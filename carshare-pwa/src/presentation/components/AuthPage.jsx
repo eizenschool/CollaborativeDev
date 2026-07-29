@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { IconCar, IconMail, IconPhone, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar } from './icons.jsx';
 import '../styles/auth.css';
 
 export default function AuthPage() {
@@ -41,7 +42,7 @@ export default function AuthPage() {
       {/* ---------- Left: journey scene ---------- */}
       <div className="auth-scene">
         <div className="scene-brand">
-          <div className="brand-icon">🚗</div>
+          <div className="brand-icon"><IconCar size={18} /></div>
           <div>
             <div className="scene-brand-name">Let's Tumpang</div>
             <div className="scene-brand-tag">Community Carpooling</div>
@@ -73,7 +74,7 @@ export default function AuthPage() {
                 <text x="345" y="16">Ipoh</text>
               </g>
             </svg>
-            <span className="route-car">🚙</span>
+            <span className="route-car"><IconCar size={22} /></span>
           </div>
 
           <div className="scene-stats">
@@ -86,7 +87,7 @@ export default function AuthPage() {
               <div className="scene-stat-label">CO₂ saved this month</div>
             </div>
             <div>
-              <div className="scene-stat-value">4.9★</div>
+              <div className="scene-stat-value scene-stat-rating"><IconStar size={18} /> 4.9</div>
               <div className="scene-stat-label">Average host rating</div>
             </div>
           </div>
@@ -115,10 +116,10 @@ export default function AuthPage() {
 
           <div className="method-toggle">
             <button type="button" className={'method-pill' + (method === 'email' ? ' active' : '')} onClick={() => setMethod('email')}>
-              ✉ Email
+              <IconMail size={14} /> Email
             </button>
             <button type="button" className={'method-pill' + (method === 'phone' ? ' active' : '')} onClick={() => setMethod('phone')}>
-              📞 Phone
+              <IconPhone size={14} /> Phone
             </button>
           </div>
 
@@ -129,7 +130,7 @@ export default function AuthPage() {
               <div className="auth-field">
                 <label>Full Name</label>
                 <div className="auth-input-wrap">
-                  <span className="prefix">👤</span>
+                  <span className="prefix"><IconUser size={16} /></span>
                   <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Jamie Delacroix" required />
                 </div>
               </div>
@@ -139,7 +140,7 @@ export default function AuthPage() {
               <div className="auth-field">
                 <label>Email Address</label>
                 <div className="auth-input-wrap">
-                  <span className="prefix">✉</span>
+                  <span className="prefix"><IconMail size={16} /></span>
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jamie@email.com" required />
                 </div>
               </div>
@@ -147,7 +148,7 @@ export default function AuthPage() {
               <div className="auth-field">
                 <label>Phone Number</label>
                 <div className="auth-input-wrap">
-                  <span className="prefix">📞</span>
+                  <span className="prefix"><IconPhone size={16} /></span>
                   <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+60 12-345 6789" required />
                 </div>
               </div>
@@ -156,7 +157,7 @@ export default function AuthPage() {
             <div className="auth-field">
               <label>Password</label>
               <div className="auth-input-wrap">
-                <span className="prefix">🔒</span>
+                <span className="prefix"><IconLock size={16} /></span>
                 <input
                   type={showPw ? 'text' : 'password'}
                   value={password}
@@ -166,13 +167,14 @@ export default function AuthPage() {
                   required
                 />
                 <button type="button" className="toggle-visibility" onClick={() => setShowPw((s) => !s)}>
-                  {showPw ? '🙈' : '👁'}
+                  {showPw ? <IconEyeOff size={15} /> : <IconEye size={15} />}
                 </button>
               </div>
             </div>
 
             <button className="auth-submit" type="submit" disabled={loading}>
-              {loading ? 'Please wait…' : mode === 'signup' ? 'Create Account →' : 'Sign In →'}
+              {loading ? 'Please wait…' : mode === 'signup' ? 'Create Account' : 'Sign In'}
+              {!loading && <IconArrowRight size={16} />}
             </button>
           </form>
 
