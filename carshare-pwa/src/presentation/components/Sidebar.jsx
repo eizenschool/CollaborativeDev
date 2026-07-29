@@ -1,12 +1,13 @@
 // ===== PRESENTATION LAYER (Sidebar) =====
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { IconCar, IconSettings, IconStar, IconChart } from './icons.jsx';
 
 const NAV_ITEMS = [
-  { to: '/profile', icon: '\u2699\uFE0F', label: 'Profile Settings', sub: 'Info, Photo & Emergency' },
-  { to: '/vehicles', icon: '\uD83D\uDE97', label: 'My Vehicles', sub: 'Add & manage vehicles' },
-  { to: '/reputation', icon: '\u2B50', label: 'Reputation', sub: 'Score & public profile' },
-  { to: '/host', icon: '\uD83D\uDCCA', label: 'Host Dashboard', sub: 'Impact score & badges' }
+  { to: '/profile', Icon: IconSettings, label: 'Profile Settings', sub: 'Info, Photo & Emergency' },
+  { to: '/vehicles', Icon: IconCar, label: 'My Vehicles', sub: 'Add & manage vehicles' },
+  { to: '/reputation', Icon: IconStar, label: 'Reputation', sub: 'Score & public profile' },
+  { to: '/host', Icon: IconChart, label: 'Host Dashboard', sub: 'Impact score & badges' }
 ];
 
 export default function Sidebar() {
@@ -21,7 +22,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="brand-icon">🚗</div>
+        <div className="brand-icon"><IconCar size={18} /></div>
         <div>
           <div className="brand-title">Let's Tumpang</div>
           <div className="brand-subtitle">Community Carpooling</div>
@@ -29,16 +30,16 @@ export default function Sidebar() {
       </div>
 
       <nav>
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.map(({ to, Icon, label, sub }) => (
           <NavLink
-            key={item.to}
-            to={item.to}
+            key={to}
+            to={to}
             className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
           >
-            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-icon"><Icon size={18} /></span>
             <span>
-              <span className="nav-label">{item.label}</span>
-              <span className="nav-sub">{item.sub}</span>
+              <span className="nav-label">{label}</span>
+              <span className="nav-sub">{sub}</span>
             </span>
           </NavLink>
         ))}

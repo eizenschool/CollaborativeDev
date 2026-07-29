@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
+import { IconStar } from './icons.jsx';
 
 export default function Reputation() {
   const { user } = useAuth();
@@ -26,6 +27,7 @@ export default function Reputation() {
           </p>
           {summary ? (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ display: 'inline-flex', color: 'var(--teal-dark)' }}><IconStar size={30} /></span>
               <span style={{ fontSize: 36, fontWeight: 800, color: 'var(--teal-dark)' }}>{summary.reputationScore}</span>
               <span style={{ color: 'var(--muted)', fontSize: 13 }}>/ 100</span>
             </div>

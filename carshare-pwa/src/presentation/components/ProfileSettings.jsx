@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ProfileService } from '../../business-logic/ProfileService.js';
+import { IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart } from './icons.jsx';
 
 export default function ProfileSettings() {
   const { user, setUser } = useAuth();
@@ -64,40 +65,40 @@ function ProfileInfoForm({ user, onSaved }) {
         <div className="field">
           <label>Full Name *</label>
           <div className="input-wrap">
-            <span className="prefix-icon">👤</span>
+            <span className="prefix-icon"><IconUser size={15} /></span>
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
           </div>
         </div>
         <div className="field">
           <label>Email Address *</label>
           <div className="input-wrap">
-            <span className="prefix-icon">✉</span>
+            <span className="prefix-icon"><IconMail size={15} /></span>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
         </div>
         <div className="field">
           <label>Phone Number *</label>
           <div className="input-wrap">
-            <span className="prefix-icon">📞</span>
+            <span className="prefix-icon"><IconPhone size={15} /></span>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} required />
           </div>
         </div>
         <div className="field">
           <label>New Password <span className="hint">(leave blank to keep current)</span></label>
           <div className="input-wrap">
-            <span className="prefix-icon">🔒</span>
+            <span className="prefix-icon"><IconLock size={15} /></span>
             <input
               type={showPw ? 'text' : 'password'}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
             <button type="button" className="toggle-visibility" onClick={() => setShowPw((s) => !s)}>
-              {showPw ? '🙈' : '👁'}
+              {showPw ? <IconEyeOff size={15} /> : <IconEye size={15} />}
             </button>
           </div>
         </div>
         <button className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }} disabled={saving}>
-          💾 {saving ? 'Saving…' : 'Save Changes'}
+          <IconSave size={15} /> {saving ? 'Saving…' : 'Save Changes'}
         </button>
       </form>
     </div>
@@ -175,26 +176,26 @@ function EmergencyContactForm({ user, onSaved }) {
         <div className="field">
           <label>Contact Name</label>
           <div className="input-wrap">
-            <span className="prefix-icon">👤</span>
+            <span className="prefix-icon"><IconUser size={15} /></span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alex Delacroix" />
           </div>
         </div>
         <div className="field">
           <label>Contact Phone</label>
           <div className="input-wrap">
-            <span className="prefix-icon">📞</span>
+            <span className="prefix-icon"><IconPhone size={15} /></span>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 0199" />
           </div>
         </div>
         <div className="field">
           <label>Relationship</label>
           <div className="input-wrap">
-            <span className="prefix-icon">❤</span>
+            <span className="prefix-icon"><IconHeart size={15} /></span>
             <input value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="e.g. Spouse, Parent, Friend" />
           </div>
         </div>
         <button className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }} disabled={saving}>
-          💾 {saving ? 'Saving…' : 'Save Changes'}
+          <IconSave size={15} /> {saving ? 'Saving…' : 'Save Changes'}
         </button>
       </form>
     </div>

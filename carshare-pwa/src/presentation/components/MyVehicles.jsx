@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { VehicleService } from '../../business-logic/VehicleService.js';
+import { IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle } from './icons.jsx';
 
 const emptyForm = { id: null, make: '', model: '', plate: '', colour: '', seats: 4, year: new Date().getFullYear() };
 
@@ -58,7 +59,7 @@ export default function MyVehicles() {
           <p>Manage vehicles available for your rides</p>
         </div>
         <button className="btn-primary" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => { setError(''); setForm(emptyForm); }}>
-          + Add Vehicle
+          <IconPlus size={15} /> Add Vehicle
         </button>
       </div>
 
@@ -94,25 +95,25 @@ export default function MyVehicles() {
           vehicles.map((v) => (
             <div className="vehicle-card" key={v.id}>
               <div className="vehicle-top">
-                <span>🚗</span>
+                <span className="vehicle-icon"><IconCar size={16} /></span>
                 <span className="vehicle-name">{v.make} {v.model}</span>
                 <span className={v.active ? 'badge-active' : 'badge-inactive'}>{v.active ? 'Active' : 'Inactive'}</span>
               </div>
               <div className="vehicle-meta">{v.plate}</div>
               <div className="vehicle-meta">{v.colour} · {v.seats} seats available · {v.year}</div>
               <div className="vehicle-actions">
-                <button className="action-edit" onClick={() => setForm(v)}>✏ Edit</button>
+                <button className="action-edit" onClick={() => setForm(v)}><IconEdit size={14} /> Edit</button>
                 <button className="action-toggle" onClick={() => toggleActive(v)}>
-                  {v.active ? '⏸ Deactivate' : '▶ Activate'}
+                  {v.active ? <><IconPause size={14} /> Deactivate</> : <><IconPlay size={14} /> Activate</>}
                 </button>
-                <button className="action-remove" onClick={() => remove(v)}>🗑 Remove</button>
+                <button className="action-remove" onClick={() => remove(v)}><IconTrash size={14} /> Remove</button>
               </div>
             </div>
           ))
         )}
 
         {!loading && activeCount > 0 && (
-          <div className="banner-ok">✓ {activeCount} active vehicle{activeCount > 1 ? 's' : ''} — ready to offer rides</div>
+          <div className="banner-ok"><IconCheckCircle size={16} /> {activeCount} active vehicle{activeCount > 1 ? 's' : ''} — ready to offer rides</div>
         )}
         {!loading && vehicles.length === 0 && (
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>No vehicles yet — add one to start hosting rides.</p>
