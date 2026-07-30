@@ -240,3 +240,57 @@ export function IconPlus(props) {
     </Svg>
   );
 }
+
+export function IconLayers(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3 3 8l9 5 9-5Z" />
+      <path d="M3 12l9 5 9-5M3 16l9 5 9-5" />
+    </Svg>
+  );
+}
+
+export function IconShield(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.5 19 6.5V12c0 5-3 8-7 9.5C8 20 5 17 5 12V6.5Z" />
+    </Svg>
+  );
+}
+
+export function IconHome(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 11.5 12 4l8 7.5" />
+      <path d="M6 10v9h5v-5h2v5h5v-9" />
+    </Svg>
+  );
+}
+
+export function IconMessage(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 5.5h16v11H9l-4 3.5v-3.5H4Z" />
+    </Svg>
+  );
+}
+
+export function IconRoute(props) {
+  return (
+    <Svg {...props}>
+      <path d="M5 19a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+      <path d="M19 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+      <path d="M7 16.6C11 13 13 11 17.2 8" />
+    </Svg>
+  );
+}
+
+export function IconAlertTriangle(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.5 21.5 20h-19Z" />
+      <path d="M12 9.5v5" />
+      <circle cx="12" cy="17.3" r="0.6" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
