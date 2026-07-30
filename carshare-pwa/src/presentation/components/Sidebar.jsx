@@ -1,13 +1,15 @@
 // ===== PRESENTATION LAYER (Sidebar) =====
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { IconCar, IconSettings, IconStar, IconChart } from './icons.jsx';
+import { IconCar, IconHome, IconRoute, IconMessage, IconUser } from './icons.jsx';
 
-const NAV_ITEMS = [
-  { to: '/profile', Icon: IconSettings, label: 'Profile Settings', sub: 'Info, Photo & Emergency' },
-  { to: '/vehicles', Icon: IconCar, label: 'My Vehicles', sub: 'Add & manage vehicles' },
-  { to: '/reputation', Icon: IconStar, label: 'Reputation', sub: 'Score & public profile' },
-  { to: '/host', Icon: IconChart, label: 'Host Dashboard', sub: 'Impact score & badges' }
+// Home, Find/Publish Ride, and Messages belong to Modules 2-6 and aren't built yet -
+// they're shown disabled so the global nav's final shape is visible without faking
+// functionality. My Profile is Module 1 and is the only item that's live.
+const COMING_SOON = [
+  { Icon: IconHome, label: 'Home' },
+  { Icon: IconRoute, label: 'Find / Publish Ride' },
+  { Icon: IconMessage, label: 'Messages' }
 ];
 
 export default function Sidebar() {
@@ -30,19 +32,17 @@ export default function Sidebar() {
       </div>
 
       <nav>
-        {NAV_ITEMS.map(({ to, Icon, label, sub }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-          >
-            <span className="nav-icon"><Icon size={18} /></span>
-            <span>
-              <span className="nav-label">{label}</span>
-              <span className="nav-sub">{sub}</span>
-            </span>
-          </NavLink>
+        {COMING_SOON.map(({ Icon, label }) => (
+          <div className="nav-item disabled" key={label} title="Coming in a later module">
+            <span className="nav-icon"><Icon size={17} /></span>
+            <span className="nav-label">{label}</span>
+            <span className="nav-badge">Soon</span>
+          </div>
         ))}
+        <NavLink to="/profile" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
+          <span className="nav-icon"><IconUser size={17} /></span>
+          <span className="nav-label">My Profile</span>
+        </NavLink>
       </nav>
 
       <div className="sidebar-footer">
