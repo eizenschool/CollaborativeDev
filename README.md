@@ -1,80 +1,386 @@
-# CollaborativeDev
-Let's Tumpang — Coding Standards & Git Workflow
+# Let's Tumpang
+# Coding Standards & Git Workflow
 
-Revision note: This version corrects three places where the previous draft'snaming/architecture examples didn't match what the Module 1 prototype (carshare-pwazip) established. Since §1.1 states the standard maps onto "the three-tierstructure already established by the Module 1 prototype," the document is correctedto describe that prototype accurately, rather than the prototype being rewritten tofit the earlier (incorrect) examples. Changes are marked [CORRECTED] below;everything else is unchanged from the original draft.
+Version: 2.0
 
+This document defines the coding standards, naming conventions, project architecture, and Git workflow adopted by the Let's Tumpang project. All team members shall follow these standards to ensure consistency, maintainability, and collaboration throughout the development process.
 
+---
 
-Coding Standards
+# 1. Coding Standards
 
-1.1 Architecture
+## 1.1 Architecture
 
-Every module's code must map into the three-tier structure already established by theModule 1 prototype:
+Every module shall follow the three-tier architecture adopted by the project.
 
+```
+Presentation Layer
+        ↓
+Business Logic Layer
+        ↓
+Data Access Layer
+        ↓
+Supabase
+```
 
+### Layer Responsibilities
 
+| Layer | Responsibility |
+|--------|----------------|
+| presentation/ | React pages, screens, forms and UI components. No direct Supabase calls. |
+| business-logic/ | Validation, business rules, data processing and orchestration. |
+| data-access/ | Supabase queries, insert, update and delete operations only. |
 
+### Architecture Rules
 
-Rule: the GUI layer never calls Supabase directly and never imports anything fromdata-access/. All reads/writes go through a business-logic service function.
+- Presentation Layer shall never communicate directly with Supabase.
+- Presentation Layer shall only communicate with Business Logic.
+- Business Logic shall communicate with Data Access.
+- Data Access shall be the only layer allowed to access Supabase.
+- Each layer shall only communicate with its adjacent layer.
 
+---
 
+## 1.2 Naming Conventions
 
-[CORRECTED] The original draft described data-access/ as the only layer allowedto "touch Supabase," implying a repository pattern (business-logic calls a data-accessfunction, which calls Supabase). That is not what Module 1 actually does — everyservice in business-logic/ (AuthService, ProfileService, VehicleService,HostImpactEngine) imports the raw supabase client from data-access/supabaseClient.jsand writes its own .from(...) queries inline. supabaseClient.js's own header commentconfirms this is intentional: "Only src/business-logic/* service modules may importsupabaseClient." The real dividing line Module 1 enforces is presentation vs.everything else, not data-access vs. everything else. The table above nowreflects that.
+| Item | Convention | Example |
+|------|------------|---------|
+| React Components | PascalCase | RidePublishForm.jsx |
+| Business Logic Files | camelCase, verb-first | validateRideRequest.js |
+| Data Access Files | camelCase, noun + Repository | rideRepository.js |
+| Variables | camelCase | rideStatus |
+| Functions | camelCase | getUserReputation() |
+| Constants | UPPER_SNAKE_CASE | MAX_SEATS |
+| Database Tables | snake_case, plural | ride_requests |
+| Database Columns | snake_case | pickup_location |
 
+### Boolean Variables
 
+Boolean variables shall begin with:
 
-1.2 Naming Conventions
+- is
+- has
+- can
 
+Example
 
+```javascript
+isVerified
+hasVehicle
+canPublishRide
+```
 
+### Array Variables
 
+Arrays shall use plural nouns.
 
-[CORRECTED] The original draft's business-logic example (validateRideRequest.js,implying one exported verb-first function per file) and data-access example(rideRepository.js, implying a noun + Repository repository-per-domain pattern)don't match any file in the Module 1 prototype. The established pattern is a singleService object per business domain (export const XService = { async methodOne(), async methodTwo(), ... }), and a Client/Store pair in data-access/ shared acrossevery service rather than one repository file per domain. Module 2–6 authors shouldfollow the corrected examples so new modules read consistently with Module 1, not theother way around.
+Example
 
+```javascript
+rideRequests
+tripHistory
+chatMessages
+```
 
+### Event Handlers
 
-1.3 Formatting & Structure
+Event handler functions shall begin with **handle**.
 
-2-space indentation, no tabs.
+```javascript
+handleLogin()
+handlePublishRide()
+handleSendMessage()
+```
 
-Single quotes for JS strings, double quotes for JSX attributes.
+### CRUD Functions
 
-One exported/routable component per file, file name matches the component name.Small private sub-components used only by that screen (e.g. a form split intovisual sections) may live in the same file as long as they aren't imported anywhereelse — once a sub-component is reused or the file is doing more than one screen'sworth of work, split it into its own file under a subfolder named for the parentscreen.
+Use consistent CRUD naming.
 
-Every business-logic function must have a short JSDoc comment stating what it doesand what it returns.
+```javascript
+fetchRideHistory()
+createRide()
+updateVehicle()
+deleteMessage()
+```
 
-No hardcoded strings for status values — use shared constants (e.g.TRIP_STATUS.DRAFT, not "Draft" typed inline) so all modules reference the sameenum and stay in sync.
+---
 
+## 1.3 Formatting & Structure
 
+### Indentation
 
-1.4 Shared Enums (preventing cross-module drift)
+- Use 2 spaces.
+- Do not use tabs.
 
-Any status/enum field used by more than one module must live in a single shared file(src/shared/constants.js) and be imported — not retyped — by every module that usesit. This directly addresses the current mismatch where Trip Lifecycle values areduplicated with different names across FR-2.9, the Trip Lifecycle Component, andModule 6.
+### Quotation
 
+- Single quotes for JavaScript strings.
+- Double quotes for JSX attributes.
 
+### Components
 
-Git Workflow
+- One component per file.
+- File name shall match the component name.
 
-(Diagram: branching model, merge direction, and PR flow for Sprint 1 — see originalfile's media/image1.png.)
+### Documentation
 
+Business Logic functions should include a short JSDoc comment.
 
+Example
 
-2.1 Key Rules
+```javascript
+/**
+ * Validate ride request.
+ * @returns {Boolean}
+ */
+```
 
-No direct commits to main or dev — all work happens onfeature/moduleX-description branches.
+### Shared Constants
 
-Every feature branch opens a Pull Request into dev; at least one reviewer approvesbefore merge.
+Do not hardcode status values.
 
-dev merges into main only when the build is stable and demo-ready.
+Incorrect
 
-Commit format: [ModuleX] short imperative description — e.g.[Module6] implement PIN generation.
+```javascript
+"Draft"
+```
 
+Correct
 
+```javascript
+TRIP_STATUS.DRAFT
+```
 
-2.2 Issue Tracking
+### Import Order
 
-Use GitHub Issues or the Trello board — one card per FR/task from the ProductBacklog.
+Imports shall follow this order:
 
-Card title should match the FR number, e.g. FR-2.3 — Ride publish form.
+1. React
+2. Third-party libraries
+3. Shared utilities
+4. Local components
+5. CSS
 
-Move cards through: Backlog → In Progress → In Review → Done.
+---
+
+## 1.4 Shared Enums
+
+Shared status values shall be defined inside
+
+```
+src/shared/constants.js
+```
+
+Examples
+
+- TRIP_STATUS
+- REPORT_STATUS
+- USER_ROLE
+- MESSAGE_TYPE
+
+All modules shall import these shared constants instead of redefining them.
+
+---
+
+## 1.5 Error Handling
+
+- Validate user input before processing.
+- Display user-friendly error messages.
+- Do not expose technical errors directly to users.
+
+Good
+
+```
+Unable to publish ride.
+
+Please try again.
+```
+
+Bad
+
+```
+Supabase Error 23505
+```
+
+---
+
+## 1.6 Security
+
+- Store API Keys inside `.env`.
+- Never commit `.env` to GitHub.
+- Never hardcode API Keys.
+- Authenticate users before accessing protected resources.
+- Follow Supabase Row Level Security (RLS) configuration where applicable.
+
+---
+
+## 1.7 Documentation
+
+Developers should
+
+- write meaningful comments for complex logic.
+- update documentation after major feature implementation.
+- maintain consistent naming across all modules.
+
+---
+
+# 2. Git Workflow
+
+The Let's Tumpang project follows a module-based Git workflow.
+
+```
+                 main
+                   ▲
+                   │
+             development
+      ▲      ▲      ▲      ▲      ▲      ▲
+      │      │      │      │      │      │
+ Module1 Module2 Module3 Module4 Module5 Module6
+```
+
+---
+
+## 2.1 Branch Strategy
+
+Each module shall have its own development branch.
+
+Example
+
+```
+main
+
+development
+
+Module1_User_Profile_&_Reputation
+
+Module2_Ride_Sharing_Management
+
+Module3_Messaging
+
+Module4_Smart_Search_&_Favourite
+
+Module5_Trip_Management_&_Eco_Impact
+
+Module6_Safety_&_Verification
+```
+
+---
+
+## 2.2 Development Flow
+
+```
+Create Module Branch
+
+↓
+
+Develop Feature
+
+↓
+
+Commit
+
+↓
+
+Push
+
+↓
+
+Merge into Development
+
+↓
+
+Testing
+
+↓
+
+Merge into Main
+```
+
+---
+
+## 2.3 Key Rules
+
+- No direct commits to the **main** branch.
+- Each developer shall work only in the assigned module branch.
+- Completed features shall be merged into the **development** branch.
+- The **development** branch shall be tested before merging into **main**.
+- Only stable and demo-ready builds may be merged into **main**.
+
+---
+
+## 2.4 Commit Convention
+
+Commit messages should be meaningful and include the module identifier.
+
+Examples
+
+```
+[Module1] Implement user registration
+
+[Module2] Add publish ride validation
+
+[Module3] Implement send message feature
+
+[Module4] Add search filters
+
+[Module5] Implement trip history
+
+[Module6] Fix hazard reporting validation
+```
+
+---
+
+## 2.5 Pull Request
+
+Every completed module feature should
+
+- create a Pull Request to **development**
+- include a clear description
+- include testing evidence where applicable
+- be reviewed before merging
+
+---
+
+## 2.6 Issue Tracking
+
+Each GitHub Issue (or Trello card) represents one Functional Requirement (FR).
+
+Example
+
+```
+FR-2.3 – Ride Publish Form
+```
+
+Workflow
+
+```
+Backlog
+
+↓
+
+In Progress
+
+↓
+
+In Review
+
+↓
+
+Done
+```
+
+Each completed Issue should correspond to its related commits or Pull Request whenever applicable.
+
+---
+
+# 3. Definition of Done
+
+A task is considered completed only when:
+
+- Coding standards are followed.
+- Functionality has been implemented.
+- Code has been tested.
+- No critical errors remain.
+- Documentation has been updated.
+- Changes have been merged into the development branch.
+- Development branch has passed integration testing before merging into main.
