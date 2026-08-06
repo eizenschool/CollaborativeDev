@@ -8,7 +8,7 @@ import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck } from '.
 import '../../styles/ride.css';
 
 const STEPS = ['Route', 'Schedule', 'Vehicle', 'Trip Details', 'Review & Publish'];
-const RESTRICTION_OPTIONS = ['Pet-friendly', 'No smoking', 'Women-only', 'Child seat available'];
+const RESTRICTION_OPTIONS = ['Pet-friendly', 'No smoking', 'Women-only', 'Child seat available', 'Luggage-friendly', 'Toll contribution', 'Music OK', 'Quiet ride'];
 
 const emptyForm = {
   pickup: '', destination: '', journeyScale: 'Urban',
@@ -75,6 +75,12 @@ export default function PublishRide() {
 
   return (
     <div className="publish-ride">
+      <header className="publish-mobile-header">
+        <button className="round-icon-button" onClick={step === 0 ? () => navigate('/ride') : back} aria-label="Go back"><IconArrowLeft size={18} /></button>
+        <div><p>Step {step + 1} of {STEPS.length}</p><h1>{STEPS[step]}</h1></div>
+        <button className="save-draft-mobile" onClick={saveAsDraft} disabled={saving}>Save draft</button>
+        <div className="publish-progress-dots">{STEPS.map((label, index) => <i key={label} className={index <= step ? 'active' : ''} />)}</div>
+      </header>
       <div className="publish-left">
         <button className="back-link" onClick={() => navigate('/ride')}><IconArrowLeft size={15} /> Back</button>
         <div className="step-list">
@@ -109,6 +115,9 @@ export default function PublishRide() {
             </button>
           </div>
         )}
+        <div className="publish-mobile-actions">
+          {step < STEPS.length - 1 ? <button className="btn-primary" onClick={next}>Continue <IconArrowRight size={15} /></button> : <div><button className="btn-secondary" onClick={saveAsDraft} disabled={saving}>Save draft</button><button className="btn-primary" onClick={publish} disabled={saving}>Publish ride</button></div>}
+        </div>
       </div>
     </div>
   );

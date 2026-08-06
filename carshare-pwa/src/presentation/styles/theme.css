@@ -81,6 +81,25 @@ body {
   .topnav-item { padding: 9px 11px; }
 }
 
+/* The Figma ride screens use a persistent bottom tab bar on phones. Keep the
+   same routes and active-state semantics as the desktop nav, but give the
+   content its safe area above the bar. */
+@media (max-width: 700px) {
+  .app-shell { padding-bottom: 64px; }
+  .topnav {
+    position: fixed; inset: auto 0 0; z-index: 40; height: calc(64px + env(safe-area-inset-bottom));
+    padding: 6px 10px max(6px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); border-bottom: 0;
+    box-shadow: 0 -2px 10px rgba(17,24,39,.06); justify-content: center;
+  }
+  .topnav-brand, .topnav-actions { display: none; }
+  .topnav-links { width: 100%; justify-content: space-around; gap: 1px; }
+  .topnav-item { min-width: 42px; flex: 1; flex-direction: column; gap: 2px; justify-content: center; padding: 4px 2px; border-radius: 9px; font-size: 9px; }
+  .topnav-item .nav-label { display: block; }
+  .topnav-item.active { background: transparent; color: var(--teal); }
+  .topnav-item.active .topnav-icon { width: 31px; height: 24px; border-radius: 999px; background: var(--teal-tint); }
+  .topnav-icon { height: 24px; }
+}
+
 /* ---------- Coming soon placeholder screens ---------- */
 .coming-soon {
   min-height: calc(100vh - 72px); display: flex; flex-direction: column;
