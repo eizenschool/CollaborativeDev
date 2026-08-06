@@ -2,7 +2,7 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1.1fr 1fr;
-  background: #fbfaf7;
+  background: var(--bg);
 }
 
 @media (max-width: 880px) {
@@ -15,8 +15,8 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 900px 500px at 15% 0%, rgba(233, 158, 74, 0.35), transparent 60%),
-    linear-gradient(160deg, #0c1c34 0%, #0c2c3a 55%, #0f4a45 100%);
+    radial-gradient(ellipse 900px 500px at 15% 0%, rgba(245, 158, 11, 0.3), transparent 60%),
+    linear-gradient(160deg, #14532d 0%, #166534 55%, #15803d 100%);
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -53,7 +53,7 @@
 .scene-headline em {
   font-style: italic;
   font-weight: 500;
-  color: #f0b26b;
+  color: #fbbf24;
 }
 .scene-subline {
   position: relative; z-index: 1;
@@ -69,11 +69,11 @@
   stroke-width: 2;
   stroke-dasharray: 6 8;
 }
-.route-node circle { fill: #0c1c34; stroke: #f0b26b; stroke-width: 2; }
+.route-node circle { fill: #14532d; stroke: #fbbf24; stroke-width: 2; }
 .route-node text { fill: rgba(255,255,255,0.85); font-size: 11px; font-family: var(--font); font-weight: 600; }
 .route-car {
   display: inline-flex;
-  color: #f0b26b;
+  color: #fbbf24;
   offset-path: path('M8,120 C 90,120 90,40 170,40 S 300,110 392,26');
   animation: travel 7s ease-in-out infinite;
   filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));
@@ -87,7 +87,7 @@
 .scene-stats { position: relative; z-index: 1; display: flex; gap: 28px; }
 .scene-stat-value { font-family: var(--font-display); font-size: 26px; font-weight: 600; color: #fff; }
 .scene-stat-rating { display: flex; align-items: center; gap: 6px; }
-.scene-stat-rating svg { color: #f0b26b; }
+.scene-stat-rating svg { color: #fbbf24; }
 .scene-stat-label { font-size: 11.5px; color: rgba(255,255,255,0.55); margin-top: 2px; }
 
 /* ---------------- Right: the form ---------------- */
@@ -109,7 +109,7 @@
 .auth-subtitle { color: var(--muted); font-size: 13.5px; margin: 0 0 26px; line-height: 1.6; }
 
 .segmented {
-  display: inline-flex; padding: 3px; background: #f0efe9; border-radius: 999px; margin-bottom: 22px;
+  display: inline-flex; padding: 3px; background: var(--bg); border-radius: 999px; margin-bottom: 22px;
 }
 .segmented button {
   border: none; background: none; padding: 7px 16px; border-radius: 999px; font-size: 12.5px;
@@ -150,7 +150,7 @@
 .auth-input-wrap .toggle-visibility:hover { color: var(--ink); }
 
 .auth-submit {
-  width: 100%; margin-top: 6px; background: var(--ink); color: #fff; border: none;
+  width: 100%; margin-top: 6px; background: var(--teal); color: #fff; border: none;
   border-radius: 999px; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   transition: background .15s, transform .1s;
