@@ -240,3 +240,146 @@ export function IconPlus(props) {
     </Svg>
   );
 }
+
+export function IconLayers(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3 3 8l9 5 9-5Z" />
+      <path d="M3 12l9 5 9-5M3 16l9 5 9-5" />
+    </Svg>
+  );
+}
+
+export function IconShield(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.5 19 6.5V12c0 5-3 8-7 9.5C8 20 5 17 5 12V6.5Z" />
+    </Svg>
+  );
+}
+
+export function IconHome(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 11.5 12 4l8 7.5" />
+      <path d="M6 10v9h5v-5h2v5h5v-9" />
+    </Svg>
+  );
+}
+
+export function IconMessage(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 5.5h16v11H9l-4 3.5v-3.5H4Z" />
+    </Svg>
+  );
+}
+
+export function IconRoute(props) {
+  return (
+    <Svg {...props}>
+      <path d="M5 19a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+      <path d="M19 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+      <path d="M7 16.6C11 13 13 11 17.2 8" />
+    </Svg>
+  );
+}
+
+export function IconAlertTriangle(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.5 21.5 20h-19Z" />
+      <path d="M12 9.5v5" />
+      <circle cx="12" cy="17.3" r="0.6" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconSearch(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M20 20l-4.8-4.8" />
+    </Svg>
+  );
+}
+
+export function IconBell(props) {
+  return (
+    <Svg {...props}>
+      <path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z" />
+      <path d="M10 18.5a2 2 0 0 0 4 0" />
+    </Svg>
+  );
+}
+
+export function IconLogOut(props) {
+  return (
+    <Svg {...props}>
+      <path d="M13.5 3.5H6A1.5 1.5 0 0 0 4.5 5v14A1.5 1.5 0 0 0 6 20.5h7.5" />
+      <path d="M10.5 12h10M17 8.2 20.8 12 17 15.8" />
+    </Svg>
+  );
+}
+
+export function IconUsers(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="8.5" cy="8" r="3" />
+      <path d="M2.8 19c.8-3.2 3.2-5 5.7-5s4.9 1.8 5.7 5" />
+      <circle cx="16.5" cy="8.5" r="2.5" />
+      <path d="M15 11.2c1.9.4 3.6 2 4.2 4.3" />
+    </Svg>
+  );
+}
+
+export function IconMapPin(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 21s7-6.4 7-11.5A7 7 0 0 0 5 9.5C5 14.6 12 21 12 21Z" />
+      <circle cx="12" cy="9.5" r="2.3" />
+    </Svg>
+  );
+}
+
+export function IconFilter(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 6h16M7.5 12h9M10.5 18h3" />
+    </Svg>
+  );
+}
+
+export function IconCalendar(props) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+    </Svg>
+  );
+}
+
+export function IconArrowLeft(props) {
+  return (
+    <Svg {...props}>
+      <path d="M20 12H4M10.5 5.5 4 12l6.5 6.5" />
+    </Svg>
+  );
+}
+
+export function IconX(props) {
+  return (
+    <Svg {...props}>
+      <path d="M5 5l14 14M19 5 5 19" />
+    </Svg>
+  );
+}
+
+export function IconCamera(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5Z" />
+      <circle cx="12" cy="13" r="3.3" />
+    </Svg>
+  );
+}
