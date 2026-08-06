@@ -7,6 +7,7 @@ import AuthPage from './presentation/components/AuthPage.jsx';
 import MyProfile from './presentation/components/MyProfile.jsx';
 import RideHub from './presentation/components/ride/RideHub.jsx';
 import PublishRide from './presentation/components/ride/PublishRide.jsx';
+import SafetyRoutes from './presentation/components/safety/SafetyRoutes.jsx';
 import { IconHome, IconSearch, IconMessage, IconHeart } from './presentation/components/icons.jsx';
 
 function AppShell() {
@@ -35,6 +36,12 @@ function AppShell() {
         <Route path="/search" element={<ComingSoonScreen icon={IconSearch} label="Search" />} />
         <Route path="/message" element={<ComingSoonScreen icon={IconMessage} label="Message" />} />
         <Route path="/favourite" element={<ComingSoonScreen icon={IconHeart} label="Favourite" />} />
+        {/* Module 6 - Trip Verification, Exchange Settlement & Safety: PIN pickup
+            verification, GPS cross-check, independent trip/exchange confirmation,
+            and the dispute confidence engine + admin console. Everything under
+            /safety is Module 6's own sub-router (SafetyRoutes.jsx) - this is the
+            only line App.jsx needs to know about it. */}
+        <Route path="/safety/*" element={<SafetyRoutes />} />
         <Route path="*" element={<Navigate to="/profile" replace />} />
       </Routes>
     </div>
