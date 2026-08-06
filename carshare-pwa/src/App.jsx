@@ -31,7 +31,6 @@ function AppShell() {
       <TopNav />
 
       <Routes>
-<<<<<<< HEAD
         {/* Profile Settings, My Vehicles, Reputation, Host Dashboard, and Account
             Settings are consolidated into one "My Profile" page (hero + in-page
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
@@ -63,7 +62,6 @@ function AppShell() {
             only line App.jsx needs to know about it. */}
         <Route path="/safety/*" element={<SafetyRoutes />} />
         <Route path="*" element={<Navigate to="/profile" replace />} />
-=======
         {/* Profile Settings, My Vehicles, Reputation, Host Dashboard,
             and Account Settings are consolidated into one "My Profile"
             page. */}
@@ -159,7 +157,6 @@ function AppShell() {
             />
           }
         />
->>>>>>> Module3_Messaging
       </Routes>
     </div>
   );
