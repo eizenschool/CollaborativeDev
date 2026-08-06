@@ -145,6 +145,24 @@ const seedData = {
       restrictionTags: ['Pet-friendly', 'No smoking', 'Child seat available'],
       status: 'Published',
       createdAt: '2026-08-01T00:00:00.000Z'
+    },
+    // One host ride for the signed-in demo user makes the mobile management
+    // screens reachable immediately, while published rides above remain the
+    // public marketplace examples.
+    r_5: {
+      id: 'r_5',
+      hostId: 'u_demo_1',
+      pickup: 'Bangsar LRT, Kuala Lumpur',
+      destination: 'Cyberjaya, Selangor',
+      date: '2026-08-20',
+      time: '08:00',
+      journeyScale: 'Urban',
+      seatsTotal: 3,
+      seatsAvailable: 3,
+      contribution: 'Toll contribution',
+      restrictionTags: ['No smoking', 'Music OK'],
+      status: 'Published',
+      createdAt: '2026-08-02T00:00:00.000Z'
     }
   }
 };
@@ -343,6 +361,21 @@ export const mockDb = {
     // Ride Request Component (join flow) isn't built in this pass - "Joining"
     // is wired up and ready for Screen 4/5's request flow to populate later.
     return { hosting, joining: [] };
+  },
+
+  async getRide(rideId) {
+    await delay();
+    const db = load();
+    return db.rides[rideId] ? enrichRide(db, db.rides[rideId]) : null;
+  },
+
+  async updateRide(rideId, patch) {
+    await delay();
+    const db = load();
+    if (!db.rides[rideId]) throw new Error('Ride not found.');
+    db.rides[rideId] = { ...db.rides[rideId], ...patch };
+    save(db);
+    return enrichRide(db, db.rides[rideId]);
   },
 
   async createRide(hostId, rideData, status) {

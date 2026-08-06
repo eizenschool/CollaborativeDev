@@ -40,6 +40,10 @@ export default function RideHub() {
 
   return (
     <div className="ride-hub">
+      <div className="ride-hub-mobile-heading">
+        <h1>Let’s Tumpang <span>🚗</span></h1>
+        <p>Find a shared journey or offer a seat.</p>
+      </div>
       <div className="ride-hub-left">
         <div className="tabs">
           <button className={'tab' + (tab === 'find' ? ' active' : '')} onClick={() => setTab('find')}>Find a Ride</button>
@@ -89,7 +93,7 @@ export default function RideHub() {
             </div>
             <div className="ride-grid">
               {rides.map((ride) => (
-                <RideCard key={ride.id} ride={ride} />
+                <RideCard key={ride.id} ride={ride} onClick={() => navigate(`/ride/${ride.id}`)} />
               ))}
               {!loading && rides.length === 0 && (
                 <p style={{ color: 'var(--muted)' }}>No rides match your search yet — try a different pickup, destination, or date.</p>
@@ -99,14 +103,14 @@ export default function RideHub() {
         )}
 
         {tab === 'my' && (
-          <MyRidesView myRides={myRides} />
+          <MyRidesView myRides={myRides} onRideSelect={(ride) => navigate(`/ride/${ride.id}`)} onRequests={() => navigate('/ride/requests')} />
         )}
       </div>
     </div>
   );
 }
 
-function MyRidesView({ myRides }) {
+function MyRidesView({ myRides, onRideSelect, onRequests }) {
   if (!myRides) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
 
   return (
@@ -117,15 +121,15 @@ function MyRidesView({ myRides }) {
           <p style={{ color: 'var(--muted)' }}>You haven't published any rides yet — use "Publish a Ride" to host your first one.</p>
         )}
         {myRides.hosting.map((ride) => (
-          <RideCard key={ride.id} ride={ride} statusChip />
+          <RideCard key={ride.id} ride={ride} statusChip onClick={() => onRideSelect(ride)} />
         ))}
       </div>
 
-      <div className="ride-hub-header" style={{ marginTop: 24 }}><h2>Joining</h2></div>
+      <div className="ride-hub-header" style={{ marginTop: 24 }}><h2>Joining</h2><button className="btn-link" onClick={onRequests}>My requests</button></div>
       <div className="ride-grid">
-        <p style={{ color: 'var(--muted)' }}>
+        <button className="my-requests-link" onClick={onRequests}>
           Ride requests aren't part of this build yet — this section is ready for the "request to join" flow (FR-2.2/2.5) to populate.
-        </p>
+        </button>
       </div>
     </>
   );
