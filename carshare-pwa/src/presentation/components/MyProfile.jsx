@@ -1,10 +1,11 @@
 // ===== PRESENTATION LAYER (MyProfile) =====
-// Consolidates what used to be four separate top-level screens - Profile Settings,
-// My Vehicles, Reputation, and Host Dashboard - into one "My Profile" page: a
-// snapshot hero band plus an in-page section rail, matching the approved UX mockup
-// (profile-consolidated.html). All four screens are Module 1 data about the same
-// user, so this is one read/write surface instead of four.
+// Consolidates Profile Settings, My Vehicles, Reputation, Host Dashboard, and
+// Account Settings into one "My Profile" page: a sidebar (compact reputation
+// hero card + section rail) plus a content panel, matching the approved UX
+// reference. All five screens are Module 1 data about the same user, so this
+// is one read/write surface instead of five.
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ProfileService } from '../../business-logic/ProfileService.js';
 import { VehicleService } from '../../business-logic/VehicleService.js';
@@ -14,30 +15,26 @@ import {
   IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart,
   IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle,
   IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar,
-  IconLayers, IconShield, IconAlertTriangle, IconRoute
+  IconLayers, IconShield, IconAlertTriangle, IconRoute, IconSettings, IconCamera, IconChart
 } from './icons.jsx';
 
 const REPUTATION_THRESHOLD = 60; // minimum reputation score required to publish rides (admin-configurable)
 
 const RAIL_ITEMS = [
   { id: 'overview', label: 'Overview', Icon: IconLayers },
-  { id: 'info', label: 'Info & Security', Icon: IconUser },
+  { id: 'info', label: 'Info & Security', Icon: IconShield },
   { id: 'vehicles', label: 'My Vehicles', Icon: IconCar },
-  { id: 'reputation', label: 'Reputation & Impact', Icon: IconStar }
+  { id: 'reputation', label: 'Reputation & Impact', Icon: IconChart },
+  { id: 'settings', label: 'Account Settings', Icon: IconSettings }
 ];
 
 function initialsOf(name) {
   return (name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
-function memberSince(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return 'Member since ' + d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-}
-
 export default function MyProfile() {
   const { user, setUser } = useAuth();
+  const navigate = useNavigate();
   const [panel, setPanel] = useState('overview');
   const [vehicles, setVehicles] = useState([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(true);
@@ -68,79 +65,78 @@ export default function MyProfile() {
   const initials = initialsOf(user.fullName);
 
   return (
-    <div className="content-area">
-      <div className="profile-hero">
-        <div
-          className="hero-avatar"
-          style={user.profilePhotoUrl ? { backgroundImage: `url(${user.profilePhotoUrl})` } : undefined}
-        >
-          {!user.profilePhotoUrl && initials}
-        </div>
-        <div>
-          <div className="hero-name">{user.fullName}</div>
-          <div className="hero-meta">
-            {summary && (
-              <span className="hero-badge"><IconMedal size={12} /> {summary.badge.name}</span>
-            )}
-            {summary && (
-              <span className="hero-rep"><span className="icon"><IconStar size={13} /></span>{summary.reputationScore} / 100 reputation</span>
-            )}
-            <span className="hero-since">{memberSince(user.createdAt)}</span>
+    <div className="profile-page">
+      <aside className="profile-sidebar">
+        <div className="hero-card">
+          <div className="hero-card-avatar-wrap">
+            <div
+              className="hero-card-avatar"
+              style={user.profilePhotoUrl ? { backgroundImage: `url(${user.profilePhotoUrl})` } : undefined}
+            >
+              {!user.profilePhotoUrl && initials}
+            </div>
+            <button className="hero-card-camera" onClick={() => setPanel('info')} title="Change photo" type="button">
+              <IconCamera size={13} />
+            </button>
           </div>
+          <div className="hero-card-name">{user.fullName}</div>
+          {summary && (
+            <div className="hero-card-meta-row">
+              <span className="hero-card-rating"><IconStar size={13} /> {summary.reputationScore}/100</span>
+              <span className="hero-card-tier"><IconMedal size={11} /> {summary.badge.name.replace(' Host', '')}</span>
+            </div>
+          )}
+          {summary && (
+            <div className="rep-bar">
+              <div className="rep-bar-track"><div className="rep-bar-fill" style={{ width: summary.reputationScore + '%' }} /></div>
+              <div className="rep-bar-labels"><span>Reputation score</span><span>{summary.reputationScore}/100</span></div>
+            </div>
+          )}
         </div>
-        <div className="hero-actions">
-          <button className="hero-btn" onClick={() => alert('Public profile view belongs to a later module - out of scope for this Module 1 build.')}>
-            <IconEye size={13} /> View public profile
-          </button>
-          <button className="hero-btn primary" onClick={() => alert('Publish New Ride belongs to Module 4/5 - out of scope for this Module 1 build.')}>
-            <IconRoute size={13} /> Publish ride
-          </button>
-        </div>
-      </div>
 
-      <div className="profile-body">
-        <div className="section-rail">
+        <nav className="rail-card">
           {RAIL_ITEMS.map(({ id, label, Icon }) => (
             <button key={id} className={'rail-item' + (panel === id ? ' active' : '')} onClick={() => setPanel(id)}>
               <span className="rail-icon"><Icon size={14} /></span> {label}
             </button>
           ))}
-          <div className="rail-divider" />
-          <div className="rail-note">Reputation, badge tier, and vehicle status are read-only here — they're calculated from Module 5 &amp; 6 trip data.</div>
-        </div>
+        </nav>
+        <p className="rail-note">Reputation, badge tier, and vehicle status are read-only here — they're calculated from Module 5 &amp; 6 trip data.</p>
+      </aside>
 
-        <div className="panels">
-          {panel === 'overview' && (
-            <OverviewPanel
-              user={user}
-              summary={summary}
-              vehicles={vehicles}
-              activeVehicleCount={activeVehicleCount}
-              goTo={setPanel}
-            />
-          )}
-          {panel === 'info' && <InfoSecurityPanel user={user} onSaved={setUser} />}
-          {panel === 'vehicles' && (
-            <VehiclesPanel
-              vehicles={vehicles}
-              loading={vehiclesLoading}
-              userId={user.id}
-              refresh={refreshVehicles}
-              activeVehicleCount={activeVehicleCount}
-            />
-          )}
-          {panel === 'reputation' && (
-            <ReputationImpactPanel user={user} summary={summary} refresh={refreshImpact} />
-          )}
-        </div>
-      </div>
+      <main className="panels">
+        {panel === 'overview' && (
+          <OverviewPanel
+            user={user}
+            summary={summary}
+            vehicles={vehicles}
+            activeVehicleCount={activeVehicleCount}
+            goTo={setPanel}
+            onPublishRide={() => navigate('/ride/publish')}
+          />
+        )}
+        {panel === 'info' && <InfoSecurityPanel user={user} onSaved={setUser} />}
+        {panel === 'vehicles' && (
+          <VehiclesPanel
+            vehicles={vehicles}
+            loading={vehiclesLoading}
+            userId={user.id}
+            refresh={refreshVehicles}
+            activeVehicleCount={activeVehicleCount}
+          />
+        )}
+        {panel === 'reputation' && (
+          <ReputationImpactPanel user={user} summary={summary} refresh={refreshImpact} />
+        )}
+        {panel === 'settings' && <AccountSettingsPanel user={user} />}
+      </main>
     </div>
   );
 }
 
 // ---------- OVERVIEW ----------
 
-function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo }) {
+function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo, onPublishRide }) {
   const hasEmergencyContact = Boolean(user.emergencyContact?.name && user.emergencyContact?.phone);
   const meetsThreshold = summary ? summary.reputationScore >= REPUTATION_THRESHOLD : true;
 
@@ -179,7 +175,7 @@ function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo }) {
           <button className="qa-btn" onClick={() => goTo('info')}><IconEdit size={12} /> Edit profile info</button>
           <button className="qa-btn" onClick={() => goTo('vehicles')}><IconPlus size={12} /> Add a vehicle</button>
           <button className="qa-btn" onClick={() => goTo('reputation')}><IconBolt size={12} /> See impact breakdown</button>
-          <button className="qa-btn primary" onClick={() => alert('Publish New Ride belongs to Module 4/5 - out of scope for this Module 1 build.')}>
+          <button className="qa-btn primary" onClick={onPublishRide}>
             <IconRoute size={12} /> Publish new ride
           </button>
         </div>
@@ -578,6 +574,110 @@ function ReputationImpactPanel({ user, summary, refresh }) {
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+// ---------- ACCOUNT SETTINGS ----------
+// Completes CRUD on the Account entity (FR-1.x): Update via Deactivate,
+// Delete via Delete Account. Deactivating signs the user out; logging back in
+// (mockDb.signIn) reactivates the account automatically.
+
+function AccountSettingsPanel({ user }) {
+  const { signOut } = useAuth();
+  const [confirm, setConfirm] = useState(null); // 'deactivate' | 'delete' | null
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  function openConfirm(kind) {
+    setError('');
+    setReason('');
+    setConfirm(kind);
+  }
+
+  async function handleDeactivate() {
+    setBusy(true);
+    setError('');
+    try {
+      await ProfileService.deactivateAccount(user.id);
+      await signOut();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    setBusy(true);
+    setError('');
+    try {
+      await ProfileService.deleteAccount(user.id, reason);
+      await signOut();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="panel-head"><h2>Account Settings</h2></div>
+
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="settings-row">
+          <div>
+            <p className="card-title" style={{ marginBottom: 4 }}>Deactivate Account</p>
+            <p className="card-subtitle" style={{ marginBottom: 0 }}>Temporarily hides your profile and pauses ride hosting. You can reactivate by logging back in.</p>
+          </div>
+          <button className="btn-outline btn-outline-warning" onClick={() => openConfirm('deactivate')}>Deactivate</button>
+        </div>
+        <div className="settings-row settings-row-last">
+          <div>
+            <p className="card-title" style={{ marginBottom: 4, color: 'var(--danger)' }}>Delete Account</p>
+            <p className="card-subtitle" style={{ marginBottom: 0 }}>Permanently removes your account and all associated data. This cannot be undone.</p>
+          </div>
+          <button className="btn-outline btn-outline-danger" onClick={() => openConfirm('delete')}>Delete Account</button>
+        </div>
+      </div>
+
+      <p className="settings-help">Need help? Contact <a href="mailto:support@letstumpang.my">support@letstumpang.my</a></p>
+
+      {confirm && (
+        <div className="modal-backdrop" onClick={() => !busy && setConfirm(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon"><IconAlertTriangle size={20} /></div>
+            {confirm === 'deactivate' ? (
+              <>
+                <p className="modal-title">Deactivate your account?</p>
+                <p className="modal-text">Your profile will be hidden and ride hosting paused until you log back in.</p>
+              </>
+            ) : (
+              <>
+                <p className="modal-title">Delete your account?</p>
+                <p className="modal-text">This permanently removes your account and all associated data. This cannot be undone.</p>
+                <div className="field" style={{ textAlign: 'left', marginTop: 12 }}>
+                  <label>Reason for leaving</label>
+                  <div className="input-wrap">
+                    <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Tell us why you're leaving" />
+                  </div>
+                </div>
+              </>
+            )}
+            {error && <div className="alert alert-error" style={{ textAlign: 'left' }}>{error}</div>}
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setConfirm(null)} disabled={busy}>Go Back</button>
+              <button
+                className="btn-danger-solid"
+                onClick={confirm === 'deactivate' ? handleDeactivate : handleDelete}
+                disabled={busy}
+              >
+                {busy ? 'Please wait…' : confirm === 'deactivate' ? 'Deactivate' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

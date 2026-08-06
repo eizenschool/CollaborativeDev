@@ -42,6 +42,13 @@ function badgeForScore(score) {
   return [...BADGE_TIERS].reverse().find((tier) => score >= tier.minScore) || BADGE_TIERS[0];
 }
 
+// Pure helper so other business-logic modules (e.g. RideService, for the Ride Hub's
+// host tier pills) can get a badge from stats they already have, without a second
+// getImpactSummary fetch. Same formula, same tiers - one Host Impact Engine.
+export function getBadgeForStats(stats) {
+  return badgeForScore(computeCompositeScore(stats));
+}
+
 export const HostImpactEngine = {
   weights: WEIGHTS,
   badgeTiers: BADGE_TIERS,

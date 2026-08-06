@@ -22,6 +22,7 @@ const seedData = {
       passwordHash: 'demo-hash', // never store plaintext even in the mock
       emergencyContact: { name: '', phone: '', relationship: '' },
       profilePhotoUrl: null,
+      status: 'active', // 'active' | 'deactivated' - Account Settings (FR-1.x)
       createdAt: '2026-02-10T00:00:00.000Z'
     },
     // Seeded so the Sign Up screen's own hint - "Use test@example.com to trigger
@@ -34,8 +35,15 @@ const seedData = {
       passwordHash: 'demo-hash',
       emergencyContact: { name: '', phone: '', relationship: '' },
       profilePhotoUrl: null,
+      status: 'active',
       createdAt: '2026-01-01T00:00:00.000Z'
-    }
+    },
+    // Other hosts, seeded read-only so the Ride Hub (Module 2) has a realistic
+    // marketplace to browse/search against without a live backend. Not signable-in.
+    u_host_ahmad: { id: 'u_host_ahmad', fullName: 'Ahmad Rizal', profilePhotoUrl: null, status: 'active' },
+    u_host_sarah: { id: 'u_host_sarah', fullName: 'Sarah Tan', profilePhotoUrl: null, status: 'active' },
+    u_host_raj: { id: 'u_host_raj', fullName: 'Raj Kumar', profilePhotoUrl: null, status: 'active' },
+    u_host_nurul: { id: 'u_host_nurul', fullName: 'Nurul Ain', profilePhotoUrl: null, status: 'active' }
   },
   vehicles: {
     u_demo_1: [
@@ -64,7 +72,80 @@ const seedData = {
   // Reputation Score Engine inputs (3.1.2.a) - completed trips, CO2 saved, and
   // reputation score feed the weighted Composite Impact Score on the Host Dashboard.
   impact: {
-    u_demo_1: { completedTrips: 34, co2SavedKg: 287, reputationScore: 78 }
+    u_demo_1: { completedTrips: 34, co2SavedKg: 287, reputationScore: 78, rating: 4.9 },
+    // Ratings shown on Ride Hub cards (Module 2) are a separate public "star"
+    // average (Module 2 FR-2.12 Rate & Review) from the 0-100 reputation score -
+    // seeded directly here since the Rate & Review screen isn't built yet.
+    // completedTrips/co2SavedKg/reputationScore still feed the same Host Impact
+    // Engine composite-score formula used on My Profile, so tier badges match.
+    u_host_ahmad: { completedTrips: 40, co2SavedKg: 120, reputationScore: 85, rating: 4.9 },
+    u_host_sarah: { completedTrips: 25, co2SavedKg: 60, reputationScore: 70, rating: 4.7 },
+    u_host_raj: { completedTrips: 8, co2SavedKg: 15, reputationScore: 45, rating: 4.5 },
+    u_host_nurul: { completedTrips: 38, co2SavedKg: 110, reputationScore: 84, rating: 4.8 }
+  },
+  // Ride Sharing Management (Module 2, FR-2.x) - Ride Management Component's
+  // records. Seeded with 4 published rides so Find a Ride has something to browse.
+  rides: {
+    r_1: {
+      id: 'r_1',
+      hostId: 'u_host_ahmad',
+      pickup: 'KL Sentral, Brickfields',
+      destination: 'Georgetown, Penang',
+      date: '2026-08-15',
+      time: '07:00',
+      journeyScale: 'Intercity',
+      seatsTotal: 3,
+      seatsAvailable: 3,
+      contribution: 'Snacks & drinks',
+      restrictionTags: ['Pet-friendly', 'No smoking'],
+      status: 'Published',
+      createdAt: '2026-08-01T00:00:00.000Z'
+    },
+    r_2: {
+      id: 'r_2',
+      hostId: 'u_host_sarah',
+      pickup: 'SS2, Petaling Jaya',
+      destination: 'USJ 10, Subang Jaya',
+      date: '2026-08-17',
+      time: '07:30',
+      journeyScale: 'Urban',
+      seatsTotal: 2,
+      seatsAvailable: 2,
+      contribution: 'Toll contribution',
+      restrictionTags: ['No smoking', 'Women-only'],
+      status: 'Published',
+      createdAt: '2026-08-01T00:00:00.000Z'
+    },
+    r_3: {
+      id: 'r_3',
+      hostId: 'u_host_raj',
+      pickup: 'Ampang Point, Kuala Lumpur',
+      destination: 'KLCC, Kuala Lumpur',
+      date: '2026-08-18',
+      time: '08:15',
+      journeyScale: 'Urban',
+      seatsTotal: 1,
+      seatsAvailable: 1,
+      contribution: 'No contribution needed',
+      restrictionTags: ['No smoking'],
+      status: 'Published',
+      createdAt: '2026-08-01T00:00:00.000Z'
+    },
+    r_4: {
+      id: 'r_4',
+      hostId: 'u_host_nurul',
+      pickup: 'Shah Alam City Centre',
+      destination: 'Putrajaya IOI City Mall',
+      date: '2026-08-19',
+      time: '08:30',
+      journeyScale: 'Intercity',
+      seatsTotal: 4,
+      seatsAvailable: 4,
+      contribution: 'Hot drinks',
+      restrictionTags: ['Pet-friendly', 'No smoking', 'Child seat available'],
+      status: 'Published',
+      createdAt: '2026-08-01T00:00:00.000Z'
+    }
   }
 };
 
@@ -113,6 +194,7 @@ export const mockDb = {
       passwordHash: password ? 'hashed:' + password.length : '',
       emergencyContact: { name: '', phone: '', relationship: '' },
       profilePhotoUrl: null,
+      status: 'active',
       createdAt: new Date().toISOString()
     };
     db.vehicles[id] = [];
@@ -131,6 +213,11 @@ export const mockDb = {
       err.code = 'NOT_FOUND';
       throw err;
     }
+    // Logging back in reactivates a deactivated account (FR-1.x Account Settings).
+    if (user.status === 'deactivated') {
+      user.status = 'active';
+      db.users[user.id] = user;
+    }
     db.currentUserId = user.id;
     save(db);
     return user;
@@ -142,6 +229,27 @@ export const mockDb = {
     db.users[userId] = { ...db.users[userId], ...patch };
     save(db);
     return db.users[userId];
+  },
+
+  // ---------- Account Settings (FR-1.x) ----------
+  async setAccountStatus(userId, status) {
+    await delay();
+    const db = load();
+    if (!db.users[userId]) throw new Error('Account not found.');
+    db.users[userId] = { ...db.users[userId], status };
+    save(db);
+    return db.users[userId];
+  },
+
+  async deleteAccount(userId) {
+    await delay();
+    const db = load();
+    delete db.users[userId];
+    delete db.vehicles[userId];
+    delete db.impact[userId];
+    if (db.currentUserId === userId) db.currentUserId = null;
+    save(db);
+    return true;
   },
 
   async listVehicles(userId) {
@@ -204,5 +312,80 @@ export const mockDb = {
     };
     save(db);
     return db.impact[userId];
+  },
+
+  // ---------- Ride Sharing Management (Module 2, FR-2.x) ----------
+  // Ride Management Component: create/read published rides. Enriches each ride
+  // with a host snapshot (name, photo, reputation score, badge tier) here in the
+  // Data Access Layer, the same way a real Supabase view/join would - so the
+  // Business Logic and Presentation layers above never need a second round trip.
+  async listRides({ from = '', to = '', date = '' } = {}) {
+    await delay();
+    const db = load();
+    const f = from.trim().toLowerCase();
+    const t = to.trim().toLowerCase();
+    return Object.values(db.rides)
+      .filter((r) => r.status === 'Published')
+      .filter((r) => !f || r.pickup.toLowerCase().includes(f))
+      .filter((r) => !t || r.destination.toLowerCase().includes(t))
+      .filter((r) => !date || r.date === date)
+      .map((r) => enrichRide(db, r))
+      .sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time));
+  },
+
+  async listMyRides(userId) {
+    await delay();
+    const db = load();
+    const hosting = Object.values(db.rides)
+      .filter((r) => r.hostId === userId)
+      .map((r) => enrichRide(db, r))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Ride Request Component (join flow) isn't built in this pass - "Joining"
+    // is wired up and ready for Screen 4/5's request flow to populate later.
+    return { hosting, joining: [] };
+  },
+
+  async createRide(hostId, rideData, status) {
+    await delay();
+    const db = load();
+    const id = 'r_' + Date.now();
+    const seats = Number(rideData.seatsTotal) || 1;
+    db.rides[id] = {
+      id,
+      hostId,
+      pickup: rideData.pickup,
+      destination: rideData.destination,
+      date: rideData.date,
+      time: rideData.time,
+      journeyScale: rideData.journeyScale,
+      vehicleId: rideData.vehicleId || null,
+      seatsTotal: seats,
+      seatsAvailable: seats,
+      contribution: rideData.contribution || '',
+      restrictionTags: rideData.restrictionTags || [],
+      status,
+      createdAt: new Date().toISOString()
+    };
+    save(db);
+    return enrichRide(db, db.rides[id]);
   }
 };
+
+function enrichRide(db, ride) {
+  const host = db.users[ride.hostId];
+  const impact = db.impact[ride.hostId] || { completedTrips: 0, co2SavedKg: 0, reputationScore: 0, rating: null };
+  return {
+    ...ride,
+    host: host
+      ? {
+          id: host.id,
+          fullName: host.fullName,
+          profilePhotoUrl: host.profilePhotoUrl,
+          completedTrips: impact.completedTrips,
+          co2SavedKg: impact.co2SavedKg,
+          reputationScore: impact.reputationScore,
+          rating: impact.rating
+        }
+      : null
+  };
+}
