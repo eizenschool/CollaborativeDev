@@ -383,3 +383,60 @@ export function IconCamera(props) {
     </Svg>
   );
 }
+export function IconSend(props) {
+  return (
+    <Svg {...props}>
+      <path d="M21 3 10.5 13.5" />
+      <path d="m21 3-6.5 18-4-7.5L3 9.5Z" />
+    </Svg>
+  );
+}
+
+export function IconPaperclip(props) {
+  return (
+    <Svg {...props}>
+      <path d="m9.5 12.5 6.8-6.8a3.3 3.3 0 0 1 4.7 4.7l-9.2 9.2a5 5 0 0 1-7.1-7.1l9-9" />
+      <path d="m7.2 14.8 8.7-8.7" />
+    </Svg>
+  );
+}
+
+export function IconSmile(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 14.5c1 1.5 2.1 2.2 3.5 2.2s2.5-.7 3.5-2.2" />
+      <circle cx="9" cy="9.5" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="9.5" r="0.8" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconMoreVertical(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconArchive(props) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="5" width="17" height="4" rx="1" />
+      <path d="M5.5 9v10.5h13V9" />
+      <path d="M9.5 13h5" />
+    </Svg>
+  );
+}
+
+export function IconClock(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </Svg>
+  );
+}
