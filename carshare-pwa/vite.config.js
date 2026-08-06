@@ -15,8 +15,8 @@ export default defineConfig({
         name: "Let's Tumpang - Community Carpooling",
         short_name: "Let's Tumpang",
         description: "Let's Tumpang: community carpooling & ride-hazard platform",
-        theme_color: '#0f9b8e',
-        background_color: '#0c1e3c',
+        theme_color: '#16a34a',
+        background_color: '#f6faf7',
         display: 'standalone', // 3.1(b) installable, app-like demo experience
         start_url: '/',
         icons: [
