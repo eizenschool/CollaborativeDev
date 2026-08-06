@@ -19,11 +19,6 @@ import EditRide from './presentation/components/ride/EditRide.jsx';
 import RateReview from './presentation/components/ride/RateReview.jsx';
 import { IconHome, IconSearch, IconMessage, IconHeart } from './presentation/components/icons.jsx';
 import MessageModule from './presentation/components/messaging/MessageModule.jsx';
-import {
-  IconHome,
-  IconSearch,
-  IconHeart,
-} from './presentation/components/icons.jsx';
 
 function AppShell() {
   return (
@@ -47,13 +42,14 @@ function AppShell() {
         <Route path="/ride/:rideId/edit" element={<EditRide />} />
         <Route path="/ride/:rideId/review" element={<RateReview />} />
         <Route path="/ride/:rideId" element={<RideDetail />} />
-        {/* Home, Search, Message, Favourite belong to Modules 3-6 and aren't
+        {/* Home, Search, Favourite belong to Modules 4-6 and aren't
             built yet - each nav tab is a real, clickable route so the shared nav
             bar's final shape is demonstrable, backed by one shared stub screen
             instead of faking each one individually. */}
         <Route path="/home" element={<ComingSoonScreen icon={IconHome} label="Home" />} />
         <Route path="/search" element={<ComingSoonScreen icon={IconSearch} label="Search" />} />
-        <Route path="/message" element={<ComingSoonScreen icon={IconMessage} label="Message" />} />
+        {/* Module 3 - Messaging */}
+        <Route path="/message" element={<MessageModule />} />
         <Route path="/favourite" element={<ComingSoonScreen icon={IconHeart} label="Favourite" />} />
         {/* Module 6 - Trip Verification, Exchange Settlement & Safety: PIN pickup
             verification, GPS cross-check, independent trip/exchange confirmation,
@@ -62,101 +58,6 @@ function AppShell() {
             only line App.jsx needs to know about it. */}
         <Route path="/safety/*" element={<SafetyRoutes />} />
         <Route path="*" element={<Navigate to="/profile" replace />} />
-        {/* Profile Settings, My Vehicles, Reputation, Host Dashboard,
-            and Account Settings are consolidated into one "My Profile"
-            page. */}
-        <Route
-          path="/profile"
-          element={<MyProfile />}
-        />
-
-        <Route
-          path="/vehicles"
-          element={
-            <Navigate
-              to="/profile"
-              replace
-            />
-          }
-        />
-
-        <Route
-          path="/reputation"
-          element={
-            <Navigate
-              to="/profile"
-              replace
-            />
-          }
-        />
-
-        <Route
-          path="/host"
-          element={
-            <Navigate
-              to="/profile"
-              replace
-            />
-          }
-        />
-
-        {/* Module 2 - Ride Sharing Management */}
-        <Route
-          path="/ride"
-          element={<RideHub />}
-        />
-
-        <Route
-          path="/ride/publish"
-          element={<PublishRide />}
-        />
-
-        {/* Shared navigation routes */}
-        <Route
-          path="/home"
-          element={
-            <ComingSoonScreen
-              icon={IconHome}
-              label="Home"
-            />
-          }
-        />
-
-        <Route
-          path="/search"
-          element={
-            <ComingSoonScreen
-              icon={IconSearch}
-              label="Search"
-            />
-          }
-        />
-
-        {/* Module 3 - Messaging */}
-        <Route
-          path="/message"
-          element={<MessageModule />}
-        />
-
-        <Route
-          path="/favourite"
-          element={
-            <ComingSoonScreen
-              icon={IconHeart}
-              label="Favourite"
-            />
-          }
-        />
-
-        <Route
-          path="*"
-          element={
-            <Navigate
-              to="/profile"
-              replace
-            />
-          }
-        />
       </Routes>
     </div>
   );
