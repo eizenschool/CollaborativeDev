@@ -19,6 +19,8 @@ import EditRide from './presentation/components/ride/EditRide.jsx';
 import RateReview from './presentation/components/ride/RateReview.jsx';
 import { IconHome, IconSearch, IconMessage, IconHeart } from './presentation/components/icons.jsx';
 import MessageModule from './presentation/components/messaging/MessageModule.jsx';
+import TripModule from './presentation/components/trip/TripModule.jsx';
+import TripDetail from './presentation/components/trip/TripDetail.jsx';
 
 function AppShell() {
   return (
@@ -51,6 +53,9 @@ function AppShell() {
         {/* Module 3 - Messaging */}
         <Route path="/message" element={<MessageModule />} />
         <Route path="/favourite" element={<ComingSoonScreen icon={IconHeart} label="Favourite" />} />
+        {/* Module 5 - Trip Management & Eco Impact */}
+        <Route path="/trip" element={<TripModule />} />
+        <Route path="/trip/:tripId" element={<TripDetail />} />
         {/* Module 6 - Trip Verification, Exchange Settlement & Safety: PIN pickup
             verification, GPS cross-check, independent trip/exchange confirmation,
             and the dispute confidence engine + admin console. Everything under
