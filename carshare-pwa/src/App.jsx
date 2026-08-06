@@ -7,6 +7,11 @@ import AuthPage from './presentation/components/AuthPage.jsx';
 import MyProfile from './presentation/components/MyProfile.jsx';
 import RideHub from './presentation/components/ride/RideHub.jsx';
 import PublishRide from './presentation/components/ride/PublishRide.jsx';
+import RideDetail from './presentation/components/ride/RideDetail.jsx';
+import ManageRequests from './presentation/components/ride/ManageRequests.jsx';
+import MyRequests from './presentation/components/ride/MyRequests.jsx';
+import EditRide from './presentation/components/ride/EditRide.jsx';
+import RateReview from './presentation/components/ride/RateReview.jsx';
 import { IconHome, IconSearch, IconMessage, IconHeart } from './presentation/components/icons.jsx';
 
 function AppShell() {
@@ -22,11 +27,14 @@ function AppShell() {
         <Route path="/vehicles" element={<Navigate to="/profile" replace />} />
         <Route path="/reputation" element={<Navigate to="/profile" replace />} />
         <Route path="/host" element={<Navigate to="/profile" replace />} />
-        {/* Module 2 - Ride Sharing Management: Ride Hub (Find a Ride / My Rides)
-            and the Publish a Ride 5-step flow. Ride Detail, Manage/My Requests,
-            Edit Ride, Cancel Ride, and Rate & Review aren't built in this pass. */}
+        {/* Module 2 - Ride Sharing Management mobile flow. */}
         <Route path="/ride" element={<RideHub />} />
         <Route path="/ride/publish" element={<PublishRide />} />
+        <Route path="/ride/requests" element={<MyRequests />} />
+        <Route path="/ride/:rideId/requests" element={<ManageRequests />} />
+        <Route path="/ride/:rideId/edit" element={<EditRide />} />
+        <Route path="/ride/:rideId/review" element={<RateReview />} />
+        <Route path="/ride/:rideId" element={<RideDetail />} />
         {/* Home, Search, Message, Favourite belong to Modules 3-6 and aren't
             built yet - each nav tab is a real, clickable route so the shared nav
             bar's final shape is demonstrable, backed by one shared stub screen
