@@ -1,0 +1,157 @@
+/* ================= Ride Hub ================= */
+.ride-hub {
+  display: flex; align-items: flex-start; gap: 24px;
+  padding: 24px 32px 48px; max-width: 1320px; margin: 0 auto;
+}
+.ride-hub-left { width: 320px; flex-shrink: 0; position: sticky; top: 96px; }
+.ride-hub-right { flex: 1; min-width: 0; }
+
+.btn-publish { margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+.ride-hub-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ride-hub-header h2 { margin: 0; font-size: 18px; font-family: var(--font-display); font-weight: 600; }
+
+.ride-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+@media (max-width: 1100px) { .ride-grid { grid-template-columns: 1fr; } }
+
+/* ---- Ride card ---- */
+.ride-card {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius-card);
+  padding: 18px; display: flex; flex-direction: column; gap: 12px;
+}
+.ride-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.ride-route { flex: 1; min-width: 0; }
+.ride-route-line { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--ink); }
+.ride-route-line + .ride-route-line { margin-top: 3px; font-weight: 500; }
+.ride-route-text.muted { color: var(--muted); font-weight: 500; font-size: 13px; }
+.pin { display: inline-flex; flex-shrink: 0; }
+.pin-pickup { color: var(--teal); }
+.ride-route-connector { width: 13px; display: inline-flex; justify-content: center; }
+.ride-route-connector::before { content: ''; width: 1.5px; height: 12px; background: var(--border); display: block; }
+
+.scale-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; flex-shrink: 0; }
+.scale-urban { background: #f3f4f6; color: var(--muted); }
+.scale-intercity { background: var(--teal-tint); color: var(--teal-dark); }
+
+.ride-meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; }
+.ride-meta { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.ride-seats { display: flex; align-items: center; gap: 6px; color: var(--teal-dark); font-weight: 700; }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #f3f4f6; color: var(--muted); }
+
+.ride-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ride-host { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ride-host-avatar {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--teal-tint); color: var(--teal-dark);
+  display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700;
+  flex-shrink: 0; background-size: cover; background-position: center;
+}
+.ride-host-name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
+.ride-host-rating { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--warning); font-weight: 700; flex-shrink: 0; }
+.tier-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; flex-shrink: 0; }
+
+.contribution-tag { font-size: 11.5px; font-weight: 700; padding: 5px 11px; border-radius: 999px; background: var(--teal-tint); color: var(--teal-dark); flex-shrink: 0; }
+
+.status-chip { font-size: 10.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; text-transform: capitalize; flex-shrink: 0; }
+.status-draft { background: #f3f4f6; color: #9ca3af; }
+.status-published { background: #dbeafe; color: #3b82f6; }
+.status-matched { background: #ede9fe; color: #7c3aed; }
+.status-in-transit { background: var(--warning-tint); color: var(--warning); }
+.status-completed { background: var(--teal-tint); color: var(--teal-dark); }
+.status-cancelled { background: var(--danger-tint); color: var(--danger); }
+
+/* ================= Publish a Ride ================= */
+.publish-ride { display: flex; align-items: flex-start; gap: 40px; padding: 24px 32px 60px; max-width: 1100px; margin: 0 auto; }
+.publish-left { width: 220px; flex-shrink: 0; position: sticky; top: 96px; }
+.publish-right { flex: 1; min-width: 0; max-width: 640px; }
+
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 13px; font-weight: 600; padding: 6px 0; margin-bottom: 14px; font-family: inherit;
+}
+.back-link:hover { color: var(--ink); }
+
+.step-list { display: flex; flex-direction: column; gap: 2px; }
+.step-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px;
+  font-size: 13.5px; font-weight: 700; color: var(--muted);
+}
+.step-item.active { background: var(--teal-tint); color: var(--teal-dark); }
+.step-item.done { color: var(--ink); }
+.step-num {
+  width: 22px; height: 22px; border-radius: 50%; background: #e5e7eb; color: #6b7280;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0;
+}
+.step-item.active .step-num { background: var(--teal); color: #fff; }
+.step-item.done .step-num { background: var(--teal-dark); color: #fff; }
+
+.step-eyebrow { margin: 0 0 2px; font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.step-title { margin: 0 0 18px; font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+
+.step-actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; }
+
+.route-inputs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.route-inputs .input-wrap input { padding-left: 36px; }
+
+.map-placeholder {
+  position: relative; height: 200px; border-radius: 16px; margin-bottom: 20px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.35) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0 1px, transparent 1px 28px),
+    linear-gradient(135deg, #bbf0cf, #86e0ab);
+  overflow: hidden;
+}
+.map-pin {
+  position: absolute; display: inline-flex; align-items: center; gap: 6px; background: #fff;
+  padding: 5px 10px 5px 6px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+.pin-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--teal); border: 2.5px solid #fff; box-shadow: 0 0 0 1.5px var(--teal); }
+.pin-dot-end { background: var(--danger); box-shadow: 0 0 0 1.5px var(--danger); }
+.map-pin-start { left: 16px; bottom: 20px; }
+.map-pin-end { right: 16px; top: 16px; }
+.map-attribution { position: absolute; left: 14px; top: 14px; font-size: 10.5px; color: rgba(17,24,39,0.5); font-weight: 600; }
+
+.field-label-standalone { font-size: 12.5px; font-weight: 700; margin: 0 0 8px; }
+
+.scale-toggle { display: flex; gap: 10px; margin-bottom: 6px; }
+.scale-option {
+  flex: 1; padding: 13px; border-radius: 12px; border: 1.5px solid var(--border); background: #fff;
+  font-size: 13.5px; font-weight: 700; color: var(--muted); cursor: pointer; font-family: inherit; transition: all .12s;
+}
+.scale-option.active { border-color: var(--teal); background: var(--teal-tint); color: var(--teal-dark); }
+
+.seat-stepper { display: inline-flex; align-items: center; gap: 16px; border: 1px solid var(--border); border-radius: 999px; padding: 6px 18px; }
+.seat-stepper button {
+  width: 26px; height: 26px; border-radius: 50%; border: none; background: var(--teal-tint); color: var(--teal-dark);
+  font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.seat-stepper span { font-size: 15px; font-weight: 700; min-width: 16px; text-align: center; }
+
+.vehicle-select-grid { display: flex; flex-direction: column; gap: 10px; }
+.vehicle-select-card {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px;
+  border: 1.5px solid var(--border); background: #fff; cursor: pointer; text-align: left; font-family: inherit;
+}
+.vehicle-select-card.active { border-color: var(--teal); background: var(--teal-tint); }
+.vehicle-select-icon {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--teal-tint); color: var(--teal-dark);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.vehicle-select-card.active .vehicle-select-icon { background: #fff; }
+.vehicle-select-name { font-weight: 700; font-size: 13.5px; }
+.vehicle-select-meta { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.vehicle-select-check { margin-left: auto; color: var(--teal-dark); display: flex; }
+
+.chip-select-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.chip-select {
+  padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--border); background: #fff;
+  font-size: 12.5px; font-weight: 700; color: var(--muted); cursor: pointer; font-family: inherit;
+}
+.chip-select.active { border-color: var(--teal); background: var(--teal-tint); color: var(--teal-dark); }
+
+.review-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.review-row:last-child { border-bottom: none; }
+.review-row span { color: var(--muted); }
+.review-row strong { text-align: right; }
