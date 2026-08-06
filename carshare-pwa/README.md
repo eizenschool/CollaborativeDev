@@ -1,93 +1,386 @@
-# Let's Tumpang — Module 1 (User Profile & Reputation) PWA
+# Let's Tumpang
+# Coding Standards & Git Workflow
 
-This is a working build of **Module 1 only** (Sign Up/Login, Profile Settings, My
-Vehicles, Reputation, Host Dashboard), implemented against the three-tier
-architecture from section 3.1 of the proposal, and structured so Modules 2–6 can be
-added later without restructuring Module 1.
+Version: 2.0
 
-## For marking — the three layers at a glance
+This document defines the coding standards, naming conventions, project architecture, and Git workflow adopted by the Let's Tumpang project. All team members shall follow these standards to ensure consistency, maintainability, and collaboration throughout the development process.
 
-Every file under `src/` opens with a `// ===== ... LAYER =====` banner comment
-identifying which layer it belongs to. Folder names match the layer names directly:
+---
 
-| Markable layer | Folder | Files |
-|---|---|---|
-| **Presentation** | `src/presentation/` | `components/AuthPage.jsx`, `ProfileSettings.jsx`, `MyVehicles.jsx`, `Reputation.jsx`, `HostDashboard.jsx`, `Sidebar.jsx` + `styles/theme.css`, `auth.css` |
-| **Business Logic** | `src/business-logic/` | `AuthService.js`, `ProfileService.js`, `VehicleService.js`, `HostImpactEngine.js` |
-| **Data Access** | `src/data-access/` | `supabaseClient.js` (real backend), `mockDataStore.js` (offline fallback so the app is markable without a live Supabase project) |
+# 1. Coding Standards
 
-`src/App.jsx`, `src/main.jsx`, and `src/context/AuthContext.jsx` are routing/wiring
-glue that sits above all three layers rather than inside one — each says so in its
-own banner comment.
+## 1.1 Architecture
 
-**The enforced rule:** Presentation only imports from Business Logic (and the
-AuthContext wrapper) — never from Data Access. Business Logic is the only layer
-that imports Data Access. Data Access is the only layer that imports the Supabase
-SDK. That chain is what section 3.1.5 of the proposal calls the three-tier
-separation rule, and it's unbroken throughout this codebase.
+Every module shall follow the three-tier architecture adopted by the project.
 
-## Run it
-
-```bash
-npm install
-npm run dev       # http://localhost:5173
+```
+Presentation Layer
+        ↓
+Business Logic Layer
+        ↓
+Data Access Layer
+        ↓
+Supabase
 ```
 
-No Supabase project is required to try it — see "Backend modes" below.
+### Layer Responsibilities
 
-To build the installable PWA bundle:
+| Layer | Responsibility |
+|--------|----------------|
+| presentation/ | React pages, screens, forms and UI components. No direct Supabase calls. |
+| business-logic/ | Validation, business rules, data processing and orchestration. |
+| data-access/ | Supabase queries, insert, update and delete operations only. |
 
-```bash
-npm run build
-npm run preview
+### Architecture Rules
+
+- Presentation Layer shall never communicate directly with Supabase.
+- Presentation Layer shall only communicate with Business Logic.
+- Business Logic shall communicate with Data Access.
+- Data Access shall be the only layer allowed to access Supabase.
+- Each layer shall only communicate with its adjacent layer.
+
+---
+
+## 1.2 Naming Conventions
+
+| Item | Convention | Example |
+|------|------------|---------|
+| React Components | PascalCase | RidePublishForm.jsx |
+| Business Logic Files | camelCase, verb-first | validateRideRequest.js |
+| Data Access Files | camelCase, noun + Repository | rideRepository.js |
+| Variables | camelCase | rideStatus |
+| Functions | camelCase | getUserReputation() |
+| Constants | UPPER_SNAKE_CASE | MAX_SEATS |
+| Database Tables | snake_case, plural | ride_requests |
+| Database Columns | snake_case | pickup_location |
+
+### Boolean Variables
+
+Boolean variables shall begin with:
+
+- is
+- has
+- can
+
+Example
+
+```javascript
+isVerified
+hasVehicle
+canPublishRide
 ```
 
-## Folder layout ↔ the three-tier architecture
+### Array Variables
 
-| Folder | Tier (3.1.x) | Rule enforced |
-|---|---|---|
-| `src/presentation/` | 3.1.1 Frontend/GUI Layer | Only imports from `src/business-logic` and `src/context`. Never imports `src/data-access` (3.1.5.a). |
-| `src/business-logic/` | 3.1.2 Business Logic Layer | `AuthService`, `ProfileService`, `VehicleService`, `HostImpactEngine` — validate input and shape data before/after it reaches Supabase (3.1.5.b). |
-| `src/data-access/` | 3.1.3 Data Processing Layer | `supabaseClient.js` is the **only** file that imports `@supabase/supabase-js`. `mockDataStore.js` is a dev-only fallback, not a real answer to 3.1.3(a) — see below. |
-| `vite.config.js` | 3.1(a) Offline resilience | `vite-plugin-pwa` service worker: precaches the app shell, cache-first for map tiles, network-first (GET only) for Supabase reads. Writes are never cached, so offline is read-only exactly as specified. |
+Arrays shall use plural nouns.
 
-## Backend modes
+Example
 
-- **No `.env`** (default): every service in `src/business-logic` transparently
-  falls back to `src/data-access/mockDataStore.js`, an in-memory + `localStorage`-backed
-  store, so all five Module 1 screens are fully clickable with no setup. This
-  exists purely so the prototype runs standalone for demos/marking — it is **not**
-  a substitute for the real architecture. The proposal's own reasoning in 3.1.3(a)
-  (localStorage is single-browser and can't support a Host on one device being
-  found by a Client on another) still holds; that's why this file is confined to
-  `src/data-access/` and never referenced from `src/presentation/`.
-- **With `.env`** (copy `.env.example`, fill in a real Supabase project's URL/anon
-  key): the same service functions call Supabase Auth / Postgres / Storage
-  instead. No component code changes — only `src/data-access/supabaseClient.js` and the
-  `if (isSupabaseConfigured)` branches in each service are backend-specific.
+```javascript
+rideRequests
+tripHistory
+chatMessages
+```
 
-To go live, you'd still need to create the Supabase tables this code expects
-(`profiles`, `vehicles`, `host_impact_stats`) and their RLS policies — that's a
-Design Phase / Supabase-project task, not something a static code handoff can set
-up for you.
+### Event Handlers
 
-## What's deliberately out of scope here
+Event handler functions shall begin with **handle**.
 
-Per the brief ("Module 1 only to compatible other modules"), nothing from
-Modules 2–6 is implemented — the "Publish New Ride" button and the Reputation
-screen's trip-history note are explicit stubs pointing at where those modules
-plug in later. Also out of scope, per the proposal itself:
+```javascript
+handleLogin()
+handlePublishRide()
+handleSendMessage()
+```
 
-- Leaflet.js / OSRM / Turf.js (Module 4) — not wired in; the offline caching rule
-  for map tiles in `vite.config.js` is pre-configured for whenever they are.
-- Microsoft Translator / Web Speech API (Module 3) — the security note in 3.1.3(f)
-  is honoured in `supabaseClient.js`'s comments so whoever builds Module 3 doesn't
-  accidentally import the translator key into client code.
-- True closed-app push notifications (3.1.4) — documented in the proposal as a
-  stated limitation, not attempted here.
+### CRUD Functions
 
-## Demo credentials (mock backend only)
+Use consistent CRUD naming.
 
-- Existing account: `jamie@letstumpang.app` (any password — the mock store doesn't
-  actually verify password hashes, only real Supabase Auth does that)
-- Sign-up duplicate-error demo: try signing up with `test@example.com`
+```javascript
+fetchRideHistory()
+createRide()
+updateVehicle()
+deleteMessage()
+```
+
+---
+
+## 1.3 Formatting & Structure
+
+### Indentation
+
+- Use 2 spaces.
+- Do not use tabs.
+
+### Quotation
+
+- Single quotes for JavaScript strings.
+- Double quotes for JSX attributes.
+
+### Components
+
+- One component per file.
+- File name shall match the component name.
+
+### Documentation
+
+Business Logic functions should include a short JSDoc comment.
+
+Example
+
+```javascript
+/**
+ * Validate ride request.
+ * @returns {Boolean}
+ */
+```
+
+### Shared Constants
+
+Do not hardcode status values.
+
+Incorrect
+
+```javascript
+"Draft"
+```
+
+Correct
+
+```javascript
+TRIP_STATUS.DRAFT
+```
+
+### Import Order
+
+Imports shall follow this order:
+
+1. React
+2. Third-party libraries
+3. Shared utilities
+4. Local components
+5. CSS
+
+---
+
+## 1.4 Shared Enums
+
+Shared status values shall be defined inside
+
+```
+src/shared/constants.js
+```
+
+Examples
+
+- TRIP_STATUS
+- REPORT_STATUS
+- USER_ROLE
+- MESSAGE_TYPE
+
+All modules shall import these shared constants instead of redefining them.
+
+---
+
+## 1.5 Error Handling
+
+- Validate user input before processing.
+- Display user-friendly error messages.
+- Do not expose technical errors directly to users.
+
+Good
+
+```
+Unable to publish ride.
+
+Please try again.
+```
+
+Bad
+
+```
+Supabase Error 23505
+```
+
+---
+
+## 1.6 Security
+
+- Store API Keys inside `.env`.
+- Never commit `.env` to GitHub.
+- Never hardcode API Keys.
+- Authenticate users before accessing protected resources.
+- Follow Supabase Row Level Security (RLS) configuration where applicable.
+
+---
+
+## 1.7 Documentation
+
+Developers should
+
+- write meaningful comments for complex logic.
+- update documentation after major feature implementation.
+- maintain consistent naming across all modules.
+
+---
+
+# 2. Git Workflow
+
+The Let's Tumpang project follows a module-based Git workflow.
+
+```
+                 main
+                   ▲
+                   │
+             development
+      ▲      ▲      ▲      ▲      ▲      ▲
+      │      │      │      │      │      │
+ Module1 Module2 Module3 Module4 Module5 Module6
+```
+
+---
+
+## 2.1 Branch Strategy
+
+Each module shall have its own development branch.
+
+Example
+
+```
+main
+
+development
+
+Module1_User_Profile_&_Reputation
+
+Module2_Ride_Sharing_Management
+
+Module3_Messaging
+
+Module4_Smart_Search_&_Favourite
+
+Module5_Trip_Management_&_Eco_Impact
+
+Module6_Safety_&_Verification
+```
+
+---
+
+## 2.2 Development Flow
+
+```
+Create Module Branch
+
+↓
+
+Develop Feature
+
+↓
+
+Commit
+
+↓
+
+Push
+
+↓
+
+Merge into Development
+
+↓
+
+Testing
+
+↓
+
+Merge into Main
+```
+
+---
+
+## 2.3 Key Rules
+
+- No direct commits to the **main** branch.
+- Each developer shall work only in the assigned module branch.
+- Completed features shall be merged into the **development** branch.
+- The **development** branch shall be tested before merging into **main**.
+- Only stable and demo-ready builds may be merged into **main**.
+
+---
+
+## 2.4 Commit Convention
+
+Commit messages should be meaningful and include the module identifier.
+
+Examples
+
+```
+[Module1] Implement user registration
+
+[Module2] Add publish ride validation
+
+[Module3] Implement send message feature
+
+[Module4] Add search filters
+
+[Module5] Implement trip history
+
+[Module6] Fix hazard reporting validation
+```
+
+---
+
+## 2.5 Pull Request
+
+Every completed module feature should
+
+- create a Pull Request to **development**
+- include a clear description
+- include testing evidence where applicable
+- be reviewed before merging
+
+---
+
+## 2.6 Issue Tracking
+
+Each GitHub Issue (or Trello card) represents one Functional Requirement (FR).
+
+Example
+
+```
+FR-2.3 – Ride Publish Form
+```
+
+Workflow
+
+```
+Backlog
+
+↓
+
+In Progress
+
+↓
+
+In Review
+
+↓
+
+Done
+```
+
+Each completed Issue should correspond to its related commits or Pull Request whenever applicable.
+
+---
+
+# 3. Definition of Done
+
+A task is considered completed only when:
+
+- Coding standards are followed.
+- Functionality has been implemented.
+- Code has been tested.
+- No critical errors remain.
+- Documentation has been updated.
+- Changes have been merged into the development branch.
+- Development branch has passed integration testing before merging into main.
