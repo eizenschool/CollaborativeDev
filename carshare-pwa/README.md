@@ -5,10 +5,9 @@ of **Module 2 (Ride Sharing Management)**, implemented against the three-tier
 architecture from section 3.1 of the proposal, and structured so Modules 3–6
 can be added later without restructuring what's here.
 
-## For marking — the three layers at a glance
+This document defines the coding standards, naming conventions, project architecture, and Git workflow adopted by the Let's Tumpang project. All team members shall follow these standards to ensure consistency, maintainability, and collaboration throughout the development process.
 
-Every file under `src/` opens with a `// ===== ... LAYER =====` banner comment
-identifying which layer it belongs to. Folder names match the layer names directly:
+---
 
 | Markable layer | Folder | Files |
 |---|---|---|
@@ -58,29 +57,66 @@ mobile bottom-tab layout is a follow-up, not part of this build.
 glue that sits above all three layers rather than inside one — each says so in its
 own banner comment.
 
-**The enforced rule:** Presentation only imports from Business Logic (and the
-AuthContext wrapper) — never from Data Access. Business Logic is the only layer
-that imports Data Access. Data Access is the only layer that imports the Supabase
-SDK. That chain is what section 3.1.5 of the proposal calls the three-tier
-separation rule, and it's unbroken throughout this codebase.
+Every module shall follow the three-tier architecture adopted by the project.
 
-## Run it
-
-```bash
-npm install
-npm run dev       # http://localhost:5173
+```
+Presentation Layer
+        ↓
+Business Logic Layer
+        ↓
+Data Access Layer
+        ↓
+Supabase
 ```
 
-No Supabase project is required to try it — see "Backend modes" below.
+### Layer Responsibilities
 
-To build the installable PWA bundle:
+| Layer | Responsibility |
+|--------|----------------|
+| presentation/ | React pages, screens, forms and UI components. No direct Supabase calls. |
+| business-logic/ | Validation, business rules, data processing and orchestration. |
+| data-access/ | Supabase queries, insert, update and delete operations only. |
 
-```bash
-npm run build
-npm run preview
+### Architecture Rules
+
+- Presentation Layer shall never communicate directly with Supabase.
+- Presentation Layer shall only communicate with Business Logic.
+- Business Logic shall communicate with Data Access.
+- Data Access shall be the only layer allowed to access Supabase.
+- Each layer shall only communicate with its adjacent layer.
+
+---
+
+## 1.2 Naming Conventions
+
+| Item | Convention | Example |
+|------|------------|---------|
+| React Components | PascalCase | RidePublishForm.jsx |
+| Business Logic Files | camelCase, verb-first | validateRideRequest.js |
+| Data Access Files | camelCase, noun + Repository | rideRepository.js |
+| Variables | camelCase | rideStatus |
+| Functions | camelCase | getUserReputation() |
+| Constants | UPPER_SNAKE_CASE | MAX_SEATS |
+| Database Tables | snake_case, plural | ride_requests |
+| Database Columns | snake_case | pickup_location |
+
+### Boolean Variables
+
+Boolean variables shall begin with:
+
+- is
+- has
+- can
+
+Example
+
+```javascript
+isVerified
+hasVehicle
+canPublishRide
 ```
 
-## Folder layout ↔ the three-tier architecture
+### Array Variables
 
 | Folder | Tier (3.1.x) | Rule enforced |
 |---|---|---|
@@ -89,7 +125,7 @@ npm run preview
 | `src/data-access/` | 3.1.3 Data Processing Layer | `supabaseClient.js` is the **only** file that imports `@supabase/supabase-js`. `mockDataStore.js` is a dev-only fallback, not a real answer to 3.1.3(a) — see below. |
 | `vite.config.js` | 3.1(a) Offline resilience | `vite-plugin-pwa` service worker: precaches the app shell, cache-first for map tiles, network-first (GET only) for Supabase reads. Writes are never cached, so offline is read-only exactly as specified. |
 
-## Backend modes
+Example
 
 - **No `.env`** (default): every service in `src/business-logic` transparently
   falls back to `src/data-access/mockDataStore.js`, an in-memory + `localStorage`-backed
@@ -108,7 +144,7 @@ npm run preview
 **Full walkthrough (creating the project, running the schema, RLS policies,
 the avatars storage bucket): [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md).**
 
-## What's deliberately out of scope here
+Event handler functions shall begin with **handle**.
 
 - Leaflet.js / OSRM / Turf.js (Module 4) — not wired in; Publish a Ride's map
   step is a static placeholder, and the offline caching rule for map tiles in
@@ -121,7 +157,7 @@ the avatars storage bucket): [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md).
 - Module 2's Request to Join / Manage Requests / Rate & Review, and Modules 3,
   5, 6 entirely — see "Module 2 — what's built vs. deferred" above.
 
-## Demo credentials (mock backend only)
+Use consistent CRUD naming.
 
 - Existing account: `jamie@letstumpang.app` (any password — the mock store doesn't
   actually verify password hashes, only real Supabase Auth does that)
