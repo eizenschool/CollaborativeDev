@@ -91,6 +91,29 @@ export const RideService = {
     return mockDb.listMyRides(userId);
   },
 
+  async getRide(rideId) {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase.from('rides').select(RIDE_SELECT).eq('id', rideId).maybeSingle();
+      if (error) throw error;
+      return data ? mapRideRow(data) : null;
+    }
+    return mockDb.getRide(rideId);
+  },
+
+  async updateRide(rideId, patch) {
+    if (isSupabaseConfigured) {
+      const values = {};
+      if (patch.contribution !== undefined) values.contribution = patch.contribution;
+      if (patch.journeyScale !== undefined) values.journey_scale = patch.journeyScale;
+      if (patch.restrictionTags !== undefined) values.restriction_tags = patch.restrictionTags;
+      if (patch.status !== undefined) values.status = patch.status;
+      const { data, error } = await supabase.from('rides').update(values).eq('id', rideId).select(RIDE_SELECT).single();
+      if (error) throw error;
+      return mapRideRow(data);
+    }
+    return mockDb.updateRide(rideId, patch);
+  },
+
   // status is 'Draft' (Save as Draft, Step 5) or 'Published' (Publish Ride, Step 5).
   async publishRide(hostId, rideData, status = 'Published') {
     if (status === 'Published') validateRideDraft(rideData);

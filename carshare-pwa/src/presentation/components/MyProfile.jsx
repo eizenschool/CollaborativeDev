@@ -113,6 +113,7 @@ export default function MyProfile() {
             activeVehicleCount={activeVehicleCount}
             goTo={setPanel}
             onPublishRide={() => navigate('/ride/publish')}
+            onOpenImpact={() => navigate('/trip')}
           />
         )}
         {panel === 'info' && <InfoSecurityPanel user={user} onSaved={setUser} />}
@@ -136,7 +137,7 @@ export default function MyProfile() {
 
 // ---------- OVERVIEW ----------
 
-function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo, onPublishRide }) {
+function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo, onPublishRide, onOpenImpact }) {
   const hasEmergencyContact = Boolean(user.emergencyContact?.name && user.emergencyContact?.phone);
   const meetsThreshold = summary ? summary.reputationScore >= REPUTATION_THRESHOLD : true;
 
@@ -168,6 +169,8 @@ function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo, onPu
         </div>
       </div>
 
+      <ImpactEntryCard onOpenImpact={onOpenImpact} />
+
       <div className="card">
         <p className="card-title">Quick actions</p>
         <p className="card-subtitle">Common tasks, one click from wherever you land on your profile</p>
@@ -191,6 +194,79 @@ function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo, onPu
         </p>
       </div>
     </>
+  );
+}
+
+function ImpactEntryCard({ onOpenImpact }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onOpenImpact}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        textAlign: 'left',
+        background: 'linear-gradient(135deg, #ECFDF5 0%, #F0FDFA 100%)',
+        border: '1.5px solid #A7F3D0',
+        borderLeft: '5px solid #0D9488',
+        borderRadius: 16,
+        padding: '18px 20px',
+        marginBottom: 16,
+        cursor: 'pointer',
+        boxShadow: hover ? '0px 10px 28px rgba(13,148,136,0.18)' : '0px 3px 12px rgba(13,148,136,0.10)',
+        transform: hover ? 'translateY(-2px)' : 'none',
+        transition: 'all 0.15s ease'
+      }}
+    >
+      <span
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, #16A34A, #0D9488)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          color: '#FFFFFF',
+          boxShadow: '0px 4px 12px rgba(13,148,136,0.25)'
+        }}
+      >
+        <IconLeaf size={22} />
+      </span>
+      <span style={{ flex: 1 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 16, color: '#111827' }}>
+            My Impact &amp; Trip History
+          </span>
+          <span
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.4,
+              textTransform: 'uppercase',
+              color: '#0D9488',
+              background: '#CCFBF1',
+              padding: '2px 8px',
+              borderRadius: 999
+            }}
+          >
+            Eco
+          </span>
+        </span>
+        <span style={{ display: 'block', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#374151', marginTop: 3 }}>
+          View CO₂ saved, ride history &amp; monthly leaderboard
+        </span>
+      </span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0D9488" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <path d="M9 18l6-6-6-6" />
+      </svg>
+    </button>
   );
 }
 

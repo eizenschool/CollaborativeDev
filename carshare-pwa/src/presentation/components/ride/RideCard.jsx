@@ -21,13 +21,13 @@ function initialsOf(name) {
   return (name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
-export default function RideCard({ ride, statusChip }) {
+export default function RideCard({ ride, statusChip, onClick }) {
   const badge = ride.host ? getBadgeForStats(ride.host) : null;
   const tier = badge ? badge.name.replace(' Host', '') : null;
   const tierStyle = tier ? TIER_COLORS[tier] : null;
 
   return (
-    <div className="ride-card">
+    <div className={'ride-card' + (onClick ? ' ride-card-clickable' : '')} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (event) => event.key === 'Enter' && onClick() : undefined}>
       <div className="ride-card-top">
         <div className="ride-route">
           <div className="ride-route-line">
