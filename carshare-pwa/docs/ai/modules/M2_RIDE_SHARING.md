@@ -47,6 +47,14 @@ Route and waypoint previews use the shared no-charge Maps Embed API directions
 component. It accepts the existing text locations and falls back to the local
 route illustration when the restricted key is absent or the app is offline.
 
+The Module 2 presentation follows the shared `docs/ai/UI.md` phone-first
+contract across the ride hub, publishing, detail, request management, editing,
+and review flows. Primary mobile actions sit above the shared bottom navigation
+and safe area, interactive controls use visible labels and at least 44px touch
+targets, sheets become centred dialogs on wider screens, and ride listings and
+details reflow into tablet/desktop grids without changing the service contract.
+Responsive verification targets are 375px, 768px, 1024px, and 1440px.
+
 ## Deferred
 Places autocomplete, stored coordinates, traffic-aware routing, and
 route-deviation automation; Module 3 conversation

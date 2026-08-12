@@ -58,7 +58,7 @@ export default function ManageRequests() {
   function RequestCard({ request, actions = false, muted = false }) {
     const person = request.requester || { fullName: 'Member', reputationScore: 0, rating: null };
     return (
-      <article className={`passenger-request-card ${muted ? 'muted' : ''}`}>
+      <article className={`passenger-request-card ${muted ? 'muted' : ''}`} aria-busy={busyId === request.id}>
         <span className="request-avatar">{avatar(person.fullName)}</span>
         <div className="request-person">
           <strong>{person.fullName} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</strong>
@@ -66,7 +66,7 @@ export default function ManageRequests() {
           {request.companionNames.length > 0 && <small>Companions: {request.companionNames.join(', ')}</small>}
           {request.decisionReason && <small>Reason: {request.decisionReason}</small>}
         </div>
-        {actions && <div className="request-actions"><button disabled={busyId === request.id} onClick={() => decide(request, 'Rejected')}>Reject</button><button disabled={busyId === request.id || request.seatsRequested > (ride?.seatsAvailable ?? 0)} onClick={() => decide(request, 'Accepted')}>Accept</button></div>}
+        {actions && <div className="request-actions"><button type="button" disabled={busyId === request.id} onClick={() => decide(request, 'Rejected')}>{busyId === request.id ? 'Working…' : 'Reject'}</button><button type="button" disabled={busyId === request.id || request.seatsRequested > (ride?.seatsAvailable ?? 0)} onClick={() => decide(request, 'Accepted')}>{busyId === request.id ? 'Working…' : 'Accept'}</button></div>}
       </article>
     );
   }
@@ -78,8 +78,8 @@ export default function ManageRequests() {
         <div><h1>Manage requests</h1><p>{ride ? `${ride.pickup.split(',')[0]} → ${ride.destination.split(',')[0]}` : 'Your ride'}</p></div>
       </header>
       <div className="requests-page-content">
-        {error && <div className="alert alert-error">{error}</div>}
-        <section className="request-stats">
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
+        <section className="request-stats" aria-label="Request summary">
           <div><strong>{pending.length}</strong><span>Pending</span></div>
           <div><strong>{accepted.reduce((sum, request) => sum + request.seatsRequested, 0)}</strong><span>Accepted seats</span></div>
           <div><strong>{ride?.seatsAvailable ?? 0}</strong><span>Seats left</span></div>
@@ -89,7 +89,7 @@ export default function ManageRequests() {
         {pending.length > 0 ? <section className="request-group"><h2 className="pending-heading">Pending ({pending.length})</h2>{pending.map((request) => <RequestCard request={request} actions key={request.id} />)}</section>
           : <section className="empty-request-state"><IconUsers size={34} /><strong>No pending requests</strong><p>New passenger requests will appear here.</p></section>}
 
-        {history.length > 0 && <section className="request-group rejected-group"><button className="rejected-toggle" onClick={() => setShowHistory((show) => !show)}>History ({history.length})</button>{showHistory && history.map((request) => <RequestCard request={request} muted key={request.id} />)}</section>}
+        {history.length > 0 && <section className="request-group rejected-group"><button type="button" className="rejected-toggle" aria-expanded={showHistory} onClick={() => setShowHistory((show) => !show)}>History ({history.length})</button>{showHistory && history.map((request) => <RequestCard request={request} muted key={request.id} />)}</section>}
       </div>
     </main>
   );

@@ -89,14 +89,14 @@ function CancelSheet({ onDismiss, onConfirm }) {
   const reasons = ['Change of plans', 'Vehicle issue', 'Emergency', 'Other'];
   return (
     <div className="sheet-backdrop" onMouseDown={onDismiss}>
-      <section className="bottom-sheet" onMouseDown={(event) => event.stopPropagation()}>
+      <section className="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-ride-title" onKeyDown={(event) => event.key === 'Escape' && onDismiss()} onMouseDown={(event) => event.stopPropagation()}>
         <span className="sheet-handle" />
-        <div className="sheet-title-row"><h2>Cancel this ride?</h2><button onClick={onDismiss} aria-label="Close"><IconX size={19} /></button></div>
+        <div className="sheet-title-row"><h2 id="cancel-ride-title">Cancel this ride?</h2><button type="button" autoFocus onClick={onDismiss} aria-label="Close cancellation dialog"><IconX size={19} /></button></div>
         <p>Let passengers know why this ride is no longer available.</p>
         <div className="reason-list">
-          {reasons.map((item) => <button className={reason === item ? 'selected' : ''} key={item} onClick={() => setReason(item)}><i />{item}</button>)}
+          {reasons.map((item) => <button type="button" aria-pressed={reason === item} className={reason === item ? 'selected' : ''} key={item} onClick={() => setReason(item)}><i />{item}</button>)}
         </div>
-        <button className="danger-button" disabled={!reason} onClick={() => onConfirm(reason)}>Confirm cancellation</button>
+        <button type="button" className="danger-button" disabled={!reason} onClick={() => onConfirm(reason)}>Confirm cancellation</button>
       </section>
     </div>
   );
@@ -112,13 +112,13 @@ function RequestSheet({ ride, onDismiss, onSubmit, saving, error }) {
   }
   return (
     <div className="sheet-backdrop" onMouseDown={onDismiss}>
-      <section className="bottom-sheet" onMouseDown={(event) => event.stopPropagation()}>
+      <section className="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="request-ride-title" onKeyDown={(event) => event.key === 'Escape' && onDismiss()} onMouseDown={(event) => event.stopPropagation()}>
         <span className="sheet-handle" />
-        <div className="sheet-title-row"><h2>Request to join</h2><button onClick={onDismiss} aria-label="Close"><IconX size={19} /></button></div>
+        <div className="sheet-title-row"><h2 id="request-ride-title">Request to join</h2><button type="button" autoFocus onClick={onDismiss} aria-label="Close request dialog"><IconX size={19} /></button></div>
         <p>Seats include you. Pending requests do not reserve seats until the Host accepts them.</p>
-        <div className="field"><label>Seats requested</label><div className="seat-stepper"><button type="button" onClick={() => setSeats(seatsRequested - 1)}>−</button><span>{seatsRequested}</span><button type="button" onClick={() => setSeats(seatsRequested + 1)}>+</button></div></div>
+        <div className="field"><label>Seats requested</label><div className="seat-stepper" aria-label="Seats requested"><button type="button" aria-label="Decrease requested seats" onClick={() => setSeats(seatsRequested - 1)}>−</button><output aria-live="polite">{seatsRequested}</output><button type="button" aria-label="Increase requested seats" onClick={() => setSeats(seatsRequested + 1)}>+</button></div></div>
         {companionNames.map((name, index) => <div className="field" key={index}><label htmlFor={`companion-${index}`}>Companion {index + 1} name</label><input id={`companion-${index}`} value={name} onChange={(event) => setCompanionNames((names) => names.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /></div>)}
-        {error && <div className="alert alert-error" style={{ marginBottom: 10 }}>{error}</div>}
+        {error && <div className="alert alert-error sheet-error" role="alert">{error}</div>}
         <button className="primary-action full" disabled={saving || companionNames.some((name) => !name.trim())} onClick={() => onSubmit({ seatsRequested, companionNames })}>{saving ? 'Sending…' : `Request ${seatsRequested} seat${seatsRequested === 1 ? '' : 's'}`}</button>
       </section>
     </div>
@@ -198,12 +198,12 @@ export default function RideDetail() {
         <RouteMap ride={ride} />
         <button className="map-back-button" onClick={() => navigate('/ride')} aria-label="Go back"><IconArrowLeft size={18} /></button>
         <span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span>
-        <a className="map-open-overlay" href={GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, destination: ride.destination, waypoints: ride.waypoints })} target="_blank" rel="noreferrer">Open map</a>
+        <a className="map-open-overlay" href={GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, destination: ride.destination, waypoints: ride.waypoints })} target="_blank" rel="noreferrer" aria-label="Open this route in Google Maps">Open map</a>
       </div>
 
       <div className="ride-detail-content">
-        {error && <div className="alert alert-error">{error}</div>}
-        <section className="ride-info-card"><Lifecycle status={ride.status} /></section>
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
+        <section className="ride-info-card lifecycle-card"><Lifecycle status={ride.status} /></section>
         <section className="ride-info-card trip-info-mobile">
           <div className="trip-title-row"><h1>{ride.pickup?.split(',')[0]} <span>→</span> {ride.destination?.split(',')[0]}</h1><b className="scale-badge">{ride.journeyScale}</b></div>
           <div className="trip-detail-grid">
@@ -228,7 +228,7 @@ export default function RideDetail() {
         <section className="ride-info-card"><p className="eyebrow">HOST REVIEWS</p>{reviews.length ? reviews.slice(0, 3).map((review) => <div className="review-row" key={review.id}><span>{review.reviewer?.fullName || 'Member'} · {review.rating}/5</span><strong>{review.comment || 'No written comment'}</strong></div>) : <p className="empty-waypoints">No reviews yet</p>}</section>
       </div>
 
-      <div className="ride-bottom-actions">
+      <div className="ride-bottom-actions" aria-label="Ride actions">
         {isHost ? <>
           <div className="host-action-row">
             {canEdit && <button className="outline-action" onClick={() => navigate(`/ride/${ride.id}/edit`)}><IconEdit size={15} /> Edit ride</button>}
