@@ -1,240 +1,241 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_IMAGE_BYTES,
+  MAX_MEDIA_COUNT,
+  MAX_MESSAGE_MEDIA_BYTES,
+  MAX_VIDEO_BYTES,
   createMessagingService,
-  MAX_MESSAGE_LENGTH,
+  getMessagingChangeConversationId,
+  mapMessageRow,
+  validateMessageDraft,
 } from '../MessagingService.js';
-import { createLocalMessagingStore } from '../../data-access/localMessagingStore.js';
 
-const host = {
-  id: 'host_1',
-  fullName: 'Ahmad Rizal',
-};
+const userId = '00000000-0000-4000-8000-000000000001';
+const otherId = '00000000-0000-4000-8000-000000000002';
+const conversationId = '10000000-0000-4000-8000-000000000001';
 
-const firstPassenger = {
-  id: 'passenger_1',
-  fullName: 'Aina Farhana',
-};
+function file(name, type, size) {
+  return { name, type, size };
+}
 
-const secondPassenger = {
-  id: 'passenger_2',
-  fullName: 'Daniel Lim',
-};
+function image(name = 'photo.jpg', size = 1024) {
+  return file(name, 'image/jpeg', size);
+}
 
-const thirdPassenger = {
-  id: 'passenger_3',
-  fullName: 'Priya Nair',
-};
+function video(name = 'clip.mp4', size = 2048) {
+  return file(name, 'video/mp4', size);
+}
 
-const ride = {
-  id: 'ride_messaging_test',
-  pickup: 'KL Sentral',
-  destination: 'Georgetown, Penang',
-  date: '2026-08-15',
-  time: '07:00',
-};
-
-function createTestService() {
-  let storedValue = JSON.stringify({
-    version: 1,
-    conversations: [],
-    memberships: [],
-    messages: [],
-  });
-  const store = createLocalMessagingStore({
-    storage: {
-      getItem: () => storedValue,
-      setItem: (_, value) => {
-        storedValue = value;
-      },
-    },
-    eventTarget: null,
-    channel: null,
-  });
-
+function rawConversation(overrides = {}) {
   return {
-    store,
-    service: createMessagingService(store),
+    id: conversationId,
+    ride_id: '20000000-0000-4000-8000-000000000001',
+    type: 'direct',
+    ride_status: 'Published',
+    trip_route: 'KL Sentral to Penang',
+    trip_departure_at: '2026-08-15T00:00:00Z',
+    created_at: '2026-08-10T00:00:00Z',
+    members: [
+      { user_id: userId, role: 'traveller', profile: { full_name: 'Aina' } },
+      { user_id: otherId, role: 'host', profile: { full_name: 'Ahmad' } },
+    ],
+    ...overrides,
   };
 }
 
-describe('MessagingService', () => {
-  it('creates one private chat for the first passenger and no group chat', async () => {
-    const { service } = createTestService();
+function rawMessage(overrides = {}) {
+  return {
+    id: '30000000-0000-4000-8000-000000000001',
+    conversation_id: conversationId,
+    sender_id: userId,
+    kind: 'user',
+    text_content: 'Hello',
+    created_at: '2026-08-10T01:00:00Z',
+    edited_at: null,
+    deleted_at: null,
+    sender: { full_name: 'Aina', profile_photo_url: null },
+    attachments: [],
+    ...overrides,
+  };
+}
 
-    const result = await service.syncAcceptedRideConversations({
-      ride,
-      host,
-      passengers: [firstPassenger],
-    });
+function createRepository({ messages = [], failUploadName = null, failEdit = false } = {}) {
+  let storedMessages = structuredClone(messages);
+  const removedPaths = [];
+  const uploads = [];
+  let sequence = 0;
+  const repository = {
+    backend: 'test',
+    removedPaths,
+    uploads,
+    getStoredMessages: () => structuredClone(storedMessages),
+    getCurrentUserId: async () => userId,
+    openRideDirectConversation: async () => conversationId,
+    listConversations: async () => [rawConversation()],
+    getConversation: async () => rawConversation(),
+    listMessages: async () => structuredClone(storedMessages),
+    getMessage: async (id) => structuredClone(storedMessages.find((message) => message.id === id) || null),
+    uploadMedia: async ({ messageId, versionId, file: mediaFile }) => {
+      if (mediaFile.name === failUploadName) throw new Error('upload failed');
+      const path = `${userId}/${conversationId}/${messageId}/${versionId}/${mediaFile.name}`;
+      uploads.push(path);
+      return path;
+    },
+    removeMedia: async (paths) => { removedPaths.push(...paths); return true; },
+    sendMessage: async ({ messageId, text, attachments }) => {
+      sequence += 1;
+      const id = messageId;
+      storedMessages.push(rawMessage({
+        id,
+        text_content: text || null,
+        created_at: `2026-08-10T01:00:0${sequence}Z`,
+        attachments: attachments.map((attachment, index) => ({ id: `a-${sequence}-${index}`, ...attachment })),
+      }));
+      return id;
+    },
+    editMessage: async ({ messageId, text, attachments }) => {
+      if (failEdit) throw new Error('read race');
+      const next = storedMessages.map((message) => message.id === messageId ? {
+        ...message,
+        text_content: text || null,
+        edited_at: '2026-08-10T02:00:00Z',
+        attachments: attachments.map((attachment, index) => ({ id: `edited-${index}`, ...attachment })),
+      } : message);
+      storedMessages = next;
+      return messageId;
+    },
+    deleteMessage: async (messageId) => {
+      const target = storedMessages.find((message) => message.id === messageId);
+      const paths = target.attachments.map((attachment) => attachment.storage_path).filter(Boolean);
+      storedMessages = storedMessages.map((message) => message.id === messageId
+        ? { ...message, text_content: null, attachments: [], deleted_at: '2026-08-10T03:00:00Z' }
+        : message);
+      return paths;
+    },
+    markConversationRead: async () => true,
+    archiveConversation: async () => true,
+    leaveGroup: async () => true,
+    subscribe: () => () => {},
+  };
+  return repository;
+}
 
-    expect(result.directConversationIds).toHaveLength(1);
-    expect(result.groupConversationId).toBeNull();
-
-    const hostConversations = await service.listConversations({ user: host });
-    const matchingConversations = hostConversations.filter(
-      (conversation) => conversation.rideId === ride.id,
-    );
-
-    expect(matchingConversations).toHaveLength(1);
-    expect(matchingConversations[0].type).toBe('direct');
+describe('composite message validation', () => {
+  it.each([
+    [{ text: 'text' }, ['text']],
+    [{ files: [image()] }, ['image']],
+    [{ files: [video()] }, ['video']],
+    [{ location: { latitude: 3.139, longitude: 101.6869 } }, ['location']],
+    [{ text: 'all', files: [image(), video()], location: { latitude: 3, longitude: 101 } }, ['text', 'image', 'video', 'location']],
+  ])('accepts supported combinations %#', (draft) => {
+    expect(validateMessageDraft(draft)).toMatchObject({ text: draft.text?.trim() || '' });
   });
 
-  it('creates a group at the second passenger and adds later passengers without duplicates', async () => {
-    const { service, store } = createTestService();
-
-    await service.syncAcceptedRideConversations({
-      ride,
-      host,
-      passengers: [firstPassenger],
-    });
-    const secondSync = await service.syncAcceptedRideConversations({
-      ride,
-      host,
-      passengers: [firstPassenger, secondPassenger],
-    });
-    await service.syncAcceptedRideConversations({
-      ride,
-      host,
-      passengers: [firstPassenger, secondPassenger, thirdPassenger],
-    });
-    await service.syncAcceptedRideConversations({
-      ride,
-      host,
-      passengers: [firstPassenger, secondPassenger, thirdPassenger],
-    });
-
-    const state = store.getState();
-    const rideConversations = state.conversations.filter(
-      (conversation) => conversation.rideId === ride.id,
-    );
-    const groupConversation = rideConversations.find(
-      (conversation) => conversation.type === 'group',
-    );
-    const groupMemberships = state.memberships.filter(
-      (membership) => membership.conversationId === groupConversation.id,
-    );
-
-    expect(secondSync.groupConversationId).toBe(groupConversation.id);
-    expect(rideConversations.filter((item) => item.type === 'direct')).toHaveLength(3);
-    expect(groupMemberships.map((membership) => membership.user.id).sort()).toEqual(
-      [host.id, firstPassenger.id, secondPassenger.id, thirdPassenger.id].sort(),
-    );
+  it('accepts 10 mixed media and rejects 11', () => {
+    const ten = Array.from({ length: MAX_MEDIA_COUNT }, (_, index) => index % 2 ? video(`v${index}.mp4`) : image(`i${index}.jpg`));
+    expect(validateMessageDraft({ files: ten }).files).toHaveLength(10);
+    expect(() => validateMessageDraft({ files: [...ten, image('extra.jpg')] })).toThrow('at most 10');
   });
 
-  it('validates text messages and only permits conversation members to send', async () => {
-    const { service } = createTestService();
-    const { directConversationIds } =
-      await service.syncAcceptedRideConversations({
-        ride,
-        host,
-        passengers: [firstPassenger],
-      });
-    const conversationId = directConversationIds[0];
+  it('enforces type, per-file, total-size, coordinate and empty-message rules', () => {
+    expect(() => validateMessageDraft({ files: [image('large.jpg', MAX_IMAGE_BYTES + 1)] })).toThrow('10 MB');
+    expect(() => validateMessageDraft({ files: [video('large.mp4', MAX_VIDEO_BYTES + 1)] })).toThrow('50 MB');
+    expect(() => validateMessageDraft({ files: [file('bad.gif', 'image/gif', 10)] })).toThrow('not a supported');
+    expect(() => validateMessageDraft({ files: [video('one.mp4', MAX_VIDEO_BYTES), video('two.mp4', MAX_VIDEO_BYTES), image('extra.jpg', 1)] })).toThrow('100 MB');
+    expect(MAX_MESSAGE_MEDIA_BYTES).toBe(100 * 1024 * 1024);
+    expect(() => validateMessageDraft({ location: { latitude: 91, longitude: 0 } })).toThrow('coordinates');
+    expect(() => validateMessageDraft({ text: '  ' })).toThrow('Add text, media, or a location');
+  });
+});
 
-    await expect(
-      service.sendTextMessage({
-        conversationId,
-        sender: host,
-        text: '   ',
-      }),
-    ).rejects.toThrow('Message cannot be empty.');
-
-    await expect(
-      service.sendTextMessage({
-        conversationId,
-        sender: host,
-        text: 'x'.repeat(MAX_MESSAGE_LENGTH + 1),
-      }),
-    ).rejects.toThrow(`Message must not exceed ${MAX_MESSAGE_LENGTH} characters.`);
-
-    await expect(
-      service.sendTextMessage({
-        conversationId,
-        sender: secondPassenger,
-        text: 'Can I join?',
-      }),
-    ).rejects.toThrow('You do not have access to this conversation.');
+describe('MessagingService repository orchestration', () => {
+  it('maps Realtime payloads to their owning conversation', () => {
+    expect(getMessagingChangeConversationId({
+      table: 'conversations',
+      new: { id: conversationId },
+    })).toBe(conversationId);
+    expect(getMessagingChangeConversationId({
+      table: 'messages',
+      new: { conversation_id: conversationId },
+    })).toBe(conversationId);
+    expect(getMessagingChangeConversationId({
+      table: 'conversation_members',
+      new: {},
+      old: { conversation_id: conversationId },
+    })).toBe(conversationId);
+    expect(getMessagingChangeConversationId({ table: 'unknown', new: { id: 'other' } })).toBeNull();
   });
 
-  it('persists a sent message, updates order, and exposes it as unread to the recipient', async () => {
-    const { service } = createTestService();
-    const { directConversationIds } =
-      await service.syncAcceptedRideConversations({
-        ride,
-        host,
-        passengers: [firstPassenger],
-      });
-    const conversationId = directConversationIds[0];
-
-    const message = await service.sendTextMessage({
+  it('uploads all parts before atomically creating a combined message', async () => {
+    const repository = createRepository();
+    const service = createMessagingService(repository);
+    const message = await service.sendMessage({
       conversationId,
-      sender: firstPassenger,
-      text: 'I will be at the pickup point early.',
+      text: 'Meet here',
+      files: [image(), video()],
+      location: { latitude: 3.1, longitude: 101.7 },
     });
-    const messages = await service.listMessages({
-      conversationId,
-      user: host,
-    });
-    const hostConversations = await service.listConversations({ user: host });
-
-    expect(messages.at(-1).id).toBe(message.id);
-    expect(messages.at(-1).text).toBe('I will be at the pickup point early.');
-    expect(hostConversations[0].id).toBe(conversationId);
-    expect(hostConversations[0].unreadCount).toBe(1);
-
-    await service.markConversationRead({ conversationId, user: host });
-    const conversationsAfterRead = await service.listConversations({ user: host });
-
-    expect(
-      conversationsAfterRead.find(
-        (conversation) => conversation.id === conversationId,
-      ).unreadCount,
-    ).toBe(0);
+    expect(message.messageTypes).toEqual(['text', 'image', 'video', 'location']);
+    expect(repository.uploads).toHaveLength(2);
+    expect(repository.getStoredMessages()).toHaveLength(1);
   });
 
-  it('writes through storage so a fresh store instance can read message history', async () => {
-    const values = new Map();
-    const storage = {
-      getItem: (key) => values.get(key) || null,
-      setItem: (key, value) => values.set(key, value),
+  it('sends no message and cleans successful uploads when any upload fails', async () => {
+    const repository = createRepository({ failUploadName: 'broken.mp4' });
+    const service = createMessagingService(repository);
+    await expect(service.sendMessage({ conversationId, files: [image('ok.jpg'), video('broken.mp4')] })).rejects.toThrow('upload failed');
+    expect(repository.getStoredMessages()).toHaveLength(0);
+    expect(repository.removedPaths).toHaveLength(1);
+    expect(repository.removedPaths[0]).toMatch(new RegExp(`^${userId}/${conversationId}/[^/]+/[^/]+/ok\\.jpg$`));
+  });
+
+  it('returns history oldest-to-newest and searches text, system messages, and file names', async () => {
+    const repository = createRepository({ messages: [
+      rawMessage({ id: 'z', text_content: null, kind: 'system', sender_id: null, sender: null, created_at: '2026-08-10T03:00:00Z', text_content: 'Daniel left the group.' }),
+      rawMessage({ id: 'a', created_at: '2026-08-10T01:00:00Z', text_content: 'Pickup point' }),
+      rawMessage({ id: 'b', created_at: '2026-08-10T02:00:00Z', text_content: null, attachments: [{ id: 'att', kind: 'image', sort_order: 0, file_name: 'receipt.png', mime_type: 'image/png', file_size: 12 }] }),
+    ] });
+    const service = createMessagingService(repository);
+    expect((await service.listMessages(conversationId)).map((item) => item.id)).toEqual(['a', 'b', 'z']);
+    expect((await service.searchMessages(conversationId, 'left')).map((item) => item.id)).toEqual(['z']);
+    expect((await service.searchMessages(conversationId, 'receipt')).map((item) => item.id)).toEqual(['b']);
+  });
+
+  it('maps read-lock, edited and deleted state', () => {
+    const conversation = {
+      members: [{ id: userId }, { id: otherId, lastReadAt: '2026-08-10T02:00:00Z' }],
+      isReadOnly: false,
     };
-    const initialState = {
-      version: 1,
-      conversations: [],
-      memberships: [],
-      messages: [],
-    };
-    values.set('letstumpang_messaging_v1', JSON.stringify(initialState));
-    const firstStore = createLocalMessagingStore({
-      storage,
-      eventTarget: null,
-      channel: null,
-    });
-    const firstService = createMessagingService(firstStore);
-    const { directConversationIds } =
-      await firstService.syncAcceptedRideConversations({
-        ride,
-        host,
-        passengers: [firstPassenger],
-      });
+    const edited = mapMessageRow(rawMessage({ edited_at: '2026-08-10T01:30:00Z' }), conversation, userId);
+    const deleted = mapMessageRow(rawMessage({ text_content: null, deleted_at: '2026-08-10T01:30:00Z' }), conversation, userId);
+    expect(edited).toMatchObject({ isRead: true, canEdit: false, canDelete: true });
+    expect(deleted).toMatchObject({ text: '', canEdit: false, canDelete: false });
+  });
 
-    await firstService.sendTextMessage({
-      conversationId: directConversationIds[0],
-      sender: host,
-      text: 'Persist this message.',
-    });
+  it('keeps the complete old version on edit failure and switches all parts on success', async () => {
+    const original = rawMessage({ attachments: [{
+      id: 'old', kind: 'image', sort_order: 0,
+      storage_path: `${userId}/${conversationId}/30000000-0000-4000-8000-000000000001/v1/old.jpg`,
+      file_name: 'old.jpg', mime_type: 'image/jpeg', file_size: 10,
+    }] });
+    const failedRepository = createRepository({ messages: [original], failEdit: true });
+    const failedService = createMessagingService(failedRepository);
+    await expect(failedService.editMessage({ messageId: original.id, text: 'New', existingAttachmentIds: [], newFiles: [image('new.jpg')] })).rejects.toThrow('read race');
+    expect(failedRepository.getStoredMessages()[0].text_content).toBe('Hello');
+    expect(failedRepository.getStoredMessages()[0].attachments[0].file_name).toBe('old.jpg');
+    expect(failedRepository.removedPaths.some((path) => path.endsWith('/new.jpg'))).toBe(true);
 
-    const secondStore = createLocalMessagingStore({
-      storage,
-      eventTarget: null,
-      channel: null,
+    const repository = createRepository({ messages: [original] });
+    const service = createMessagingService(repository);
+    const edited = await service.editMessage({
+      messageId: original.id,
+      text: 'New',
+      existingAttachmentIds: [],
+      newFiles: [{ file: video('new.mp4'), clientId: 'replacement' }],
+      mediaOrder: ['new:replacement'],
+      location: { latitude: 4, longitude: 102 },
     });
-    const secondService = createMessagingService(secondStore);
-    const messages = await secondService.listMessages({
-      conversationId: directConversationIds[0],
-      user: firstPassenger,
-    });
-
-    expect(messages.at(-1).text).toBe('Persist this message.');
+    expect(edited.messageTypes).toEqual(['text', 'video', 'location']);
+    expect(repository.removedPaths).toContain(`${userId}/${conversationId}/30000000-0000-4000-8000-000000000001/v1/old.jpg`);
   });
 });

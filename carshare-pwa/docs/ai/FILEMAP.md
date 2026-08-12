@@ -17,10 +17,12 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 
 ## Business Logic
 - `src/business-logic/` — business-rule/service layer, including Module 6 verification logic.
-- `src/business-logic/GoogleMapsEmbedService.js` — shared zero-charge Maps Embed URL boundary; no paid Maps services.
+- `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.
+- `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, and reverse-geocoding boundary.
 
 ## Shared Mapping
 - `src/presentation/components/maps/GoogleRouteMap.jsx` — shared route iframe with an offline/unconfigured fallback.
+- `src/presentation/components/maps/ConfirmedLocationInput.jsx` — reusable confirmed-location combobox and current-pickup confirmation UI.
 - `docs/GOOGLE-MAPS-SETUP.md` — Cloud project, restricted-key, environment, and cost-safety setup.
 
 ## Data Access / Backend Adapters

@@ -11,18 +11,25 @@ history lives in `database/sql/`; do not duplicate full migrations here.
 Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
-Adopted live scope: Module 1 + complete Module 2 ride/request/review lifecycle
-Official SQL history: 001-016
+Adopted live scope: Module 1 + Module 2 + Module 3 messaging
+Deployed SQL history: 001-021
+Repository SQL history: 001-021
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
 `011-012` are deployed follow-ups for advisor findings and the confirmed
 host-owned vehicle requirement. `013-015` were deployed on 2026-08-12 for the
-confirmed Module 2 request, lifecycle, and review design. `016` adds the
-vehicle driver's-license-number field. Future changes start at `017` and
-must not rewrite deployed history.
+confirmed Module 2 request, lifecycle, and review design. `016-018` were deployed
+on 2026-08-13 for production Module 3 messaging, advisor follow-up, and versioned
+media paths. `019_m1_add_vehicle_driver_license.sql` and
+`020_m2_add_route_locations.sql` were deployed on 2026-08-13 for the vehicle
+driver-licence field, confirmed route references, pickup instructions, and the
+replacement Ride RPC signatures. `021_m3_stabilize_realtime_reads.sql` was
+deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
+Realtime refresh loops. Future changes start at `022`; deployed history
+must not be rewritten.
 
-Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
+Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
 ## Current Database State
 
@@ -30,22 +37,31 @@ Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
 - `profiles`: authenticated-visible safe fields only (`full_name`, photo, status).
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
-- `vehicles`: owner-only CRUD and at most one active vehicle per owner; includes an owner-only `driver_license_number` (input-capture eligibility gate, not a verified Module 6 check).
+- `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner.
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
-- `rides`: authoritative `departure_at`, lifecycle metadata, authenticated browsing, and RPC-only mutation.
+- `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, public pickup instructions, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation.
 - `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
+- `conversations`: one ride/traveller direct chat and one ride group, lifecycle snapshot, last-message pointer, and terminal retention.
+- `conversation_members`: role, join/leave, per-user archive, and trusted read cursor.
+- `messages`: user/system message rows with edit/delete tombstone state.
+- `message_attachments`: ordered image/video Storage metadata or one coordinate pair.
 
 ### Security and Storage
 
-- RLS is enabled on all seven public tables.
+- RLS is enabled on all eleven public tables.
 - `anon` has no business-table privileges.
 - `authenticated` has explicit least-privilege table/column grants plus owner policies with `USING` and `WITH CHECK`.
 - `public.handle_new_user()` is `SECURITY DEFINER`, has an empty `search_path`, uses schema-qualified names, and is not executable by `anon` or `authenticated`.
 - The public `avatars` bucket allows JPEG, PNG, and WebP up to 5 MB. Authenticated users can write only below their own UUID folder.
+- The private `message-media` bucket accepts the approved image/video MIME types up to 50 MB per object. Listing is blocked and committed downloads require current conversation access.
 - Rides require a vehicle owned by the host, persist `waypoints` as a JSON array, and enforce `0 <= seats_available <= seats_total`.
+- Pickup coordinates must be stored as a valid latitude/longitude pair, and pickup instructions are limited to 300 characters.
 - Authenticated clients have SELECT but no direct INSERT/UPDATE/DELETE on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
+- Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
+- All four messaging tables are in the `supabase_realtime` publication.
 
 ### Indexes
 
@@ -63,6 +79,12 @@ Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 - `ride_requests_pending_ride_idx`
 - `ride_reviews_reviewee_created_idx`
 - `ride_reviews_reviewer_created_idx`
+- `conversations_one_direct_per_ride_user_idx`
+- `conversations_one_group_per_ride_idx`
+- `conversations_direct_user_id_idx`
+- `conversation_members_user_active_idx`
+- `messages_conversation_created_idx`
+- `message_attachments_message_sort_idx`
 
 Fresh empty-table indexes may appear as "unused" in the performance advisor until normal traffic exercises them.
 
@@ -83,7 +105,12 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `013_m2_ride_requests_and_departure.sql` - authoritative departure instant, ride lifecycle metadata, multi-seat requests, RLS/grants, and atomic RPC mutations.
 - `014_m2_lifecycle_cron.sql` - minute lifecycle processor and service-role-only verified ride transition.
 - `015_m2_ride_reviews.sql` - mutual Completed-ride reviews and account-level average star rating updates.
-- `016_m1_add_vehicle_driver_license.sql` - adds `vehicles.driver_license_number` plus its column grants.
+- `016_m3_supabase_messaging.sql` - messaging schema, locked RPCs, RLS/grants, Accepted backfill, private media bucket, Realtime, and seven-day lifecycle.
+- `017_m3_advisor_followup.sql` - covering index for the direct-user foreign key.
+- `018_m3_versioned_media_paths.sql` - sender/conversation/message/version Storage paths and matching RPC/policy contract.
+- `019_m1_add_vehicle_driver_license.sql` - deployed; adds `vehicles.driver_license_number` plus its column grants.
+- `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
+- `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 
 ## Rules for New Database Work
 

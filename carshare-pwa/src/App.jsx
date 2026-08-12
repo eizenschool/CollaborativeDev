@@ -54,6 +54,8 @@ function AppShell() {
         <Route path="/search" element={<ComingSoonScreen icon={IconSearch} label="Search" />} />
         {/* Module 3 - Messaging */}
         <Route path="/message" element={<MessageModule />} />
+        <Route path="/message/:conversationId" element={<MessageModule />} />
+        <Route path="/message/:conversationId/history" element={<MessageModule />} />
         <Route path="/favourite" element={<ComingSoonScreen icon={IconHeart} label="Favourite" />} />
         {/* Module 5 - Trip Management & Eco Impact */}
         <Route path="/trip" element={<TripModule />} />

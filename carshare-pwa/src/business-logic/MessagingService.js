@@ -1,8 +1,12 @@
 // ===== BUSINESS LOGIC LAYER (MessagingService) =====
-import { localMessagingStore } from '../data-access/localMessagingStore.js';
+import { supabaseMessagingRepository } from '../data-access/supabaseMessagingRepository.js';
 
 export const MESSAGE_TYPE = {
   TEXT: 'text',
+  IMAGE: 'image',
+  VIDEO: 'video',
+  LOCATION: 'location',
+  SYSTEM: 'system',
 };
 
 export const CONVERSATION_TYPE = {
@@ -11,471 +15,519 @@ export const CONVERSATION_TYPE = {
 };
 
 export const MAX_MESSAGE_LENGTH = 1000;
+export const MAX_MEDIA_COUNT = 10;
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+export const MAX_MESSAGE_MEDIA_BYTES = 100 * 1024 * 1024;
 
-let lastTimestampMilliseconds = 0;
+export const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
-function createTimestamp() {
-  const nextMilliseconds = Math.max(
-    Date.now(),
-    lastTimestampMilliseconds + 1,
-  );
-  lastTimestampMilliseconds = nextMilliseconds;
-  return new Date(nextMilliseconds).toISOString();
+function cleanText(text) {
+  return typeof text === 'string' ? text.trim() : '';
 }
 
-function createId(prefix) {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return `${prefix}_${crypto.randomUUID()}`;
+function mediaKind(file) {
+  if (IMAGE_MIME_TYPES.includes(file?.type)) return MESSAGE_TYPE.IMAGE;
+  if (VIDEO_MIME_TYPES.includes(file?.type)) return MESSAGE_TYPE.VIDEO;
+  return null;
+}
+
+export function validateLocation(location) {
+  if (location == null) return null;
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
+      || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new Error('Shared location coordinates are invalid.');
+  }
+  return { latitude, longitude };
+}
+
+export function validateMessageDraft({ text, files = [], location = null }) {
+  const messageText = cleanText(text);
+  const mediaFiles = files.map((item) => item?.file || item);
+
+  if (messageText.length > MAX_MESSAGE_LENGTH) {
+    throw new Error(`Message must not exceed ${MAX_MESSAGE_LENGTH} characters.`);
+  }
+  if (mediaFiles.length > MAX_MEDIA_COUNT) {
+    throw new Error(`A message can contain at most ${MAX_MEDIA_COUNT} photos or videos.`);
   }
 
-  return `${prefix}_${Date.now()}_${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-}
+  let totalBytes = 0;
+  mediaFiles.forEach((file) => {
+    const kind = mediaKind(file);
+    if (!kind) {
+      throw new Error(`${file?.name || 'This file'} is not a supported photo or video.`);
+    }
+    if (kind === MESSAGE_TYPE.IMAGE && file.size > MAX_IMAGE_BYTES) {
+      throw new Error(`${file.name} exceeds the 10 MB image limit.`);
+    }
+    if (kind === MESSAGE_TYPE.VIDEO && file.size > MAX_VIDEO_BYTES) {
+      throw new Error(`${file.name} exceeds the 50 MB video limit.`);
+    }
+    totalBytes += file.size;
+  });
 
-function normaliseUser(user) {
-  const id = user?.id;
-  const name =
-    user?.name ||
-    user?.fullName ||
-    user?.user_metadata?.full_name ||
-    user?.email;
-
-  if (!id || !name) {
-    throw new Error('A valid messaging user is required.');
+  if (totalBytes > MAX_MESSAGE_MEDIA_BYTES) {
+    throw new Error('Message media must not exceed 100 MB in total.');
   }
 
-  return {
-    id,
-    name,
-    avatarUrl:
-      user?.avatarUrl ||
-      user?.avatar ||
-      user?.profilePhotoUrl ||
-      null,
-  };
-}
-
-function getMembership(state, conversationId, userId) {
-  return state.memberships.find(
-    (membership) =>
-      membership.conversationId === conversationId &&
-      membership.user.id === userId,
-  );
-}
-
-function getConversation(state, conversationId) {
-  return state.conversations.find(
-    (conversation) => conversation.id === conversationId,
-  );
-}
-
-function getConversationMessages(state, conversationId) {
-  return state.messages
-    .filter((message) => message.conversationId === conversationId)
-    .sort(
-      (firstMessage, secondMessage) =>
-        new Date(firstMessage.createdAt) -
-        new Date(secondMessage.createdAt),
-    );
-}
-
-function formatMessageTime(isoTimestamp) {
-  return new Intl.DateTimeFormat('en-MY', {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(isoTimestamp));
-}
-
-function formatConversationTime(isoTimestamp) {
-  const timestamp = new Date(isoTimestamp);
-  const now = new Date();
-  const isToday = timestamp.toDateString() === now.toDateString();
-
-  if (isToday) {
-    return formatMessageTime(isoTimestamp);
+  const cleanLocation = validateLocation(location);
+  if (!messageText && !mediaFiles.length && !cleanLocation) {
+    throw new Error('Add text, media, or a location before sending.');
   }
 
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (timestamp.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday';
-  }
+  return { text: messageText, files: mediaFiles, location: cleanLocation };
+}
 
+function formatMessageTime(timestamp) {
+  if (!timestamp) return '';
   return new Intl.DateTimeFormat('en-MY', {
     day: 'numeric',
     month: 'short',
-  }).format(timestamp);
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date(timestamp));
 }
 
-function getConversationMembers(state, conversationId) {
-  return state.memberships
-    .filter((membership) => membership.conversationId === conversationId)
-    .map((membership) => membership.user);
-}
-
-function getDisplayTitle(conversation, members, currentUserId) {
-  if (conversation.type === CONVERSATION_TYPE.GROUP) {
-    return conversation.title || 'Ride group';
+function formatConversationTime(timestamp) {
+  if (!timestamp) return '';
+  const value = new Date(timestamp);
+  const now = new Date();
+  if (value.toDateString() === now.toDateString()) {
+    return new Intl.DateTimeFormat('en-MY', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: 'Asia/Kuala_Lumpur',
+    }).format(value);
   }
-
-  return (
-    members.find((member) => member.id !== currentUserId)?.name ||
-    'Private conversation'
-  );
+  return new Intl.DateTimeFormat('en-MY', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(value);
 }
 
-function getUnreadCount(state, conversationId, userId) {
-  const membership = getMembership(state, conversationId, userId);
-  if (!membership) {
-    return 0;
-  }
-
-  return getConversationMessages(state, conversationId).filter(
-    (message) =>
-      message.sender.id !== userId &&
-      (!membership.lastReadAt ||
-        new Date(message.createdAt) >
-          new Date(membership.lastReadAt)),
-  ).length;
+function formatTripDate(timestamp) {
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('en-MY', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date(timestamp));
 }
 
-function toConversationView(state, conversation, currentUserId) {
-  const members = getConversationMembers(state, conversation.id);
-  const messages = getConversationMessages(state, conversation.id);
-  const latestMessage = messages.at(-1) || null;
+function formatTripTime(timestamp) {
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('en-MY', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date(timestamp));
+}
+
+function mapMember(row) {
+  return {
+    id: row.user_id,
+    role: row.role,
+    joinedAt: row.joined_at,
+    leftAt: row.left_at,
+    archivedAt: row.archived_at,
+    lastReadAt: row.last_read_at,
+    name: row.profile?.full_name || 'Member',
+    avatarUrl: row.profile?.profile_photo_url || null,
+  };
+}
+
+function messagePreview(message) {
+  if (!message) return 'No messages yet';
+  if (message.deleted_at) return 'message deleted';
+  if (message.text_content) return message.text_content;
+  const kinds = (message.attachments || []).map((item) => item.kind);
+  if (kinds.includes(MESSAGE_TYPE.IMAGE)) return 'Photo';
+  if (kinds.includes(MESSAGE_TYPE.VIDEO)) return 'Video';
+  if (kinds.includes(MESSAGE_TYPE.LOCATION)) return 'Location';
+  return message.kind === 'system' ? 'Group update' : 'Message';
+}
+
+export function mapConversationRow(row, currentUserId) {
+  const allMembers = (row.members || []).map(mapMember);
+  const members = allMembers.filter((member) => !member.leftAt);
+  const currentMembership = allMembers.find((member) => member.id === currentUserId);
+  const otherMember = members.find((member) => member.id !== currentUserId);
+  const route = row.trip_route
+    || [row.ride?.pickup, row.ride?.destination].filter(Boolean).join(' to ')
+    || null;
+  const title = row.type === CONVERSATION_TYPE.GROUP
+    ? row.title || `${route || 'Ride'} Trip Group`
+    : otherMember?.name || 'Private conversation';
+  const lastMessage = Array.isArray(row.last_message)
+    ? row.last_message[0]
+    : row.last_message;
+  const lastAt = lastMessage?.created_at || row.last_message_at || row.created_at;
 
   return {
-    ...conversation,
-    title: getDisplayTitle(conversation, members, currentUserId),
+    id: row.id,
+    rideId: row.ride_id,
+    type: row.type,
+    title,
     members,
-    lastMessage: latestMessage?.text || 'No messages yet',
-    lastMessageAt: latestMessage?.createdAt || conversation.updatedAt,
-    lastTime: formatConversationTime(
-      latestMessage?.createdAt || conversation.updatedAt,
-    ),
-    unreadCount: getUnreadCount(
-      state,
-      conversation.id,
-      currentUserId,
-    ),
-    tripRoute: conversation.trip?.route || null,
-    tripDate: conversation.trip?.date || null,
-    tripTime: conversation.trip?.time || null,
-    tripBadge: conversation.trip?.date || null,
+    currentMembership,
+    isArchived: Boolean(currentMembership?.archivedAt),
+    isReadOnly: Boolean(currentMembership?.archivedAt),
+    rideStatus: row.ride_status,
+    expiresAt: row.expires_at,
+    tripRoute: route,
+    tripDate: formatTripDate(row.trip_departure_at),
+    tripTime: formatTripTime(row.trip_departure_at),
+    lastMessage: messagePreview(lastMessage),
+    lastMessageAt: lastAt,
+    lastTime: formatConversationTime(lastAt),
+    unreadCount: row.unread_count || 0,
   };
 }
 
-function toMessageView(message) {
+function mapAttachment(row) {
   return {
-    ...message,
-    senderId: message.sender.id,
-    senderName: message.sender.name,
-    senderAvatar: message.sender.avatarUrl,
-    timestamp: formatMessageTime(message.createdAt),
+    id: row.id,
+    kind: row.kind,
+    sortOrder: row.sort_order,
+    storagePath: row.storage_path,
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    url: row.signed_url || null,
   };
 }
 
-function createConversationId(type, rideId, userIds) {
-  const sortedUserIds = [...userIds].sort().join('__');
-  return `${type}__${rideId}__${sortedUserIds}`;
-}
-
-function createTripSnapshot(ride) {
-  const route =
-    ride.route ||
-    [ride.pickup, ride.destination].filter(Boolean).join(' to ') ||
-    null;
-
-  return {
-    route,
-    date: ride.date || null,
-    time: ride.time || null,
-  };
-}
-
-function createGroupTitle(ride, trip) {
-  if (ride.title?.trim()) {
-    return `${ride.title.trim()} Group`;
-  }
-
-  if (trip.route) {
-    return `${trip.route} Trip Group`;
-  }
-
-  return 'Ride Trip Group';
-}
-
-function upsertMembership(state, conversationId, user) {
-  const existingMembership = getMembership(
-    state,
-    conversationId,
-    user.id,
+export function mapMessageRow(row, conversation, currentUserId) {
+  const attachments = (row.attachments || [])
+    .map(mapAttachment)
+    .sort((first, second) => first.sortOrder - second.sortOrder);
+  const messageTypes = [];
+  if (row.kind === 'system') messageTypes.push(MESSAGE_TYPE.SYSTEM);
+  if (row.text_content) messageTypes.push(MESSAGE_TYPE.TEXT);
+  attachments.forEach((attachment) => {
+    if (!messageTypes.includes(attachment.kind)) messageTypes.push(attachment.kind);
+  });
+  const sender = row.sender;
+  const isRead = Boolean(
+    conversation?.members?.some((member) =>
+      member.id !== row.sender_id
+      && member.lastReadAt
+      && new Date(member.lastReadAt) >= new Date(row.created_at),
+    ),
   );
 
-  if (existingMembership) {
-    existingMembership.user = user;
-    return;
-  }
-
-  state.memberships.push({
-    conversationId,
-    user,
-    lastReadAt: null,
-  });
-}
-
-function upsertConversation({
-  state,
-  id,
-  type,
-  rideId,
-  title,
-  trip,
-  members,
-  timestamp,
-}) {
-  let conversation = getConversation(state, id);
-
-  if (!conversation) {
-    conversation = {
-      id,
-      type,
-      rideId,
-      title,
-      trip,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-    state.conversations.push(conversation);
-  } else {
-    conversation.title = title;
-    conversation.trip = trip;
-  }
-
-  members.forEach((member) => {
-    upsertMembership(state, id, member);
-  });
-
-  return conversation;
-}
-
-/**
- * Creates the Module 3 business service against any compatible messaging store.
- * The default store is localStorage + same-origin tab synchronisation; a future
- * Supabase adapter can use this same public service contract.
- */
-export function createMessagingService(store = localMessagingStore) {
   return {
-    async listConversations({ user }) {
-      const currentUser = normaliseUser(user);
-      const state = store.getState();
+    id: row.id,
+    conversationId: row.conversation_id,
+    kind: row.kind,
+    text: row.text_content || '',
+    senderId: row.sender_id,
+    senderName: sender?.full_name || (row.kind === 'system' ? 'System' : 'Member'),
+    senderAvatar: sender?.profile_photo_url || null,
+    attachments,
+    messageTypes,
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    deletedAt: row.deleted_at,
+    timestamp: formatMessageTime(row.created_at),
+    isRead,
+    canEdit: row.sender_id === currentUserId
+      && !row.deleted_at
+      && !isRead
+      && !conversation?.isReadOnly,
+    canDelete: row.sender_id === currentUserId
+      && !row.deleted_at
+      && !conversation?.isReadOnly,
+  };
+}
 
-      return state.conversations
+function fileDescriptor(file, storagePath, sortOrder) {
+  return {
+    kind: mediaKind(file),
+    sort_order: sortOrder,
+    storage_path: storagePath,
+    file_name: file.name,
+    mime_type: file.type,
+    file_size: file.size,
+  };
+}
+
+function locationDescriptor(location) {
+  if (!location) return null;
+  return {
+    kind: MESSAGE_TYPE.LOCATION,
+    sort_order: 10,
+    latitude: location.latitude,
+    longitude: location.longitude,
+  };
+}
+
+function createUuid() {
+  if (!globalThis.crypto?.randomUUID) {
+    throw new Error('This browser cannot create secure message identifiers.');
+  }
+  return globalThis.crypto.randomUUID();
+}
+
+async function uploadAll(repository, conversationId, messageId, versionId, fileEntries) {
+  const results = await Promise.allSettled(fileEntries.map(async (entry) => ({
+    entry,
+    storagePath: await repository.uploadMedia({
+      conversationId,
+      messageId,
+      versionId,
+      file: entry.file,
+    }),
+  })));
+  const uploaded = results
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => result.value);
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) {
+    await repository.removeMedia(uploaded.map((item) => item.storagePath)).catch(() => {});
+    throw failed.reason;
+  }
+  return uploaded;
+}
+
+function containsKeyword(message, keyword) {
+  const normalized = keyword.toLocaleLowerCase();
+  return message.text.toLocaleLowerCase().includes(normalized)
+    || message.senderName.toLocaleLowerCase().includes(normalized)
+    || message.attachments.some((attachment) =>
+      attachment.fileName?.toLocaleLowerCase().includes(normalized),
+    );
+}
+
+export function getMessagingChangeConversationId(change) {
+  const row = change?.new && Object.keys(change.new).length
+    ? change.new
+    : change?.old;
+  if (!row) return null;
+  if (change.table === 'conversations') return row.id || null;
+  if (['conversation_members', 'messages'].includes(change.table)) {
+    return row.conversation_id || null;
+  }
+  return null;
+}
+
+/** Creates the Module 3 service against a compatible data repository. */
+export function createMessagingService(repository = supabaseMessagingRepository) {
+  return {
+    backend: repository.backend,
+
+    async openRideDirectConversation(rideId) {
+      if (!rideId) throw new Error('A ride is required to start a conversation.');
+      return repository.openRideDirectConversation(rideId);
+    },
+
+    async listConversations(folder = 'active') {
+      if (!['active', 'archived'].includes(folder)) {
+        throw new Error('Unsupported conversation folder.');
+      }
+      const currentUserId = await repository.getCurrentUserId();
+      const rows = await repository.listConversations();
+      return rows
+        .map((row) => mapConversationRow(row, currentUserId))
         .filter((conversation) =>
-          Boolean(
-            getMembership(state, conversation.id, currentUser.id),
-          ),
+          folder === 'archived' ? conversation.isArchived : !conversation.isArchived,
         )
-        .map((conversation) =>
-          toConversationView(state, conversation, currentUser.id),
-        )
-        .sort(
-          (firstConversation, secondConversation) =>
-            new Date(secondConversation.lastMessageAt) -
-            new Date(firstConversation.lastMessageAt),
+        .sort((first, second) =>
+          new Date(second.lastMessageAt) - new Date(first.lastMessageAt),
         );
     },
 
-    async getConversation({ conversationId, user }) {
-      const currentUser = normaliseUser(user);
-      const state = store.getState();
-      const conversation = getConversation(state, conversationId);
-
-      if (
-        !conversation ||
-        !getMembership(state, conversationId, currentUser.id)
-      ) {
-        return null;
-      }
-
-      return toConversationView(state, conversation, currentUser.id);
+    async getConversation(conversationId) {
+      const currentUserId = await repository.getCurrentUserId();
+      const row = await repository.getConversation(conversationId);
+      return row ? mapConversationRow(row, currentUserId) : null;
     },
 
-    async listMessages({ conversationId, user }) {
-      const currentUser = normaliseUser(user);
-      const state = store.getState();
-
-      if (!getMembership(state, conversationId, currentUser.id)) {
-        throw new Error('You do not have access to this conversation.');
-      }
-
-      return getConversationMessages(state, conversationId).map(
-        toMessageView,
-      );
+    async listMessages(conversationId) {
+      const currentUserId = await repository.getCurrentUserId();
+      const conversation = await this.getConversation(conversationId);
+      if (!conversation) throw new Error('Unable to load messages.');
+      const rows = await repository.listMessages(conversationId);
+      return rows
+        .map((row) => mapMessageRow(row, conversation, currentUserId))
+        .sort((first, second) => {
+          const timeDifference = new Date(first.createdAt) - new Date(second.createdAt);
+          return timeDifference || first.id.localeCompare(second.id);
+        });
     },
 
-    async sendTextMessage({ conversationId, sender, text }) {
-      const currentUser = normaliseUser(sender);
-      const messageText = typeof text === 'string' ? text.trim() : '';
-
-      if (!messageText) {
-        throw new Error('Message cannot be empty.');
-      }
-
-      if (messageText.length > MAX_MESSAGE_LENGTH) {
-        throw new Error(
-          `Message must not exceed ${MAX_MESSAGE_LENGTH} characters.`,
-        );
-      }
-
-      return store.update((state) => {
-        const conversation = getConversation(state, conversationId);
-        const membership = getMembership(
-          state,
-          conversationId,
-          currentUser.id,
-        );
-
-        if (!conversation || !membership) {
-          throw new Error('You do not have access to this conversation.');
-        }
-
-        const createdAt = createTimestamp();
-        const message = {
-          id: createId('message'),
-          conversationId,
-          type: MESSAGE_TYPE.TEXT,
-          sender: currentUser,
-          text: messageText,
-          createdAt,
-        };
-
-        state.messages.push(message);
-        conversation.updatedAt = createdAt;
-        membership.lastReadAt = createdAt;
-
-        return toMessageView(message);
-      });
+    async searchMessages(conversationId, keyword) {
+      const query = cleanText(keyword);
+      const messages = await this.listMessages(conversationId);
+      if (!query) return messages;
+      return messages.filter((message) => containsKeyword(message, query));
     },
 
-    async markConversationRead({ conversationId, user }) {
-      const currentUser = normaliseUser(user);
-      const state = store.getState();
-      const membership = getMembership(
-        state,
+    async sendMessage({ conversationId, text, files = [], location = null }) {
+      const draft = validateMessageDraft({ text, files, location });
+      const fileEntries = draft.files.map((file, index) => ({
+        file,
+        clientId: `new-${index}`,
+      }));
+      const messageId = createUuid();
+      const versionId = createUuid();
+      const uploaded = await uploadAll(
+        repository,
         conversationId,
-        currentUser.id,
+        messageId,
+        versionId,
+        fileEntries,
       );
+      const attachments = uploaded.map(({ entry, storagePath }, index) =>
+        fileDescriptor(entry.file, storagePath, index),
+      );
+      const locationItem = locationDescriptor(draft.location);
+      if (locationItem) attachments.push(locationItem);
 
-      if (!membership) {
-        throw new Error('You do not have access to this conversation.');
-      }
-
-      const latestOtherMessage = getConversationMessages(
-        state,
-        conversationId,
-      )
-        .filter((message) => message.sender.id !== currentUser.id)
-        .at(-1);
-
-      if (
-        !latestOtherMessage ||
-        (membership.lastReadAt &&
-          new Date(membership.lastReadAt) >=
-            new Date(latestOtherMessage.createdAt))
-      ) {
-        return false;
-      }
-
-      store.update((nextState) => {
-        const nextMembership = getMembership(
-          nextState,
+      try {
+        const savedMessageId = await repository.sendMessage({
           conversationId,
-          currentUser.id,
-        );
-        nextMembership.lastReadAt = latestOtherMessage.createdAt;
-        return true;
-      });
+          messageId,
+          text: draft.text,
+          attachments,
+        });
+        const [currentUserId, conversation, row] = await Promise.all([
+          repository.getCurrentUserId(),
+          this.getConversation(conversationId),
+          repository.getMessage(savedMessageId),
+        ]);
+        return mapMessageRow(row, conversation, currentUserId);
+      } catch (error) {
+        await repository.removeMedia(uploaded.map((item) => item.storagePath)).catch(() => {});
+        throw error;
+      }
+    },
 
+    async editMessage({
+      messageId,
+      text,
+      existingAttachmentIds = [],
+      newFiles = [],
+      location = null,
+      mediaOrder = [],
+    }) {
+      const original = await repository.getMessage(messageId);
+      if (!original) throw new Error('Message not found.');
+      const originalMedia = (original.attachments || []).filter(
+        (attachment) => attachment.kind !== MESSAGE_TYPE.LOCATION,
+      );
+      const existingById = new Map(originalMedia.map((item) => [item.id, item]));
+      const selectedExisting = existingAttachmentIds.map((id) => {
+        const attachment = existingById.get(id);
+        if (!attachment) throw new Error('An existing attachment is unavailable.');
+        return attachment;
+      });
+      const normalizedNewFiles = newFiles.map((item, index) => ({
+        file: item.file || item,
+        clientId: item.clientId || `new-${index}`,
+      }));
+      const draft = validateMessageDraft({
+        text,
+        files: [
+          ...selectedExisting.map((item) => ({
+            name: item.file_name || item.fileName,
+            type: item.mime_type || item.mimeType,
+            size: Number(item.file_size || item.fileSize),
+          })),
+          ...normalizedNewFiles.map((item) => item.file),
+        ],
+        location,
+      });
+      const uploaded = await uploadAll(
+        repository,
+        original.conversation_id,
+        messageId,
+        createUuid(),
+        normalizedNewFiles,
+      );
+      try {
+        const newByClientId = new Map(uploaded.map((item) => [item.entry.clientId, item]));
+        const defaultOrder = [
+          ...selectedExisting.map((item) => `existing:${item.id}`),
+          ...normalizedNewFiles.map((item) => `new:${item.clientId}`),
+        ];
+        const requestedOrder = mediaOrder.length ? mediaOrder : defaultOrder;
+        const attachments = requestedOrder.map((token, index) => {
+          const [source, id] = token.split(':');
+          if (source === 'existing') {
+            const item = existingById.get(id);
+            if (!item || !existingAttachmentIds.includes(id)) {
+              throw new Error('An attachment order item is invalid.');
+            }
+            return {
+              kind: item.kind,
+              sort_order: index,
+              storage_path: item.storage_path || item.storagePath,
+              file_name: item.file_name || item.fileName,
+              mime_type: item.mime_type || item.mimeType,
+              file_size: Number(item.file_size || item.fileSize),
+            };
+          }
+          const uploadedItem = newByClientId.get(id);
+          if (!uploadedItem) throw new Error('A new attachment order item is invalid.');
+          return fileDescriptor(uploadedItem.entry.file, uploadedItem.storagePath, index);
+        });
+        const locationItem = locationDescriptor(draft.location);
+        if (locationItem) attachments.push(locationItem);
+
+        await repository.editMessage({ messageId, text: draft.text, attachments });
+
+        const keptPaths = new Set(attachments.map((item) => item.storage_path).filter(Boolean));
+        const removedPaths = originalMedia
+          .map((item) => item.storage_path || item.storagePath)
+          .filter((path) => path && !keptPaths.has(path));
+        await repository.removeMedia(removedPaths).catch(() => {});
+      } catch (error) {
+        await repository.removeMedia(uploaded.map((item) => item.storagePath)).catch(() => {});
+        throw error;
+      }
+      const [currentUserId, conversation, row] = await Promise.all([
+        repository.getCurrentUserId(),
+        this.getConversation(original.conversation_id),
+        repository.getMessage(messageId),
+      ]);
+      return mapMessageRow(row, conversation, currentUserId);
+    },
+
+    async deleteMessage(messageId) {
+      const paths = await repository.deleteMessage(messageId);
+      await repository.removeMedia(paths).catch(() => {});
       return true;
     },
 
-    /**
-     * Module 2 integration contract: call this after a ride's accepted-passenger
-     * list changes. It is idempotent and does not require Module 2 to know any
-     * conversation IDs.
-     */
-    async syncAcceptedRideConversations({ ride, host, passengers }) {
-      if (!ride?.id) {
-        throw new Error('An accepted ride must include an ID.');
-      }
+    async markConversationRead(conversationId) {
+      return repository.markConversationRead(conversationId);
+    },
 
-      const hostUser = normaliseUser(host);
-      const acceptedPassengers = [...new Map(
-        (passengers || [])
-          .map(normaliseUser)
-          .filter((passenger) => passenger.id !== hostUser.id)
-          .map((passenger) => [passenger.id, passenger]),
-      ).values()];
-      const trip = createTripSnapshot(ride);
-      const timestamp = createTimestamp();
+    async archiveConversation(conversationId) {
+      return repository.archiveConversation(conversationId);
+    },
 
-      const conversationIds = store.update((state) => {
-        const directConversationIds = acceptedPassengers.map(
-          (passenger) => {
-            const directConversationId = createConversationId(
-              CONVERSATION_TYPE.DIRECT,
-              ride.id,
-              [hostUser.id, passenger.id],
-            );
+    async leaveGroup(conversationId) {
+      return repository.leaveGroup(conversationId);
+    },
 
-            upsertConversation({
-              state,
-              id: directConversationId,
-              type: CONVERSATION_TYPE.DIRECT,
-              rideId: ride.id,
-              title: null,
-              trip,
-              members: [hostUser, passenger],
-              timestamp,
-            });
-
-            return directConversationId;
-          },
-        );
-
-        let groupConversationId = null;
-        if (acceptedPassengers.length >= 2) {
-          groupConversationId = createConversationId(
-            CONVERSATION_TYPE.GROUP,
-            ride.id,
-            [hostUser.id],
-          );
-
-          upsertConversation({
-            state,
-            id: groupConversationId,
-            type: CONVERSATION_TYPE.GROUP,
-            rideId: ride.id,
-            title: createGroupTitle(ride, trip),
-            trip,
-            members: [hostUser, ...acceptedPassengers],
-            timestamp,
-          });
-        }
-
-        return {
-          directConversationIds,
-          groupConversationId,
-        };
-      });
-
-      return conversationIds;
+    subscribeToMessaging(listener) {
+      return repository.subscribe(listener);
     },
 
     subscribe(listener) {
-      return store.subscribe(listener);
+      return repository.subscribe(listener);
     },
   };
 }

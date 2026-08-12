@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { validateRideDraft } from '../RideService.js';
+import {
+  routeChangeRequiresConfirmation,
+  validateConfirmedRoute,
+  validateRideDraft
+} from '../RideService.js';
 import { validateRideRequest } from '../RideRequestService.js';
 import { validateRideReview } from '../RideReviewService.js';
 import {
@@ -11,8 +15,10 @@ import {
 import { mockDb } from '../../data-access/mockDataStore.js';
 import {
   buildDirectionsEmbedUrl,
-  buildGoogleMapsDirectionsUrl
+  buildGoogleMapsDirectionsUrl,
+  buildViewEmbedUrl
 } from '../GoogleMapsEmbedService.js';
+import { hasRegisteredVehicle } from '../VehicleService.js';
 
 const memory = new Map();
 globalThis.localStorage = {
@@ -52,6 +58,29 @@ describe('Module 2 ride workflow contracts', () => {
     })).toThrow('vehicle capacity');
   });
 
+  it('requires confirmed Google route selections for newly saved rides', () => {
+    expect(() => validateConfirmedRoute({
+      pickupLocation: null,
+      destinationLocation: { placeId: 'destination-id' }
+    })).toThrow('confirmed pickup');
+    expect(() => validateConfirmedRoute({
+      pickupLocation: { placeId: 'pickup-id' },
+      destinationLocation: null
+    })).toThrow('confirmed destination');
+    expect(() => validateConfirmedRoute({
+      pickupLocation: { latitude: 3.139, longitude: 101.6869 },
+      destinationLocation: { placeId: 'destination-id' }
+    })).not.toThrow();
+  });
+
+  it('limits public pickup instructions to 300 characters', () => {
+    expect(() => validateRideDraft({
+      pickup: 'KL Sentral', destination: 'Ipoh', date: '2026-08-21', time: '09:30',
+      journeyScale: 'Intercity', vehicleId: 'v_1', seatsTotal: 2,
+      pickupInstructions: 'x'.repeat(301)
+    })).toThrow('300 characters');
+  });
+
   it('requires one companion name for every additional requested seat', () => {
     expect(validateRideRequest({ seatsRequested: 3, companionNames: ['Aina', 'Daniel'] })).toEqual({
       seatsRequested: 3,
@@ -87,11 +116,62 @@ describe('Module 2 ride workflow contracts', () => {
     expect(external.searchParams.get('travelmode')).toBe('driving');
   });
 
+  it('prefers Place IDs or device coordinates for route previews', () => {
+    const placeRoute = new URL(buildDirectionsEmbedUrl({
+      pickup: 'KL Sentral', pickupLocation: { placeId: 'pickup-id' },
+      destination: 'Ipoh', destinationLocation: { placeId: 'destination-id' },
+      apiKey: 'test-browser-key'
+    }));
+    expect(placeRoute.searchParams.get('origin')).toBe('place_id:pickup-id');
+    expect(placeRoute.searchParams.get('destination')).toBe('place_id:destination-id');
+
+    const gpsRoute = new URL(buildDirectionsEmbedUrl({
+      pickup: 'Current location', pickupLocation: { latitude: 3.139, longitude: 101.6869 },
+      destination: 'Ipoh', destinationLocation: { placeId: 'destination-id' },
+      apiKey: 'test-browser-key'
+    }));
+    expect(gpsRoute.searchParams.get('origin')).toBe('3.139,101.6869');
+  });
+
+  it('builds a free Embed view centred on the one-shot GPS preview', () => {
+    const view = new URL(buildViewEmbedUrl({
+      location: { latitude: 3.139, longitude: 101.6869 },
+      apiKey: 'test-browser-key'
+    }));
+    expect(`${view.origin}${view.pathname}`).toBe('https://www.google.com/maps/embed/v1/view');
+    expect(view.searchParams.get('center')).toBe('3.139,101.6869');
+    expect(view.searchParams.get('zoom')).toBe('15');
+    expect(buildViewEmbedUrl({ location: { latitude: null, longitude: null }, apiKey: 'test-browser-key' })).toBeNull();
+    expect(buildViewEmbedUrl({ location: { latitude: 91, longitude: 101.6869 }, apiKey: 'test-browser-key' })).toBeNull();
+  });
+
+  it('allows the Publish Ride flow only when the Host has a registered vehicle', () => {
+    expect(hasRegisteredVehicle([])).toBe(false);
+    expect(hasRegisteredVehicle(null)).toBe(false);
+    expect(hasRegisteredVehicle([{ id: 'vehicle-1' }])).toBe(true);
+  });
+
   it('lazily expires due Published rides and their Pending requests in the mock adapter', async () => {
     await mockDb.processRideLifecycle(new Date('2026-08-16T00:00:00.000Z'));
     const ride = await mockDb.getRide('r_1');
     const requests = await mockDb.listMyRideRequests('u_demo_1');
     expect(ride.status).toBe('Expired');
     expect(requests.find((request) => request.rideId === 'r_1').status).toBe('Expired');
+  });
+
+  it('exposes accepted-request edit locks in the mock ride adapter', async () => {
+    const ride = await mockDb.getRide('r_5');
+    expect(ride.hasAcceptedRequests).toBe(true);
+    await expect(mockDb.updateRide('r_5', { pickupInstructions: 'Changed' }))
+      .rejects.toThrow('accepted requests');
+  });
+
+  it('lets legacy rides edit non-route fields but requires references for route changes', () => {
+    const legacy = {
+      pickup: 'Legacy pickup', destination: 'Legacy destination',
+      pickupLocation: null, destinationLocation: null
+    };
+    expect(routeChangeRequiresConfirmation(legacy, { pickupInstructions: 'Meet at Gate A' })).toBe(false);
+    expect(routeChangeRequiresConfirmation(legacy, { pickup: 'Changed pickup' })).toBe(true);
   });
 });
