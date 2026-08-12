@@ -10,6 +10,7 @@ Follow the same progressive module-context loading rules as Codex:
 
 ```text
 AGENTS.md
+-> docs/ai/UI.md for UI/presentation work
 -> relevant docs/ai/modules/Mx_*.md
 -> relevant source files
 -> conditional shared context only when needed

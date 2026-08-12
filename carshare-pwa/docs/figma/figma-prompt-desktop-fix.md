@@ -1,5 +1,9 @@
 # Figma Prompt — Fix Desktop Layouts Only (Module 2)
 
+> **Implementation authority:** This is a Figma/design reference. For repository
+> implementation, read `docs/ai/UI.md` first; it is the current shared UI/UX
+> contract and takes precedence when this prompt is outdated.
+
 ## Scope — read this first
 - **Do not touch any mobile frame.** The mobile versions are correct — leave them exactly as they are.
 - Only rebuild the **desktop/web frame** for each screen. Keep the same colors, typography, copy, and content already generated — this is a **layout restructuring pass**, not a re-brand or re-write.

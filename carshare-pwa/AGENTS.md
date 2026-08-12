@@ -81,6 +81,9 @@ AGENTS.md
 ```
 
 Use `docs/ai/FILEMAP.md` when locating shared or cross-module files.
+Read `docs/ai/UI.md` before changing UI/UX, presentation styling, responsive
+behaviour, accessibility, shared navigation/components, or implementing a Figma
+design. Then read only the relevant module context and source files.
 Read `docs/ai/TODO.md` only when project-level coordination or integration status matters.
 Read `docs/ai/PROJECT.md` when project purpose, stack, commands, architecture, or several modules matter.
 Read `docs/ai/MEMORY.md` when a stable project preference or long-term fact may affect the work.
@@ -200,6 +203,7 @@ docs/ai/MEMORY.md
 docs/ai/DECISIONS.md
 docs/ai/TODO.md
 docs/ai/FILEMAP.md
+docs/ai/UI.md
 docs/ai/SQL.md
 ```
 Module owners primarily maintain:

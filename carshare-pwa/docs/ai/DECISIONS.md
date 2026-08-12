@@ -120,6 +120,15 @@ Places, Routes, Geocoding, Dynamic Maps, traffic data, and other billable SKUs
 must not be enabled or added without a separate team decision and cost-control
 review. Budget alerts are notifications, not the Maps spending boundary.
 
+## D014 — Shared Mobile-First UI Contract
+**Status:** Accepted
+`docs/ai/UI.md` is the shared cross-module UI/UX contract. Phone is the primary
+design target; tablet and desktop use intentional responsive reflow rather than
+stretched phone layouts. `src/presentation/styles/theme.css` remains the runtime
+source of truth for exact implemented token values. Files under `docs/figma/`
+are design references and do not silently override accepted decisions, this
+contract, or verified current implementation.
+
 ## Open Decisions
 - database schemas/RLS for Modules 3-6;
 - billable Google Maps features such as autocomplete and coordinate persistence;

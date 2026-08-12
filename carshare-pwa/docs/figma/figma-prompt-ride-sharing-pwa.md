@@ -1,6 +1,9 @@
 # Figma Design Prompt — Ride-Sharing PWA (Module 2 Focus)
 
 ## How to use this document
+- **Implementation authority:** This is a Figma/design reference. For repository
+  implementation, read `docs/ai/UI.md` first; it is the current shared UI/UX
+  contract and takes precedence when this prompt is outdated.
 - Paste the **Design System** section once into your AI design tool (Figma "First Draft"/AI features, Uizard, Galileo AI, v0, etc.) so it's used as shared context, then paste each **screen prompt** one at a time.
 - If your tool accepts one long brief, you can paste the whole document in one go.
 - Replace **[App Name]** with your actual project/app name throughout.

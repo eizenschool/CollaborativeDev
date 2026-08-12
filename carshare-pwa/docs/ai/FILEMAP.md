@@ -10,6 +10,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/context/AuthContext.jsx` — shared authenticated-user state.
 
 ## Shared Presentation
+- `docs/ai/UI.md` — shared mobile-first UI/UX, responsive, component, and accessibility contract.
 - `src/presentation/components/nav/` — shared navigation.
 - `src/presentation/components/icons.jsx` — shared icons.
 - `src/presentation/styles/` — shared and module style files.
