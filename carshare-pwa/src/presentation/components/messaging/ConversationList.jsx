@@ -5,12 +5,34 @@ import {
   IconUsers,
   IconX,
 } from '../icons';
-import { conversations } from '../../../data-access/mockMessageData';
 
-function ConversationAvatar({ conversation }) {
+function getInitials(name) {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function MemberAvatar({ member, className }) {
+  if (member.avatarUrl) {
+    return (
+      <img src={member.avatarUrl} alt={member.name} className={className} />
+    );
+  }
+
+  return (
+    <span className={`${className} message-avatar-fallback`}>
+      {getInitials(member.name)}
+    </span>
+  );
+}
+
+function ConversationAvatar({ conversation, currentUserId }) {
   if (conversation.type === 'group') {
-    const groupMembers = conversation.members
-      .filter((member) => member.id !== 'me')
+    const visibleMembers = conversation.members
+      .filter((member) => member.id !== currentUserId)
       .slice(0, 2);
 
     return (
@@ -18,11 +40,10 @@ function ConversationAvatar({ conversation }) {
         className="message-conversation-group-avatar"
         aria-label={`${conversation.title} group`}
       >
-        {groupMembers.map((member, index) => (
-          <img
+        {visibleMembers.map((member, index) => (
+          <MemberAvatar
             key={member.id}
-            src={member.avatar}
-            alt={member.name}
+            member={member}
             className={`message-conversation-group-image message-conversation-group-image-${index + 1}`}
           />
         ))}
@@ -30,10 +51,13 @@ function ConversationAvatar({ conversation }) {
     );
   }
 
+  const contact = conversation.members.find(
+    (member) => member.id !== currentUserId,
+  );
+
   return (
-    <img
-      src={conversation.avatar}
-      alt={conversation.title}
+    <MemberAvatar
+      member={contact || { name: conversation.title, avatarUrl: null }}
       className="message-conversation-avatar"
     />
   );
@@ -41,22 +65,22 @@ function ConversationAvatar({ conversation }) {
 
 function ConversationRow({
   conversation,
+  currentUserId,
   isSelected,
   onSelect,
 }) {
-  function handleSelectConversation() {
-    onSelect(conversation.id);
-  }
-
   return (
     <button
       type="button"
       className={`message-conversation-row ${
         isSelected ? 'message-conversation-row-selected' : ''
       }`}
-      onClick={handleSelectConversation}
+      onClick={() => onSelect(conversation.id)}
     >
-      <ConversationAvatar conversation={conversation} />
+      <ConversationAvatar
+        conversation={conversation}
+        currentUserId={currentUserId}
+      />
 
       <div className="message-conversation-content">
         <div className="message-conversation-heading">
@@ -90,10 +114,8 @@ function ConversationRow({
           )}
         </div>
 
-        {conversation.tripBadge && (
-          <span className="message-trip-badge">
-            {conversation.tripBadge}
-          </span>
+        {conversation.type === 'group' && (
+          <span className="message-trip-badge">Group chat</span>
         )}
       </div>
     </button>
@@ -104,11 +126,7 @@ function EmptyConversationState({ hasSearchQuery, searchQuery }) {
   return (
     <div className="message-conversation-empty">
       <div className="message-conversation-empty-icon">
-        {hasSearchQuery ? (
-          <IconSearch size={28} />
-        ) : (
-          <IconUsers size={28} />
-        )}
+        {hasSearchQuery ? <IconSearch size={28} /> : <IconUsers size={28} />}
       </div>
 
       <h3 className="message-conversation-empty-title">
@@ -127,77 +145,46 @@ function EmptyConversationState({ hasSearchQuery, searchQuery }) {
 }
 
 export default function ConversationList({
+  conversations,
+  currentUserId,
   selectedConversationId,
   onSelectConversation,
-  isCompact = false,
+  isLoading,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isArchivedOpen, setIsArchivedOpen] = useState(false);
-
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
-  const activeConversations = useMemo(() => {
+  const filteredConversations = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return conversations;
+    }
+
     return conversations.filter((conversation) => {
-      if (conversation.isArchived) {
-        return false;
-      }
-
-      if (!normalizedSearchQuery) {
-        return true;
-      }
-
       return (
-        conversation.title
-          .toLowerCase()
-          .includes(normalizedSearchQuery) ||
+        conversation.title.toLowerCase().includes(normalizedSearchQuery) ||
         conversation.lastMessage
           .toLowerCase()
           .includes(normalizedSearchQuery)
       );
     });
-  }, [normalizedSearchQuery]);
-
-  const archivedConversations = useMemo(() => {
-    return conversations.filter(
-      (conversation) => conversation.isArchived,
-    );
-  }, []);
-
-  function handleSearchChange(event) {
-    setSearchQuery(event.target.value);
-  }
-
-  function handleClearSearch() {
-    setSearchQuery('');
-  }
-
-  function handleToggleArchived() {
-    setIsArchivedOpen((currentValue) => !currentValue);
-  }
+  }, [conversations, normalizedSearchQuery]);
 
   return (
-    <section
-      className="message-conversation-list"
-      aria-label="Conversations"
-    >
+    <section className="message-conversation-list" aria-label="Conversations">
       <header className="message-conversation-list-header">
-        {!isCompact && (
-          <div className="message-conversation-title-row">
-            <div className="message-conversation-page-icon">
-              <IconMessage size={18} />
-            </div>
-
-            <div>
-              <h1 className="message-conversation-page-title">
-                Messages
-              </h1>
-
-              <p className="message-conversation-page-subtitle">
-                Your ride and trip conversations
-              </p>
-            </div>
+        <div className="message-conversation-title-row">
+          <div className="message-conversation-page-icon">
+            <IconMessage size={18} />
           </div>
-        )}
+
+          <div>
+            <h1 className="message-conversation-page-title">Messages</h1>
+
+            <p className="message-conversation-page-subtitle">
+              Your ride and trip conversations
+            </p>
+          </div>
+        </div>
 
         <div className="message-conversation-search">
           <span className="message-conversation-search-icon">
@@ -207,7 +194,7 @@ export default function ConversationList({
           <input
             type="search"
             value={searchQuery}
-            onChange={handleSearchChange}
+            onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search conversations..."
             aria-label="Search conversations"
           />
@@ -216,7 +203,7 @@ export default function ConversationList({
             <button
               type="button"
               className="message-conversation-search-clear"
-              onClick={handleClearSearch}
+              onClick={() => setSearchQuery('')}
               aria-label="Clear conversation search"
             >
               <IconX size={14} />
@@ -225,70 +212,23 @@ export default function ConversationList({
         </div>
       </header>
 
-      <div className="message-conversation-scroll">
-        {activeConversations.length > 0 ? (
-          activeConversations.map((conversation) => (
+      <div className="message-conversation-scroll" aria-busy={isLoading}>
+        {filteredConversations.length > 0 ? (
+          filteredConversations.map((conversation) => (
             <ConversationRow
               key={conversation.id}
               conversation={conversation}
-              isSelected={
-                selectedConversationId === conversation.id
-              }
+              currentUserId={currentUserId}
+              isSelected={selectedConversationId === conversation.id}
               onSelect={onSelectConversation}
             />
           ))
-        ) : (
+        ) : !isLoading ? (
           <EmptyConversationState
             hasSearchQuery={Boolean(normalizedSearchQuery)}
             searchQuery={searchQuery}
           />
-        )}
-
-        {archivedConversations.length > 0 &&
-          !normalizedSearchQuery && (
-            <div className="message-archived-section">
-              <button
-                type="button"
-                className="message-archived-toggle"
-                onClick={handleToggleArchived}
-                aria-expanded={isArchivedOpen}
-              >
-                <span
-                  className={`message-archived-chevron ${
-                    isArchivedOpen
-                      ? 'message-archived-chevron-open'
-                      : ''
-                  }`}
-                  aria-hidden="true"
-                >
-                  ›
-                </span>
-
-                <span className="message-archived-label">
-                  Archived conversations
-                </span>
-
-                <span className="message-archived-count">
-                  {archivedConversations.length}
-                </span>
-              </button>
-
-              {isArchivedOpen && (
-                <div className="message-archived-list">
-                  {archivedConversations.map((conversation) => (
-                    <ConversationRow
-                      key={conversation.id}
-                      conversation={conversation}
-                      isSelected={
-                        selectedConversationId === conversation.id
-                      }
-                      onSelect={onSelectConversation}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        ) : null}
       </div>
     </section>
   );

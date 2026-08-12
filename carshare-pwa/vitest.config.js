@@ -10,8 +10,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    // Scoped to Module 6's own folder. Other modules adding tests later pick their
-    // own scope; nobody's suite can break or slow down anybody else's.
-    include: ['src/business-logic/verification/__tests__/**/*.test.js']
+    include: [
+      'src/business-logic/verification/__tests__/**/*.test.js',
+      'src/business-logic/__tests__/**/*.test.js'
+    ]
   }
 });

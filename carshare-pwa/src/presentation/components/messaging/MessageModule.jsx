@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../../../context/AuthContext.jsx';
+import { MessagingService } from '../../../business-logic/MessagingService.js';
 import { IconMessage } from '../icons';
 import ConversationList from './ConversationList';
 import ChatWindow from './ChatWindow';
@@ -33,11 +35,47 @@ function EmptyChatSelection() {
 }
 
 export default function MessageModule() {
+  const { user } = useAuth();
   const [isDesktop, setIsDesktop] = useState(getIsDesktop);
-  const [
-    selectedConversationId,
-    setSelectedConversationId,
-  ] = useState(null);
+  const [selectedConversationId, setSelectedConversationId] =
+    useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [dataVersion, setDataVersion] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refreshConversations = useCallback(async () => {
+    if (!user) {
+      setConversations([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const nextConversations =
+        await MessagingService.listConversations({ user });
+      setConversations(nextConversations);
+      setSelectedConversationId((currentId) =>
+        currentId &&
+        !nextConversations.some(
+          (conversation) => conversation.id === currentId,
+        )
+          ? null
+          : currentId,
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    refreshConversations();
+  }, [refreshConversations, dataVersion]);
+
+  useEffect(() => {
+    return MessagingService.subscribe(() => {
+      setDataVersion((currentVersion) => currentVersion + 1);
+    });
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(
@@ -49,16 +87,10 @@ export default function MessageModule() {
     }
 
     setIsDesktop(mediaQuery.matches);
-    mediaQuery.addEventListener(
-      'change',
-      handleViewportChange,
-    );
+    mediaQuery.addEventListener('change', handleViewportChange);
 
     return () => {
-      mediaQuery.removeEventListener(
-        'change',
-        handleViewportChange,
-      );
+      mediaQuery.removeEventListener('change', handleViewportChange);
     };
   }, []);
 
@@ -70,25 +102,33 @@ export default function MessageModule() {
     setSelectedConversationId(null);
   }
 
+  const selectedConversation = conversations.find(
+    (conversation) => conversation.id === selectedConversationId,
+  );
+
+  const conversationList = (
+    <ConversationList
+      conversations={conversations}
+      currentUserId={user?.id}
+      selectedConversationId={selectedConversationId}
+      onSelectConversation={handleSelectConversation}
+      isLoading={isLoading}
+    />
+  );
+
   if (isDesktop) {
     return (
       <main className="message-module message-module-desktop">
         <section className="message-desktop-conversation-column">
-          <ConversationList
-            selectedConversationId={
-              selectedConversationId
-            }
-            onSelectConversation={
-              handleSelectConversation
-            }
-            isCompact
-          />
+          {conversationList}
         </section>
 
         <section className="message-desktop-chat-column">
           {selectedConversationId ? (
             <ChatWindow
               conversationId={selectedConversationId}
+              currentUser={user}
+              dataVersion={dataVersion}
               onBack={handleBackToConversationList}
               isDesktop
             />
@@ -99,7 +139,8 @@ export default function MessageModule() {
 
         <section className="message-desktop-info-column">
           <TripInfoSidebar
-            conversationId={selectedConversationId}
+            conversation={selectedConversation}
+            currentUserId={user?.id}
           />
         </section>
       </main>
@@ -111,16 +152,13 @@ export default function MessageModule() {
       {selectedConversationId ? (
         <ChatWindow
           conversationId={selectedConversationId}
+          currentUser={user}
+          dataVersion={dataVersion}
           onBack={handleBackToConversationList}
           isDesktop={false}
         />
       ) : (
-        <ConversationList
-          selectedConversationId={null}
-          onSelectConversation={
-            handleSelectConversation
-          }
-        />
+        conversationList
       )}
     </main>
   );

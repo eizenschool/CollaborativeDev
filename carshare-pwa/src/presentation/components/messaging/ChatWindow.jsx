@@ -1,41 +1,45 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  IconArchive,
   IconArrowLeft,
-  IconCamera,
-  IconMapPin,
   IconMessage,
-  IconMoreVertical,
-  IconPaperclip,
-  IconSearch,
   IconSend,
-  IconSmile,
-  IconTrash,
-  IconX,
 } from '../icons';
-import {
-  CONVERSATION_TYPE,
-  CURRENT_USER,
-  CURRENT_USER_ID,
-  MESSAGE_TYPE,
-  fetchConversationById,
-  fetchMessagesByConversationId,
-} from '../../../data-access/mockMessageData';
+import { MessagingService } from '../../../business-logic/MessagingService.js';
 import MessageBubble from './MessageBubble';
 
-function ConversationAvatar({ conversation }) {
-  if (conversation.type === CONVERSATION_TYPE.GROUP) {
+function getInitials(name) {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function MemberAvatar({ member, className }) {
+  if (member.avatarUrl) {
+    return <img src={member.avatarUrl} alt={member.name} className={className} />;
+  }
+
+  return (
+    <span className={`${className} message-avatar-fallback`}>
+      {getInitials(member.name)}
+    </span>
+  );
+}
+
+function ConversationAvatar({ conversation, currentUserId }) {
+  if (conversation.type === 'group') {
     const visibleMembers = conversation.members
-      .filter((member) => member.id !== CURRENT_USER_ID)
+      .filter((member) => member.id !== currentUserId)
       .slice(0, 2);
 
     return (
       <div className="message-chat-group-avatar">
         {visibleMembers.map((member, index) => (
-          <img
+          <MemberAvatar
             key={member.id}
-            src={member.avatar}
-            alt={member.name}
+            member={member}
             className={`message-chat-group-image message-chat-group-image-${index + 1}`}
           />
         ))}
@@ -43,10 +47,13 @@ function ConversationAvatar({ conversation }) {
     );
   }
 
+  const contact = conversation.members.find(
+    (member) => member.id !== currentUserId,
+  );
+
   return (
-    <img
-      src={conversation.avatar}
-      alt={conversation.title}
+    <MemberAvatar
+      member={contact || { name: conversation.title, avatarUrl: null }}
       className="message-chat-avatar"
     />
   );
@@ -66,180 +73,64 @@ function ChatEmptyState() {
   );
 }
 
-function ConversationMenu({
-  conversation,
-  onClose,
-}) {
-  const destructiveLabel =
-    conversation.type === CONVERSATION_TYPE.GROUP
-      ? 'Leave group'
-      : 'Delete conversation';
-
-  return (
-    <div className="message-chat-menu">
-      <button type="button" onClick={onClose}>
-        <IconArchive size={15} />
-        <span>Archive conversation</span>
-      </button>
-
-      <button
-        type="button"
-        className="message-chat-menu-danger"
-        onClick={onClose}
-      >
-        <IconTrash size={15} />
-        <span>{destructiveLabel}</span>
-      </button>
-    </div>
-  );
-}
-
-function AttachmentMenu({
-  onSendImage,
-  onSendLocation,
-  onClose,
-}) {
-  function handleSendDemoImage() {
-    onSendImage();
-    onClose();
-  }
-
-  function handleSendDemoLocation() {
-    onSendLocation();
-    onClose();
-  }
-
-  return (
-    <div className="message-attachment-menu">
-      <button
-        type="button"
-        onClick={handleSendDemoImage}
-      >
-        <span className="message-attachment-menu-icon">
-          <IconCamera size={18} />
-        </span>
-
-        <span>
-          <strong>Photo</strong>
-          <small>Send a dummy photo</small>
-        </span>
-      </button>
-
-      <button
-        type="button"
-        onClick={handleSendDemoLocation}
-      >
-        <span className="message-attachment-menu-icon">
-          <IconMapPin size={18} />
-        </span>
-
-        <span>
-          <strong>Location</strong>
-          <small>Share a dummy location</small>
-        </span>
-      </button>
-    </div>
-  );
-}
-
-function MessageOptionsModal({
-  message,
-  onClose,
-  onDelete,
-}) {
-  const canDelete = message.senderId === CURRENT_USER_ID;
-
-  return (
-    <div
-      className="message-options-backdrop"
-      onClick={onClose}
-    >
-      <div
-        className="message-options-modal"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="message-options-handle" />
-
-        <header className="message-options-header">
-          <div>
-            <span>Message options</span>
-            <p>
-              {message.text
-                ? message.text.slice(0, 70)
-                : 'Shared attachment'}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close message options"
-          >
-            <IconX size={18} />
-          </button>
-        </header>
-
-        {canDelete ? (
-          <button
-            type="button"
-            className="message-options-delete"
-            onClick={() => onDelete(message.id)}
-          >
-            <IconTrash size={17} />
-            <span>Delete message</span>
-          </button>
-        ) : (
-          <p className="message-options-note">
-            Additional message actions will be connected later.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function ChatWindow({
   conversationId,
+  currentUser,
+  dataVersion,
   onBack,
   isDesktop = false,
 }) {
-  const conversation =
-    fetchConversationById(conversationId);
-
-  const [messageList, setMessageList] = useState(() =>
-    fetchMessagesByConversationId(conversationId),
-  );
+  const [conversation, setConversation] = useState(null);
+  const [messageList, setMessageList] = useState([]);
   const [messageInput, setMessageInput] = useState('');
-  const [isConversationMenuOpen, setIsConversationMenuOpen] =
-    useState(false);
-  const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] =
-    useState(false);
-  const [selectedMessage, setSelectedMessage] = useState(null);
-
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const messageBottomRef = useRef(null);
   const messageInputRef = useRef(null);
 
+  const loadConversation = useCallback(async () => {
+    if (!currentUser || !conversationId) {
+      setConversation(null);
+      setMessageList([]);
+      return;
+    }
+
+    try {
+      const [nextConversation, nextMessages] = await Promise.all([
+        MessagingService.getConversation({
+          conversationId,
+          user: currentUser,
+        }),
+        MessagingService.listMessages({
+          conversationId,
+          user: currentUser,
+        }),
+      ]);
+
+      setConversation(nextConversation);
+      setMessageList(nextMessages);
+      await MessagingService.markConversationRead({
+        conversationId,
+        user: currentUser,
+      });
+    } catch (error) {
+      setConversation(null);
+      setMessageList([]);
+      setErrorMessage(
+        error.message || 'Unable to load this conversation.',
+      );
+    }
+  }, [conversationId, currentUser]);
+
   useEffect(() => {
-    setMessageList(
-      fetchMessagesByConversationId(conversationId),
-    );
     setMessageInput('');
-    setSelectedMessage(null);
-  }, [conversationId]);
+    setErrorMessage('');
+    loadConversation();
+  }, [loadConversation, dataVersion]);
 
   useEffect(() => {
-    messageBottomRef.current?.scrollIntoView({
-      behavior: 'smooth',
-    });
+    messageBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messageList]);
-
-  if (!conversation) {
-    return null;
-  }
-
-  function handleInputChange(event) {
-    setMessageInput(event.target.value);
-  }
 
   function handleInputKeyDown(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -248,133 +139,46 @@ export default function ChatWindow({
     }
   }
 
-  function handleSendMessage() {
-    const trimmedMessage = messageInput.trim();
-
-    if (!trimmedMessage) {
+  async function handleSendMessage() {
+    if (isSending) {
       return;
     }
 
-    const newMessage = {
-      id: `message-${Date.now()}`,
-      type: MESSAGE_TYPE.TEXT,
-      senderId: CURRENT_USER_ID,
-      senderName: CURRENT_USER.name,
-      senderAvatar: CURRENT_USER.avatar,
-      text: trimmedMessage,
-      timestamp: 'Just now',
-      isRead: false,
-      isEdited: false,
-      isDeleted: false,
-    };
+    setErrorMessage('');
+    setIsSending(true);
 
-    setMessageList((currentMessages) => [
-      ...currentMessages,
-      newMessage,
-    ]);
-    setMessageInput('');
-    messageInputRef.current?.focus();
+    try {
+      await MessagingService.sendTextMessage({
+        conversationId,
+        sender: currentUser,
+        text: messageInput,
+      });
+      setMessageInput('');
+      messageInputRef.current?.focus();
+      await loadConversation();
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to send message.');
+    } finally {
+      setIsSending(false);
+    }
   }
 
-  function handleSendImage() {
-    const newMessage = {
-      id: `message-${Date.now()}`,
-      type: MESSAGE_TYPE.IMAGE,
-      senderId: CURRENT_USER_ID,
-      senderName: CURRENT_USER.name,
-      senderAvatar: CURRENT_USER.avatar,
-      imageUrl:
-        'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600&h=400&fit=crop&auto=format',
-      text: 'Sharing this trip photo.',
-      timestamp: 'Just now',
-      isRead: false,
-      isEdited: false,
-      isDeleted: false,
-    };
-
-    setMessageList((currentMessages) => [
-      ...currentMessages,
-      newMessage,
-    ]);
-  }
-
-  function handleSendLocation() {
-    const newMessage = {
-      id: `message-${Date.now()}`,
-      type: MESSAGE_TYPE.LOCATION,
-      senderId: CURRENT_USER_ID,
-      senderName: CURRENT_USER.name,
-      senderAvatar: CURRENT_USER.avatar,
-      timestamp: 'Just now',
-      isRead: false,
-      isEdited: false,
-      isDeleted: false,
-      location: {
-        name: 'KLCC Basement Carpark, Gate B',
-        latitude: 3.1579,
-        longitude: 101.7116,
-      },
-    };
-
-    setMessageList((currentMessages) => [
-      ...currentMessages,
-      newMessage,
-    ]);
-  }
-
-  function handleToggleConversationMenu(event) {
-    event.stopPropagation();
-
-    setIsConversationMenuOpen(
-      (currentValue) => !currentValue,
+  if (!conversation) {
+    return (
+      <section className="message-chat-window" aria-label="Conversation">
+        <ChatEmptyState />
+      </section>
     );
-    setIsAttachmentMenuOpen(false);
-  }
-
-  function handleToggleAttachmentMenu() {
-    setIsAttachmentMenuOpen(
-      (currentValue) => !currentValue,
-    );
-    setIsConversationMenuOpen(false);
-  }
-
-  function handleCloseMenus() {
-    setIsConversationMenuOpen(false);
-    setIsAttachmentMenuOpen(false);
-  }
-
-  function handleOpenMessageOptions(message) {
-    setSelectedMessage(message);
-  }
-
-  function handleCloseMessageOptions() {
-    setSelectedMessage(null);
-  }
-
-  function handleDeleteMessage(messageId) {
-    setMessageList((currentMessages) =>
-      currentMessages.map((message) =>
-        message.id === messageId
-          ? {
-              ...message,
-              isDeleted: true,
-            }
-          : message,
-      ),
-    );
-
-    setSelectedMessage(null);
   }
 
   const memberDescription =
-    conversation.type === CONVERSATION_TYPE.GROUP
+    conversation.type === 'group'
       ? `${conversation.members.length} members`
-      : 'Active recently';
+      : 'Private ride chat';
 
   return (
     <section
       className="message-chat-window"
-      onClick={handleCloseMenus}
       aria-label={`Conversation with ${conversation.title}`}
     >
       <header className="message-chat-header">
@@ -389,49 +193,21 @@ export default function ChatWindow({
           </button>
         )}
 
-        <ConversationAvatar conversation={conversation} />
+        <ConversationAvatar
+          conversation={conversation}
+          currentUserId={currentUser.id}
+        />
 
         <div className="message-chat-header-content">
           <div className="message-chat-header-title-row">
             <h2>{conversation.title}</h2>
 
-            {conversation.tripBadge && (
-              <span className="message-chat-header-badge">
-                {conversation.tripBadge}
-              </span>
+            {conversation.type === 'group' && (
+              <span className="message-chat-header-badge">Group chat</span>
             )}
           </div>
 
           <p>{memberDescription}</p>
-        </div>
-
-        <div className="message-chat-header-actions">
-          <button
-            type="button"
-            className="message-chat-header-button"
-            aria-label="Search this conversation"
-          >
-            <IconSearch size={17} />
-          </button>
-
-          <div className="message-chat-menu-wrap">
-            <button
-              type="button"
-              className="message-chat-header-button"
-              onClick={handleToggleConversationMenu}
-              aria-label="Conversation options"
-              aria-expanded={isConversationMenuOpen}
-            >
-              <IconMoreVertical size={18} />
-            </button>
-
-            {isConversationMenuOpen && (
-              <ConversationMenu
-                conversation={conversation}
-                onClose={handleCloseMenus}
-              />
-            )}
-          </div>
         </div>
       </header>
 
@@ -441,9 +217,7 @@ export default function ChatWindow({
             <MessageBubble
               key={message.id}
               message={message}
-              onOpenMessageOptions={
-                handleOpenMessageOptions
-              }
+              currentUserId={currentUser.id}
             />
           ))
         ) : (
@@ -455,76 +229,41 @@ export default function ChatWindow({
 
       <footer className="message-composer">
         <div className="message-composer-inner">
-          <div className="message-attachment-wrap">
-            <button
-              type="button"
-              className={`message-composer-icon-button ${
-                isAttachmentMenuOpen
-                  ? 'message-composer-icon-button-active'
-                  : ''
-              }`}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleToggleAttachmentMenu();
-              }}
-              aria-label="Add attachment"
-              aria-expanded={isAttachmentMenuOpen}
-            >
-              <IconPaperclip size={19} />
-            </button>
-
-            {isAttachmentMenuOpen && (
-              <AttachmentMenu
-                onSendImage={handleSendImage}
-                onSendLocation={handleSendLocation}
-                onClose={handleCloseMenus}
-              />
-            )}
-          </div>
-
           <div className="message-composer-input-wrap">
             <textarea
               ref={messageInputRef}
               value={messageInput}
-              onChange={handleInputChange}
+              onChange={(event) => setMessageInput(event.target.value)}
               onKeyDown={handleInputKeyDown}
               rows="1"
+              maxLength="1000"
               placeholder="Type a message..."
               aria-label="Message"
+              disabled={isSending}
             />
           </div>
 
           <button
             type="button"
-            className="message-composer-icon-button message-composer-smile"
-            aria-label="Choose emoji"
-          >
-            <IconSmile size={19} />
-          </button>
-
-          <button
-            type="button"
             className={`message-send-button ${
-              messageInput.trim()
+              messageInput.trim() && !isSending
                 ? 'message-send-button-active'
                 : ''
             }`}
             onClick={handleSendMessage}
-            disabled={!messageInput.trim()}
+            disabled={!messageInput.trim() || isSending}
             aria-label="Send message"
           >
             <IconSend size={17} />
           </button>
         </div>
-      </footer>
 
-      {selectedMessage && (
-        <MessageOptionsModal
-          message={selectedMessage}
-          onClose={handleCloseMessageOptions}
-          onDelete={handleDeleteMessage}
-        />
-      )}
+        {errorMessage && (
+          <p className="message-composer-error" role="alert">
+            {errorMessage}
+          </p>
+        )}
+      </footer>
     </section>
   );
 }

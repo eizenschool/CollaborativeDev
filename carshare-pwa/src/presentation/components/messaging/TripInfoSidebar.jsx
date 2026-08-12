@@ -1,14 +1,35 @@
 import {
   IconCalendar,
-  IconLayers,
   IconMapPin,
-  IconTrash,
   IconUsers,
 } from '../icons';
-import {
-  CONVERSATION_TYPE,
-  fetchConversationById,
-} from '../../../data-access/mockMessageData';
+
+function getInitials(name) {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function ParticipantAvatar({ member }) {
+  if (member.avatarUrl) {
+    return (
+      <img
+        src={member.avatarUrl}
+        alt={member.name}
+        className="message-trip-member-avatar"
+      />
+    );
+  }
+
+  return (
+    <span className="message-trip-member-avatar message-avatar-fallback">
+      {getInitials(member.name)}
+    </span>
+  );
+}
 
 function TripSummaryCard({ conversation }) {
   if (!conversation.tripRoute) {
@@ -22,9 +43,7 @@ function TripSummaryCard({ conversation }) {
       </div>
 
       <div className="message-trip-summary-content">
-        <span className="message-trip-summary-label">
-          Trip route
-        </span>
+        <span className="message-trip-summary-label">Trip route</span>
 
         <h4 className="message-trip-summary-route">
           {conversation.tripRoute}
@@ -37,9 +56,7 @@ function TripSummaryCard({ conversation }) {
             <IconCalendar size={15} />
 
             <div>
-              <span className="message-trip-summary-detail-label">
-                Date
-              </span>
+              <span className="message-trip-summary-detail-label">Date</span>
 
               <span className="message-trip-summary-detail-value">
                 {conversation.tripDate}
@@ -50,9 +67,7 @@ function TripSummaryCard({ conversation }) {
 
         {conversation.tripTime && (
           <div className="message-trip-summary-time-row">
-            <span className="message-trip-summary-time-label">
-              Departure
-            </span>
+            <span className="message-trip-summary-time-label">Departure</span>
 
             <span className="message-trip-summary-time-value">
               {conversation.tripTime}
@@ -64,19 +79,9 @@ function TripSummaryCard({ conversation }) {
   );
 }
 
-function ParticipantAvatar({ member }) {
-  return (
-    <img
-      src={member.avatar}
-      alt={member.name}
-      className="message-trip-member-avatar"
-    />
-  );
-}
-
-function ParticipantList({ conversation }) {
+function ParticipantList({ conversation, currentUserId }) {
   const participantHeading =
-    conversation.type === CONVERSATION_TYPE.GROUP
+    conversation.type === 'group'
       ? `Members (${conversation.members.length})`
       : 'Participant';
 
@@ -92,84 +97,31 @@ function ParticipantList({ conversation }) {
 
       <div className="message-trip-member-list">
         {conversation.members.map((member) => {
-          const isCurrentUser = member.id === 'me';
+          const isCurrentUser = member.id === currentUserId;
 
           return (
-            <div
-              key={member.id}
-              className="message-trip-member-row"
-            >
+            <div key={member.id} className="message-trip-member-row">
               <ParticipantAvatar member={member} />
 
               <div className="message-trip-member-content">
-                <span className="message-trip-member-name">
-                  {member.name}
-                </span>
+                <span className="message-trip-member-name">{member.name}</span>
 
                 <span className="message-trip-member-role">
                   {isCurrentUser
                     ? 'You'
-                    : conversation.type ===
-                        CONVERSATION_TYPE.GROUP
+                    : conversation.type === 'group'
                       ? 'Trip member'
-                      : 'Contact'}
+                      : 'Ride contact'}
                 </span>
               </div>
 
               {isCurrentUser && (
-                <span className="message-trip-member-you-badge">
-                  You
-                </span>
+                <span className="message-trip-member-you-badge">You</span>
               )}
             </div>
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function ConversationActions({ conversation }) {
-  const destructiveLabel =
-    conversation.type === CONVERSATION_TYPE.GROUP
-      ? 'Leave group'
-      : 'Delete conversation';
-
-  return (
-    <section className="message-trip-actions-card">
-      <button
-        type="button"
-        className="message-trip-action-button"
-      >
-        <span className="message-trip-action-icon">
-          <IconLayers size={16} />
-        </span>
-
-        <span>
-          <strong>Archive conversation</strong>
-          <small>
-            Move this conversation to your archive.
-          </small>
-        </span>
-      </button>
-
-      <button
-        type="button"
-        className="message-trip-action-button message-trip-action-danger"
-      >
-        <span className="message-trip-action-icon">
-          <IconTrash size={16} />
-        </span>
-
-        <span>
-          <strong>{destructiveLabel}</strong>
-          <small>
-            {conversation.type === CONVERSATION_TYPE.GROUP
-              ? 'You will stop receiving messages from this group.'
-              : 'Remove this conversation from your messages.'}
-          </small>
-        </span>
-      </button>
     </section>
   );
 }
@@ -183,33 +135,23 @@ function EmptyTripInfo() {
 
       <h3>No conversation selected</h3>
 
-      <p>
-        Select a conversation to view trip and participant
-        information.
-      </p>
+      <p>Select a conversation to view trip and participant information.</p>
     </div>
   );
 }
 
-export default function TripInfoSidebar({
-  conversationId,
-}) {
-  const conversation = fetchConversationById(conversationId);
-
+export default function TripInfoSidebar({ conversation, currentUserId }) {
   if (!conversation) {
     return <EmptyTripInfo />;
   }
 
   const sidebarTitle =
-    conversation.type === CONVERSATION_TYPE.GROUP
+    conversation.type === 'group'
       ? 'Trip Information'
       : 'Contact Information';
 
   return (
-    <aside
-      className="message-trip-sidebar"
-      aria-label={sidebarTitle}
-    >
+    <aside className="message-trip-sidebar" aria-label={sidebarTitle}>
       <header className="message-trip-sidebar-header">
         <span className="message-trip-sidebar-eyebrow">
           Conversation details
@@ -221,9 +163,10 @@ export default function TripInfoSidebar({
       <div className="message-trip-sidebar-scroll">
         <TripSummaryCard conversation={conversation} />
 
-        <ParticipantList conversation={conversation} />
-
-        <ConversationActions conversation={conversation} />
+        <ParticipantList
+          conversation={conversation}
+          currentUserId={currentUserId}
+        />
       </div>
     </aside>
   );

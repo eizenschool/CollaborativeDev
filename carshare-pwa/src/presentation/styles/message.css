@@ -1237,6 +1237,17 @@
   font-family: var(--font);
 }
 
+.message-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #d1fae5;
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .message-chat-header {
   position: relative;
   z-index: 8;
@@ -1552,6 +1563,13 @@
 .message-send-button-active:hover {
   background: var(--teal-dark);
   transform: translateY(-1px);
+}
+
+.message-composer-error {
+  margin: 7px 2px 0;
+  color: var(--danger);
+  font-size: 10.5px;
+  line-height: 1.4;
 }
 
 .message-attachment-menu {
