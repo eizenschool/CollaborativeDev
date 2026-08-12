@@ -3,20 +3,26 @@ import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedS
 
 export default function GoogleRouteMap({
   pickup,
+  pickupLocation,
   destination,
+  destinationLocation,
+  previewLocation,
   waypoints = [],
   className = '',
   children
 }) {
-  const [route, setRoute] = useState({ pickup, destination, waypoints });
+  const [route, setRoute] = useState({ pickup, pickupLocation, destination, destinationLocation, previewLocation, waypoints });
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setRoute({ pickup, destination, waypoints }), 500);
+    const timer = window.setTimeout(() => setRoute({ pickup, pickupLocation, destination, destinationLocation, previewLocation, waypoints }), 500);
     return () => window.clearTimeout(timer);
-  }, [pickup, destination, waypoints]);
+  }, [pickup, pickupLocation, destination, destinationLocation, previewLocation, waypoints]);
 
-  const src = GoogleMapsEmbedService.buildDirectionsEmbedUrl(route);
-  const label = pickup && destination ? `Route from ${pickup} to ${destination}` : 'Route preview';
+  const directionsSrc = GoogleMapsEmbedService.buildDirectionsEmbedUrl(route);
+  const src = directionsSrc || GoogleMapsEmbedService.buildViewEmbedUrl({ location: route.previewLocation });
+  const label = directionsSrc
+    ? `Route from ${pickup} to ${destination}`
+    : src ? 'Map centred on your current location' : 'Route preview';
 
   if (!src) {
     return <div className={`${className} google-map-fallback`} aria-label={label}>{children}</div>;

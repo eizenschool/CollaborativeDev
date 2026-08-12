@@ -43,9 +43,26 @@ expiry. `Matched -> In Transit -> Completed` is exposed only through the
 service-role `transition_verified_ride()` contract for a future trusted Module 6
 pipeline; no browser adapter can perform that production transition.
 
-Route and waypoint previews use the shared no-charge Maps Embed API directions
-component. It accepts the existing text locations and falls back to the local
-route illustration when the restricted key is absent or the app is offline.
+New Publish Ride drafts require at least one registered Host vehicle and
+confirmed Malaysia-only Google location suggestions for pickup and destination.
+The entry gate checks vehicles before requesting location permission. Eligible
+Hosts receive one automatic device-location request to centre the Embed preview;
+it is neither persisted nor treated as pickup. Pickup may use that location only
+when GPS accuracy is 100 metres or better, reverse geocoding succeeds, and the
+Host confirms the result. Place IDs are stored for Google selections;
+device coordinates are stored only for a confirmed current-location pickup.
+Editing the displayed text invalidates the reference immediately. Optional
+public pickup instructions are limited to 300 characters and follow the same
+accepted-request/status edit lock as the Ride.
+
+`database/sql/016_m2_add_route_locations.sql` contains the required nullable
+columns, constraints, and replacement create/update RPC signatures. It is
+prepared locally but not yet deployed to the shared project.
+
+Route and waypoint previews continue to use Maps Embed API directions mode.
+The builder sends Place ID or coordinate references when available and falls
+back to saved text for legacy Rides. Legacy rows without canonical references
+remain readable and may edit non-route fields without fabricated location data.
 
 The Module 2 presentation follows the shared `docs/ai/UI.md` phone-first
 contract across the ride hub, publishing, detail, request management, editing,
@@ -56,7 +73,7 @@ details reflow into tablet/desktop grids without changing the service contract.
 Responsive verification targets are 375px, 768px, 1024px, and 1440px.
 
 ## Deferred
-Places autocomplete, stored coordinates, traffic-aware routing, and
+Routes API, route distance/time, traffic-aware routing, map-pin selection, and
 route-deviation automation; Module 3 conversation
 creation and notifications after acceptance; production Module 1/6 driver
 verification; wiring the trusted Module 6 pipeline to the service-role transition.

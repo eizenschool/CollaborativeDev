@@ -18,8 +18,10 @@ Official SQL history: 001-015
 `001-010` were applied atomically as the initial schema on 2026-08-12.
 `011-012` are deployed follow-ups for advisor findings and the confirmed
 host-owned vehicle requirement. `013-015` were deployed on 2026-08-12 for the
-confirmed Module 2 request, lifecycle, and review design. Future changes start at `016` and
-must not rewrite deployed history.
+confirmed Module 2 request, lifecycle, and review design. `016` is prepared
+locally for confirmed route references and pickup instructions but is not yet
+deployed; it requires explicit shared-project migration approval. Deployed
+history must not be rewritten.
 
 Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
@@ -82,6 +84,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `013_m2_ride_requests_and_departure.sql` - authoritative departure instant, ride lifecycle metadata, multi-seat requests, RLS/grants, and atomic RPC mutations.
 - `014_m2_lifecycle_cron.sql` - minute lifecycle processor and service-role-only verified ride transition.
 - `015_m2_ride_reviews.sql` - mutual Completed-ride reviews and account-level average star rating updates.
+- `016_m2_add_route_locations.sql` - pending deployment; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 
 ## Rules for New Database Work
 

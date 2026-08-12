@@ -1,10 +1,16 @@
 // ===== PRESENTATION LAYER (PublishRide) =====
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideService } from '../../../business-logic/RideService.js';
-import { VehicleService } from '../../../business-logic/VehicleService.js';
+import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
+import {
+  GooglePlacesService,
+  isConfirmedLocation,
+  MAX_GPS_ACCURACY_METRES
+} from '../../../business-logic/GooglePlacesService.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
+import ConfirmedLocationInput from '../maps/ConfirmedLocationInput.jsx';
 import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck, IconPlus, IconX } from '../icons.jsx';
 import '../../styles/ride.css';
 
@@ -19,7 +25,9 @@ const STEP_DESCRIPTIONS = [
 const RESTRICTION_OPTIONS = ['Pet-friendly', 'No smoking', 'Women-only', 'Child seat available', 'Luggage-friendly', 'Toll contribution', 'Music OK', 'Quiet ride'];
 
 const emptyForm = {
-  pickup: '', destination: '', journeyScale: 'Urban',
+  pickup: '', pickupLocation: null,
+  destination: '', destinationLocation: null,
+  pickupInstructions: '', journeyScale: 'Urban',
   date: '', time: '', seatsTotal: 3,
   vehicleId: null, vehicleCapacity: null,
   contribution: '', restrictionTags: [],
@@ -33,6 +41,47 @@ export default function PublishRide() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [vehicles, setVehicles] = useState(null);
+  const [vehicleGateError, setVehicleGateError] = useState('');
+  const [vehicleGateAttempt, setVehicleGateAttempt] = useState(0);
+  const [previewLocation, setPreviewLocation] = useState(null);
+  const [previewStatus, setPreviewStatus] = useState({ state: 'idle', message: '' });
+  const locationRequested = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    setVehicles(null);
+    setVehicleGateError('');
+    VehicleService.listVehicles(user.id)
+      .then((items) => {
+        if (active) setVehicles(items);
+      })
+      .catch((err) => {
+        if (active) setVehicleGateError(err.message || 'Your vehicles could not be checked.');
+      });
+    return () => { active = false; };
+  }, [user.id, vehicleGateAttempt]);
+
+  useEffect(() => {
+    if (!hasRegisteredVehicle(vehicles) || locationRequested.current) return;
+    locationRequested.current = true;
+    let active = true;
+    setPreviewStatus({ state: 'locating', message: 'Finding your current location to centre the map…' });
+    GooglePlacesService.getCurrentLocationPreview()
+      .then((location) => {
+        if (!active) return;
+        setPreviewLocation(location);
+        setPreviewStatus({
+          state: 'ready',
+          message: `Map centred near your current location (±${Math.round(location.accuracy)} m). This is not your pickup until you confirm it.`
+        });
+      })
+      .catch((err) => {
+        if (!active) return;
+        setPreviewStatus({ state: 'error', message: err.message });
+      });
+    return () => { active = false; };
+  }, [vehicles]);
 
   function patch(fields) {
     setForm((f) => ({ ...f, ...fields }));
@@ -40,8 +89,8 @@ export default function PublishRide() {
 
   function next() {
     setError('');
-    if (step === 0 && (!form.pickup.trim() || !form.destination.trim())) {
-      setError('Enter both a pickup point and a destination to continue.');
+    if (step === 0 && (!isConfirmedLocation(form.pickupLocation) || !form.destinationLocation?.placeId)) {
+      setError('Choose a confirmed Google location for both the pickup point and destination.');
       return;
     }
     if (step === 1 && (!form.date || !form.time)) {
@@ -86,6 +135,42 @@ export default function PublishRide() {
     }
   }
 
+  if (!vehicles && !vehicleGateError) {
+    return <main className="publish-access-state" role="status">Checking that you have a vehicle…</main>;
+  }
+
+  if (vehicleGateError) {
+    return (
+      <main className="publish-access-state">
+        <section className="publish-access-card" role="alert">
+          <span className="publish-access-icon"><IconCar size={24} /></span>
+          <h1>We couldn't check your vehicles</h1>
+          <p>{vehicleGateError} Location permission has not been requested.</p>
+          <div>
+            <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
+            <button className="btn-primary" onClick={() => setVehicleGateAttempt((attempt) => attempt + 1)}>Try again</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!hasRegisteredVehicle(vehicles)) {
+    return (
+      <main className="publish-access-state">
+        <section className="publish-access-card" role="alert">
+          <span className="publish-access-icon"><IconCar size={24} /></span>
+          <h1>Add a vehicle before publishing</h1>
+          <p>You need at least one registered vehicle to publish a ride. We did not request your location.</p>
+          <div>
+            <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
+            <button className="btn-primary" onClick={() => navigate('/profile')}>Add a vehicle</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="publish-ride">
       <header className="publish-mobile-header">
@@ -115,9 +200,9 @@ export default function PublishRide() {
 
         {error && <div className="alert alert-error publish-error" role="alert">{error}</div>}
 
-        {step === 0 && <RouteStep form={form} patch={patch} />}
+        {step === 0 && <RouteStep form={form} patch={patch} previewLocation={previewLocation} previewStatus={previewStatus} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}
-        {step === 2 && <VehicleStep form={form} patch={patch} userId={user.id} />}
+        {step === 2 && <VehicleStep form={form} patch={patch} vehicles={vehicles} />}
         {step === 3 && <TripDetailsStep form={form} patch={patch} />}
         {step === 4 && <ReviewStep form={form} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
 
@@ -138,31 +223,41 @@ export default function PublishRide() {
 }
 
 // ---------- STEP 1: ROUTE ----------
-function RouteStep({ form, patch }) {
+function RouteStep({ form, patch, previewLocation, previewStatus }) {
   return (
     <>
       <div className="route-inputs">
-        <label className="route-field" htmlFor="ride-pickup">
-          <span>Pickup point</span>
-          <div className="input-wrap">
-          <span className="prefix-icon" style={{ color: 'var(--teal)' }}><IconMapPin size={14} /></span>
-          <input id="ride-pickup" autoComplete="street-address" placeholder="e.g. KL Sentral" value={form.pickup} onChange={(e) => patch({ pickup: e.target.value })} />
-          </div>
-        </label>
-        <label className="route-field" htmlFor="ride-destination">
-          <span>Destination</span>
-          <div className="input-wrap">
-          <span className="prefix-icon" style={{ color: 'var(--danger)' }}><IconMapPin size={14} /></span>
-          <input id="ride-destination" autoComplete="street-address" placeholder="e.g. Georgetown" value={form.destination} onChange={(e) => patch({ destination: e.target.value })} />
-          </div>
-        </label>
+        <ConfirmedLocationInput
+          id="ride-pickup"
+          label="Pickup point"
+          placeholder="Search in Malaysia, e.g. KL Sentral"
+          value={form.pickup}
+          location={form.pickupLocation}
+          onChange={(pickup, pickupLocation) => patch({ pickup, pickupLocation })}
+          allowCurrentLocation
+          currentLocationPreview={previewLocation?.accuracy <= MAX_GPS_ACCURACY_METRES ? previewLocation : null}
+        />
+        <ConfirmedLocationInput
+          id="ride-destination"
+          label="Destination"
+          placeholder="Search in Malaysia, e.g. Georgetown"
+          value={form.destination}
+          location={form.destinationLocation}
+          onChange={(destination, destinationLocation) => patch({ destination, destinationLocation })}
+        />
       </div>
 
-      <GoogleRouteMap pickup={form.pickup} destination={form.destination} waypoints={form.waypoints} className="map-placeholder">
+      <GoogleRouteMap pickup={form.pickupLocation ? form.pickup : ''} pickupLocation={form.pickupLocation} destination={form.destinationLocation ? form.destination : ''} destinationLocation={form.destinationLocation} previewLocation={previewLocation} waypoints={form.waypoints} className="map-placeholder">
+        {previewLocation && !form.pickupLocation && <span className="map-pin map-pin-current"><span className="pin-dot" /> Current location</span>}
         <span className="map-pin map-pin-start"><span className="pin-dot" /> {form.pickup || 'Pickup point'}</span>
         <span className="map-pin map-pin-end"><span className="pin-dot pin-dot-end" /> {form.destination || 'Destination'}</span>
         <span className="map-attribution">Google Maps preview appears when the Embed key is configured</span>
       </GoogleRouteMap>
+      {!form.pickupLocation && previewStatus.message && (
+        <p className={`map-location-status ${previewStatus.state === 'error' ? 'error' : ''}`} role="status">
+          {previewStatus.message}
+        </p>
+      )}
 
       <p className="field-label-standalone">Journey scale</p>
       <div className="scale-toggle">
@@ -214,23 +309,7 @@ function ScheduleStep({ form, patch }) {
 }
 
 // ---------- STEP 3: VEHICLE ----------
-function VehicleStep({ form, patch, userId }) {
-  const [vehicles, setVehicles] = useState(null);
-
-  useEffect(() => {
-    VehicleService.listVehicles(userId).then(setVehicles);
-  }, [userId]);
-
-  if (!vehicles) return <p style={{ color: 'var(--muted)' }}>Loading your vehicles…</p>;
-
-  if (vehicles.length === 0) {
-    return (
-      <div className="alert alert-info">
-        You haven't added a vehicle yet. Add one from My Profile → My Vehicles, then come back to select it here.
-      </div>
-    );
-  }
-
+function VehicleStep({ form, patch, vehicles }) {
   return (
     <div className="vehicle-select-grid">
       {vehicles.map((v) => (
@@ -281,6 +360,19 @@ function TripDetailsStep({ form, patch }) {
         </div>
       </div>
 
+      <div className="field pickup-instructions-field">
+        <label htmlFor="pickup-instructions">Pickup instructions <span>(optional)</span></label>
+        <textarea
+          id="pickup-instructions"
+          rows="3"
+          maxLength="300"
+          placeholder="e.g. Meet beside Entrance A, next to the taxi stand"
+          value={form.pickupInstructions}
+          onChange={(event) => patch({ pickupInstructions: event.target.value })}
+        />
+        <small>{form.pickupInstructions.length}/300</small>
+      </div>
+
       <p className="field-label-standalone">Trip restriction tags</p>
       <div className="chip-select-row">
         {RESTRICTION_OPTIONS.map((tag) => (
@@ -315,6 +407,7 @@ function ReviewStep({ form, onPublish, onDraft, saving }) {
       <div className="card">
         <p className="card-title">Trip summary</p>
         <div className="review-row"><span>Route</span><strong>{form.pickup || '—'} → {form.destination || '—'}</strong></div>
+        <div className="review-row"><span>Pickup instructions</span><strong>{form.pickupInstructions || 'None'}</strong></div>
         <div className="review-row"><span>Journey scale</span><strong>{form.journeyScale}</strong></div>
         <div className="review-row"><span>Departure</span><strong>{form.date || '—'} {form.time}</strong></div>
         <div className="review-row"><span>Seats available</span><strong>{form.seatsTotal}</strong></div>

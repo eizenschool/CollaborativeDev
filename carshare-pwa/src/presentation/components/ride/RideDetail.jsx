@@ -34,7 +34,7 @@ function MobileHeader({ title, onBack }) {
 
 function RouteMap({ ride }) {
   return (
-    <GoogleRouteMap pickup={ride.pickup} destination={ride.destination} waypoints={ride.waypoints} className="ride-map">
+    <GoogleRouteMap pickup={ride.pickup} pickupLocation={ride.pickupLocation} destination={ride.destination} destinationLocation={ride.destinationLocation} waypoints={ride.waypoints} className="ride-map">
       <span className="map-grid map-grid-a" />
       <span className="map-grid map-grid-b" />
       <span className="map-route" />
@@ -198,7 +198,7 @@ export default function RideDetail() {
         <RouteMap ride={ride} />
         <button className="map-back-button" onClick={() => navigate('/ride')} aria-label="Go back"><IconArrowLeft size={18} /></button>
         <span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span>
-        <a className="map-open-overlay" href={GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, destination: ride.destination, waypoints: ride.waypoints })} target="_blank" rel="noreferrer" aria-label="Open this route in Google Maps">Open map</a>
+        <a className="map-open-overlay" href={GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, pickupLocation: ride.pickupLocation, destination: ride.destination, destinationLocation: ride.destinationLocation, waypoints: ride.waypoints })} target="_blank" rel="noreferrer" aria-label="Open this route in Google Maps">Open map</a>
       </div>
 
       <div className="ride-detail-content">
@@ -215,6 +215,8 @@ export default function RideDetail() {
           <p className="seats-left"><IconUsers size={15} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} available</p>
           <p className="request-date">Request deadline: {requestDeadline.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' })}</p>
         </section>
+
+        {ride.pickupInstructions && <section className="ride-info-card pickup-instructions-card"><p className="eyebrow">PICKUP INSTRUCTIONS</p><p><IconMapPin size={15} /> {ride.pickupInstructions}</p></section>}
 
         <section className="fixed-route-note"><IconAlertTriangle size={16} /><span>This ride follows a <strong>fixed route</strong>. Route-deviation automation is not enabled yet.</span></section>
 

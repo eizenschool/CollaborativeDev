@@ -47,9 +47,9 @@ Backend/data:
 
 Mapping:
 - Google Maps Platform is the current project direction.
-- Module 2 uses the no-charge Maps Embed API for directions previews, text locations, and waypoints, with a local fallback when unconfigured/offline.
+- Module 2 uses Maps Embed API for directions previews and a separate restricted Places/Geocoding key for confirmed Malaysia-only location selection, with legacy-text and local visual fallbacks.
 - Earlier OpenStreetMap / Leaflet / OSRM planning and tile caching have been removed from the active baseline.
-- Places autocomplete, geocoding, traffic-aware routing, and other billable Maps SKUs require a separate accepted cost-control decision.
+- Routes, Dynamic Maps, traffic-aware routing, and other unused Maps SKUs remain disabled pending a separate accepted cost-control decision.
 
 ## Current Commands
 Run from `carshare-pwa/`.
