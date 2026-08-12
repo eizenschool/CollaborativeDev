@@ -3,93 +3,96 @@
 //
 // Everything in this module is READ-ONLY for the user - no create/edit/delete
 // of rides happens here (that's Module 2's RideService). It reuses:
-//   - mockDb.listMyRides() / listRides() / getRide()  -> Module 2's ride data
-//   - HostImpactEngine                                 -> the SAME Composite
-//     Host Impact Score formula already used on the Profile/Reputation
-//     screen, so the Leaderboard here always matches a host's own profile.
+//   - mockDb.listMyRides() / listAllRides() / getRide()  -> Module 2's ride and
+//     request data, including the real Accepted-request participation list
+//   - HostImpactEngine  -> the SAME Composite Host Impact Score formula already
+//     used on the Profile/Reputation screen, so the Leaderboard here always
+//     matches a host's own profile
+//   - departureParts()  -> Module 2's shared Asia/Kuala_Lumpur formatting, so a
+//     trip's displayed date matches what Module 2 shows for the same ride
 //
-// mockDataStore.js currently only seeds rides with status 'Published' and
-// doesn't yet track "joined" rides (Module 2's request/join flow isn't wired
-// up to listMyRides() yet - it returns joining: [] on purpose) or per-trip
-// distance/participants. Rather than editing mockDataStore.js (a shared file
-// several teammates are already working in), this file derives everything
-// it needs on top of it and keeps its own small, isolated localStorage key
-// for the one bit of extra demo data Module 5 needs. Swap the two functions
-// marked "DERIVED / DEMO ONLY" for real data as soon as it exists - nothing
-// in src/presentation/components/trip/ talks to mockDb or localStorage
-// directly, so those screens don't need to change.
+// `departure_at` is the authoritative ride instant (D012). The `date`/`time`
+// columns were dropped in database/sql/013, so nothing here may read them.
 
 import { mockDb } from '../data-access/mockDataStore.js';
 import { HostImpactEngine } from './HostImpactEngine.js';
+import { departureParts } from './rideDateTime.js';
 
-const JOINED_TRIPS_KEY = 'letstumpang_module5_joined_trips_v1';
+const round1 = (value) => Math.round(value * 10) / 10;
 
-// ---------- DERIVED / DEMO ONLY: synthetic "joined" trips ----------
-// Seeds a couple of the public marketplace rides as if this user had already
-// been accepted onto them, the first time this module runs, so "Joined"
-// filters/screens have something real to show. Remembered in its own
-// localStorage key so it's stable across reloads without touching
-// mockDataStore.js's shared store.
-async function getOrSeedJoinedRideIds() {
-  try {
-    const raw = localStorage.getItem(JOINED_TRIPS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // fall through and reseed
-  }
-  const publicRides = await mockDb.listRides();
-  const user = await mockDb.getCurrentUser();
-  const ids = publicRides
-    .filter((r) => r.hostId !== user?.id)
-    .slice(0, 2)
-    .map((r) => r.id);
-  localStorage.setItem(JOINED_TRIPS_KEY, JSON.stringify(ids));
-  return ids;
+const SHORT_MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+// 'YYYY-MM' in Asia/Kuala_Lumpur, taken from the already-localised card date so
+// month bucketing never drifts against what the user sees on screen.
+function monthKey(year, month) {
+  return `${year}-${String(month + 1).padStart(2, '0')}`;
 }
 
-// ---------- DERIVED / DEMO ONLY: lifecycle status ----------
-// mockDataStore.js seeds every ride as 'Published' with no lifecycle
-// history. So Ride History can demonstrate every status in FR-5.2's filter
-// row, this derives a display status from how the ride's date/time compares
-// to now, without mutating the underlying ride record. Once Module 2 tracks
-// real lifecycle transitions, drop this and use ride.status as-is.
-function deriveDisplayStatus(ride) {
-  if (ride.status === 'Cancelled' || ride.status === 'Draft') return ride.status;
-  const rideDateTime = new Date(`${ride.date}T${ride.time || '00:00'}`);
-  const hoursDiff = (rideDateTime - new Date()) / (1000 * 60 * 60);
-  if (hoursDiff > 2) return 'Published';
-  if (hoursDiff > -3) return 'In Transit';
+// ---------- Lifecycle status ----------
+// Module 2 owns ride lifecycle and its cron job already drives
+// Published -> Matched | Expired. Those states, plus Draft/Cancelled, are
+// authoritative and must never be overridden - in particular 'Expired'
+// (published, nobody joined, departure passed) is NOT a completed trip and
+// must never earn carbon credit.
+export function deriveDisplayStatus(ride, now = new Date()) {
+  if (ride.status !== 'Matched') return ride.status;
+
+  // A Matched ride whose departure has passed really has started or finished,
+  // but D012 reserves the 'In Transit'/'Completed' writes for a service-role
+  // Module 6 verification pipeline that does not exist yet. Until it lands,
+  // show the stage the trip has actually reached rather than leaving every
+  // past ride stuck on 'Matched'. Delete this branch the day that pipeline
+  // starts writing real transitions.
+  const hoursSinceDeparture = (now - new Date(ride.departureAt)) / 3_600_000;
+  if (hoursSinceDeparture < 0) return 'Matched';
+  if (hoursSinceDeparture < 3) return 'In Transit';
   return 'Completed';
 }
 
-// ---------- DERIVED / DEMO ONLY: estimated carbon savings ----------
+// ---------- Estimated carbon savings ----------
 // FR-5.4: "estimated based on distance and passengers carried." Ride records
-// don't store a distance, so this uses a simple, clearly-labelled estimate:
-// an average trip distance per journey scale, times the number of seats
-// actually filled, times a standard avoided-emissions factor (kg CO2 per
-// passenger-km, based on displacing an equivalent solo car trip).
+// carry no distance (no lat/lng columns, and D013 rules out billable Maps
+// SKUs), so this uses an average trip distance per journey scale times the
+// seats actually filled times a standard avoided-emissions factor.
+// The carbon model is still an open decision in docs/ai/DECISIONS.md - these
+// numbers are a labelled estimate, not a ratified formula.
 const AVG_DISTANCE_KM = { Urban: 18, Intercity: 340 };
 const EMISSION_FACTOR_KG_PER_PASSENGER_KM = 0.12;
 
-function estimateCarbonSavedKg(ride) {
-  const distance = AVG_DISTANCE_KM[ride.journeyScale] ?? AVG_DISTANCE_KM.Urban;
-  const passengers = Math.max(0, (ride.seatsTotal || 1) - (ride.seatsAvailable ?? 0));
-  return Math.round(distance * Math.max(passengers, 1) * EMISSION_FACTOR_KG_PER_PASSENGER_KM * 10) / 10;
+export function estimateDistanceKm(ride) {
+  return AVG_DISTANCE_KM[ride.journeyScale] ?? AVG_DISTANCE_KM.Urban;
 }
 
-function toHistoryCard(ride, role) {
-  const status = deriveDisplayStatus(ride);
+export function estimateCarbonSavedKg(ride) {
+  const distanceKm = estimateDistanceKm(ride);
+  const passengers = Math.max(0, (ride.seatsTotal || 0) - (ride.seatsAvailable ?? 0));
+  // UC5.4 C2 requires a distance greater than zero, and the whole premise of
+  // the estimate is a shared ride - a trip that carried nobody saved nothing.
+  if (distanceKm <= 0 || passengers <= 0) return 0;
+  return round1(distanceKm * passengers * EMISSION_FACTOR_KG_PER_PASSENGER_KM);
+}
+
+export function toHistoryCard(ride, role, now = new Date()) {
+  const status = deriveDisplayStatus(ride, now);
+  const { date, time } = departureParts(ride.departureAt);
+  const completed = status === 'Completed';
   return {
     id: ride.id,
     role, // 'Host' | 'Passenger'
     pickup: ride.pickup,
     destination: ride.destination,
-    date: ride.date,
-    time: ride.time,
+    departureAt: ride.departureAt,
+    date,
+    time,
     status,
     journeyScale: ride.journeyScale,
-    carbonSavedKg: status === 'Completed' ? estimateCarbonSavedKg(ride) : null,
+    distanceKm: completed ? estimateDistanceKm(ride) : null,
+    carbonSavedKg: completed ? estimateCarbonSavedKg(ride) : null,
     host: ride.host || null,
+    hostId: ride.hostId,
     contribution: ride.contribution,
     restrictionTags: ride.restrictionTags || [],
     seatsTotal: ride.seatsTotal,
@@ -97,117 +100,192 @@ function toHistoryCard(ride, role) {
   };
 }
 
+function passengersCarriedOn(trip) {
+  return Math.max(0, (trip.seatsTotal || 0) - (trip.seatsAvailable ?? 0));
+}
+
+// Only the Host's own trips count towards "passengers carried" - a passenger
+// did not carry themselves.
+function aggregate(trips) {
+  const hosted = trips.filter((trip) => trip.role === 'Host');
+  return {
+    completedTrips: trips.length,
+    totalCarbonSavedKg: round1(trips.reduce((sum, trip) => sum + (trip.carbonSavedKg || 0), 0)),
+    totalDistanceKm: Math.round(trips.reduce((sum, trip) => sum + (trip.distanceKm || 0), 0)),
+    passengersCarried: hosted.reduce((sum, trip) => sum + passengersCarriedOn(trip), 0)
+  };
+}
+
+// FR-5.7's "Carbon saved trend" - the real per-month totals for the last N
+// months, so the chart shows measured data instead of an illustration.
+function buildMonthlyTrend(completedTrips, now = new Date(), months = 6) {
+  const buckets = [];
+  for (let offset = months - 1; offset >= 0; offset -= 1) {
+    const point = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    buckets.push({
+      year: point.getFullYear(),
+      month: point.getMonth(),
+      label: SHORT_MONTH_NAMES[point.getMonth()],
+      carbonSavedKg: 0
+    });
+  }
+  for (const trip of completedTrips) {
+    const bucket = buckets.find((item) => monthKey(item.year, item.month) === trip.date.slice(0, 7));
+    if (bucket) bucket.carbonSavedKg = round1(bucket.carbonSavedKg + (trip.carbonSavedKg || 0));
+  }
+  return buckets;
+}
+
+// UC5.3's participant list. mockDb.listRideRequests() deliberately refuses
+// non-hosts, which is the right privacy boundary: a Host sees everyone they
+// accepted, a passenger sees the Host and their own party.
+async function buildParticipants(ride, userId, ownRequest) {
+  const host = ride.host
+    ? { id: ride.host.id, name: ride.host.fullName, role: 'Host' }
+    : { id: ride.hostId, name: 'Host', role: 'Host' };
+
+  const partyOf = (request) => [
+    {
+      id: request.requesterId,
+      name: request.requester?.fullName || 'Passenger',
+      role: 'Passenger'
+    },
+    ...(request.companionNames || []).map((name, index) => ({
+      id: `${request.id}_companion_${index}`,
+      name,
+      role: 'Companion'
+    }))
+  ];
+
+  if (ride.hostId === userId) {
+    try {
+      const requests = await mockDb.listRideRequests(ride.id);
+      return [host, ...requests.filter((request) => request.status === 'Accepted').flatMap(partyOf)];
+    } catch {
+      // Losing the passenger list should not take the whole trip page down.
+      return [host];
+    }
+  }
+
+  return ownRequest ? [host, ...partyOf(ownRequest)] : [host];
+}
+
 export const TripHistoryEngine = {
   // ---------- FR-5.1 / FR-5.2 - Ride History, lifecycle filtering ----------
-  async listHistory(userId) {
-    const [{ hosting }, joinedIds] = await Promise.all([
-      mockDb.listMyRides(userId),
-      getOrSeedJoinedRideIds()
-    ]);
-    const joinedRides = await Promise.all(joinedIds.map((id) => mockDb.getRide(id)));
+  async listHistory(userId, now = new Date()) {
+    const { hosting, joining } = await mockDb.listMyRides(userId);
 
-    const hostedCards = hosting.map((r) => toHistoryCard(r, 'Host'));
-    const joinedCards = joinedRides.filter(Boolean).map((r) => toHistoryCard(r, 'Passenger'));
+    const hostedCards = hosting.map((ride) => toHistoryCard(ride, 'Host', now));
+    // `joining` holds ride requests, and request.status is the REQUEST state -
+    // only an Accepted request means the user actually joined the trip.
+    const joinedCards = joining
+      .filter((request) => request.status === 'Accepted' && request.ride)
+      .map((request) => toHistoryCard(request.ride, 'Passenger', now));
 
+    // UC5.1 C2 - most recent trip first.
     return [...hostedCards, ...joinedCards].sort(
-      (a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`)
+      (a, b) => new Date(b.departureAt) - new Date(a.departureAt)
     );
   },
 
   // ---------- FR-5.3 / FR-5.4 / FR-5.5 - Trip Detail (read-only) ----------
-  async getTripDetail(tripId, userId) {
-    const ride = await mockDb.getRide(tripId);
+  async getTripDetail(tripId, userId, now = new Date()) {
+    const [ride, myRides] = await Promise.all([mockDb.getRide(tripId), mockDb.listMyRides(userId)]);
     if (!ride) return null;
-    const user = await mockDb.getCurrentUser();
-    const role = ride.hostId === userId ? 'Host' : 'Passenger';
-    const card = toHistoryCard(ride, role);
 
-    const participants = [
-      ride.host
-        ? { id: ride.host.id, name: ride.host.fullName, role: 'Host' }
-        : { id: ride.hostId, name: 'Host', role: 'Host' },
-      role === 'Passenger' ? { id: user?.id, name: user?.fullName || 'You', role: 'Passenger' } : null
-    ].filter(Boolean);
+    const isHost = ride.hostId === userId;
+    const ownRequest = myRides.joining.find(
+      (request) => request.rideId === tripId && request.status === 'Accepted'
+    );
+    // UC5.3 C1 - users may only view trips they hosted or joined. A
+    // non-participant gets the same "not found" answer as a missing trip so
+    // the response never confirms that the ride exists.
+    if (!isHost && !ownRequest) return null;
+
+    const card = toHistoryCard(ride, isHost ? 'Host' : 'Passenger', now);
+    const participants = await buildParticipants(ride, userId, ownRequest);
 
     return { ...card, participants };
   },
 
   // ---------- FR-5.6 / FR-5.7 - Environmental Impact Dashboard ----------
-  async getImpactSummary(userId) {
-    const history = await TripHistoryEngine.listHistory(userId);
-    const completed = history.filter((t) => t.status === 'Completed');
-    const totalCarbonSavedKg = completed.reduce((sum, t) => sum + (t.carbonSavedKg || 0), 0);
-    const totalDistanceKm = completed.reduce(
-      (sum, t) => sum + (AVG_DISTANCE_KM[t.journeyScale] ?? AVG_DISTANCE_KM.Urban),
-      0
-    );
-    const passengersCarried = completed
-      .filter((t) => t.role === 'Host')
-      .reduce((sum, t) => sum + Math.max(0, (t.seatsTotal || 0) - (t.seatsAvailable ?? 0)), 0);
+  async getImpactSummary(userId, now = new Date()) {
+    const history = await TripHistoryEngine.listHistory(userId, now);
+    const completed = history.filter((trip) => trip.status === 'Completed');
+    const totals = aggregate(completed);
 
     return {
       hasData: completed.length > 0,
-      totalCarbonSavedKg: Math.round(totalCarbonSavedKg * 10) / 10,
-      totalDistanceKm: Math.round(totalDistanceKm),
-      passengersCarried,
-      treesEquivalent: Math.round(totalCarbonSavedKg / 21) // ~21kg CO2/year per tree, illustrative
+      ...totals,
+      // ~21kg CO2 absorbed per tree per year, illustrative.
+      treesEquivalent: Math.round(totals.totalCarbonSavedKg / 21),
+      monthlyTrend: buildMonthlyTrend(completed, now)
     };
   },
 
   // ---------- FR-5.8 / FR-5.9 - Monthly Impact Report ----------
-  async getMonthlyReport(userId, year, month) {
-    const history = await TripHistoryEngine.listHistory(userId);
-    const monthTrips = history.filter((t) => {
-      const d = new Date(`${t.date}T${t.time || '00:00'}`);
-      return t.status === 'Completed' && d.getFullYear() === year && d.getMonth() === month;
-    });
-    const totalCarbonSavedKg = monthTrips.reduce((sum, t) => sum + (t.carbonSavedKg || 0), 0);
-    const totalDistanceKm = monthTrips.reduce(
-      (sum, t) => sum + (AVG_DISTANCE_KM[t.journeyScale] ?? AVG_DISTANCE_KM.Urban),
-      0
+  // `month` is 0-indexed, matching Date#getMonth().
+  async getMonthlyReport(userId, year, month, now = new Date()) {
+    const history = await TripHistoryEngine.listHistory(userId, now);
+    const key = monthKey(year, month);
+    const monthTrips = history.filter(
+      (trip) => trip.status === 'Completed' && trip.date.slice(0, 7) === key
     );
-    const passengersCarried = monthTrips
-      .filter((t) => t.role === 'Host')
-      .reduce((sum, t) => sum + Math.max(0, (t.seatsTotal || 0) - (t.seatsAvailable ?? 0)), 0);
 
     return {
       year,
       month,
       hasData: monthTrips.length > 0,
-      completedTrips: monthTrips.length,
-      totalCarbonSavedKg: Math.round(totalCarbonSavedKg * 10) / 10,
-      totalDistanceKm: Math.round(totalDistanceKm),
-      passengersCarried,
+      ...aggregate(monthTrips),
       trips: monthTrips
     };
   },
 
   // ---------- FR-5.10 / FR-5.11 - Monthly Community Leaderboard ----------
-  // Ranks hosts by the SAME Composite Host Impact Score formula as My
-  // Profile (src/business-logic/HostImpactEngine.js) - reused, not
-  // reimplemented, so a host's rank here always matches the score shown on
-  // their own profile page.
-  async getLeaderboard(userId) {
-    const [publicRides, currentUser] = await Promise.all([mockDb.listRides(), mockDb.getCurrentUser()]);
-    const hostIds = Array.from(new Set(publicRides.map((r) => r.hostId).concat([userId])));
+  // UC5.10: eligible hosts are those with at least one completed trip in the
+  // month; they are then ranked by the SAME Composite Host Impact Score
+  // formula as My Profile (HostImpactEngine) - reused, not reimplemented, so a
+  // host's rank here always matches the score shown on their own profile.
+  async getLeaderboard(userId, year, month, now = new Date()) {
+    const period = year == null || month == null
+      ? { year: now.getFullYear(), month: now.getMonth() }
+      : { year, month };
+    const key = monthKey(period.year, period.month);
+
+    const [allRides, currentUser] = await Promise.all([mockDb.listAllRides(), mockDb.getCurrentUser()]);
+
+    const namesByHostId = new Map();
+    const eligibleHostIds = new Set();
+    for (const ride of allRides) {
+      if (ride.host) namesByHostId.set(ride.hostId, ride.host.fullName);
+      const card = toHistoryCard(ride, 'Host', now);
+      if (card.status === 'Completed' && card.date.slice(0, 7) === key) {
+        eligibleHostIds.add(ride.hostId);
+      }
+    }
 
     const entries = await Promise.all(
-      hostIds.map(async (id) => {
+      Array.from(eligibleHostIds).map(async (id) => {
         const summary = await HostImpactEngine.getImpactSummary(id);
-        const ride = publicRides.find((r) => r.hostId === id);
-        const name = id === userId ? currentUser?.fullName || 'You' : ride?.host?.fullName || 'Host';
+        const isCurrentUser = id === userId;
         return {
           id,
-          name,
-          isCurrentUser: id === userId,
+          name: isCurrentUser
+            ? currentUser?.fullName || 'You'
+            : namesByHostId.get(id) || 'Host',
+          isCurrentUser,
           compositeScore: summary.compositeScore,
           badge: summary.badge
         };
       })
     );
 
-    return entries
-      .sort((a, b) => b.compositeScore - a.compositeScore)
-      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+    return {
+      year: period.year,
+      month: period.month,
+      entries: entries
+        .sort((a, b) => b.compositeScore - a.compositeScore)
+        .map((entry, index) => ({ ...entry, rank: index + 1 }))
+    };
   }
 };

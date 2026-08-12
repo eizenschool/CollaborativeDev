@@ -5,26 +5,38 @@ import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js'
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { IconLeafSmall } from './tripIcons.jsx';
+import { ErrorState } from './tripStates.jsx';
 
-const STAGES = ['All', 'Draft', 'Published', 'Matched', 'In Transit', 'Completed', 'Cancelled'];
+// The seven lifecycle states Module 2 actually stores on a ride. 'Expired'
+// belongs here too - a published ride nobody joined lapses rather than
+// completing, and without a chip it would only ever appear under 'All'.
+const STAGES = ['All', 'Draft', 'Published', 'Matched', 'In Transit', 'Completed', 'Expired', 'Cancelled'];
 const ROLES = ['All', 'Hosted', 'Joined'];
 
 export default function RideHistory({ userId, onOpenTrip }) {
   const isDesktop = useIsDesktop();
-  const [trips, setTrips] = useState(null);
+  const [state, setState] = useState({ phase: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
   const [stage, setStage] = useState('All');
   const [role, setRole] = useState('All');
 
   useEffect(() => {
     let active = true;
     if (!userId) return;
-    TripHistoryEngine.listHistory(userId).then((data) => {
-      if (active) setTrips(data);
-    });
+    setState({ phase: 'loading' });
+    TripHistoryEngine.listHistory(userId)
+      .then((data) => {
+        if (active) setState({ phase: 'ready', trips: data });
+      })
+      .catch((error) => {
+        if (active) setState({ phase: 'error', message: error.message });
+      });
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, reloadToken]);
+
+  const trips = state.phase === 'ready' ? state.trips : null;
 
   const filtered = useMemo(() => {
     if (!trips) return [];
@@ -36,7 +48,11 @@ export default function RideHistory({ userId, onOpenTrip }) {
     });
   }, [trips, stage, role]);
 
-  if (trips === null) {
+  if (state.phase === 'error') {
+    return <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />;
+  }
+
+  if (state.phase === 'loading') {
     return <p style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>Loading your trips…</p>;
   }
 

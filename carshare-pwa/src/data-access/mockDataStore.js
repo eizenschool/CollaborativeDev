@@ -428,6 +428,20 @@ export const mockDb = {
       .sort((a, b) => new Date(a.departureAt) - new Date(b.departureAt));
   },
 
+  // Every ride regardless of lifecycle state, mirroring Supabase's
+  // authenticated-read policy on `rides`. listRides() above is the public
+  // marketplace and only returns Published, so Module 5's community
+  // leaderboard (FR-5.10) needs this to see completed trips across all hosts.
+  async listAllRides() {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    save(db);
+    return Object.values(db.rides)
+      .map((r) => enrichRide(db, r))
+      .sort((a, b) => new Date(b.departureAt) - new Date(a.departureAt));
+  },
+
   async listMyRides(userId) {
     await delay();
     const db = load();

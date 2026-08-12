@@ -5,25 +5,38 @@ import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js'
 import { COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
+import { ErrorState } from './tripStates.jsx';
 
 export default function ImpactDashboard({ userId }) {
   const isDesktop = useIsDesktop();
-  const [summary, setSummary] = useState(null);
+  const [state, setState] = useState({ phase: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let active = true;
     if (!userId) return;
-    TripHistoryEngine.getImpactSummary(userId).then((data) => {
-      if (active) setSummary(data);
-    });
+    setState({ phase: 'loading' });
+    TripHistoryEngine.getImpactSummary(userId)
+      .then((data) => {
+        if (active) setState({ phase: 'ready', summary: data });
+      })
+      .catch((error) => {
+        if (active) setState({ phase: 'error', message: error.message });
+      });
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, reloadToken]);
 
-  if (!summary) {
+  if (state.phase === 'error') {
+    return <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />;
+  }
+
+  if (state.phase === 'loading') {
     return <p style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>Loading your impact…</p>;
   }
+
+  const summary = state.summary;
 
   if (!summary.hasData) {
     return (
@@ -63,7 +76,7 @@ export default function ImpactDashboard({ userId }) {
         <h3 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, margin: '0 0 16px', color: COLORS.textPrimary }}>
           Carbon saved trend
         </h3>
-        <TrendBars totalKg={summary.totalCarbonSavedKg} />
+        <TrendBars points={summary.monthlyTrend} />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '14px 18px', background: COLORS.primaryTint, borderRadius: 12 }}>
@@ -76,24 +89,31 @@ export default function ImpactDashboard({ userId }) {
   );
 }
 
-function TrendBars({ totalKg }) {
-  // Illustrative distribution of the total across recent months, for visual
-  // context only - real per-month figures live in Monthly Report.
-  const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
-  const weights = [0.08, 0.12, 0.15, 0.18, 0.22, 0.25];
+// Real per-month totals from TripHistoryEngine. This used to be a fixed month
+// list and a made-up distribution of the all-time total, which meant the chart
+// read "Aug" forever and showed figures nobody had earned.
+function TrendBars({ points }) {
+  const peak = Math.max(...points.map((point) => point.carbonSavedKg), 0);
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 130 }}>
-      {months.map((m, i) => (
-        <div key={m} style={{ flex: 1, textAlign: 'center' }}>
+      {points.map((point) => (
+        <div key={`${point.year}-${point.month}`} style={{ flex: 1, textAlign: 'center' }}>
           <div
+            title={`${point.carbonSavedKg} kg CO₂`}
             style={{
-              height: Math.max(10, totalKg * weights[i]),
-              maxHeight: 100,
-              background: `linear-gradient(180deg, ${COLORS.teal} 0%, ${COLORS.primary} 100%)`,
+              // Zero months stay a visible baseline sliver so the axis reads as
+              // "no trips that month" rather than a rendering gap.
+              height: peak > 0 ? Math.max(4, (point.carbonSavedKg / peak) * 100) : 4,
+              background:
+                point.carbonSavedKg > 0
+                  ? `linear-gradient(180deg, ${COLORS.teal} 0%, ${COLORS.primary} 100%)`
+                  : COLORS.border,
               borderRadius: '8px 8px 4px 4px'
             }}
           />
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: COLORS.textSecondary, margin: '6px 0 0' }}>{m}</p>
+          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: COLORS.textSecondary, margin: '6px 0 0' }}>
+            {point.label}
+          </p>
         </div>
       ))}
     </div>

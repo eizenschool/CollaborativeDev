@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, TIER_COLORS } from './tripTheme.js';
 import { IconTrophySmall } from './tripIcons.jsx';
+import { ErrorState } from './tripStates.jsx';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -27,30 +28,43 @@ function gradientFor(name) {
 }
 
 export default function Leaderboard({ userId }) {
-  const [entries, setEntries] = useState(null);
-  const now = new Date();
+  const [state, setState] = useState({ phase: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let active = true;
     if (!userId) return;
-    TripHistoryEngine.getLeaderboard(userId).then((data) => {
-      if (active) setEntries(data);
-    });
+    setState({ phase: 'loading' });
+    TripHistoryEngine.getLeaderboard(userId)
+      .then((data) => {
+        if (active) setState({ phase: 'ready', board: data });
+      })
+      .catch((error) => {
+        if (active) setState({ phase: 'error', message: error.message });
+      });
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, reloadToken]);
 
-  if (entries === null) {
+  if (state.phase === 'error') {
+    return <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />;
+  }
+
+  if (state.phase === 'loading') {
     return <p style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>Loading leaderboard…</p>;
   }
+
+  // The heading used to print today's month while getLeaderboard() ranked
+  // all-time scores. Both now describe the same period the engine queried.
+  const { year, month, entries } = state.board;
 
   if (entries.length === 0) {
     return (
       <div className="m5-card m5-empty">
         <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, color: COLORS.textPrimary, margin: 0 }}>No leaderboard data available yet</p>
         <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, marginTop: 6 }}>
-          Check back once more hosts have completed rides this month.
+          Check back once more hosts have completed rides in {MONTH_NAMES[month]} {year}.
         </p>
       </div>
     );
@@ -65,7 +79,7 @@ export default function Leaderboard({ userId }) {
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
         <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 22, margin: 0, color: COLORS.textPrimary }}>Community Leaderboard</h2>
         <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, margin: '4px 0 0' }}>
-          {MONTH_NAMES[now.getMonth()]} {now.getFullYear()}
+          {MONTH_NAMES[month]} {year}
         </p>
       </div>
 
