@@ -14,7 +14,8 @@ const emptyForm = {
   pickup: '', destination: '', journeyScale: 'Urban',
   date: '', time: '', seatsTotal: 3,
   vehicleId: null,
-  contribution: '', restrictionTags: []
+  contribution: '', restrictionTags: [],
+  waypoints: []
 };
 
 export default function PublishRide() {
@@ -37,6 +38,10 @@ export default function PublishRide() {
     }
     if (step === 1 && (!form.date || !form.time)) {
       setError('Pick a departure date and time to continue.');
+      return;
+    }
+    if (step === 2 && !form.vehicleId) {
+      setError('Choose one of your vehicles to continue.');
       return;
     }
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
@@ -78,7 +83,7 @@ export default function PublishRide() {
       <header className="publish-mobile-header">
         <button className="round-icon-button" onClick={step === 0 ? () => navigate('/ride') : back} aria-label="Go back"><IconArrowLeft size={18} /></button>
         <div><p>Step {step + 1} of {STEPS.length}</p><h1>{STEPS[step]}</h1></div>
-        <button className="save-draft-mobile" onClick={saveAsDraft} disabled={saving}>Save draft</button>
+        {step === STEPS.length - 1 && <button className="save-draft-mobile" onClick={saveAsDraft} disabled={saving}>Save draft</button>}
         <div className="publish-progress-dots">{STEPS.map((label, index) => <i key={label} className={index <= step ? 'active' : ''} />)}</div>
       </header>
       <div className="publish-left">
@@ -92,7 +97,7 @@ export default function PublishRide() {
           ))}
         </div>
         <div className="rail-divider" />
-        <button className="btn-link" onClick={saveAsDraft} disabled={saving}>Save as draft</button>
+        {step === STEPS.length - 1 && <button className="btn-link" onClick={saveAsDraft} disabled={saving}>Save as draft</button>}
       </div>
 
       <div className="publish-right">

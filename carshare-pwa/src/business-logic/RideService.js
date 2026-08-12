@@ -2,19 +2,20 @@
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 
-// Backs the Ride Hub (Find a Ride / My Rides) and Publish a Ride flow. GUI
-// components call these methods only - never Supabase or mockDataStore directly.
-// This is Create + Read (publish + browse/search) for FR-2.1/2.3/2.5/2.6; ride
-// editing and cancellation (FR-2.8/2.11 - Update/Delete) are Screens 6/7 from
-// the design spec and aren't wired up in this pass yet.
-
 const JOURNEY_SCALES = ['Urban', 'Intercity'];
+const RIDE_SELECT = '*, host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))';
 
-// rides/profiles/host_impact_stats are snake_case in Postgres (see docs/SUPABASE-SETUP.md),
-// same convention as VehicleService and HostImpactEngine. This mapper is the one place
-// that translates a Supabase row into the camelCase shape RideCard/PublishRide already
-// use against the mock backend, so every component works unchanged on either backend.
-function mapRideRow(row) {
+function normalizeWaypoints(waypoints = []) {
+  return waypoints
+    .map((item) => typeof item === 'string' ? { name: item, description: '' } : item)
+    .filter((item) => item?.name?.trim())
+    .map((item) => ({
+      name: item.name.trim(),
+      description: item.description?.trim() || ''
+    }));
+}
+
+export function mapRideRow(row) {
   const host = row.host;
   const stats = host?.host_impact_stats?.[0] || host?.host_impact_stats || null;
   return {
@@ -30,6 +31,7 @@ function mapRideRow(row) {
     seatsAvailable: row.seats_available,
     contribution: row.contribution,
     restrictionTags: row.restriction_tags || [],
+    waypoints: normalizeWaypoints(row.waypoints),
     status: row.status,
     createdAt: row.created_at,
     host: host
@@ -46,21 +48,57 @@ function mapRideRow(row) {
   };
 }
 
-// The embedded-resource select used by both search and listMyRides below - keep
-// these in one place so the two queries can't drift out of sync with mapRideRow.
-const RIDE_SELECT = '*, host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))';
-
-function validateRideDraft(rideData) {
+export function validateRideDraft(rideData) {
   if (!rideData.pickup?.trim()) throw new Error('Pickup point is required.');
   if (!rideData.destination?.trim()) throw new Error('Destination is required.');
   if (!rideData.date) throw new Error('Departure date is required.');
   if (!rideData.time) throw new Error('Departure time is required.');
   if (!JOURNEY_SCALES.includes(rideData.journeyScale)) throw new Error('Choose a journey scale.');
+  if (!rideData.vehicleId) throw new Error('Choose one of your vehicles.');
   const seats = Number(rideData.seatsTotal);
-  if (!seats || seats < 1 || seats > 8) throw new Error('Seats available must be between 1 and 8.');
+  if (!Number.isInteger(seats) || seats < 1 || seats > 8) {
+    throw new Error('Seats available must be between 1 and 8.');
+  }
+}
+
+export function buildRideInsert(hostId, rideData, status) {
+  const seats = Number(rideData.seatsTotal);
+  return {
+    host_id: hostId,
+    pickup: rideData.pickup.trim(),
+    destination: rideData.destination.trim(),
+    date: rideData.date,
+    time: rideData.time,
+    journey_scale: rideData.journeyScale,
+    vehicle_id: rideData.vehicleId || null,
+    seats_total: seats,
+    seats_available: seats,
+    contribution: rideData.contribution?.trim() || '',
+    restriction_tags: rideData.restrictionTags || [],
+    waypoints: normalizeWaypoints(rideData.waypoints),
+    status
+  };
+}
+
+export function buildRidePatch(patch) {
+  const values = {};
+  if (patch.pickup !== undefined) values.pickup = patch.pickup.trim();
+  if (patch.destination !== undefined) values.destination = patch.destination.trim();
+  if (patch.date !== undefined) values.date = patch.date;
+  if (patch.time !== undefined) values.time = patch.time;
+  if (patch.contribution !== undefined) values.contribution = patch.contribution.trim();
+  if (patch.journeyScale !== undefined) values.journey_scale = patch.journeyScale;
+  if (patch.vehicleId !== undefined) values.vehicle_id = patch.vehicleId || null;
+  if (patch.seatsTotal !== undefined) values.seats_total = Number(patch.seatsTotal);
+  if (patch.seatsAvailable !== undefined) values.seats_available = Number(patch.seatsAvailable);
+  if (patch.restrictionTags !== undefined) values.restriction_tags = patch.restrictionTags;
+  if (patch.waypoints !== undefined) values.waypoints = normalizeWaypoints(patch.waypoints);
+  if (patch.status !== undefined) values.status = patch.status;
+  return values;
 }
 
 export const RideService = {
+  backend: isSupabaseConfigured ? 'supabase' : 'mock',
   journeyScales: JOURNEY_SCALES,
 
   async searchRides({ from, to, date } = {}) {
@@ -84,8 +122,6 @@ export const RideService = {
         .eq('host_id', userId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      // Ride Request Component (join flow) isn't built in this pass - "Joining"
-      // is wired up and ready for Screen 4/5's request flow to populate later.
       return { hosting: data.map(mapRideRow), joining: [] };
     }
     return mockDb.listMyRides(userId);
@@ -102,49 +138,32 @@ export const RideService = {
 
   async updateRide(rideId, patch) {
     if (isSupabaseConfigured) {
-      const values = {};
-      if (patch.contribution !== undefined) values.contribution = patch.contribution;
-      if (patch.journeyScale !== undefined) values.journey_scale = patch.journeyScale;
-      if (patch.restrictionTags !== undefined) values.restriction_tags = patch.restrictionTags;
-      if (patch.status !== undefined) values.status = patch.status;
-      const { data, error } = await supabase.from('rides').update(values).eq('id', rideId).select(RIDE_SELECT).single();
+      const { data, error } = await supabase
+        .from('rides')
+        .update(buildRidePatch(patch))
+        .eq('id', rideId)
+        .select(RIDE_SELECT)
+        .single();
       if (error) throw error;
       return mapRideRow(data);
     }
     return mockDb.updateRide(rideId, patch);
   },
 
-  // status is 'Draft' (Save as Draft, Step 5) or 'Published' (Publish Ride, Step 5).
   async publishRide(hostId, rideData, status = 'Published') {
-    if (status === 'Published') validateRideDraft(rideData);
-    else if (!rideData.pickup?.trim() && !rideData.destination?.trim()) {
-      throw new Error('Add at least a pickup point or destination before saving a draft.');
-    }
+    if (!['Draft', 'Published'].includes(status)) throw new Error('Unsupported ride status.');
+    validateRideDraft(rideData);
 
     if (isSupabaseConfigured) {
-      const seats = Number(rideData.seatsTotal) || 1;
       const { data, error } = await supabase
         .from('rides')
-        .insert({
-          host_id: hostId,
-          pickup: rideData.pickup,
-          destination: rideData.destination,
-          date: rideData.date,
-          time: rideData.time,
-          journey_scale: rideData.journeyScale,
-          vehicle_id: rideData.vehicleId || null,
-          seats_total: seats,
-          seats_available: seats,
-          contribution: rideData.contribution || '',
-          restriction_tags: rideData.restrictionTags || [],
-          status
-        })
+        .insert(buildRideInsert(hostId, rideData, status))
         .select(RIDE_SELECT)
         .single();
       if (error) throw error;
       return mapRideRow(data);
     }
 
-    return mockDb.createRide(hostId, rideData, status);
+    return mockDb.createRide(hostId, { ...rideData, waypoints: normalizeWaypoints(rideData.waypoints) }, status);
   }
 };

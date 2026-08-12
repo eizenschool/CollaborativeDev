@@ -13,6 +13,8 @@ export function AuthProvider({ children }) {
     try {
       const u = await AuthService.getCurrentUser();
       setUser(u);
+    } catch {
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -20,12 +22,28 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     refresh();
+    let active = true;
+    const unsubscribe = AuthService.onAuthStateChange((event) => {
+      if (!active) return;
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      if (['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event)) {
+        window.setTimeout(() => active && refresh(), 0);
+      }
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [refresh]);
 
   const signUp = async (form) => {
-    const u = await AuthService.signUp(form);
-    setUser(u);
-    return u;
+    const result = await AuthService.signUp(form);
+    setUser(result.user);
+    return result;
   };
 
   const signIn = async (form) => {

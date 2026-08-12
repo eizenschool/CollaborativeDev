@@ -2,10 +2,6 @@
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 
-// Backs the "My Vehicles" screen. Enforces one rule the mockup shows but the raw
-// GUI can't be trusted to enforce on its own: only one vehicle may be Active at a
-// time (a Host publishes rides against exactly one active vehicle).
-
 function validateVehicle({ make, model, plate, seats }) {
   if (!make?.trim() || !model?.trim()) throw new Error('Make and model are required.');
   if (!plate?.trim()) throw new Error('Plate number is required.');
@@ -14,7 +10,24 @@ function validateVehicle({ make, model, plate, seats }) {
   }
 }
 
+export function buildVehicleRecord(userId, vehicle) {
+  const record = {
+    owner_id: userId,
+    make: vehicle.make.trim(),
+    model: vehicle.model.trim(),
+    plate: vehicle.plate.trim(),
+    colour: vehicle.colour?.trim() || '',
+    seats: vehicle.seats,
+    year: vehicle.year,
+    active: Boolean(vehicle.active)
+  };
+  if (vehicle.id) record.id = vehicle.id;
+  return record;
+}
+
 export const VehicleService = {
+  backend: isSupabaseConfigured ? 'supabase' : 'mock',
+
   async listVehicles(userId) {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase
@@ -31,10 +44,26 @@ export const VehicleService = {
   async saveVehicle(userId, vehicle) {
     validateVehicle(vehicle);
     if (isSupabaseConfigured) {
+      const record = buildVehicleRecord(userId, vehicle);
+      if (vehicle.id) {
+        const { id, owner_id: _ownerId, ...patch } = record;
+        const { data, error } = await supabase
+          .from('vehicles')
+          .update(patch)
+          .eq('id', id)
+          .eq('owner_id', userId)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
+
+      const { id: _id, ...insertRecord } = record;
       const { data, error } = await supabase
         .from('vehicles')
-        .upsert({ ...vehicle, owner_id: userId })
-        .select();
+        .insert(insertRecord)
+        .select()
+        .single();
       if (error) throw error;
       return data;
     }
@@ -52,17 +81,20 @@ export const VehicleService = {
 
   async setActiveVehicle(userId, vehicleId, active) {
     if (isSupabaseConfigured) {
-      // Deactivate all, then activate the chosen one, mirroring the "single active
-      // vehicle" rule enforced by the mock backend below.
       if (active) {
-        await supabase.from('vehicles').update({ active: false }).eq('owner_id', userId);
+        const { error: deactivateError } = await supabase
+          .from('vehicles')
+          .update({ active: false })
+          .eq('owner_id', userId);
+        if (deactivateError) throw deactivateError;
       }
       const { data, error } = await supabase
         .from('vehicles')
         .update({ active })
         .eq('id', vehicleId)
         .eq('owner_id', userId)
-        .select();
+        .select()
+        .single();
       if (error) throw error;
       return data;
     }

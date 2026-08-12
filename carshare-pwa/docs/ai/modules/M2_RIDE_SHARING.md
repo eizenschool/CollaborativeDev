@@ -23,7 +23,13 @@ Module 1 eligibility/profile/vehicle; Google Maps; Module 6 lifecycle verificati
 Ride data, accepted participation context, lifecycle state, searchable rides.
 
 ## Current Status
-`Development` already contains substantial Module 2 UI and `RideService.js`.
+Module 2 ride CRUD/search is connected to the shared Supabase project through
+`RideService.js`. The deployed schema is `006-007` plus hardening in `010` and
+`012`: authenticated browsing, host-only management, persisted waypoints,
+seat constraints, indexed search/ownership, and a mandatory vehicle owned by
+the host. Drafts use the current Review-step save semantics and therefore need
+the same route, date, time, seats, and vehicle fields as published rides.
+Ride requests, reviews, and accepted-passenger persistence remain local/future.
 
 ## Open Questions
 Ride/trip model; shared lifecycle; multi-passenger behaviour; route-deviation threshold; auto-expiry interpretation; identity/license verification ownership; matched-ride discoverability.

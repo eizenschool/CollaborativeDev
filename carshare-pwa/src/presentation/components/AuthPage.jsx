@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { IconCar, IconMail, IconPhone, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar } from './icons.jsx';
+import { IconCar, IconMail, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar } from './icons.jsx';
 import '../styles/auth.css';
 
 export default function AuthPage() {
@@ -10,22 +10,26 @@ export default function AuthPage() {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState('signup'); // 'signup' | 'login'
-  const [method, setMethod] = useState('email'); // 'email' | 'phone'
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setVerificationMessage('');
     setLoading(true);
     try {
       if (mode === 'signup') {
-        await signUp({ fullName, email, phone, password, method });
+        const result = await signUp({ fullName, email, password });
+        if (result.requiresEmailConfirmation) {
+          setVerificationMessage(`We sent a confirmation link to ${result.email}. Confirm it before signing in.`);
+          return;
+        }
       } else {
         await signIn({ email, password });
       }
@@ -114,16 +118,8 @@ export default function AuthPage() {
             </button>
           </div>
 
-          <div className="method-toggle">
-            <button type="button" className={'method-pill' + (method === 'email' ? ' active' : '')} onClick={() => setMethod('email')}>
-              <IconMail size={14} /> Email
-            </button>
-            <button type="button" className={'method-pill' + (method === 'phone' ? ' active' : '')} onClick={() => setMethod('phone')}>
-              <IconPhone size={14} /> Phone
-            </button>
-          </div>
-
           {error && <div className="auth-error">{error}</div>}
+          {verificationMessage && <div className="alert alert-success">{verificationMessage}</div>}
 
           <form onSubmit={handleSubmit}>
             {mode === 'signup' && (
@@ -136,23 +132,13 @@ export default function AuthPage() {
               </div>
             )}
 
-            {method === 'email' ? (
-              <div className="auth-field">
-                <label>Email Address</label>
-                <div className="auth-input-wrap">
-                  <span className="prefix"><IconMail size={16} /></span>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jamie@email.com" required />
-                </div>
+            <div className="auth-field">
+              <label>Email Address</label>
+              <div className="auth-input-wrap">
+                <span className="prefix"><IconMail size={16} /></span>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jamie@email.com" required />
               </div>
-            ) : (
-              <div className="auth-field">
-                <label>Phone Number</label>
-                <div className="auth-input-wrap">
-                  <span className="prefix"><IconPhone size={16} /></span>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+60 12-345 6789" required />
-                </div>
-              </div>
-            )}
+            </div>
 
             <div className="auth-field">
               <label>Password</label>

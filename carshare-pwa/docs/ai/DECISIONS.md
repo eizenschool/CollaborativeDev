@@ -85,21 +85,24 @@ This avoids fragile `../` and `../../` references when context files are moved w
 
 ---
 
-## D010 — Module 1 Supabase Schema Drafted as Numbered SQL Files
-**Status:** Proposed
-`database/sql/001-005` draft `profiles`, `vehicles`, `host_impact_stats`,
-the `handle_new_user` trigger, and RLS for Module 1, matching what
-`AuthService.js`/`ProfileService.js`/`VehicleService.js`/`HostImpactEngine.js`
-already query. `006-007` draft `rides` (Module 2) alongside them so Module
-1's Sign Up → Profile → Ride Hub flow is demoable end-to-end; Module 2's
-owner (Yee Zu Yao) should confirm or adjust `006-007` before the team
-treats them as final. Not yet run against a live Supabase project. Moves
-"final database schema/RLS" below from undiscussed to "drafted, pending
-team review" - still Proposed, not Accepted, until the team reviews it.
+## D010 — Module 1 and Module 2 Initial Supabase Schema
+**Status:** Accepted
+`database/sql/001-012` is the deployed database history for the accepted first
+slice: Module 1 plus ride CRUD/search. The original `001-007` drafts are kept
+as history; `008-012` separate private profile data, harden Auth/RLS/grants,
+configure avatars, persist waypoints, and enforce a host-owned vehicle.
+
+## D011 — Supabase Scope and Authentication
+**Status:** Accepted
+The shared project is `pnetstmovctfwqcumodx`. Frontend configuration uses
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; the old anon-key name
+is compatibility-only. This slice uses email/password with email verification.
+Phone OTP, Google OAuth, account hard deletion, ride requests/reviews, and
+Messaging Realtime are deferred. Modules 3-6 retain their local adapters.
 
 ## Open Decisions
 - final ride/trip domain model;
-- final database schema/RLS (drafted in D010, pending team review);
+- database schemas/RLS for Modules 3-6;
 - detailed Google Maps integration;
 - shared lifecycle contract;
 - messaging persistence/realtime architecture;

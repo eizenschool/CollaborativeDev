@@ -50,6 +50,7 @@ export function getBadgeForStats(stats) {
 }
 
 export const HostImpactEngine = {
+  backend: isSupabaseConfigured ? 'supabase' : 'mock',
   weights: WEIGHTS,
   badgeTiers: BADGE_TIERS,
 

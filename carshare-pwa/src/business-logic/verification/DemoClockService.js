@@ -7,27 +7,16 @@
 // this only controls what value module6Db.now() hands them, so the rules
 // themselves stay identical whether driven by this clock or a real one.
 //
-// Same guard shape as HostImpactEngine.applyDemoAdjustment: demo-only controls
-// refuse to run once a real backend is configured, so they can never be mistaken
-// for production behaviour.
-
-import { isSupabaseConfigured } from '../../data-access/supabaseClient.js';
 import { module6Db } from '../../data-access/module6Store.js';
 
-function assertMockBackend() {
-  if (isSupabaseConfigured) {
-    throw new Error('Demo clock controls are only available against the mock backend.');
-  }
-}
-
 export const DemoClockService = {
+  backend: 'local',
+
   async advanceBy(ms) {
-    assertMockBackend();
     return module6Db.advanceClock(ms);
   },
 
   async reset() {
-    assertMockBackend();
     return module6Db.resetClock();
   },
 

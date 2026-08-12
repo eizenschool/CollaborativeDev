@@ -10,7 +10,6 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ProfileService } from '../../business-logic/ProfileService.js';
 import { VehicleService } from '../../business-logic/VehicleService.js';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
-import { isSupabaseConfigured } from '../../data-access/supabaseClient.js';
 import {
   IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart,
   IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle,
@@ -612,7 +611,7 @@ function ReputationImpactPanel({ user, summary, refresh }) {
               ))}
             </ul>
 
-            {!isSupabaseConfigured && (
+            {HostImpactEngine.backend === 'mock' && (
               <div className="demo-controls" style={{ marginTop: 16 }}>
                 <p className="card-title">Demo controls</p>
                 <button className="btn-block demo-up" onClick={() => adjust(5, 3)}><IconTrendUp size={14} /> +5 trips, +3 rep score</button>
@@ -655,21 +654,18 @@ function ReputationImpactPanel({ user, summary, refresh }) {
 }
 
 // ---------- ACCOUNT SETTINGS ----------
-// Completes CRUD on the Account entity (FR-1.x): Update via Deactivate,
-// Delete via Delete Account. Deactivating signs the user out; logging back in
-// (mockDb.signIn) reactivates the account automatically.
+// Deactivation is reversible on the next successful login. Hard deletion is
+// intentionally deferred until it can remove the Supabase Auth identity too.
 
 function AccountSettingsPanel({ user }) {
   const { signOut } = useAuth();
-  const [confirm, setConfirm] = useState(null); // 'deactivate' | 'delete' | null
-  const [reason, setReason] = useState('');
+  const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  function openConfirm(kind) {
+  function openConfirm() {
     setError('');
-    setReason('');
-    setConfirm(kind);
+    setConfirm(true);
   }
 
   async function handleDeactivate() {
@@ -684,36 +680,17 @@ function AccountSettingsPanel({ user }) {
     }
   }
 
-  async function handleDelete() {
-    setBusy(true);
-    setError('');
-    try {
-      await ProfileService.deleteAccount(user.id, reason);
-      await signOut();
-    } catch (err) {
-      setError(err.message);
-      setBusy(false);
-    }
-  }
-
   return (
     <>
       <div className="panel-head"><h2>Account Settings</h2></div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="settings-row">
+        <div className="settings-row settings-row-last">
           <div>
             <p className="card-title" style={{ marginBottom: 4 }}>Deactivate Account</p>
             <p className="card-subtitle" style={{ marginBottom: 0 }}>Temporarily hides your profile and pauses ride hosting. You can reactivate by logging back in.</p>
           </div>
-          <button className="btn-outline btn-outline-warning" onClick={() => openConfirm('deactivate')}>Deactivate</button>
-        </div>
-        <div className="settings-row settings-row-last">
-          <div>
-            <p className="card-title" style={{ marginBottom: 4, color: 'var(--danger)' }}>Delete Account</p>
-            <p className="card-subtitle" style={{ marginBottom: 0 }}>Permanently removes your account and all associated data. This cannot be undone.</p>
-          </div>
-          <button className="btn-outline btn-outline-danger" onClick={() => openConfirm('delete')}>Delete Account</button>
+          <button className="btn-outline btn-outline-warning" onClick={openConfirm}>Deactivate</button>
         </div>
       </div>
 
@@ -723,32 +700,17 @@ function AccountSettingsPanel({ user }) {
         <div className="modal-backdrop" onClick={() => !busy && setConfirm(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-icon"><IconAlertTriangle size={20} /></div>
-            {confirm === 'deactivate' ? (
-              <>
-                <p className="modal-title">Deactivate your account?</p>
-                <p className="modal-text">Your profile will be hidden and ride hosting paused until you log back in.</p>
-              </>
-            ) : (
-              <>
-                <p className="modal-title">Delete your account?</p>
-                <p className="modal-text">This permanently removes your account and all associated data. This cannot be undone.</p>
-                <div className="field" style={{ textAlign: 'left', marginTop: 12 }}>
-                  <label>Reason for leaving</label>
-                  <div className="input-wrap">
-                    <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Tell us why you're leaving" />
-                  </div>
-                </div>
-              </>
-            )}
+            <p className="modal-title">Deactivate your account?</p>
+            <p className="modal-text">Your profile will be hidden and ride hosting paused until you log back in.</p>
             {error && <div className="alert alert-error" style={{ textAlign: 'left' }}>{error}</div>}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setConfirm(null)} disabled={busy}>Go Back</button>
               <button
                 className="btn-danger-solid"
-                onClick={confirm === 'deactivate' ? handleDeactivate : handleDelete}
+                onClick={handleDeactivate}
                 disabled={busy}
               >
-                {busy ? 'Please wait…' : confirm === 'deactivate' ? 'Deactivate' : 'Delete Account'}
+                {busy ? 'Please wait…' : 'Deactivate'}
               </button>
             </div>
           </div>

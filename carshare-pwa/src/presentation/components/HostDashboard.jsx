@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
-import { isSupabaseConfigured } from '../../data-access/supabaseClient.js';
 import { IconCar, IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar } from './icons.jsx';
 
 export default function HostDashboard() {
@@ -51,7 +50,7 @@ export default function HostDashboard() {
             ))}
           </ul>
 
-          {!isSupabaseConfigured && (
+          {HostImpactEngine.backend === 'mock' && (
             <div className="demo-controls" style={{ marginTop: 18 }}>
               <p className="card-title">Demo controls</p>
               <button className="btn-block demo-up" onClick={() => adjust(5, 3)}><IconTrendUp size={15} /> +5 trips, +3 rep score</button>

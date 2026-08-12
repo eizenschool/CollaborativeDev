@@ -22,8 +22,16 @@ Module 6 trust/verification outcomes; Module 5/other trip data for some impact m
 
 ## Current Status
 `Development` already contains a substantial Module 1 prototype and services. Do not restart from scratch.
-Supabase schema for Module 1 (`profiles`, `vehicles`, `host_impact_stats`, sign-up trigger, RLS) is drafted in `database/sql/001-005` (see D010 in `docs/ai/DECISIONS.md`) - not yet run against a live project. `AuthService.js`/`ProfileService.js` already branch on `isSupabaseConfigured` and need no code changes once that project exists.
+Module 1 is connected to the shared Supabase project. The deployed history is
+`database/sql/001-012`; security corrections for Module 1 are in `008-009`.
+Public-safe profile fields are separate from owner-only phone/emergency data,
+email is sourced from Supabase Auth, avatars use an owner-folder policy, and
+vehicles are owner-only with one active vehicle per user. Email verification
+does not establish an app session until Supabase returns one. Deactivation is
+reversible on the next successful login and hides published rides; hard account
+deletion is hidden until Auth identity deletion can be implemented safely.
 `MyProfile.jsx`'s consolidated layout (`.profile-page`/`.profile-sidebar`/`.rail-card` in `theme.css`) now has a `@media (max-width: 700px)` breakpoint matching Module 2's Ride Hub pattern - previously the sidebar had no mobile treatment.
 
 ## Open Questions
-Reputation formula/weights; Host Impact formula; badge/publishing thresholds; emergency-contact email mismatch; phone OTP production infrastructure.
+Reputation formula/weights; Host Impact formula; badge/publishing thresholds;
+hard account deletion; phone OTP; Google OAuth.

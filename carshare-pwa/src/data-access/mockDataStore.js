@@ -396,6 +396,7 @@ export const mockDb = {
       seatsAvailable: seats,
       contribution: rideData.contribution || '',
       restrictionTags: rideData.restrictionTags || [],
+      waypoints: rideData.waypoints || [],
       status,
       createdAt: new Date().toISOString()
     };
