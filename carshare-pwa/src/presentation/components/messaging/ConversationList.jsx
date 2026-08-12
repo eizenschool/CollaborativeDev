@@ -1,46 +1,30 @@
 import { useMemo, useState } from 'react';
 import {
+  IconArchive,
   IconMessage,
+  IconMoreVertical,
   IconSearch,
   IconUsers,
   IconX,
-} from '../icons';
+} from '../icons.jsx';
 
-function getInitials(name) {
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+function getInitials(name = 'Member') {
+  return name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 }
 
 function MemberAvatar({ member, className }) {
-  if (member.avatarUrl) {
-    return (
-      <img src={member.avatarUrl} alt={member.name} className={className} />
-    );
+  if (member?.avatarUrl) {
+    return <img src={member.avatarUrl} alt={member.name} className={className} />;
   }
-
-  return (
-    <span className={`${className} message-avatar-fallback`}>
-      {getInitials(member.name)}
-    </span>
-  );
+  return <span className={`${className} message-avatar-fallback`}>{getInitials(member?.name)}</span>;
 }
 
 function ConversationAvatar({ conversation, currentUserId }) {
+  const others = conversation.members.filter((member) => member.id !== currentUserId);
   if (conversation.type === 'group') {
-    const visibleMembers = conversation.members
-      .filter((member) => member.id !== currentUserId)
-      .slice(0, 2);
-
     return (
-      <div
-        className="message-conversation-group-avatar"
-        aria-label={`${conversation.title} group`}
-      >
-        {visibleMembers.map((member, index) => (
+      <div className="message-conversation-group-avatar" aria-label={`${conversation.title} group`}>
+        {others.slice(0, 2).map((member, index) => (
           <MemberAvatar
             key={member.id}
             member={member}
@@ -50,95 +34,67 @@ function ConversationAvatar({ conversation, currentUserId }) {
       </div>
     );
   }
-
-  const contact = conversation.members.find(
-    (member) => member.id !== currentUserId,
-  );
-
   return (
     <MemberAvatar
-      member={contact || { name: conversation.title, avatarUrl: null }}
+      member={others[0] || { name: conversation.title }}
       className="message-conversation-avatar"
     />
   );
 }
 
-function ConversationRow({
-  conversation,
-  currentUserId,
-  isSelected,
-  onSelect,
-}) {
+function ConversationRow({ conversation, currentUserId, isSelected, onSelect, onManage }) {
   return (
-    <button
-      type="button"
-      className={`message-conversation-row ${
-        isSelected ? 'message-conversation-row-selected' : ''
-      }`}
-      onClick={() => onSelect(conversation.id)}
-    >
-      <ConversationAvatar
-        conversation={conversation}
-        currentUserId={currentUserId}
-      />
-
-      <div className="message-conversation-content">
-        <div className="message-conversation-heading">
-          <span className="message-conversation-title">
-            {conversation.title}
-          </span>
-
-          <span
-            className={`message-conversation-time ${
-              conversation.unreadCount > 0
-                ? 'message-conversation-time-unread'
-                : ''
-            }`}
-          >
-            {conversation.lastTime}
-          </span>
-        </div>
-
-        <div className="message-conversation-preview-row">
-          <span className="message-conversation-preview">
-            {conversation.lastMessage}
-          </span>
-
-          {conversation.unreadCount > 0 && (
-            <span
-              className="message-unread-badge"
-              aria-label={`${conversation.unreadCount} unread messages`}
-            >
-              {conversation.unreadCount}
+    <article className={`message-conversation-row ${isSelected ? 'message-conversation-row-selected' : ''}`}>
+      <button
+        type="button"
+        className="message-conversation-open"
+        onClick={() => onSelect(conversation.id)}
+      >
+        <ConversationAvatar conversation={conversation} currentUserId={currentUserId} />
+        <div className="message-conversation-content">
+          <div className="message-conversation-heading">
+            <span className="message-conversation-title">{conversation.title}</span>
+            <span className={conversation.unreadCount ? 'message-conversation-time message-conversation-time-unread' : 'message-conversation-time'}>
+              {conversation.lastTime}
             </span>
-          )}
+          </div>
+          <div className="message-conversation-preview-row">
+            <span className="message-conversation-preview">{conversation.lastMessage}</span>
+            {conversation.unreadCount > 0 && (
+              <span className="message-unread-badge" aria-label={`${conversation.unreadCount} unread messages`}>
+                {conversation.unreadCount}
+              </span>
+            )}
+          </div>
+          <div className="message-conversation-badges">
+            {conversation.type === 'group' && <span className="message-trip-badge">Group chat</span>}
+            {conversation.isArchived && <span className="message-trip-badge"><IconArchive size={10} /> Archived</span>}
+          </div>
         </div>
-
-        {conversation.type === 'group' && (
-          <span className="message-trip-badge">Group chat</span>
-        )}
-      </div>
-    </button>
+      </button>
+      <button
+        type="button"
+        className="message-conversation-manage"
+        onClick={() => onManage(conversation)}
+        aria-label={`Manage ${conversation.title}`}
+      >
+        <IconMoreVertical size={18} />
+      </button>
+    </article>
   );
 }
 
-function EmptyConversationState({ hasSearchQuery, searchQuery }) {
+function EmptyConversationState({ folder, hasSearchQuery, searchQuery }) {
   return (
     <div className="message-conversation-empty">
       <div className="message-conversation-empty-icon">
-        {hasSearchQuery ? <IconSearch size={28} /> : <IconUsers size={28} />}
+        {hasSearchQuery ? <IconSearch size={28} /> : folder === 'archived' ? <IconArchive size={28} /> : <IconUsers size={28} />}
       </div>
-
       <h3 className="message-conversation-empty-title">
-        {hasSearchQuery
-          ? `No results for "${searchQuery}"`
-          : 'No conversations yet'}
+        {hasSearchQuery ? `No results for "${searchQuery}"` : folder === 'archived' ? 'No archived conversations' : 'No conversations yet'}
       </h3>
-
       <p className="message-conversation-empty-text">
-        {hasSearchQuery
-          ? 'Try searching with another name or message.'
-          : 'Join or accept a ride to start chatting.'}
+        {hasSearchQuery ? 'Try searching with another name or message.' : folder === 'archived' ? 'Completed private chats you archive will appear here.' : 'Open a published ride to message its Host.'}
       </p>
     </div>
   );
@@ -149,48 +105,52 @@ export default function ConversationList({
   currentUserId,
   selectedConversationId,
   onSelectConversation,
+  onManageConversation,
+  folder,
+  onFolderChange,
   isLoading,
+  error,
+  onRetry,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-
   const filteredConversations = useMemo(() => {
-    if (!normalizedSearchQuery) {
-      return conversations;
-    }
-
-    return conversations.filter((conversation) => {
-      return (
-        conversation.title.toLowerCase().includes(normalizedSearchQuery) ||
-        conversation.lastMessage
-          .toLowerCase()
-          .includes(normalizedSearchQuery)
-      );
-    });
+    if (!normalizedSearchQuery) return conversations;
+    return conversations.filter((conversation) =>
+      conversation.title.toLowerCase().includes(normalizedSearchQuery)
+      || conversation.lastMessage.toLowerCase().includes(normalizedSearchQuery)
+      || conversation.tripRoute?.toLowerCase().includes(normalizedSearchQuery),
+    );
   }, [conversations, normalizedSearchQuery]);
 
   return (
     <section className="message-conversation-list" aria-label="Conversations">
       <header className="message-conversation-list-header">
         <div className="message-conversation-title-row">
-          <div className="message-conversation-page-icon">
-            <IconMessage size={18} />
-          </div>
-
+          <div className="message-conversation-page-icon"><IconMessage size={18} /></div>
           <div>
             <h1 className="message-conversation-page-title">Messages</h1>
-
-            <p className="message-conversation-page-subtitle">
-              Your ride and trip conversations
-            </p>
+            <p className="message-conversation-page-subtitle">Your ride conversations</p>
           </div>
         </div>
 
-        <div className="message-conversation-search">
-          <span className="message-conversation-search-icon">
-            <IconSearch size={16} />
-          </span>
+        <div className="message-folder-tabs" role="tablist" aria-label="Conversation folders">
+          {['active', 'archived'].map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              aria-selected={folder === item}
+              className={folder === item ? 'message-folder-tab-active' : ''}
+              onClick={() => onFolderChange(item)}
+            >
+              {item === 'active' ? 'Active' : 'Archived'}
+            </button>
+          ))}
+        </div>
 
+        <div className="message-conversation-search">
+          <span className="message-conversation-search-icon"><IconSearch size={16} /></span>
           <input
             type="search"
             value={searchQuery}
@@ -198,14 +158,8 @@ export default function ConversationList({
             placeholder="Search conversations..."
             aria-label="Search conversations"
           />
-
           {searchQuery && (
-            <button
-              type="button"
-              className="message-conversation-search-clear"
-              onClick={() => setSearchQuery('')}
-              aria-label="Clear conversation search"
-            >
+            <button type="button" className="message-conversation-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear conversation search">
               <IconX size={14} />
             </button>
           )}
@@ -213,7 +167,12 @@ export default function ConversationList({
       </header>
 
       <div className="message-conversation-scroll" aria-busy={isLoading}>
-        {filteredConversations.length > 0 ? (
+        {error ? (
+          <div className="message-inline-error" role="alert">
+            <p>{error}</p>
+            <button type="button" onClick={onRetry}>Retry</button>
+          </div>
+        ) : filteredConversations.length > 0 ? (
           filteredConversations.map((conversation) => (
             <ConversationRow
               key={conversation.id}
@@ -221,14 +180,14 @@ export default function ConversationList({
               currentUserId={currentUserId}
               isSelected={selectedConversationId === conversation.id}
               onSelect={onSelectConversation}
+              onManage={onManageConversation}
             />
           ))
         ) : !isLoading ? (
-          <EmptyConversationState
-            hasSearchQuery={Boolean(normalizedSearchQuery)}
-            searchQuery={searchQuery}
-          />
-        ) : null}
+          <EmptyConversationState folder={folder} hasSearchQuery={Boolean(normalizedSearchQuery)} searchQuery={searchQuery} />
+        ) : (
+          <div className="message-loading-state">Loading conversations…</div>
+        )}
       </div>
     </section>
   );

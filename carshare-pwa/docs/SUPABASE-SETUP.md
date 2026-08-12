@@ -1,16 +1,15 @@
 # Supabase setup
 
-Let's Tumpang is connected to the shared Supabase project for Module 1 and
-Module 2 ride CRUD/search.
+Let's Tumpang is connected to the shared Supabase project for Modules 1-3,
+including Module 3 Database, Realtime, and private Storage messaging.
 
 ```text
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 ```
 
-Modules 3-6 intentionally remain on their local adapters. In particular,
-Messaging currently uses `localStorage`/`BroadcastChannel`, not Supabase
-Realtime, and Module 6's demo clock remains local.
+Modules 4-6 intentionally remain on their local adapters. Module 3's production
+path no longer uses its legacy `localStorage`/`BroadcastChannel` adapter.
 
 ## Local configuration
 
@@ -37,25 +36,35 @@ Restart `npm run dev` after changing environment values.
 - `vehicles`: owner-only CRUD with one active vehicle per user.
 - `host_impact_stats`: authenticated read-only until a trusted update pipeline exists.
 - `rides`: authenticated search, host-only CRUD, waypoints, seat constraints, and mandatory host-owned vehicle.
+- `ride_requests` and `ride_reviews`: RPC-only participation and mutual review lifecycle.
+- `conversations`, `conversation_members`, `messages`, and `message_attachments`: member-readable, RPC-mutated messaging with seven-day terminal retention.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
+- `message-media`: private, no listing, approved media only, 50 MB object maximum, and attachment-bound signed downloads.
 
-Google OAuth, phone OTP, hard account deletion, ride requests/reviews, and
-cross-device Messaging are not part of this connection.
+Google OAuth, phone OTP, hard account deletion, translation, messaging
+notifications, and Modules 4-6 are not part of this connection.
 
 ## Database history and deployment
 
 The authoritative SQL lives in `database/sql/`. Files `001-010` were deployed
-as one atomic initial migration, then `011-012` as follow-ups. The live migration
-records are:
+as one atomic initial migration, `011-012` as hardening follow-ups, `013-015`
+as the completed Module 2 lifecycle, and `016-018` as Module 3 messaging. The
+live migration records are:
 
 ```text
 initial_m1_m2_schema
 project_advisor_followup
 require_host_vehicle_for_rides
+m2_ride_requests_and_departure
+m2_lifecycle_cron
+m2_ride_reviews
+m3_supabase_messaging
+m3_advisor_followup
+m3_versioned_media_paths
 ```
 
-Do not run `001-012` again on this project and do not edit them after deployment.
-Future changes start at `013`, are applied through migration tooling, and must be
+Do not run `001-018` again on this project and do not edit them after deployment.
+Future changes start at `019`, are applied through migration tooling, and must be
 recorded in `docs/ai/SQL.md`. Do not make Dashboard-only schema changes.
 
 ## Security model
@@ -89,4 +98,5 @@ For live acceptance, use two real email accounts and verify:
 4. Vehicle create/edit/active/delete and the single-active constraint.
 5. Ride draft/publish/search/edit-waypoints/cancel.
 6. An unauthenticated client cannot access any business table.
-7. Messaging and Modules 4-6 local demo functions still operate.
+7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, and expired access denial.
+8. Modules 4-6 local demo functions still operate.

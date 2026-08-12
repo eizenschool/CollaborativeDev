@@ -96,8 +96,8 @@ and `013-015` add the accepted ride/request/lifecycle/review model.
 The shared project is `pnetstmovctfwqcumodx`. Frontend configuration uses
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; the old anon-key name
 is compatibility-only. This slice uses email/password with email verification.
-Phone OTP, Google OAuth, account hard deletion, and Messaging Realtime are
-deferred. Modules 3-6 retain their local adapters.
+Phone OTP, Google OAuth, and account hard deletion are deferred. Module 3 uses
+Supabase Database, Realtime, and private Storage; Modules 4-6 retain local adapters.
 
 ## D012 — Module 2 Lifecycle and Participation Contract
 **Status:** Accepted
@@ -129,11 +129,24 @@ source of truth for exact implemented token values. Files under `docs/figma/`
 are design references and do not silently override accepted decisions, this
 contract, or verified current implementation.
 
+## D015 — Module 3 Supabase Messaging and Retention Contract
+**Status:** Accepted
+Published rides allow any signed-in non-Host to create/reuse one ride-bound
+direct chat without a ride request. The first Accepted request creates the one
+ride group transactionally; every accepted account holder joins and companions
+do not. A message is one atomic text/media/location bundle with up to ten mixed
+photos/videos and one coordinate pair. Sender-only edits are allowed only before
+another member reads the message; sender-only deletion always tombstones the
+whole bundle. Completed private chats can be archived per user, Completed group
+travellers can leave, and Hosts cannot leave. Completed, Cancelled, and Expired
+conversation access ends permanently seven days after the terminal timestamp,
+overriding UC3.8's older permanent archive wording. Translation and messaging
+notifications remain deferred.
+
 ## Open Decisions
-- database schemas/RLS for Modules 3-6;
+- database schemas/RLS for Modules 4-6;
 - billable Google Maps features such as autocomplete and coordinate persistence;
 - production Module 6 verification pipeline integration;
-- messaging persistence/realtime architecture;
 - reputation and Host Impact formulas;
 - carbon model;
 - complete offline behaviour;

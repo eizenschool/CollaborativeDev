@@ -17,7 +17,7 @@ Business logic: `src/business-logic/RideService.js`.
 Ride entity behaviour, publishing/request flows, host decisions, ride lifecycle contract.
 
 ## Depends On
-Module 1 eligibility/profile/vehicle; Google Maps; Module 6 lifecycle verification; Module 3 conversation creation after acceptance.
+Module 1 eligibility/profile/vehicle; Google Maps; Module 6 lifecycle verification; Module 3 group membership after acceptance.
 
 ## Provides
 Ride data, accepted participation context, lifecycle state, searchable rides.
@@ -47,8 +47,15 @@ Route and waypoint previews use the shared no-charge Maps Embed API directions
 component. It accepts the existing text locations and falls back to the local
 route illustration when the restricted key is absent or the app is offline.
 
+Migration `016_m3_supabase_messaging.sql` preserves the public
+`respond_to_ride_request(request_id, decision, reason)` interface and seat logic.
+For an Accepted decision it also creates/reuses the ride group and adds the
+accepted account holder in the same database transaction. Existing Accepted
+requests were backfilled during deployment. Companion names remain request data
+and are never conversation members. Published Ride Detail also exposes Module
+3's independent `Message host` direct-chat entry for non-Hosts.
+
 ## Deferred
 Places autocomplete, stored coordinates, traffic-aware routing, and
-route-deviation automation; Module 3 conversation
-creation and notifications after acceptance; production Module 1/6 driver
+route-deviation automation; messaging notifications; production Module 1/6 driver
 verification; wiring the trusted Module 6 pipeline to the service-role transition.

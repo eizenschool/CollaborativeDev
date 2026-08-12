@@ -4,58 +4,32 @@
 Chong Zheng Zhe
 
 ## Purpose
-Trip-bound communication between hosts and accepted travellers.
+Supabase-backed ride communication for UC3.4, UC3.7, and UC3.8.
 
-## Requirement Intent
-Text/image/video, location sharing, conversation list/history, sender/timestamp/type, notifications, hazard advisories, translation, edit-before-read, realtime, delete, archive/leave.
+## Implemented Contract
 
-## Existing Repository Areas
-Presentation: `src/presentation/components/messaging/` including `MessageModule.jsx`, `ConversationList.jsx`, `ChatWindow.jsx`, `MessageBubble.jsx`, `TripInfoSidebar.jsx`.
-Business logic: `src/business-logic/MessagingService.js`.
-Local demo data adapter: `src/data-access/localMessagingStore.js`.
-Styles: `src/presentation/styles/message.css`.
+- A signed-in non-Host can create or reuse one direct chat for a Published ride from Ride Detail; acceptance is not required.
+- Accepting the first ride request creates the ride's one group chat in the same transaction and adds the Host plus accepted account holder. Later accepted account holders join that group. Companion names never become members.
+- A user message is one atomic bundle containing any non-empty combination of up to 1,000 text characters, 10 mixed images/videos, and one current GPS location.
+- Images: JPEG/PNG/WebP, 10 MB each. Videos: MP4/WebM/QuickTime, 50 MB each. Combined media: 100 MB per message.
+- Rendering order is text, ordered media grid, then Google Maps Embed `place` mode. Location is coordinates only; no geocoding.
+- The original sender can atomically edit the complete bundle only before another member reads it. The sender can delete the complete bundle regardless of read state. Deleted messages remain as tombstones.
+- History is oldest-to-newest and searches text, system messages, and media filenames. Results safely highlight the keyword and jump back to the original message.
+- Completed direct chats can be archived independently by each user and become read-only with no unarchive. A Completed group can be left only by a traveller; the Host cannot leave. Remaining members receive a Realtime system message.
+- Completed, Cancelled, and Expired rides retain their conversations for seven days, then RLS removes all access.
 
-## Depends On
-Module 2 accepted ride/participation; Module 6 hazard advisories; translation provider; Supabase Realtime/Storage if selected.
+## Architecture
 
-## Current Status
-Core text messaging is implemented as a local demo: private and group
-conversations, message history, unread counts, latest-message sorting, and
-same-origin browser-tab updates. State is versioned in `localStorage`, so it
-survives page refreshes. This is not cross-device or production realtime.
+- Presentation: `src/presentation/components/messaging/` and routes `/message`, `/message/:conversationId`, `/message/:conversationId/history`.
+- Business logic: `src/business-logic/MessagingService.js` validates bundles, coordinates uploads, maps `messageTypes`, and keeps failed drafts retryable.
+- Data access: `src/data-access/supabaseMessagingRepository.js` is the production adapter for PostgREST RPC, Realtime, and private Storage signed URLs.
+- Database: `database/sql/016_m3_supabase_messaging.sql`; `017_m3_advisor_followup.sql` covers the direct-user foreign key; `018_m3_versioned_media_paths.sql` finalizes sender/conversation/message/version object paths.
+- The previous `localMessagingStore.js` and dummy message data are legacy-only and are no longer imported by the production Module 3 path.
 
-## Module 2 Contract
+## Security Boundary
 
-When an accepted-passenger list changes, Module 2 should call:
+Clients receive SELECT-only grants on messaging tables. All mutations use narrow authenticated `SECURITY DEFINER` RPCs with empty search paths, `auth.uid()` ownership/membership checks, lifecycle checks, and row locks. The `message-media` bucket is private: uploads are owner/conversation staged, listing is blocked, and downloads require a current visible attachment row.
 
-```js
-await MessagingService.syncAcceptedRideConversations({
-  ride,
-  host,
-  passengers,
-});
-```
+## Deferred
 
-`ride` must include `id`; `pickup`, `destination`, `date`, and `time` are used
-when available. `host` and each accepted passenger must include `id` and one of
-`fullName`, `name`, `user_metadata.full_name`, or `email`; `profilePhotoUrl` is
-optional. The operation is idempotent: every accepted passenger receives one
-host-private chat, a group is created only once there are two passengers, and
-later accepted passengers are added to that same group. Module 2 does not need
-to store conversation IDs.
-
-## Current Limitations
-
-- Realtime means local `BroadcastChannel` plus the `storage` event between
-  same-origin browser tabs only; replace the local adapter with Supabase
-  persistence and Realtime for cross-device communication.
-- This pass supports text messages only. Media, location, translation, hazard
-  advisories, edit/delete, archive/leave, and push notifications remain future
-  work.
-
-## Open Questions
-Supabase tables/RLS, production Realtime subscriptions, translation
-integration, notifications, media storage, and the wider conversation lifecycle.
-
-## Agent Note
-Web Speech is speech I/O, not the translation service. Do not expose translator secrets in frontend code.
+Translation/UC3.6, push/email notifications, hazard advisories, address geocoding, and map point selection. Two-account cross-browser manual acceptance remains required before a release sign-off.

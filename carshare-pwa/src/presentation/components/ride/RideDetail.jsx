@@ -6,10 +6,11 @@ import { RideRequestService } from '../../../business-logic/RideRequestService.j
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
 import { isAtLeastHoursAway } from '../../../business-logic/rideDateTime.js';
 import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedService.js';
+import { MessagingService } from '../../../business-logic/MessagingService.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import {
   IconAlertTriangle, IconArrowLeft, IconCalendar, IconCheck, IconEdit,
-  IconMapPin, IconRoute, IconStar, IconUsers, IconX
+  IconMapPin, IconMessage, IconRoute, IconStar, IconUsers, IconX
 } from '../icons.jsx';
 import '../../styles/ride.css';
 
@@ -137,6 +138,7 @@ export default function RideDetail() {
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [reviews, setReviews] = useState([]);
+  const [isOpeningChat, setIsOpeningChat] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -161,6 +163,7 @@ export default function RideDetail() {
   const canEdit = isHost && ['Draft', 'Published'].includes(ride.status) && !ride.hasAcceptedRequests;
   const canCancel = isHost && ['Published', 'Matched'].includes(ride.status);
   const canRequest = !isHost && ride.status === 'Published' && ride.seatsAvailable > 0 && isAtLeastHoursAway(ride.departureAt);
+  const canMessageHost = !isHost && ride.status === 'Published';
   const requestDeadline = new Date(new Date(ride.departureAt).getTime() - 5 * 60 * 60 * 1000);
   const waypoints = ride.waypoints?.length ? ride.waypoints : ride.journeyScale === 'Intercity'
     ? [{ name: 'Ipoh Old Town', description: 'A food stop along the way.' }, { name: 'Taiping Lake Gardens', description: 'A cultural stop by the route.' }]
@@ -190,6 +193,19 @@ export default function RideDetail() {
     try {
       setRide(action === 'close' ? await RideService.closeRecruitment(ride.id) : await RideService.reopenRecruitment(ride.id));
     } catch (err) { setError(err.message); }
+  }
+
+  async function messageHost() {
+    setError('');
+    setIsOpeningChat(true);
+    try {
+      const conversationId = await MessagingService.openRideDirectConversation(ride.id);
+      navigate(`/message/${conversationId}`);
+    } catch (err) {
+      setError(err.message || 'Unable to open a private chat with this Host.');
+    } finally {
+      setIsOpeningChat(false);
+    }
   }
 
   return (
@@ -238,9 +254,12 @@ export default function RideDetail() {
           {ride.status === 'Matched' && isAtLeastHoursAway(ride.departureAt) && <button className="outline-action full" onClick={() => changeRecruitment('reopen')}>Reopen recruitment</button>}
           {ride.status === 'Completed' && <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate accepted passengers</button>}
           {canCancel && <button className="cancel-action" onClick={() => setCancelling(true)}>Cancel this ride</button>}
-        </> : ride.status === 'Completed' ? <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate & review</button>
-          : activeRequest ? <div className="request-sent"><IconCheck size={15} /> {activeRequest.status === 'Accepted' ? 'Request accepted' : 'Request sent — awaiting approval'}</div>
-            : <button className="primary-action full" disabled={!canRequest} onClick={() => setShowRequest(true)}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
+        </> : <>
+          {canMessageHost && <button className="outline-action full" disabled={isOpeningChat} onClick={messageHost}><IconMessage size={15} /> {isOpeningChat ? 'Opening chat…' : 'Message host'}</button>}
+          {ride.status === 'Completed' ? <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate & review</button>
+            : activeRequest ? <div className="request-sent"><IconCheck size={15} /> {activeRequest.status === 'Accepted' ? 'Request accepted' : 'Request sent — awaiting approval'}</div>
+              : <button className="primary-action full" disabled={!canRequest} onClick={() => setShowRequest(true)}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
+        </>}
       </div>
       {cancelling && <CancelSheet onDismiss={() => setCancelling(false)} onConfirm={cancelRide} />}
       {showRequest && <RequestSheet ride={ride} onDismiss={() => { setShowRequest(false); setError(''); }} onSubmit={submitRequest} saving={requesting} error={error} />}

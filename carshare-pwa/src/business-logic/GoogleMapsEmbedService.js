@@ -4,7 +4,9 @@
 // without an explicit project decision and cost-control plan.
 
 const EMBED_BASE_URL = 'https://www.google.com/maps/embed/v1/directions';
+const PLACE_EMBED_BASE_URL = 'https://www.google.com/maps/embed/v1/place';
 const DIRECTIONS_BASE_URL = 'https://www.google.com/maps/dir/';
+const MAPS_SEARCH_BASE_URL = 'https://www.google.com/maps/search/';
 const configuredApiKey = import.meta.env.VITE_GOOGLE_MAPS_EMBED_API_KEY?.trim() || '';
 
 function cleanLocation(value) {
@@ -54,9 +56,36 @@ export function buildGoogleMapsDirectionsUrl({ pickup, destination, waypoints = 
   return `${DIRECTIONS_BASE_URL}?${params.toString()}`;
 }
 
+export function buildPlaceEmbedUrl({ latitude, longitude, apiKey = configuredApiKey } = {}) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  const key = cleanLocation(apiKey);
+  if (!key || !Number.isFinite(lat) || lat < -90 || lat > 90
+      || !Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  const params = new URLSearchParams({
+    key,
+    q: `${lat},${lng}`,
+    zoom: '16',
+    region: 'my',
+    language: 'en'
+  });
+  return `${PLACE_EMBED_BASE_URL}?${params.toString()}`;
+}
+
+export function buildGoogleMapsLocationUrl({ latitude, longitude } = {}) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90
+      || !Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  const params = new URLSearchParams({ api: '1', query: `${lat},${lng}` });
+  return `${MAPS_SEARCH_BASE_URL}?${params.toString()}`;
+}
+
 export const GoogleMapsEmbedService = {
   backend: 'maps-embed',
   isConfigured: Boolean(configuredApiKey),
   buildDirectionsEmbedUrl,
-  buildGoogleMapsDirectionsUrl
+  buildGoogleMapsDirectionsUrl,
+  buildPlaceEmbedUrl,
+  buildGoogleMapsLocationUrl
 };
