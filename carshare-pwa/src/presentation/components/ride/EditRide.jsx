@@ -11,6 +11,7 @@ export default function EditRide() {
   const navigate = useNavigate();
   const [ride, setRide] = useState(null);
   const [contribution, setContribution] = useState('');
+  const [pickupInstructions, setPickupInstructions] = useState('');
   const [journeyScale, setJourneyScale] = useState('Urban');
   const [tags, setTags] = useState([]);
   const [waypoints, setWaypoints] = useState([]);
@@ -23,6 +24,7 @@ export default function EditRide() {
     RideService.getRide(rideId).then((found) => {
       setRide(found);
       setContribution(found?.contribution || '');
+      setPickupInstructions(found?.pickupInstructions || '');
       setJourneyScale(found?.journeyScale || 'Urban');
       setTags(found?.restrictionTags || []);
       setWaypoints(found?.waypoints?.map((item) => item.name || item) || []);
@@ -40,7 +42,7 @@ export default function EditRide() {
     setSaving(true);
     setError('');
     try {
-      await RideService.updateRide(rideId, { contribution, journeyScale, restrictionTags: tags, waypoints: waypoints.map((name) => ({ name, description: '' })) });
+      await RideService.updateRide(rideId, { pickupInstructions, contribution, journeyScale, restrictionTags: tags, waypoints: waypoints.map((name) => ({ name, description: '' })) });
       setSaved(true);
       window.setTimeout(() => navigate(`/ride/${rideId}`), 600);
     } catch (err) {
@@ -56,6 +58,7 @@ export default function EditRide() {
       <div className={`edit-ride-content ${locked ? 'locked-form' : ''}`}>
         {locked && <section className="locked-banner"><IconLock size={16} /><span>{ride.hasAcceptedRequests ? 'This ride already has an accepted request and can no longer be edited.' : <>This ride is <strong>{ride.status.toLowerCase()}</strong> and can no longer be edited.</>}</span></section>}
         {error && <div className="alert alert-error" role="alert">{error}</div>}
+        <section className="ride-info-card pickup-instructions-field"><label className="eyebrow" htmlFor="edit-pickup-instructions">PICKUP INSTRUCTIONS</label><textarea id="edit-pickup-instructions" disabled={locked} rows="3" maxLength="300" value={pickupInstructions} onChange={(event) => setPickupInstructions(event.target.value)} placeholder="e.g. Meet beside Entrance A, next to the taxi stand" /><small>{pickupInstructions.length}/300</small></section>
         <section className="ride-info-card"><p className="eyebrow">JOURNEY SCALE</p><div className="scale-picker">{['Urban', 'Intercity'].map((scale) => <button type="button" aria-pressed={journeyScale === scale} key={scale} disabled={locked} className={journeyScale === scale ? 'selected' : ''} onClick={() => setJourneyScale(scale)}>{scale} route</button>)}</div></section>
         <section className="ride-info-card"><label className="eyebrow" htmlFor="contribution">NON-MONETARY CONTRIBUTION</label><input id="contribution" disabled={locked} value={contribution} onChange={(event) => setContribution(event.target.value)} placeholder="e.g. Snacks, toll fee, coffee…" /></section>
         <section className="ride-info-card"><p className="eyebrow">TRIP RESTRICTIONS</p><div className="restriction-picker">{restrictionOptions.map((tag) => <button type="button" aria-pressed={tags.includes(tag)} key={tag} disabled={locked} className={tags.includes(tag) ? 'selected' : ''} onClick={() => toggleTag(tag)}>{tag}</button>)}</div></section>

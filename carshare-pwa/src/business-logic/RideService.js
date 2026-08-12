@@ -7,6 +7,7 @@ import {
   klDayRange,
   toDepartureAt
 } from './rideDateTime.js';
+import { isConfirmedLocation } from './GooglePlacesService.js';
 
 const JOURNEY_SCALES = ['Urban', 'Intercity'];
 const RIDE_SELECT = '*, host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))';
@@ -27,6 +28,46 @@ function rpcError(error) {
   return Object.assign(new Error(message), { code: error.code });
 }
 
+function normalizeLocation(location) {
+  if (!location || typeof location !== 'object') return null;
+  const placeId = typeof location.placeId === 'string' ? location.placeId.trim() : '';
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  const hasCoordinates = location.latitude !== null && location.latitude !== undefined && location.latitude !== ''
+    && location.longitude !== null && location.longitude !== undefined && location.longitude !== ''
+    && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
+    && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+  if (!placeId && !hasCoordinates) return null;
+  return {
+    source: hasCoordinates ? 'device' : 'place',
+    ...(placeId ? { placeId } : {}),
+    ...(hasCoordinates ? { latitude, longitude } : {})
+  };
+}
+
+function rowLocation(row, prefix) {
+  return normalizeLocation({
+    placeId: row[`${prefix}_place_id`] ?? row[`${prefix}PlaceId`] ?? null,
+    latitude: row[`${prefix}_latitude`] ?? row[`${prefix}Latitude`] ?? null,
+    longitude: row[`${prefix}_longitude`] ?? row[`${prefix}Longitude`] ?? null
+  });
+}
+
+export function validateConfirmedRoute(rideData) {
+  if (!isConfirmedLocation(rideData.pickupLocation)) {
+    throw new Error('Choose a confirmed pickup location.');
+  }
+  if (!rideData.destinationLocation?.placeId?.trim()) {
+    throw new Error('Choose a confirmed destination from Google suggestions.');
+  }
+}
+
+export function routeChangeRequiresConfirmation(current, patch) {
+  const routeChanged = (patch.pickup !== undefined && patch.pickup.trim() !== current.pickup.trim())
+    || (patch.destination !== undefined && patch.destination.trim() !== current.destination.trim());
+  return Boolean(current.pickupLocation || current.destinationLocation || routeChanged);
+}
+
 export function mapRideRow(row) {
   const host = row.host;
   const stats = host?.host_impact_stats?.[0] || host?.host_impact_stats || null;
@@ -37,6 +78,9 @@ export function mapRideRow(row) {
     hostId: row.host_id ?? row.hostId,
     pickup: row.pickup,
     destination: row.destination,
+    pickupLocation: rowLocation(row, 'pickup'),
+    destinationLocation: rowLocation(row, 'destination'),
+    pickupInstructions: row.pickup_instructions ?? row.pickupInstructions ?? '',
     departureAt,
     date: legacyParts.date,
     time: legacyParts.time,
@@ -69,9 +113,11 @@ export function mapRideRow(row) {
   };
 }
 
-export function validateRideDraft(rideData, { publishing = false, now = new Date() } = {}) {
+export function validateRideDraft(rideData, { publishing = false, requireConfirmedLocations = false, now = new Date() } = {}) {
   if (!rideData.pickup?.trim()) throw new Error('Pickup point is required.');
   if (!rideData.destination?.trim()) throw new Error('Destination is required.');
+  if (requireConfirmedLocations) validateConfirmedRoute(rideData);
+  if ((rideData.pickupInstructions?.length || 0) > 300) throw new Error('Pickup instructions must be 300 characters or fewer.');
   if (!rideData.date && !rideData.departureAt) throw new Error('Departure date is required.');
   if (!rideData.time && !rideData.departureAt) throw new Error('Departure time is required.');
   if (!JOURNEY_SCALES.includes(rideData.journeyScale)) throw new Error('Choose a journey scale.');
@@ -92,10 +138,17 @@ export function validateRideDraft(rideData, { publishing = false, now = new Date
 
 export function buildRideInsert(hostId, rideData, status) {
   const seats = Number(rideData.seatsTotal);
+  const pickupLocation = normalizeLocation(rideData.pickupLocation);
+  const destinationLocation = normalizeLocation(rideData.destinationLocation);
   return {
     host_id: hostId,
     pickup: rideData.pickup.trim(),
     destination: rideData.destination.trim(),
+    pickup_place_id: pickupLocation?.placeId || null,
+    pickup_latitude: pickupLocation?.latitude ?? null,
+    pickup_longitude: pickupLocation?.longitude ?? null,
+    destination_place_id: destinationLocation?.placeId || null,
+    pickup_instructions: rideData.pickupInstructions?.trim() || '',
     departure_at: rideData.departureAt || toDepartureAt(rideData.date, rideData.time),
     journey_scale: rideData.journeyScale,
     vehicle_id: rideData.vehicleId || null,
@@ -112,6 +165,16 @@ export function buildRidePatch(patch) {
   const values = {};
   if (patch.pickup !== undefined) values.pickup = patch.pickup.trim();
   if (patch.destination !== undefined) values.destination = patch.destination.trim();
+  if (patch.pickupLocation !== undefined) {
+    const location = normalizeLocation(patch.pickupLocation);
+    values.pickup_place_id = location?.placeId || null;
+    values.pickup_latitude = location?.latitude ?? null;
+    values.pickup_longitude = location?.longitude ?? null;
+  }
+  if (patch.destinationLocation !== undefined) {
+    values.destination_place_id = normalizeLocation(patch.destinationLocation)?.placeId || null;
+  }
+  if (patch.pickupInstructions !== undefined) values.pickup_instructions = patch.pickupInstructions.trim();
   if (patch.date !== undefined || patch.time !== undefined || patch.departureAt !== undefined) {
     values.departure_at = patch.departureAt || toDepartureAt(patch.date, patch.time);
   }
@@ -124,11 +187,18 @@ export function buildRidePatch(patch) {
   return values;
 }
 
-function rideRpcArgs(rideData) {
+export function buildRideRpcArgs(rideData) {
+  const pickupLocation = normalizeLocation(rideData.pickupLocation);
+  const destinationLocation = normalizeLocation(rideData.destinationLocation);
   return {
     p_vehicle_id: rideData.vehicleId,
     p_pickup: rideData.pickup.trim(),
     p_destination: rideData.destination.trim(),
+    p_pickup_place_id: pickupLocation?.placeId || null,
+    p_pickup_latitude: pickupLocation?.latitude ?? null,
+    p_pickup_longitude: pickupLocation?.longitude ?? null,
+    p_destination_place_id: destinationLocation?.placeId || null,
+    p_pickup_instructions: rideData.pickupInstructions?.trim() || '',
     p_departure_at: rideData.departureAt || toDepartureAt(rideData.date, rideData.time),
     p_journey_scale: rideData.journeyScale,
     p_seats_total: Number(rideData.seatsTotal),
@@ -184,9 +254,12 @@ export const RideService = {
     const current = await this.getRide(rideId);
     if (!current) throw new Error('Ride not found.');
     const merged = { ...current, ...patch };
-    validateRideDraft(merged, { publishing: current.status === 'Published' });
+    validateRideDraft(merged, {
+      publishing: current.status === 'Published',
+      requireConfirmedLocations: routeChangeRequiresConfirmation(current, patch)
+    });
     if (isSupabaseConfigured) {
-      const { error } = await supabase.rpc('update_ride', { p_ride_id: rideId, ...rideRpcArgs(merged) });
+      const { error } = await supabase.rpc('update_ride', { p_ride_id: rideId, ...buildRideRpcArgs(merged) });
       if (error) throw rpcError(error);
       return this.getRide(rideId);
     }
@@ -195,11 +268,11 @@ export const RideService = {
 
   async publishRide(hostId, rideData, status = 'Published') {
     if (!['Draft', 'Published'].includes(status)) throw new Error('Unsupported ride status.');
-    validateRideDraft(rideData, { publishing: status === 'Published' });
+    validateRideDraft(rideData, { publishing: status === 'Published', requireConfirmedLocations: true });
 
     if (isSupabaseConfigured) {
       const { data: rideId, error } = await supabase.rpc('create_ride', {
-        ...rideRpcArgs(rideData),
+        ...buildRideRpcArgs(rideData),
         p_publish: status === 'Published'
       });
       if (error) throw rpcError(error);

@@ -90,11 +90,12 @@ m3_advisor_followup
 m3_versioned_media_paths
 ```
 
-`001-018` are deployed and must not be run again or edited. Repository migration
-`019_m1_add_vehicle_driver_license.sql` is merged but not yet deployed: the live
-`vehicles` table does not currently have that column. Future changes start at
-`020`, are applied through migration tooling, and must be recorded in
-`docs/ai/SQL.md`. Do not make Dashboard-only schema changes.
+`001-018` are deployed and must not be run again or edited. Repository migrations
+`019_m1_add_vehicle_driver_license.sql` and `020_m2_add_route_locations.sql` are
+merged but not yet deployed: the live database does not currently have those
+columns or replacement Ride RPC signatures. Future changes start at `021`, are
+applied through migration tooling, and must be recorded in `docs/ai/SQL.md`. Do
+not make Dashboard-only schema changes.
 
 ## Security model
 

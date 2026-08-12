@@ -13,7 +13,7 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-018
-Repository SQL history: 001-019
+Repository SQL history: 001-020
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -22,8 +22,10 @@ host-owned vehicle requirement. `013-015` were deployed on 2026-08-12 for the
 confirmed Module 2 request, lifecycle, and review design. `016-018` were deployed
 on 2026-08-13 for production Module 3 messaging, advisor follow-up, and versioned
 media paths. `019_m1_add_vehicle_driver_license.sql` is the next repository
-migration and is not deployed yet. Future changes start at `020`; deployed
-history must never be rewritten.
+migration and is not deployed yet. `020_m2_add_route_locations.sql` is also
+pending deployment and adds confirmed route references and pickup instructions.
+Future changes start at `021`; deployed
+history must not be rewritten.
 
 Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
@@ -103,6 +105,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `017_m3_advisor_followup.sql` - covering index for the direct-user foreign key.
 - `018_m3_versioned_media_paths.sql` - sender/conversation/message/version Storage paths and matching RPC/policy contract.
 - `019_m1_add_vehicle_driver_license.sql` - pending deployment; adds `vehicles.driver_license_number` plus its column grants.
+- `020_m2_add_route_locations.sql` - pending deployment; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 
 ## Rules for New Database Work
 

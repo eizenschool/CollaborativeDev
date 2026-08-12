@@ -154,6 +154,7 @@ const seedData = {
       hostId: 'u_demo_1',
       pickup: 'Bangsar LRT, Kuala Lumpur',
       destination: 'Cyberjaya, Selangor',
+      pickupInstructions: 'Meet beside the main LRT entrance.',
       date: '2026-08-20',
       time: '08:00',
       journeyScale: 'Urban',
@@ -515,6 +516,9 @@ export const mockDb = {
       hostId,
       pickup: rideData.pickup,
       destination: rideData.destination,
+      pickupLocation: rideData.pickupLocation || null,
+      destinationLocation: rideData.destinationLocation || null,
+      pickupInstructions: rideData.pickupInstructions || '',
       date: rideData.date,
       time: rideData.time,
       departureAt,
@@ -781,8 +785,11 @@ function enrichReview(db, review) {
 function enrichRide(db, ride) {
   const host = db.users[ride.hostId];
   const impact = db.impact[ride.hostId] || { completedTrips: 0, co2SavedKg: 0, reputationScore: 0, rating: null };
+  const hasAcceptedRequests = Object.values(db.rideRequests)
+    .some((request) => request.rideId === ride.id && request.status === 'Accepted');
   return {
     ...ride,
+    hasAcceptedRequests,
     host: host
       ? {
           id: host.id,

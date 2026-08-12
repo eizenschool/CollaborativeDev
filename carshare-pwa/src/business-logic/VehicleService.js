@@ -36,6 +36,10 @@ export function buildVehicleRecord(userId, vehicle) {
   return record;
 }
 
+export function hasRegisteredVehicle(vehicles) {
+  return Array.isArray(vehicles) && vehicles.length > 0;
+}
+
 export const VehicleService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
 
