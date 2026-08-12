@@ -19,5 +19,5 @@ Project-level coordination only. Module work belongs in `docs/ai/modules/Mx_*.md
 ## BLOCKED / NEEDS TEAM CONFIRMATION
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.
 - Several existing module branches are behind current `Development`.
-- Exact Supabase production schema/RLS needs validation against the real Supabase project.
+- Module 1 + Module 2 schema/RLS drafted as `database/sql/001-007` (D010) - needs Module 2 owner sign-off on `006-007` (`rides`), then a live Supabase project to actually run against and validate.
 - Google Maps API setup is not yet recorded as verified repository configuration.

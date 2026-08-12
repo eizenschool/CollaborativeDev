@@ -22,6 +22,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/data-access/mockDataStore.js` — mock/local prototype store.
 - `src/data-access/mockMessageData.js` — messaging prototype/mock data.
 - `src/data-access/module6Store.js` — Module 6 prototype store.
+- `database/sql/` — numbered schema/RLS/trigger SQL files; see `docs/ai/SQL.md` for the current file map before reading these directly.
 
 ## Module Context
 - M1 → `docs/ai/modules/M1_PROFILE_REPUTATION.md`

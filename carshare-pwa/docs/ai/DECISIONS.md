@@ -85,9 +85,21 @@ This avoids fragile `../` and `../../` references when context files are moved w
 
 ---
 
+## D010 — Module 1 Supabase Schema Drafted as Numbered SQL Files
+**Status:** Proposed
+`database/sql/001-005` draft `profiles`, `vehicles`, `host_impact_stats`,
+the `handle_new_user` trigger, and RLS for Module 1, matching what
+`AuthService.js`/`ProfileService.js`/`VehicleService.js`/`HostImpactEngine.js`
+already query. `006-007` draft `rides` (Module 2) alongside them so Module
+1's Sign Up → Profile → Ride Hub flow is demoable end-to-end; Module 2's
+owner (Yee Zu Yao) should confirm or adjust `006-007` before the team
+treats them as final. Not yet run against a live Supabase project. Moves
+"final database schema/RLS" below from undiscussed to "drafted, pending
+team review" - still Proposed, not Accepted, until the team reviews it.
+
 ## Open Decisions
 - final ride/trip domain model;
-- final database schema/RLS;
+- final database schema/RLS (drafted in D010, pending team review);
 - detailed Google Maps integration;
 - shared lifecycle contract;
 - messaging persistence/realtime architecture;

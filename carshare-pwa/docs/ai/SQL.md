@@ -23,41 +23,33 @@ Do not store the full SQL history inside this file.
 
 ```text
 Supabase connected: No
-Official database schema: Not started
-Official SQL history: Empty
+Official database schema: Drafted (Module 1 tables + trigger + RLS; Module 2 rides table drafted alongside, pending M2 owner confirmation)
+Official SQL history: 001-007, see SQL File Map below
 ```
 
-The existing files:
+`docs/SUPABASE-SETUP.md` now documents these seven files directly (its
+"Run the schema" section links to them file-by-file) and is no longer just a
+draft for Module 1's part - Module 1's owner has adopted 001-005 as the
+working schema for that module. `docs/MODULE6-SCHEMA.md` is still a draft.
 
-```text
-docs/SUPABASE-SETUP.md
-docs/MODULE6-SCHEMA.md
-```
+The 006/007 (Module 2 `rides`) files are drafted, not yet confirmed by
+Module 2's owner - see D0XX in `docs/ai/DECISIONS.md`. Do not treat them as
+final until that review happens.
 
-are drafts only.
-
-Do not treat them as the final database design unless the team explicitly adopts part of them later.
+None of this has been run against a live Supabase project yet - "Supabase
+connected: No" stays No until someone actually creates the shared project
+and executes these files (see `docs/SUPABASE-SETUP.md` "Working as a team").
 
 ## SQL History
 
-No official SQL file has been created yet.
-
-When database development starts, create numbered SQL files in:
+Numbered SQL files exist in:
 
 ```text
 database/sql/
 ```
 
-Example:
-
-```text
-001_m1_create_profiles.sql
-002_m1_create_vehicles.sql
-003_m2_create_rides.sql
-004_m2_create_ride_requests.sql
-```
-
-The ordered `.sql` files themselves form the SQL development history.
+Current files (see "SQL File Map" below for what each does). The ordered
+`.sql` files themselves form the SQL development history.
 
 A separate SQL history document is not required during development.
 
@@ -98,36 +90,39 @@ NNN_project_short_description.sql
 
 ### Tables
 
-None confirmed yet.
+Drafted, not yet run on a live project: `profiles`, `vehicles`,
+`host_impact_stats` (Module 1), `rides` (Module 2, pending M2 confirmation).
 
 ### RLS
 
-None confirmed yet.
+Drafted for all four tables above (005, 007). `host_impact_stats` has no
+client insert/update/delete policy at all by design - only a future
+service-role pipeline should write to it.
 
 ### Functions / RPC
 
-None confirmed yet.
+`public.handle_new_user()` drafted (004) - mirrors a new `auth.users` row
+into `profiles` + `host_impact_stats` on sign-up.
 
 ### Triggers
 
-None confirmed yet.
+`on_auth_user_created` drafted (004) - fires `handle_new_user()` after
+insert on `auth.users`.
 
 ### Indexes
 
-None confirmed yet.
+None beyond the primary keys/foreign keys implied by the table definitions.
+No additional indexes confirmed yet.
 
 ## SQL File Map
 
-No official SQL files yet.
-
-Add entries here only after real SQL files exist.
-
-Example:
-
-```text
-- database/sql/001_m1_create_profiles.sql
-  - Creates the profiles table for Module 1.
-```
+- `database/sql/001_m1_create_profiles.sql` - Creates `profiles` (Module 1).
+- `database/sql/002_m1_create_vehicles.sql` - Creates `vehicles` (Module 1).
+- `database/sql/003_m1_create_host_impact_stats.sql` - Creates `host_impact_stats` (Module 1).
+- `database/sql/004_m1_handle_new_user_trigger.sql` - `handle_new_user()` function + `on_auth_user_created` trigger (Module 1).
+- `database/sql/005_m1_enable_rls.sql` - RLS + policies for `profiles`, `vehicles`, `host_impact_stats` (Module 1).
+- `database/sql/006_m2_create_rides.sql` - Creates `rides` (Module 2, drafted for Module 1's end-to-end demo; needs M2 owner confirmation).
+- `database/sql/007_m2_enable_rls.sql` - RLS + policies for `rides` (Module 2, same confirmation note as 006).
 
 ## Security
 

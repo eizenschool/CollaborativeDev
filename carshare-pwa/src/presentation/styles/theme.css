@@ -26,6 +26,16 @@
 
 * { box-sizing: border-box; }
 
+html, body {
+  /* Safety net: box-sizing above already prevents the most common overflow
+     cause (padding/border pushing an element past 100%), but this stops any
+     element that still ends up a few px too wide on a phone from forcing the
+     whole page into horizontal scroll ("PC-sized" feel on a phone). Doesn't
+     affect the intentionally-scrollable strips (e.g. .rail-card) below,
+     which manage their own local overflow-x independently. */
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   font-family: var(--font);
@@ -306,6 +316,37 @@ body {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
 
+/* My Profile on phones: same breakpoint/approach Module 2's Ride Hub uses
+   (see ride.css "@media (max-width: 700px)") - the sidebar (hero card +
+   section rail) stops being a fixed 260px sticky column and stacks above the
+   panel content instead. The rail itself becomes a fixed 2-column grid of
+   compact icon-over-label tiles (same visual language as the bottom tab
+   bar's mobile pattern above) so all 5 sections - Overview / Info &
+   Security / My Vehicles / Reputation & Impact / Account Settings - are
+   visible at once within the screen width, instead of a long
+   horizontally-scrolling strip that runs off the right edge. */
+@media (max-width: 700px) {
+  .profile-page { display: block; padding: 16px 16px 84px; }
+
+  .profile-sidebar { position: static; width: auto; margin-bottom: 14px; }
+
+  .hero-card { padding: 16px; margin-bottom: 10px; }
+
+  .rail-card {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 6px;
+  }
+  .rail-item {
+    flex-direction: column; justify-content: center; text-align: center;
+    gap: 4px; padding: 10px 6px; margin-bottom: 0; white-space: normal;
+    font-size: 11px; line-height: 1.25;
+  }
+  .rail-item .rail-icon { margin: 0 auto; }
+  .rail-divider { display: none; }
+  .rail-note { display: none; }
+
+  .panels { width: 100%; }
+}
+
 .snap-card { display: flex; align-items: center; gap: 12px; }
 .snap-icon {
   width: 36px; height: 36px; border-radius: 9px; background: var(--teal-tint); color: var(--teal-dark);
@@ -349,6 +390,10 @@ body {
   padding: 20px 22px; border-bottom: 1px solid var(--border);
 }
 .settings-row-last { border-bottom: none; }
+@media (max-width: 700px) {
+  .settings-row { flex-direction: column; align-items: stretch; gap: 12px; }
+  .settings-row .btn-outline { width: 100%; text-align: center; }
+}
 .btn-outline {
   background: #fff; border-radius: 10px; padding: 10px 20px; font-size: 13px; font-weight: 700;
   cursor: pointer; white-space: nowrap; font-family: inherit;
