@@ -12,8 +12,8 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-021
-Repository SQL history: 001-021
+Deployed SQL history: 001-022
+Repository SQL history: 001-022
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -26,7 +26,9 @@ media paths. `019_m1_add_vehicle_driver_license.sql` and
 driver-licence field, confirmed route references, pickup instructions, and the
 replacement Ride RPC signatures. `021_m3_stabilize_realtime_reads.sql` was
 deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
-Realtime refresh loops. Future changes start at `022`; deployed history
+Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
+on 2026-08-13 to allow current conversation members to generate short-lived
+URLs for private chat media. Future changes start at `023`; deployed history
 must not be rewritten.
 
 Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
@@ -54,7 +56,7 @@ Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 - `authenticated` has explicit least-privilege table/column grants plus owner policies with `USING` and `WITH CHECK`.
 - `public.handle_new_user()` is `SECURITY DEFINER`, has an empty `search_path`, uses schema-qualified names, and is not executable by `anon` or `authenticated`.
 - The public `avatars` bucket allows JPEG, PNG, and WebP up to 5 MB. Authenticated users can write only below their own UUID folder.
-- The private `message-media` bucket accepts the approved image/video MIME types up to 50 MB per object. Listing is blocked and committed downloads require current conversation access.
+- The private `message-media` bucket accepts the approved image/video MIME types up to 50 MB per object. Listing is blocked; only current conversation members can create a short-lived URL for committed media, and the signed download does not need a public bucket.
 - Rides require a vehicle owned by the host, persist `waypoints` as a JSON array, and enforce `0 <= seats_available <= seats_total`.
 - Pickup coordinates must be stored as a valid latitude/longitude pair, and pickup instructions are limited to 300 characters.
 - Authenticated clients have SELECT but no direct INSERT/UPDATE/DELETE on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce ownership and cross-row invariants with an empty `search_path`.
@@ -111,6 +113,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `019_m1_add_vehicle_driver_license.sql` - deployed; adds `vehicles.driver_license_number` plus its column grants.
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
+- `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
 
 ## Rules for New Database Work
 
