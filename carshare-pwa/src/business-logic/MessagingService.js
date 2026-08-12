@@ -204,6 +204,7 @@ function mapAttachment(row) {
     latitude: row.latitude,
     longitude: row.longitude,
     url: row.signed_url || null,
+    loadError: row.media_error || null,
   };
 }
 

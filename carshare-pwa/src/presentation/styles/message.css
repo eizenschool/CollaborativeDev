@@ -2030,6 +2030,28 @@
   object-fit: cover;
 }
 
+.message-media-unavailable {
+  display: flex;
+  padding: 16px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: #374151;
+  color: #fff;
+  text-align: center;
+}
+
+.message-media-unavailable span { font-size: 12px; font-weight: 700; }
+.message-media-unavailable small {
+  overflow: hidden;
+  width: 100%;
+  color: #d1d5db;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .message-media-video a {
   position: absolute;
   right: 6px;

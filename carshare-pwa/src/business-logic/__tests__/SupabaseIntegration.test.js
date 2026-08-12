@@ -176,6 +176,17 @@ describe('Supabase integration contracts', () => {
     expect(sql).toContain('grant execute on function public.mark_conversation_read');
   });
 
+  it('allows current conversation members to sign private chat media without listing the bucket', async () => {
+    const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../database/sql/022_m3_allow_member_media_signing.sql', import.meta.url),
+      'utf8'
+    ));
+    expect(sql).toContain("'storage.object.sign'");
+    expect(sql).toContain("'storage.object.sign_many'");
+    expect(sql).toContain('private.conversation_is_visible');
+    expect(sql).not.toContain("'storage.object.list'");
+  });
+
   it('requires complete route and schedule data for drafts too', () => {
     expect(() => validateRideDraft({
       pickup: 'KL Sentral',
