@@ -14,7 +14,7 @@ import {
   IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart,
   IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle,
   IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar,
-  IconLayers, IconShield, IconAlertTriangle, IconRoute, IconSettings, IconCamera, IconChart
+  IconLayers, IconShield, IconAlertTriangle, IconSettings, IconCamera, IconChart, IconUsers
 } from './icons.jsx';
 
 const REPUTATION_THRESHOLD = 60; // minimum reputation score required to publish rides (admin-configurable)
@@ -110,8 +110,6 @@ export default function MyProfile() {
             summary={summary}
             vehicles={vehicles}
             activeVehicleCount={activeVehicleCount}
-            goTo={setPanel}
-            onPublishRide={() => navigate('/ride/publish')}
             onOpenImpact={() => navigate('/trip')}
           />
         )}
@@ -136,7 +134,7 @@ export default function MyProfile() {
 
 // ---------- OVERVIEW ----------
 
-function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo, onPublishRide, onOpenImpact }) {
+function OverviewPanel({ user, summary, vehicles, activeVehicleCount, onOpenImpact }) {
   const hasEmergencyContact = Boolean(user.emergencyContact?.name && user.emergencyContact?.phone);
   const meetsThreshold = summary ? summary.reputationScore >= REPUTATION_THRESHOLD : true;
 
@@ -169,19 +167,6 @@ function OverviewPanel({ user, summary, vehicles, activeVehicleCount, goTo, onPu
       </div>
 
       <ImpactEntryCard onOpenImpact={onOpenImpact} />
-
-      <div className="card">
-        <p className="card-title">Quick actions</p>
-        <p className="card-subtitle">Common tasks, one click from wherever you land on your profile</p>
-        <div className="quick-actions">
-          <button className="qa-btn" onClick={() => goTo('info')}><IconEdit size={12} /> Edit profile info</button>
-          <button className="qa-btn" onClick={() => goTo('vehicles')}><IconPlus size={12} /> Add a vehicle</button>
-          <button className="qa-btn" onClick={() => goTo('reputation')}><IconBolt size={12} /> See impact breakdown</button>
-          <button className="qa-btn primary" onClick={onPublishRide}>
-            <IconRoute size={12} /> Publish new ride
-          </button>
-        </div>
-      </div>
 
       <div className="card">
         <p className="card-title"><IconShield size={13} /> Account health</p>
@@ -276,7 +261,10 @@ function InfoSecurityPanel({ user, onSaved }) {
     <>
       <div className="panel-head"><h2>Info &amp; Security</h2><p>Your identity, photo, and emergency contact — saved together</p></div>
       <div className="grid-2">
-        <BasicInfoCard user={user} onSaved={onSaved} />
+        <div>
+          <BasicInfoCard user={user} onSaved={onSaved} />
+          <ChangePasswordCard userId={user.id} />
+        </div>
         <div>
           <ProfilePhotoCard user={user} onSaved={onSaved} />
           <EmergencyContactCard user={user} onSaved={onSaved} />
@@ -290,8 +278,6 @@ function BasicInfoCard({ user, onSaved }) {
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
-  const [newPassword, setNewPassword] = useState('');
-  const [showPw, setShowPw] = useState(false);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -300,9 +286,8 @@ function BasicInfoCard({ user, onSaved }) {
     setSaving(true);
     setStatus(null);
     try {
-      const updated = await ProfileService.updateProfileInfo(user.id, { fullName, email, phone, newPassword });
+      const updated = await ProfileService.updateProfileInfo(user.id, { fullName, email, phone });
       onSaved(updated);
-      setNewPassword('');
       setStatus({ type: 'success', text: 'Profile updated.' });
     } catch (err) {
       setStatus({ type: 'error', text: err.message });
@@ -340,22 +325,84 @@ function BasicInfoCard({ user, onSaved }) {
             <input value={phone} onChange={(e) => setPhone(e.target.value)} required />
           </div>
         </div>
+        <button className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }} disabled={saving}>
+          <IconSave size={14} /> {saving ? 'Saving…' : 'Save Changes'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// Deliberately its own form/card, separate from Basic Information: changing a
+// password is a sensitive action and shouldn't ride along with a routine name/
+// email/phone edit, and it requires the current password before Supabase (or
+// the mock adapter) will accept a new one.
+function ChangePasswordCard({ userId }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    try {
+      await ProfileService.changePassword(userId, { currentPassword, newPassword });
+      setCurrentPassword('');
+      setNewPassword('');
+      setStatus({ type: 'success', text: 'Password updated.' });
+    } catch (err) {
+      setStatus({ type: 'error', text: err.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <p className="card-title">Change password</p>
+      <p className="card-subtitle">Requires your current password</p>
+
+      {status && <div className={'alert ' + (status.type === 'error' ? 'alert-error' : 'alert-success')}>{status.text}</div>}
+
+      <form onSubmit={handleSave}>
         <div className="field">
-          <label>New Password <span className="hint">(leave blank to keep current)</span></label>
+          <label>Current Password *</label>
           <div className="input-wrap">
             <span className="prefix-icon"><IconLock size={14} /></span>
             <input
-              type={showPw ? 'text' : 'password'}
+              type={showCurrent ? 'text' : 'password'}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+            <button type="button" className="toggle-visibility" onClick={() => setShowCurrent((s) => !s)}>
+              {showCurrent ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+            </button>
+          </div>
+        </div>
+        <div className="field">
+          <label>New Password *</label>
+          <div className="input-wrap">
+            <span className="prefix-icon"><IconLock size={14} /></span>
+            <input
+              type={showNew ? 'text' : 'password'}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Min. 8 characters"
+              minLength={8}
+              required
             />
-            <button type="button" className="toggle-visibility" onClick={() => setShowPw((s) => !s)}>
-              {showPw ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+            <button type="button" className="toggle-visibility" onClick={() => setShowNew((s) => !s)}>
+              {showNew ? <IconEyeOff size={14} /> : <IconEye size={14} />}
             </button>
           </div>
         </div>
         <button className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }} disabled={saving}>
-          <IconSave size={14} /> {saving ? 'Saving…' : 'Save Changes'}
+          <IconLock size={14} /> {saving ? 'Updating…' : 'Change Password'}
         </button>
       </form>
     </div>
@@ -465,7 +512,7 @@ function EmergencyContactCard({ user, onSaved }) {
 
 // ---------- MY VEHICLES ----------
 
-const emptyVehicleForm = { id: null, make: '', model: '', plate: '', colour: '', seats: 4, year: new Date().getFullYear() };
+const emptyVehicleForm = { id: null, make: '', model: '', plate: '', driverLicenseNumber: '', colour: '', seats: 4, year: new Date().getFullYear() };
 
 function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount }) {
   const [form, setForm] = useState(null);
@@ -503,10 +550,28 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
         </button>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="stat-row"><span className="stat-value">{vehicles.length}</span><span className="stat-label">Total Vehicles</span></div>
-        <div className="stat-row"><span className="stat-value">{activeVehicleCount}</span><span className="stat-label">Active</span></div>
-        <div className="stat-row" style={{ borderBottom: 'none' }}><span className="stat-value">{vehicles.reduce((s, v) => s + v.seats, 0)}</span><span className="stat-label">Total Seats</span></div>
+      <div className="grid-3">
+        <div className="card snap-card">
+          <span className="snap-icon"><IconCar size={16} /></span>
+          <div>
+            <div className="snap-value">{vehicles.length}</div>
+            <div className="snap-label">Total Vehicles</div>
+          </div>
+        </div>
+        <div className="card snap-card">
+          <span className="snap-icon"><IconCheckCircle size={16} /></span>
+          <div>
+            <div className="snap-value">{activeVehicleCount}</div>
+            <div className="snap-label">Active</div>
+          </div>
+        </div>
+        <div className="card snap-card">
+          <span className="snap-icon"><IconUsers size={16} /></span>
+          <div>
+            <div className="snap-value">{vehicles.reduce((s, v) => s + v.seats, 0)}</div>
+            <div className="snap-label">Total Seats</div>
+          </div>
+        </div>
       </div>
 
       {form && (
@@ -517,6 +582,17 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
             <div className="field"><label>Make</label><div className="input-wrap"><input value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} required /></div></div>
             <div className="field"><label>Model</label><div className="input-wrap"><input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} required /></div></div>
             <div className="field"><label>Plate Number</label><div className="input-wrap"><input value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} required /></div></div>
+            <div className="field">
+              <label>Driver's License Number <span className="hint">confirms you're licensed to drive this vehicle</span></label>
+              <div className="input-wrap">
+                <input
+                  value={form.driverLicenseNumber}
+                  onChange={(e) => setForm({ ...form, driverLicenseNumber: e.target.value })}
+                  placeholder="e.g. D1234567"
+                  required
+                />
+              </div>
+            </div>
             <div className="field"><label>Colour</label><div className="input-wrap"><input value={form.colour} onChange={(e) => setForm({ ...form, colour: e.target.value })} /></div></div>
             <div className="field"><label>Seats available</label><div className="input-wrap"><input type="number" min="1" max="8" value={form.seats} onChange={(e) => setForm({ ...form, seats: e.target.value })} required /></div></div>
             <div className="field"><label>Year</label><div className="input-wrap"><input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} required /></div></div>

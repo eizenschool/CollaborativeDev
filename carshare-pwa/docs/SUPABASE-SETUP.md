@@ -31,7 +31,8 @@ Restart `npm run dev` after changing environment values.
 
 ## Adopted backend scope
 
-- Supabase Auth: email/password with email confirmation.
+- Supabase Auth: email/password with email confirmation, and Google OAuth (see
+  below for the Dashboard-side setup this needs).
 - `profiles`: authenticated-visible display fields only.
 - `profile_private`: owner-only phone and emergency contact; email remains in Auth.
 - `vehicles`: owner-only CRUD with one active vehicle per user.
@@ -39,8 +40,33 @@ Restart `npm run dev` after changing environment values.
 - `rides`: authenticated search, host-only CRUD, waypoints, seat constraints, and mandatory host-owned vehicle.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
 
-Google OAuth, phone OTP, hard account deletion, ride requests/reviews, and
-cross-device Messaging are not part of this connection.
+Phone OTP, hard account deletion, ride requests/reviews, and cross-device
+Messaging are not part of this connection.
+
+## Enabling Google OAuth (Dashboard + Google Cloud, not code)
+
+The app-side code (`AuthService.signInWithGoogle`, the "Continue with Google"
+button on `AuthPage.jsx`) is already in place and calls
+`supabase.auth.signInWithOAuth({ provider: 'google' })`. No new SQL migration
+is needed for this: `handle_new_user()` (`008_m1_secure_profiles_and_auth.sql`)
+already falls back through `full_name` → `name` → the email's local part, and
+already reads `avatar_url`/`picture` into `profile_photo_url` - exactly the
+`raw_user_meta_data` shape Google's provider supplies. What is still required
+is Dashboard/Cloud Console configuration, which only a project owner can do:
+
+1. In Google Cloud Console, create an OAuth 2.0 Client ID (Web application)
+   for this project.
+2. Add `https://pnetstmovctfwqcumodx.supabase.co/auth/v1/callback` as an
+   Authorized redirect URI on that client.
+3. In the Supabase Dashboard, go to Authentication → Providers → Google,
+   enable it, and paste in that Client ID and Client Secret.
+4. In Authentication → URL Configuration, make sure Site URL and Redirect URLs
+   include the app's dev/prod origins (the code sends `redirectTo:
+   window.location.origin`, so whatever origin the app is served from must be
+   allow-listed there).
+
+Until step 3 is done, clicking "Continue with Google" will reach Supabase and
+fail with a provider-not-enabled error - that is expected, not a code bug.
 
 ## Database history and deployment
 
@@ -90,3 +116,7 @@ For live acceptance, use two real email accounts and verify:
 5. Ride draft/publish/search/edit-waypoints/cancel.
 6. An unauthenticated client cannot access any business table.
 7. Messaging and Modules 4-6 local demo functions still operate.
+8. Once Google OAuth is enabled in the Dashboard (see above): "Continue with
+   Google" reaches the Google consent screen, returns to the app signed in,
+   and creates a `profiles`/`profile_private`/`host_impact_stats` row with a
+   sensible name and avatar picked up automatically.

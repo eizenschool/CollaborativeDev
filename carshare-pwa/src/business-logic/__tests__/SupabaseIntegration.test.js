@@ -61,6 +61,7 @@ describe('Supabase integration contracts', () => {
       make: ' Perodua ',
       model: ' Myvi ',
       plate: ' VAA 1234 ',
+      driverLicenseNumber: ' D1234567 ',
       colour: ' Blue ',
       seats: 4,
       year: 2024,
@@ -70,7 +71,12 @@ describe('Supabase integration contracts', () => {
 
     expect(record).not.toHaveProperty('id');
     expect(record).not.toHaveProperty('unexpected');
-    expect(record).toMatchObject({ owner_id: 'user-a', make: 'Perodua', plate: 'VAA 1234' });
+    expect(record).toMatchObject({
+      owner_id: 'user-a',
+      make: 'Perodua',
+      plate: 'VAA 1234',
+      driver_license_number: 'D1234567'
+    });
   });
 
   it('persists and hydrates ride waypoints', () => {
