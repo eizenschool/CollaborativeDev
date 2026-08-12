@@ -34,9 +34,9 @@ Restart `npm run dev` after changing environment values.
   below for the Dashboard-side setup this needs).
 - `profiles`: authenticated-visible display fields only.
 - `profile_private`: owner-only phone and emergency contact; email remains in Auth.
-- `vehicles`: owner-only CRUD with one active vehicle per user.
+- `vehicles`: owner-only CRUD with a driver-licence field and one active vehicle per user.
 - `host_impact_stats`: authenticated read-only until a trusted update pipeline exists.
-- `rides`: authenticated search, host-only CRUD, waypoints, seat constraints, and mandatory host-owned vehicle.
+- `rides`: authenticated search, RPC-only host mutation, confirmed route references, pickup instructions, waypoints, seat constraints, and a mandatory host-owned vehicle.
 - `ride_requests` and `ride_reviews`: RPC-only participation and mutual review lifecycle.
 - `conversations`, `conversation_members`, `messages`, and `message_attachments`: member-readable, RPC-mutated messaging with seven-day terminal retention.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
@@ -75,7 +75,8 @@ fail with a provider-not-enabled error - that is expected, not a code bug.
 
 The authoritative SQL lives in `database/sql/`. Files `001-010` were deployed
 as one atomic initial migration, `011-012` as hardening follow-ups, `013-015`
-as the completed Module 2 lifecycle, and `016-018` as Module 3 messaging. The
+as the completed Module 2 lifecycle, `016-018` as Module 3 messaging, and
+`019-020` as the vehicle driver-licence and Ride route-location additions. The
 live migration records are:
 
 ```text
@@ -88,14 +89,15 @@ m2_ride_reviews
 m3_supabase_messaging
 m3_advisor_followup
 m3_versioned_media_paths
+m1_add_vehicle_driver_license
+m2_add_route_locations
 ```
 
-`001-018` are deployed and must not be run again or edited. Repository migrations
-`019_m1_add_vehicle_driver_license.sql` and `020_m2_add_route_locations.sql` are
-merged but not yet deployed: the live database does not currently have those
-columns or replacement Ride RPC signatures. Future changes start at `021`, are
-applied through migration tooling, and must be recorded in `docs/ai/SQL.md`. Do
-not make Dashboard-only schema changes.
+`001-020` are deployed and must not be run again or edited. The live database
+includes the driver-licence column, canonical route-location columns, their
+constraints, and the replacement Ride RPC signatures. Future changes start at
+`021`, are applied through migration tooling, and must be recorded in
+`docs/ai/SQL.md`. Do not make Dashboard-only schema changes.
 
 ## Security model
 
@@ -125,8 +127,8 @@ For live acceptance, use two real email accounts and verify:
 1. Sign up, click the confirmation email, sign in, refresh, and sign out.
 2. User B cannot read User A's `profile_private` row or change A's vehicle/ride.
 3. Avatar upload, profile updates, deactivate/sign-in reactivation.
-4. Vehicle create/edit/active/delete and the single-active constraint.
-5. Ride draft/publish/search/edit-waypoints/cancel.
+4. Vehicle create/edit/active/delete, driver-licence persistence, and the single-active constraint.
+5. Ride draft/publish/search/edit-waypoints/cancel, confirmed Place IDs, current-location pickup, and pickup instructions.
 6. An unauthenticated client cannot access any business table.
 7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, and expired access denial.
 8. Modules 4-6 local demo functions still operate.

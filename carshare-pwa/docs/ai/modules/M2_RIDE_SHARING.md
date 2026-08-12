@@ -24,7 +24,8 @@ Ride data, accepted participation context, lifecycle state, searchable rides.
 
 ## Current Status
 Module 2 is connected to the shared Supabase project through `RideService.js`,
-`RideRequestService.js`, and `RideReviewService.js`. Deployed SQL `006-015`
+`RideRequestService.js`, and `RideReviewService.js`. Deployed SQL `006-015` and
+`020`
 covers ride publishing, authoritative `departure_at`, waypoints, multi-seat
 requests, atomic acceptance/cancellation, manual recruitment close/reopen,
 automatic departure-time lifecycle processing, and mutual Completed-ride
@@ -56,8 +57,8 @@ public pickup instructions are limited to 300 characters and follow the same
 accepted-request/status edit lock as the Ride.
 
 `database/sql/020_m2_add_route_locations.sql` contains the required nullable
-columns, constraints, and replacement create/update RPC signatures. It is
-prepared locally but not yet deployed to the shared project.
+columns, constraints, and replacement create/update RPC signatures. It was
+deployed to the shared project on 2026-08-13.
 
 Route and waypoint previews continue to use Maps Embed API directions mode.
 The builder sends Place ID or coordinate references when available and falls
