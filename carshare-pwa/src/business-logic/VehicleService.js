@@ -2,9 +2,19 @@
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 
-function validateVehicle({ make, model, plate, seats }) {
+// Malaysian JPJ driving licenses don't have one universal public format the
+// way MyKad IC numbers do, so this is a lenient input-capture check (an
+// eligibility gate, not a real verification - that remains Module 6's domain).
+function validateDriverLicenseNumber(driverLicenseNumber) {
+  return /^[A-Za-z0-9]{5,20}$/.test((driverLicenseNumber || '').trim());
+}
+
+function validateVehicle({ make, model, plate, seats, driverLicenseNumber }) {
   if (!make?.trim() || !model?.trim()) throw new Error('Make and model are required.');
   if (!plate?.trim()) throw new Error('Plate number is required.');
+  if (!validateDriverLicenseNumber(driverLicenseNumber)) {
+    throw new Error("Enter a valid driver's license number (5-20 letters/numbers).");
+  }
   if (!Number.isInteger(seats) || seats < 1 || seats > 8) {
     throw new Error('Seats must be a whole number between 1 and 8.');
   }
@@ -16,6 +26,7 @@ export function buildVehicleRecord(userId, vehicle) {
     make: vehicle.make.trim(),
     model: vehicle.model.trim(),
     plate: vehicle.plate.trim(),
+    driver_license_number: vehicle.driverLicenseNumber?.trim() || '',
     colour: vehicle.colour?.trim() || '',
     seats: vehicle.seats,
     year: vehicle.year,

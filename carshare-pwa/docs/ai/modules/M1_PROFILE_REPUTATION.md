@@ -39,6 +39,16 @@ unconfirmed Host Impact formula.
 existing `handle_new_user()` trigger already covers Google's profile/avatar
 metadata shape. Still needs Google Cloud + Supabase Dashboard provider setup
 (see `docs/SUPABASE-SETUP.md`) before it works against the live project.
+Sign-up now also validates a Malaysian IC (MyKad) number format
+(`AuthService.validateMalaysianIC`) as an identity gate before an account can
+be created; the value is never persisted or sent to Supabase - format check
+only. Adding a vehicle now also requires a driver's license number
+(`vehicles.driver_license_number`, `database/sql/016`), an input-capture
+eligibility gate rather than a verified Module 6 check.
+The post-login landing route changed from `/profile` to `/home`
+(`HomeScreen.jsx`), a lightweight welcome + quick-actions screen; Profile's
+Overview panel dropped its now-redundant "Quick actions" card since Home
+owns primary navigation.
 
 ## Open Questions
 Reputation formula/weights; Host Impact formula; badge/publishing thresholds;

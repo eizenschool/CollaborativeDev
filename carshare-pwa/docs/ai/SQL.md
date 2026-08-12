@@ -12,13 +12,14 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + complete Module 2 ride/request/review lifecycle
-Official SQL history: 001-015
+Official SQL history: 001-016
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
 `011-012` are deployed follow-ups for advisor findings and the confirmed
 host-owned vehicle requirement. `013-015` were deployed on 2026-08-12 for the
-confirmed Module 2 request, lifecycle, and review design. Future changes start at `016` and
+confirmed Module 2 request, lifecycle, and review design. `016` adds the
+vehicle driver's-license-number field. Future changes start at `017` and
 must not rewrite deployed history.
 
 Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
@@ -29,7 +30,7 @@ Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
 - `profiles`: authenticated-visible safe fields only (`full_name`, photo, status).
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
-- `vehicles`: owner-only CRUD and at most one active vehicle per owner.
+- `vehicles`: owner-only CRUD and at most one active vehicle per owner; includes an owner-only `driver_license_number` (input-capture eligibility gate, not a verified Module 6 check).
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
 - `rides`: authoritative `departure_at`, lifecycle metadata, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation.
@@ -82,6 +83,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `013_m2_ride_requests_and_departure.sql` - authoritative departure instant, ride lifecycle metadata, multi-seat requests, RLS/grants, and atomic RPC mutations.
 - `014_m2_lifecycle_cron.sql` - minute lifecycle processor and service-role-only verified ride transition.
 - `015_m2_ride_reviews.sql` - mutual Completed-ride reviews and account-level average star rating updates.
+- `016_m1_add_vehicle_driver_license.sql` - adds `vehicles.driver_license_number` plus its column grants.
 
 ## Rules for New Database Work
 

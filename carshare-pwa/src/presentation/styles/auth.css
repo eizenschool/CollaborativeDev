@@ -150,6 +150,7 @@
 .auth-field label {
   display: block; font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 7px; letter-spacing: 0.2px;
 }
+.auth-field label .hint { font-weight: 400; color: var(--muted); letter-spacing: 0; text-transform: none; }
 .auth-input-wrap { position: relative; display: flex; align-items: center; }
 .auth-input-wrap .prefix {
   position: absolute; left: 1px; top: 50%; transform: translateY(-50%); color: var(--muted);

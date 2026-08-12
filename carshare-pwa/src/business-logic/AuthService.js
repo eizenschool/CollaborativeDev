@@ -11,6 +11,13 @@ function validatePassword(password) {
   return typeof password === 'string' && password.length >= 8;
 }
 
+// Malaysian MyKad format: 6-digit birthdate (YYMMDD) + 2-digit birthplace/state
+// code + 4-digit serial, with or without the conventional dashes. This is a
+// format-only sign-up gate - the value is never persisted or sent to Supabase.
+export function validateMalaysianIC(ic) {
+  return /^\d{6}-?\d{2}-?\d{4}$/.test((ic || '').trim());
+}
+
 export function buildSignUpResult({ authUser, session, appUser }) {
   if (!session) {
     return {
@@ -29,10 +36,13 @@ export function buildSignUpResult({ authUser, session, appUser }) {
 export const AuthService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
 
-  async signUp({ fullName, email, password }) {
+  async signUp({ fullName, email, password, icNumber }) {
     if (!fullName?.trim()) throw new Error('Full name is required.');
     if (!validateEmail(email)) throw new Error('Enter a valid email address.');
     if (!validatePassword(password)) throw new Error('Password must be at least 8 characters.');
+    if (!validateMalaysianIC(icNumber)) {
+      throw new Error('Enter a valid Malaysian IC number, e.g. 990101-14-5678.');
+    }
 
     if (isSupabaseConfigured) {
       const options = { data: { full_name: fullName.trim() } };
