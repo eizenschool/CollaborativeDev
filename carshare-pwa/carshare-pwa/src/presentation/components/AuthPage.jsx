@@ -2,11 +2,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { IconCar, IconMail, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar } from './icons.jsx';
+import { IconCar, IconMail, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar, IconGoogle } from './icons.jsx';
 import '../styles/auth.css';
 
 export default function AuthPage() {
-  const { signUp, signIn } = useAuth();
+  const { signUp, signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [mode, setMode] = useState('signup'); // 'signup' | 'login'
@@ -17,6 +17,24 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const [verificationMessage, setVerificationMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  // One button covers both Sign Up and Login: Supabase's Google provider
+  // creates the auth.users row on first arrival and just signs the user in on
+  // every visit after, so there's no separate "sign up with Google" call.
+  // This redirects away from the page, so on success there is nothing further
+  // to do here - AuthContext picks the session up when the browser returns.
+  async function handleGoogle() {
+    setError('');
+    setVerificationMessage('');
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.');
+      setGoogleLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -120,6 +138,18 @@ export default function AuthPage() {
 
           {error && <div className="auth-error">{error}</div>}
           {verificationMessage && <div className="alert alert-success">{verificationMessage}</div>}
+
+          <button
+            type="button"
+            className="google-btn"
+            onClick={handleGoogle}
+            disabled={googleLoading || loading}
+          >
+            <IconGoogle size={18} />
+            {googleLoading ? 'Redirecting to Google…' : mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
+          </button>
+
+          <div className="auth-divider"><span>or {mode === 'signup' ? 'sign up' : 'sign in'} with email</span></div>
 
           <form onSubmit={handleSubmit}>
             {mode === 'signup' && (

@@ -72,6 +72,26 @@ export const AuthService = {
     return mockDb.signIn({ email });
   },
 
+  // Google Sign-In/Sign-Up share one Supabase call: `signInWithOAuth` upserts
+  // the auth.users row either way, then the 008 handle_new_user() trigger
+  // creates the matching profiles/profile_private/host_impact_stats rows the
+  // same as email/password sign-up does (it already reads raw_user_meta_data's
+  // full_name/name/avatar_url/picture fallbacks, which is what Google supplies).
+  // This redirects the browser away and back, so unlike signUp/signIn it does
+  // not return the signed-in user directly - AuthContext's onAuthStateChange
+  // listener picks up the SIGNED_IN event after the redirect completes.
+  async signInWithGoogle() {
+    if (!isSupabaseConfigured) {
+      throw new Error('Google sign-in needs a live Supabase connection. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local first.');
+    }
+
+    const options = {};
+    if (typeof window !== 'undefined') options.redirectTo = window.location.origin;
+
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options });
+    if (error) throw error;
+  },
+
   async signOut() {
     if (isSupabaseConfigured) {
       const { error } = await supabase.auth.signOut();

@@ -92,12 +92,12 @@ original `001-007` drafts are kept as history; `008-012` harden the first slice,
 and `013-015` add the accepted ride/request/lifecycle/review model.
 
 ## D011 — Supabase Scope and Authentication
-**Status:** Accepted
+**Status:** Superseded by D015 (Google OAuth only; the rest of this decision stands)
 The shared project is `pnetstmovctfwqcumodx`. Frontend configuration uses
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; the old anon-key name
 is compatibility-only. This slice uses email/password with email verification.
-Phone OTP, Google OAuth, account hard deletion, and Messaging Realtime are
-deferred. Modules 3-6 retain their local adapters.
+Phone OTP, account hard deletion, and Messaging Realtime are deferred.
+Modules 3-6 retain their local adapters.
 
 ## D012 — Module 2 Lifecycle and Participation Contract
 **Status:** Accepted
@@ -128,6 +128,19 @@ stretched phone layouts. `src/presentation/styles/theme.css` remains the runtime
 source of truth for exact implemented token values. Files under `docs/figma/`
 are design references and do not silently override accepted decisions, this
 contract, or verified current implementation.
+
+## D015 — Google OAuth Added to the Login Workflow
+**Status:** Accepted
+`AuthPage.jsx` offers "Continue with Google" alongside email/password, for
+both Sign Up and Login (one Supabase call covers both: `signInWithOAuth`
+creates the `auth.users` row on first arrival and just signs the user in on
+every visit after). No new SQL migration was needed: `handle_new_user()`
+(`008_m1_secure_profiles_and_auth.sql`) already tolerates Google's
+`raw_user_meta_data` shape (`full_name`/`name`/`avatar_url`/`picture`
+fallbacks). Enabling this end-to-end still needs a one-time, code-independent
+Dashboard step - a Google Cloud OAuth Client ID/Secret registered against the
+Supabase provider and matching Redirect URLs - tracked in
+`docs/SUPABASE-SETUP.md` and `docs/ai/TODO.md`.
 
 ## Open Decisions
 - database schemas/RLS for Modules 3-6;

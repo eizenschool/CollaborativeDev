@@ -23,3 +23,4 @@ Project-level coordination only. Module work belongs in `docs/ai/modules/Mx_*.md
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.
 - Several existing module branches are behind current `Development`.
 - Google Cloud Console setup remains unverified until the restricted Embed-only key is created; do not enable billable Maps SKUs to unblock it.
+- Google OAuth (D015): code is in place, but someone with Supabase Dashboard + Google Cloud Console access still needs to register the OAuth Client ID/Secret and enable the provider - see `docs/SUPABASE-SETUP.md`. Cannot demo "Continue with Google" against the live project until that's done.
