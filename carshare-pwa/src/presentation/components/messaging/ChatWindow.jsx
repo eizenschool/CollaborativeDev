@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   IconArrowLeft,
-  IconCamera,
+  IconArchive,
   IconClock,
   IconMapPin,
   IconMessage,
@@ -48,6 +48,23 @@ function ChatEmptyState({ title = 'No messages yet', text = 'Send a message to s
       <h3>{title}</h3>
       <p>{text}</p>
     </div>
+  );
+}
+
+function ChatSkeleton() {
+  return (
+    <section className="message-chat-window" aria-label="Loading conversation" aria-busy="true">
+      <div className="message-chat-header message-chat-header-skeleton" aria-hidden="true">
+        <span className="message-skeleton-avatar" />
+        <span className="message-skeleton-lines"><i /><i /></span>
+      </div>
+      <div className="message-chat-skeleton" aria-hidden="true">
+        <i className="message-chat-skeleton-bubble message-chat-skeleton-bubble-left" />
+        <i className="message-chat-skeleton-bubble message-chat-skeleton-bubble-right" />
+        <i className="message-chat-skeleton-bubble message-chat-skeleton-bubble-left message-chat-skeleton-bubble-short" />
+      </div>
+      <span className="message-sr-only">Loading conversation</span>
+    </section>
   );
 }
 
@@ -127,8 +144,12 @@ export default function ChatWindow({
   const [isPending, setIsPending] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const fileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
   const messageBottomRef = useRef(null);
   const mediaEntriesRef = useRef([]);
+  const deleteCancelRef = useRef(null);
+  const deleteModalRef = useRef(null);
+  const deleteReturnFocusRef = useRef(null);
 
   const releaseMediaEntries = useCallback((entries) => {
     entries.filter((entry) => entry.source === 'new').forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
@@ -144,6 +165,7 @@ export default function ChatWindow({
     setEditingMessage(null);
     setErrorMessage('');
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (messageInputRef.current) messageInputRef.current.style.height = '';
   }, [releaseMediaEntries]);
 
   const loadConversation = useCallback(async () => {
@@ -182,6 +204,28 @@ export default function ChatWindow({
   }, [mediaEntries]);
 
   useEffect(() => () => releaseMediaEntries(mediaEntriesRef.current), [releaseMediaEntries]);
+
+  useEffect(() => {
+    if (!deleteTarget) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !isPending) closeDeleteDialog();
+      if (event.key !== 'Tab') return;
+      const focusable = [...(deleteModalRef.current?.querySelectorAll('button:not(:disabled)') || [])];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    deleteCancelRef.current?.focus();
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [deleteTarget, isPending]);
 
   useEffect(() => {
     if (highlightedMessageId) {
@@ -249,6 +293,29 @@ export default function ChatWindow({
     setMediaEntries(message.attachments.filter((item) => ['image', 'video'].includes(item.kind)).map(mediaEntryFromAttachment));
     const sharedLocation = message.attachments.find((item) => item.kind === MESSAGE_TYPE.LOCATION);
     setLocation(sharedLocation ? { latitude: sharedLocation.latitude, longitude: sharedLocation.longitude } : null);
+    window.setTimeout(() => messageInputRef.current?.focus(), 0);
+  }
+
+  function openDeleteDialog(message) {
+    deleteReturnFocusRef.current = document.activeElement;
+    setDeleteTarget(message);
+  }
+
+  function closeDeleteDialog() {
+    setDeleteTarget(null);
+    window.setTimeout(() => deleteReturnFocusRef.current?.focus(), 0);
+  }
+
+  function handleComposerKeyDown(event) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (text.trim() || mediaEntries.length || location) submitMessage();
+  }
+
+  function resizeComposer(event) {
+    const input = event.currentTarget;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
   }
 
   async function submitMessage() {
@@ -305,7 +372,7 @@ export default function ChatWindow({
     );
   }
   if (isLoading || !conversation) {
-    return <section className="message-chat-window"><div className="message-loading-state">Loading conversation…</div></section>;
+    return <ChatSkeleton />;
   }
 
   const hasDraft = Boolean(text.trim() || mediaEntries.length || location);
@@ -322,22 +389,25 @@ export default function ChatWindow({
             {conversation.type === 'group' && <span className="message-chat-header-badge">Group chat</span>}
             {conversation.isArchived && <span className="message-chat-header-badge">Archived</span>}
           </div>
-          <p>{memberDescription}</p>
+          <p className="message-chat-header-context">
+            <span><span className="message-status-dot" aria-hidden="true" />{conversation.rideStatus ? `${conversation.rideStatus} · ${memberDescription}` : memberDescription}</span>
+            {conversation.tripRoute && <span className="message-chat-header-route">{conversation.tripRoute}</span>}
+          </p>
         </div>
         <div className="message-chat-header-actions">
-          <button type="button" className="message-chat-header-button" onClick={() => onOpenHistory(conversation.id)} aria-label="Open message history"><IconClock size={18} /></button>
-          <button type="button" className="message-chat-header-button" onClick={() => onManage(conversation)} aria-label="Manage conversation"><IconMoreVertical size={18} /></button>
+          <button type="button" className="message-chat-header-button" onClick={() => onOpenHistory(conversation.id)} aria-label="Open message history" title="Message history"><IconClock size={19} /></button>
+          <button type="button" className="message-chat-header-button" onClick={() => onManage(conversation)} aria-label="Manage conversation" title="Manage conversation"><IconMoreVertical size={19} /></button>
         </div>
       </header>
 
-      <div className="message-chat-scroll">
+      <div className="message-chat-scroll" aria-live="polite">
         {messageList.length ? messageList.map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
             currentUserId={currentUser.id}
             onEdit={beginEdit}
-            onDelete={setDeleteTarget}
+            onDelete={openDeleteDialog}
             highlighted={message.id === highlightedMessageId}
           />
         )) : <ChatEmptyState />}
@@ -345,7 +415,7 @@ export default function ChatWindow({
       </div>
 
       {conversation.isReadOnly ? (
-        <footer className="message-read-only-banner">Archived conversations are read-only until they expire.</footer>
+        <footer className="message-read-only-banner"><IconArchive size={17} /> Archived conversations are read-only until they expire.</footer>
       ) : (
         <footer className="message-composer">
           {editingMessage && (
@@ -370,13 +440,27 @@ export default function ChatWindow({
               accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
               onChange={(event) => addFiles(event.target.files)}
             />
-            <button type="button" className="message-composer-icon-button" onClick={() => fileInputRef.current?.click()} disabled={isPending} aria-label="Add photos or videos"><IconPaperclip size={18} /></button>
-            <button type="button" className="message-composer-icon-button" onClick={() => fileInputRef.current?.click()} disabled={isPending} aria-label="Add media"><IconCamera size={18} /></button>
-            <button type="button" className={`message-composer-icon-button ${location ? 'message-composer-icon-button-active' : ''}`} onClick={shareCurrentLocation} disabled={isPending || isLocating} aria-label="Share current location"><IconMapPin size={18} /></button>
+            <button type="button" className="message-composer-icon-button" onClick={() => fileInputRef.current?.click()} disabled={isPending} aria-label="Add photos or videos" title="Add photos or videos"><IconPaperclip size={20} /></button>
+            <button type="button" className={`message-composer-icon-button ${location ? 'message-composer-icon-button-active' : ''}`} onClick={shareCurrentLocation} disabled={isPending || isLocating} aria-label={isLocating ? 'Getting current location' : 'Share current location'} title="Share current location"><IconMapPin size={20} /></button>
             <div className="message-composer-input-wrap">
-              <textarea value={text} onChange={(event) => setText(event.target.value)} rows="1" maxLength="1000" placeholder="Write a message…" aria-label="Message text" disabled={isPending} />
+              <textarea
+                ref={messageInputRef}
+                value={text}
+                onChange={(event) => { setText(event.target.value); resizeComposer(event); }}
+                onKeyDown={handleComposerKeyDown}
+                rows="1"
+                maxLength="1000"
+                placeholder="Write a message"
+                aria-label="Message text"
+                aria-describedby={`message-composer-help-${conversation.id}`}
+                disabled={isPending}
+              />
             </div>
-            <button type="button" className={`message-send-button ${hasDraft && !isPending ? 'message-send-button-active' : ''}`} onClick={submitMessage} disabled={!hasDraft || isPending} aria-label={editingMessage ? 'Save edited message' : 'Send message'}><IconSend size={17} /></button>
+            <button type="button" className={`message-send-button ${hasDraft && !isPending ? 'message-send-button-active' : ''}`} onClick={submitMessage} disabled={!hasDraft || isPending} aria-label={editingMessage ? 'Save edited message' : 'Send message'} title={editingMessage ? 'Save changes' : 'Send message'}><IconSend size={19} /></button>
+          </div>
+          <div id={`message-composer-help-${conversation.id}`} className="message-composer-help">
+            <span>Enter to send · Shift + Enter for a new line</span>
+            <span className={text.length >= 900 ? 'message-character-count message-character-count-warning' : 'message-character-count'}>{text.length}/1000</span>
           </div>
           {errorMessage && <p className="message-composer-error" role="alert" aria-live="assertive">{errorMessage}</p>}
           {isPending && <p className="message-pending-status" role="status" aria-live="polite">{editingMessage ? 'Saving message…' : 'Uploading and sending…'}</p>}
@@ -384,11 +468,14 @@ export default function ChatWindow({
       )}
 
       {deleteTarget && (
-        <div className="message-options-backdrop" role="presentation" onMouseDown={() => !isPending && setDeleteTarget(null)}>
-          <section className="message-options-modal" role="dialog" aria-modal="true" aria-labelledby="delete-message-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="message-options-backdrop" role="presentation" onMouseDown={() => !isPending && closeDeleteDialog()}>
+          <section ref={deleteModalRef} className="message-options-modal" role="dialog" aria-modal="true" aria-labelledby="delete-message-title" onMouseDown={(event) => event.stopPropagation()}>
             <span className="message-options-handle" />
-            <div className="message-options-header"><div><span id="delete-message-title">Delete this message?</span><p>The complete text, media and location bundle will be deleted permanently.</p></div><button type="button" onClick={() => setDeleteTarget(null)} aria-label="Close"><IconX size={15} /></button></div>
-            <button type="button" className="message-options-delete" onClick={confirmDelete} disabled={isPending}>Delete message</button>
+            <div className="message-options-header"><div><span id="delete-message-title">Delete this message?</span><p>The complete text, media and location bundle will be deleted permanently.</p></div><button ref={deleteCancelRef} type="button" onClick={closeDeleteDialog} aria-label="Close delete confirmation"><IconX size={18} /></button></div>
+            <div className="message-options-actions">
+              <button type="button" className="message-options-cancel" onClick={closeDeleteDialog} disabled={isPending}>Keep message</button>
+              <button type="button" className="message-options-delete" onClick={confirmDelete} disabled={isPending}>{isPending ? 'Deleting…' : 'Delete message'}</button>
+            </div>
           </section>
         </div>
       )}

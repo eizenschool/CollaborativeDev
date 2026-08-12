@@ -36,18 +36,33 @@ function TripSummaryCard({ conversation }) {
     return null;
   }
 
+  const routePoints = conversation.tripRoute.split(/\s+(?:to|→)\s+/i);
+  const hasDistinctRoutePoints = routePoints.length === 2;
+
   return (
     <section className="message-trip-summary-card">
-      <div className="message-trip-summary-icon">
-        <IconMapPin size={18} />
+      <div className="message-trip-summary-topline">
+        <div className="message-trip-summary-icon">
+          <IconMapPin size={18} />
+        </div>
+        <span className="message-trip-status-badge">
+          <span className="message-status-dot" aria-hidden="true" />
+          {conversation.rideStatus || 'Ride chat'}
+        </span>
       </div>
 
       <div className="message-trip-summary-content">
         <span className="message-trip-summary-label">Trip route</span>
 
-        <h4 className="message-trip-summary-route">
-          {conversation.tripRoute}
-        </h4>
+        {hasDistinctRoutePoints ? (
+          <div className="message-trip-route-points">
+            <div><span className="message-route-marker message-route-marker-start" /><strong>{routePoints[0]}</strong></div>
+            <span className="message-route-line" aria-hidden="true" />
+            <div><span className="message-route-marker message-route-marker-end" /><strong>{routePoints[1]}</strong></div>
+          </div>
+        ) : (
+          <h4 className="message-trip-summary-route">{conversation.tripRoute}</h4>
+        )}
       </div>
 
       <div className="message-trip-summary-details">
@@ -107,11 +122,7 @@ function ParticipantList({ conversation, currentUserId }) {
                 <span className="message-trip-member-name">{member.name}</span>
 
                 <span className="message-trip-member-role">
-                  {isCurrentUser
-                    ? 'You'
-                    : conversation.type === 'group'
-                      ? 'Trip member'
-                      : 'Ride contact'}
+                  {member.role === 'host' ? 'Host' : member.role === 'traveller' ? 'Traveller' : conversation.type === 'group' ? 'Trip member' : 'Ride contact'}
                 </span>
               </div>
 

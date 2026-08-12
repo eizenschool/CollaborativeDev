@@ -3,6 +3,7 @@ import {
   IconArchive,
   IconMessage,
   IconMoreVertical,
+  IconRoute,
   IconSearch,
   IconUsers,
   IconX,
@@ -49,6 +50,8 @@ function ConversationRow({ conversation, currentUserId, isSelected, onSelect, on
         type="button"
         className="message-conversation-open"
         onClick={() => onSelect(conversation.id)}
+        aria-current={isSelected ? 'page' : undefined}
+        aria-label={`Open conversation with ${conversation.title}`}
       >
         <ConversationAvatar conversation={conversation} currentUserId={currentUserId} />
         <div className="message-conversation-content">
@@ -66,8 +69,18 @@ function ConversationRow({ conversation, currentUserId, isSelected, onSelect, on
               </span>
             )}
           </div>
+          {conversation.tripRoute && (
+            <span className="message-conversation-route">
+              <IconRoute size={12} />
+              <span>{conversation.tripRoute}</span>
+            </span>
+          )}
           <div className="message-conversation-badges">
-            {conversation.type === 'group' && <span className="message-trip-badge">Group chat</span>}
+            <span className="message-trip-badge message-trip-badge-status">
+              <span className="message-status-dot" aria-hidden="true" />
+              {conversation.rideStatus || 'Ride chat'}
+            </span>
+            {conversation.type === 'group' && <span className="message-trip-badge">Group</span>}
             {conversation.isArchived && <span className="message-trip-badge"><IconArchive size={10} /> Archived</span>}
           </div>
         </div>
@@ -78,13 +91,13 @@ function ConversationRow({ conversation, currentUserId, isSelected, onSelect, on
         onClick={() => onManage(conversation)}
         aria-label={`Manage ${conversation.title}`}
       >
-        <IconMoreVertical size={18} />
+        <IconMoreVertical size={19} />
       </button>
     </article>
   );
 }
 
-function EmptyConversationState({ folder, hasSearchQuery, searchQuery }) {
+function EmptyConversationState({ folder, hasSearchQuery, searchQuery, onBrowseRides }) {
   return (
     <div className="message-conversation-empty">
       <div className="message-conversation-empty-icon">
@@ -94,8 +107,27 @@ function EmptyConversationState({ folder, hasSearchQuery, searchQuery }) {
         {hasSearchQuery ? `No results for "${searchQuery}"` : folder === 'archived' ? 'No archived conversations' : 'No conversations yet'}
       </h3>
       <p className="message-conversation-empty-text">
-        {hasSearchQuery ? 'Try searching with another name or message.' : folder === 'archived' ? 'Completed private chats you archive will appear here.' : 'Open a published ride to message its Host.'}
+        {hasSearchQuery ? 'Try searching with another name, route or message.' : folder === 'archived' ? 'Completed private chats you archive will appear here.' : 'Open a published ride to message its Host.'}
       </p>
+      {!hasSearchQuery && folder === 'active' && (
+        <button type="button" className="message-empty-primary-action" onClick={onBrowseRides}>
+          Browse available rides
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ConversationSkeleton() {
+  return (
+    <div className="message-conversation-skeleton" role="status" aria-label="Loading conversations">
+      {[0, 1, 2, 3].map((item) => (
+        <div className="message-conversation-skeleton-row" key={item} aria-hidden="true">
+          <span className="message-skeleton-avatar" />
+          <span className="message-skeleton-lines"><i /><i /><i /></span>
+        </div>
+      ))}
+      <span className="message-sr-only">Loading conversations</span>
     </div>
   );
 }
@@ -111,6 +143,7 @@ export default function ConversationList({
   isLoading,
   error,
   onRetry,
+  onBrowseRides,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -127,10 +160,12 @@ export default function ConversationList({
     <section className="message-conversation-list" aria-label="Conversations">
       <header className="message-conversation-list-header">
         <div className="message-conversation-title-row">
-          <div className="message-conversation-page-icon"><IconMessage size={18} /></div>
+          <div className="message-conversation-page-icon"><IconMessage size={20} /></div>
           <div>
             <h1 className="message-conversation-page-title">Messages</h1>
-            <p className="message-conversation-page-subtitle">Your ride conversations</p>
+            <p className="message-conversation-page-subtitle">
+              {isLoading ? 'Syncing your ride conversations' : `${conversations.length} ${folder} conversation${conversations.length === 1 ? '' : 's'}`}
+            </p>
           </div>
         </div>
 
@@ -150,17 +185,18 @@ export default function ConversationList({
         </div>
 
         <div className="message-conversation-search">
-          <span className="message-conversation-search-icon"><IconSearch size={16} /></span>
+          <label className="message-sr-only" htmlFor="conversation-search">Search conversations</label>
+          <span className="message-conversation-search-icon"><IconSearch size={17} /></span>
           <input
+            id="conversation-search"
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search conversations..."
-            aria-label="Search conversations"
+            placeholder="Search people, routes or messages"
           />
           {searchQuery && (
             <button type="button" className="message-conversation-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear conversation search">
-              <IconX size={14} />
+              <IconX size={15} />
             </button>
           )}
         </div>
@@ -170,8 +206,10 @@ export default function ConversationList({
         {error ? (
           <div className="message-inline-error" role="alert">
             <p>{error}</p>
-            <button type="button" onClick={onRetry}>Retry</button>
+            <button type="button" onClick={onRetry}>Try again</button>
           </div>
+        ) : isLoading ? (
+          <ConversationSkeleton />
         ) : filteredConversations.length > 0 ? (
           filteredConversations.map((conversation) => (
             <ConversationRow
@@ -183,10 +221,13 @@ export default function ConversationList({
               onManage={onManageConversation}
             />
           ))
-        ) : !isLoading ? (
-          <EmptyConversationState folder={folder} hasSearchQuery={Boolean(normalizedSearchQuery)} searchQuery={searchQuery} />
         ) : (
-          <div className="message-loading-state">Loading conversations…</div>
+          <EmptyConversationState
+            folder={folder}
+            hasSearchQuery={Boolean(normalizedSearchQuery)}
+            searchQuery={searchQuery}
+            onBrowseRides={onBrowseRides}
+          />
         )}
       </div>
     </section>

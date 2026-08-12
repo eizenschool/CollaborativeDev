@@ -42,7 +42,7 @@ function MessageActions({ message, onEdit, onDelete }) {
   if (!message.canEdit && !message.canDelete) return null;
   return (
     <details className="message-bubble-actions">
-      <summary aria-label="Message actions"><IconMoreVertical size={16} /></summary>
+      <summary aria-label="Message actions" title="Message actions"><IconMoreVertical size={18} /></summary>
       <div>
         {message.canEdit && <button type="button" onClick={() => onEdit(message)}><IconEdit size={14} /> Edit</button>}
         {message.canDelete && <button type="button" className="danger" onClick={() => onDelete(message)}><IconTrash size={14} /> Delete</button>}
@@ -60,7 +60,7 @@ export default function MessageBubble({
 }) {
   if (message.kind === 'system') {
     return (
-      <div id={`message-${message.id}`} className={`message-system-row ${highlighted ? 'message-highlighted' : ''}`}>
+      <div id={`message-${message.id}`} className={`message-system-row ${highlighted ? 'message-highlighted' : ''}`} role="status">
         <span className="message-system-text">{message.text}</span>
       </div>
     );
@@ -70,7 +70,7 @@ export default function MessageBubble({
   if (message.deletedAt) {
     return (
       <div id={`message-${message.id}`} className={`message-deleted-row ${isCurrentUser ? 'message-deleted-row-current-user' : ''} ${highlighted ? 'message-highlighted' : ''}`}>
-        <span className="message-deleted-text">message deleted</span>
+        <span className="message-deleted-text">Message deleted</span>
       </div>
     );
   }
