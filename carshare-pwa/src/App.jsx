@@ -8,6 +8,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import TopNav from './presentation/components/nav/TopNav.jsx';
 import ComingSoonScreen from './presentation/components/placeholders/ComingSoonScreen.jsx';
 import AuthPage from './presentation/components/AuthPage.jsx';
+import HomeScreen from './presentation/components/HomeScreen.jsx';
 import MyProfile from './presentation/components/MyProfile.jsx';
 import RideHub from './presentation/components/ride/RideHub.jsx';
 import PublishRide from './presentation/components/ride/PublishRide.jsx';
@@ -17,7 +18,7 @@ import ManageRequests from './presentation/components/ride/ManageRequests.jsx';
 import MyRequests from './presentation/components/ride/MyRequests.jsx';
 import EditRide from './presentation/components/ride/EditRide.jsx';
 import RateReview from './presentation/components/ride/RateReview.jsx';
-import { IconHome, IconSearch, IconMessage, IconHeart } from './presentation/components/icons.jsx';
+import { IconSearch, IconHeart } from './presentation/components/icons.jsx';
 import MessageModule from './presentation/components/messaging/MessageModule.jsx';
 import TripModule from './presentation/components/trip/TripModule.jsx';
 import TripDetail from './presentation/components/trip/TripDetail.jsx';
@@ -44,11 +45,12 @@ function AppShell() {
         <Route path="/ride/:rideId/edit" element={<EditRide />} />
         <Route path="/ride/:rideId/review" element={<RateReview />} />
         <Route path="/ride/:rideId" element={<RideDetail />} />
-        {/* Home, Search, Favourite belong to Modules 4-6 and aren't
-            built yet - each nav tab is a real, clickable route so the shared nav
-            bar's final shape is demonstrable, backed by one shared stub screen
-            instead of faking each one individually. */}
-        <Route path="/home" element={<ComingSoonScreen icon={IconHome} label="Home" />} />
+        {/* Home is the post-login landing page (Module 1). Search/Favourite
+            still belong to Modules 4-6 and aren't built yet - each nav tab is
+            a real, clickable route so the shared nav bar's final shape is
+            demonstrable, backed by one shared stub screen instead of faking
+            each one individually. */}
+        <Route path="/home" element={<HomeScreen />} />
         <Route path="/search" element={<ComingSoonScreen icon={IconSearch} label="Search" />} />
         {/* Module 3 - Messaging */}
         <Route path="/message" element={<MessageModule />} />
@@ -64,7 +66,7 @@ function AppShell() {
             /safety is Module 6's own sub-router (SafetyRoutes.jsx) - this is the
             only line App.jsx needs to know about it. */}
         <Route path="/safety/*" element={<SafetyRoutes />} />
-        <Route path="*" element={<Navigate to="/profile" replace />} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </div>
   );

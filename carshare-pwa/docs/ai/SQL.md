@@ -12,7 +12,8 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Official SQL history: 001-018
+Deployed SQL history: 001-018
+Repository SQL history: 001-019
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -20,7 +21,9 @@ Official SQL history: 001-018
 host-owned vehicle requirement. `013-015` were deployed on 2026-08-12 for the
 confirmed Module 2 request, lifecycle, and review design. `016-018` were deployed
 on 2026-08-13 for production Module 3 messaging, advisor follow-up, and versioned
-media paths. Future changes start at `019` and must not rewrite deployed history.
+media paths. `019_m1_add_vehicle_driver_license.sql` is the next repository
+migration and is not deployed yet. Future changes start at `020`; deployed
+history must never be rewritten.
 
 Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
@@ -30,7 +33,7 @@ Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
 - `profiles`: authenticated-visible safe fields only (`full_name`, photo, status).
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
-- `vehicles`: owner-only CRUD and at most one active vehicle per owner.
+- `vehicles`: owner-only CRUD and at most one active vehicle per owner. The repository expects an owner-only `driver_license_number` after pending migration `019`; live deployment is still required.
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
 - `rides`: authoritative `departure_at`, lifecycle metadata, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation.
@@ -42,7 +45,7 @@ Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
 ### Security and Storage
 
-- RLS is enabled on all seven public tables.
+- RLS is enabled on all eleven public tables.
 - `anon` has no business-table privileges.
 - `authenticated` has explicit least-privilege table/column grants plus owner policies with `USING` and `WITH CHECK`.
 - `public.handle_new_user()` is `SECURITY DEFINER`, has an empty `search_path`, uses schema-qualified names, and is not executable by `anon` or `authenticated`.
@@ -99,6 +102,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `016_m3_supabase_messaging.sql` - messaging schema, locked RPCs, RLS/grants, Accepted backfill, private media bucket, Realtime, and seven-day lifecycle.
 - `017_m3_advisor_followup.sql` - covering index for the direct-user foreign key.
 - `018_m3_versioned_media_paths.sql` - sender/conversation/message/version Storage paths and matching RPC/policy contract.
+- `019_m1_add_vehicle_driver_license.sql` - pending deployment; adds `vehicles.driver_license_number` plus its column grants.
 
 ## Rules for New Database Work
 

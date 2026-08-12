@@ -324,6 +324,28 @@ export const mockDb = {
     return db.users[userId];
   },
 
+  // Mirrors the fake-hash scheme signUp() already uses ('hashed:' + length) so
+  // a real current-password check works for accounts created through this
+  // offline demo's own Sign Up flow. The two hardcoded seed accounts carry a
+  // fixed 'demo-hash' sentinel with no real password behind it (mock signIn
+  // never checked one either), so any current password is accepted for them.
+  async changePassword(userId, currentPassword, newPassword) {
+    await delay();
+    const db = load();
+    const user = db.users[userId];
+    if (!user) throw new Error('Account not found.');
+
+    const isSeedAccount = user.passwordHash === 'demo-hash';
+    const suppliedHash = 'hashed:' + (currentPassword || '').length;
+    if (!isSeedAccount && user.passwordHash !== suppliedHash) {
+      throw new Error('Current password is incorrect.');
+    }
+
+    db.users[userId] = { ...user, passwordHash: 'hashed:' + newPassword.length };
+    save(db);
+    return true;
+  },
+
   // ---------- Account Settings (FR-1.x) ----------
   async setAccountStatus(userId, status) {
     await delay();

@@ -30,7 +30,8 @@ Restart `npm run dev` after changing environment values.
 
 ## Adopted backend scope
 
-- Supabase Auth: email/password with email confirmation.
+- Supabase Auth: email/password with email confirmation, and Google OAuth (see
+  below for the Dashboard-side setup this needs).
 - `profiles`: authenticated-visible display fields only.
 - `profile_private`: owner-only phone and emergency contact; email remains in Auth.
 - `vehicles`: owner-only CRUD with one active vehicle per user.
@@ -41,8 +42,34 @@ Restart `npm run dev` after changing environment values.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
 - `message-media`: private, no listing, approved media only, 50 MB object maximum, and attachment-bound signed downloads.
 
-Google OAuth, phone OTP, hard account deletion, translation, messaging
-notifications, and Modules 4-6 are not part of this connection.
+Phone OTP, hard account deletion, translation, messaging notifications, and
+Modules 4-6 are not part of this connection. Google OAuth code is present, but
+it still needs the provider configuration below before it works end to end.
+
+## Enabling Google OAuth (Dashboard + Google Cloud, not code)
+
+The app-side code (`AuthService.signInWithGoogle`, the "Continue with Google"
+button on `AuthPage.jsx`) is already in place and calls
+`supabase.auth.signInWithOAuth({ provider: 'google' })`. No new SQL migration
+is needed for this: `handle_new_user()` (`008_m1_secure_profiles_and_auth.sql`)
+already falls back through `full_name` → `name` → the email's local part, and
+already reads `avatar_url`/`picture` into `profile_photo_url` - exactly the
+`raw_user_meta_data` shape Google's provider supplies. What is still required
+is Dashboard/Cloud Console configuration, which only a project owner can do:
+
+1. In Google Cloud Console, create an OAuth 2.0 Client ID (Web application)
+   for this project.
+2. Add `https://pnetstmovctfwqcumodx.supabase.co/auth/v1/callback` as an
+   Authorized redirect URI on that client.
+3. In the Supabase Dashboard, go to Authentication → Providers → Google,
+   enable it, and paste in that Client ID and Client Secret.
+4. In Authentication → URL Configuration, make sure Site URL and Redirect URLs
+   include the app's dev/prod origins (the code sends `redirectTo:
+   window.location.origin`, so whatever origin the app is served from must be
+   allow-listed there).
+
+Until step 3 is done, clicking "Continue with Google" will reach Supabase and
+fail with a provider-not-enabled error - that is expected, not a code bug.
 
 ## Database history and deployment
 
@@ -63,9 +90,11 @@ m3_advisor_followup
 m3_versioned_media_paths
 ```
 
-Do not run `001-018` again on this project and do not edit them after deployment.
-Future changes start at `019`, are applied through migration tooling, and must be
-recorded in `docs/ai/SQL.md`. Do not make Dashboard-only schema changes.
+`001-018` are deployed and must not be run again or edited. Repository migration
+`019_m1_add_vehicle_driver_license.sql` is merged but not yet deployed: the live
+`vehicles` table does not currently have that column. Future changes start at
+`020`, are applied through migration tooling, and must be recorded in
+`docs/ai/SQL.md`. Do not make Dashboard-only schema changes.
 
 ## Security model
 
@@ -100,3 +129,7 @@ For live acceptance, use two real email accounts and verify:
 6. An unauthenticated client cannot access any business table.
 7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, and expired access denial.
 8. Modules 4-6 local demo functions still operate.
+9. Once Google OAuth is enabled in the Dashboard (see above): "Continue with
+   Google" reaches the Google consent screen, returns to the app signed in,
+   and creates a `profiles`/`profile_private`/`host_impact_stats` row with a
+   sensible name and avatar picked up automatically.

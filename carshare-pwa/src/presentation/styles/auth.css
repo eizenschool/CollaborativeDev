@@ -126,10 +126,31 @@
 }
 .method-pill.active { border-color: var(--teal); color: var(--teal-dark); background: var(--teal-tint); }
 
+/* Google sign-in: kept as a neutral white/bordered button per Google's
+   branding guidelines rather than the app's teal accent, so it reads as a
+   distinct identity provider and not just another themed button. */
+.google-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: #fff; color: var(--ink); border: 1.5px solid var(--border);
+  border-radius: 999px; padding: 11px; font-size: 13.5px; font-weight: 700;
+  font-family: inherit; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.google-btn:hover:not(:disabled) { background: var(--bg); border-color: #c7cdd6; }
+.google-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.auth-divider {
+  display: flex; align-items: center; gap: 12px; margin: 18px 0;
+  font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
 .auth-field { margin-bottom: 16px; }
 .auth-field label {
   display: block; font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 7px; letter-spacing: 0.2px;
 }
+.auth-field label .hint { font-weight: 400; color: var(--muted); letter-spacing: 0; text-transform: none; }
 .auth-input-wrap { position: relative; display: flex; align-items: center; }
 .auth-input-wrap .prefix {
   position: absolute; left: 1px; top: 50%; transform: translateY(-50%); color: var(--muted);

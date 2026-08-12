@@ -52,13 +52,20 @@ export function AuthProvider({ children }) {
     return u;
   };
 
+  // No `setUser` here: this redirects the browser to Google and back, so the
+  // signed-in user only becomes known once Supabase fires SIGNED_IN after the
+  // redirect - the effect above already listens for that and calls refresh().
+  const signInWithGoogle = async () => {
+    await AuthService.signInWithGoogle();
+  };
+
   const signOut = async () => {
     await AuthService.signOut();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, refresh, setUser }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signInWithGoogle, signOut, refresh, setUser }}>
       {children}
     </AuthContext.Provider>
   );

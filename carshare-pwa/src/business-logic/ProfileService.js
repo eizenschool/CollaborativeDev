@@ -54,24 +54,18 @@ export const ProfileService = {
     return mockDb.getCurrentUser();
   },
 
-  async updateProfileInfo(userId, { fullName, email, phone, newPassword }) {
+  async updateProfileInfo(userId, { fullName, email, phone }) {
     if (!fullName?.trim()) throw new Error('Full name is required.');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '')) {
       throw new Error('Enter a valid email address.');
     }
-    if (newPassword && newPassword.length < 8) {
-      throw new Error('Password must be at least 8 characters.');
-    }
 
     if (isSupabaseConfigured) {
       const existingUser = await currentAuthUser();
-      const authChanges = {};
-      if (email !== existingUser.email) authChanges.email = email;
-      if (newPassword) authChanges.password = newPassword;
 
       let authUser = existingUser;
-      if (Object.keys(authChanges).length) {
-        const { data, error } = await supabase.auth.updateUser(authChanges);
+      if (email !== existingUser.email) {
+        const { data, error } = await supabase.auth.updateUser({ email });
         if (error) throw error;
         authUser = data.user;
       }
@@ -92,6 +86,31 @@ export const ProfileService = {
     }
 
     return mockDb.updateProfile(userId, { fullName, email, phone });
+  },
+
+  // Split out from updateProfileInfo: a password change is a sensitive action
+  // and requires the current password before Supabase (or the mock adapter)
+  // will accept a new one, rather than riding along with a routine profile edit.
+  async changePassword(userId, { currentPassword, newPassword }) {
+    if (!currentPassword) throw new Error('Enter your current password.');
+    if (!newPassword || newPassword.length < 8) {
+      throw new Error('New password must be at least 8 characters.');
+    }
+
+    if (isSupabaseConfigured) {
+      const existingUser = await currentAuthUser();
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: existingUser.email,
+        password: currentPassword
+      });
+      if (verifyError) throw new Error('Current password is incorrect.');
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      return true;
+    }
+
+    return mockDb.changePassword(userId, currentPassword, newPassword);
   },
 
   async updateEmergencyContact(userId, contact) {
