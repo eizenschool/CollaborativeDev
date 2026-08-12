@@ -124,7 +124,7 @@ function ComposerMedia({ entries, onMove, onRemove }) {
 export default function ChatWindow({
   conversationId,
   currentUser,
-  dataVersion,
+  realtimeUpdate,
   onBack,
   onManage,
   onOpenHistory,
@@ -150,6 +150,9 @@ export default function ChatWindow({
   const deleteCancelRef = useRef(null);
   const deleteModalRef = useRef(null);
   const deleteReturnFocusRef = useRef(null);
+  const loadRequestRef = useRef(0);
+  const hasLoadedConversationRef = useRef(false);
+  const lastMessageIdRef = useRef(null);
 
   const releaseMediaEntries = useCallback((entries) => {
     entries.filter((entry) => entry.source === 'new').forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
@@ -168,36 +171,57 @@ export default function ChatWindow({
     if (messageInputRef.current) messageInputRef.current.style.height = '';
   }, [releaseMediaEntries]);
 
-  const loadConversation = useCallback(async () => {
+  const loadConversation = useCallback(async ({ showLoading = false, markRead = false } = {}) => {
     if (!conversationId) return;
-    setLoadError('');
-    setIsLoading(true);
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+    if (showLoading) {
+      setLoadError('');
+      setIsLoading(true);
+    }
     try {
       const [nextConversation, nextMessages] = await Promise.all([
         MessagingService.getConversation(conversationId),
         MessagingService.listMessages(conversationId),
       ]);
       if (!nextConversation) throw new Error('This conversation is no longer available.');
+      if (requestId !== loadRequestRef.current) return;
       setConversation(nextConversation);
       setMessageList(nextMessages);
-      await MessagingService.markConversationRead(conversationId).catch(() => {});
+      hasLoadedConversationRef.current = true;
+      if (markRead && requestId === loadRequestRef.current) {
+        await MessagingService.markConversationRead(conversationId).catch(() => {});
+      }
     } catch (error) {
-      setConversation(null);
-      setMessageList([]);
-      setLoadError(error.message || 'Unable to load this conversation.');
+      if (requestId !== loadRequestRef.current) return;
+      if (showLoading || !hasLoadedConversationRef.current) {
+        setConversation(null);
+        setMessageList([]);
+        setLoadError(error.message || 'Unable to load this conversation.');
+      } else {
+        setErrorMessage('Unable to refresh this conversation. Current messages are still shown.');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current) setIsLoading(false);
     }
   }, [conversationId]);
 
   useEffect(() => {
+    hasLoadedConversationRef.current = false;
+    lastMessageIdRef.current = null;
     resetComposer();
-    loadConversation();
+    loadConversation({ showLoading: true, markRead: true });
+    return () => {
+      loadRequestRef.current += 1;
+    };
   }, [conversationId, loadConversation, resetComposer]);
 
   useEffect(() => {
-    if (dataVersion) loadConversation();
-  }, [dataVersion, loadConversation]);
+    if (!realtimeUpdate?.version) return;
+    if (realtimeUpdate.conversationIds.length
+        && !realtimeUpdate.conversationIds.includes(conversationId)) return;
+    loadConversation({ markRead: true });
+  }, [conversationId, loadConversation, realtimeUpdate]);
 
   useEffect(() => {
     mediaEntriesRef.current = mediaEntries;
@@ -230,9 +254,10 @@ export default function ChatWindow({
   useEffect(() => {
     if (highlightedMessageId) {
       document.getElementById(`message-${highlightedMessageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else {
+    } else if (messageList.at(-1)?.id !== lastMessageIdRef.current) {
       messageBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
+    lastMessageIdRef.current = messageList.at(-1)?.id || null;
   }, [messageList, highlightedMessageId]);
 
   function addFiles(fileList) {
@@ -367,7 +392,7 @@ export default function ChatWindow({
   if (loadError) {
     return (
       <section className="message-chat-window">
-        <div className="message-inline-error" role="alert"><p>{loadError}</p><button type="button" onClick={loadConversation}>Retry</button></div>
+        <div className="message-inline-error" role="alert"><p>{loadError}</p><button type="button" onClick={() => loadConversation({ showLoading: true, markRead: true })}>Retry</button></div>
       </section>
     );
   }

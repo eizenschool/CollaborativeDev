@@ -164,6 +164,18 @@ describe('Supabase integration contracts', () => {
     expect(sql).toContain('grant execute on function public.update_ride');
   });
 
+  it('keeps Realtime read receipts idempotent in SQL history', async () => {
+    const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../database/sql/021_m3_stabilize_realtime_reads.sql', import.meta.url),
+      'utf8'
+    ));
+    expect(sql).toContain('and (last_read_at is null or last_read_at < v_latest)');
+    expect(sql).toContain('set last_read_at = v_latest');
+    expect(sql).toContain('set search_path =');
+    expect(sql).toContain('revoke all on function public.mark_conversation_read');
+    expect(sql).toContain('grant execute on function public.mark_conversation_read');
+  });
+
   it('requires complete route and schedule data for drafts too', () => {
     expect(() => validateRideDraft({
       pickup: 'KL Sentral',

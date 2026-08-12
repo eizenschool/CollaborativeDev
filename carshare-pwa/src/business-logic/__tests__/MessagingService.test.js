@@ -5,6 +5,7 @@ import {
   MAX_MESSAGE_MEDIA_BYTES,
   MAX_VIDEO_BYTES,
   createMessagingService,
+  getMessagingChangeConversationId,
   mapMessageRow,
   validateMessageDraft,
 } from '../MessagingService.js';
@@ -148,6 +149,23 @@ describe('composite message validation', () => {
 });
 
 describe('MessagingService repository orchestration', () => {
+  it('maps Realtime payloads to their owning conversation', () => {
+    expect(getMessagingChangeConversationId({
+      table: 'conversations',
+      new: { id: conversationId },
+    })).toBe(conversationId);
+    expect(getMessagingChangeConversationId({
+      table: 'messages',
+      new: { conversation_id: conversationId },
+    })).toBe(conversationId);
+    expect(getMessagingChangeConversationId({
+      table: 'conversation_members',
+      new: {},
+      old: { conversation_id: conversationId },
+    })).toBe(conversationId);
+    expect(getMessagingChangeConversationId({ table: 'unknown', new: { id: 'other' } })).toBeNull();
+  });
+
   it('uploads all parts before atomically creating a combined message', async () => {
     const repository = createRepository();
     const service = createMessagingService(repository);

@@ -3,6 +3,9 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
 const MEDIA_BUCKET = 'message-media';
 const SIGNED_URL_SECONDS = 60 * 60;
+// Attachment mutations are committed with a messages or conversations change,
+// so subscribing to them separately only produces duplicate refreshes.
+const REALTIME_TABLES = ['conversations', 'conversation_members', 'messages'];
 
 const CONVERSATION_SELECT = `
   *,
@@ -258,7 +261,7 @@ export const supabaseMessagingRepository = {
     }
     const client = supabase;
     let channel = client.channel(`messaging-${Date.now()}-${Math.random()}`);
-    ['conversations', 'conversation_members', 'messages', 'message_attachments']
+    REALTIME_TABLES
       .forEach((table) => {
         channel = channel.on(
           'postgres_changes',
@@ -267,6 +270,8 @@ export const supabaseMessagingRepository = {
         );
       });
     channel.subscribe();
-    return () => client.removeChannel(channel);
+    return () => {
+      void client.removeChannel(channel);
+    };
   },
 };

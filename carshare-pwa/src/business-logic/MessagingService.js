@@ -309,6 +309,18 @@ function containsKeyword(message, keyword) {
     );
 }
 
+export function getMessagingChangeConversationId(change) {
+  const row = change?.new && Object.keys(change.new).length
+    ? change.new
+    : change?.old;
+  if (!row) return null;
+  if (change.table === 'conversations') return row.id || null;
+  if (['conversation_members', 'messages'].includes(change.table)) {
+    return row.conversation_id || null;
+  }
+  return null;
+}
+
 /** Creates the Module 3 service against a compatible data repository. */
 export function createMessagingService(repository = supabaseMessagingRepository) {
   return {

@@ -12,8 +12,8 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-020
-Repository SQL history: 001-020
+Deployed SQL history: 001-021
+Repository SQL history: 001-021
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -24,7 +24,9 @@ on 2026-08-13 for production Module 3 messaging, advisor follow-up, and versione
 media paths. `019_m1_add_vehicle_driver_license.sql` and
 `020_m2_add_route_locations.sql` were deployed on 2026-08-13 for the vehicle
 driver-licence field, confirmed route references, pickup instructions, and the
-replacement Ride RPC signatures. Future changes start at `021`; deployed history
+replacement Ride RPC signatures. `021_m3_stabilize_realtime_reads.sql` was
+deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
+Realtime refresh loops. Future changes start at `022`; deployed history
 must not be rewritten.
 
 Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
@@ -58,6 +60,7 @@ Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 - Authenticated clients have SELECT but no direct INSERT/UPDATE/DELETE on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
 - Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
 - All four messaging tables are in the `supabase_realtime` publication.
 
 ### Indexes
@@ -107,6 +110,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `018_m3_versioned_media_paths.sql` - sender/conversation/message/version Storage paths and matching RPC/policy contract.
 - `019_m1_add_vehicle_driver_license.sql` - deployed; adds `vehicles.driver_license_number` plus its column grants.
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
+- `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 
 ## Rules for New Database Work
 
