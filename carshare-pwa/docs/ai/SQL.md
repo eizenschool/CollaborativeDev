@@ -11,13 +11,14 @@ history lives in `database/sql/`; do not duplicate full migrations here.
 Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
-Adopted live scope: Module 1 + Module 2 ride CRUD/search
-Official SQL history: 001-012
+Adopted live scope: Module 1 + complete Module 2 ride/request/review lifecycle
+Official SQL history: 001-015
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
 `011-012` are deployed follow-ups for advisor findings and the confirmed
-host-owned vehicle requirement. Future database changes start at `013` and
+host-owned vehicle requirement. `013-015` were deployed on 2026-08-12 for the
+confirmed Module 2 request, lifecycle, and review design. Future changes start at `016` and
 must not rewrite deployed history.
 
 Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
@@ -29,17 +30,21 @@ Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 - `profiles`: authenticated-visible safe fields only (`full_name`, photo, status).
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
 - `vehicles`: owner-only CRUD and at most one active vehicle per owner.
-- `host_impact_stats`: authenticated read-only; future trusted server pipeline writes.
-- `rides`: authenticated browsing of active hosts' published rides; hosts manage their own rides and drafts.
+- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
+- `rides`: authoritative `departure_at`, lifecycle metadata, authenticated browsing, and RPC-only mutation.
+- `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation.
+- `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
 
 ### Security and Storage
 
-- RLS is enabled on all five public tables.
+- RLS is enabled on all seven public tables.
 - `anon` has no business-table privileges.
 - `authenticated` has explicit least-privilege table/column grants plus owner policies with `USING` and `WITH CHECK`.
 - `public.handle_new_user()` is `SECURITY DEFINER`, has an empty `search_path`, uses schema-qualified names, and is not executable by `anon` or `authenticated`.
 - The public `avatars` bucket allows JPEG, PNG, and WebP up to 5 MB. Authenticated users can write only below their own UUID folder.
 - Rides require a vehicle owned by the host, persist `waypoints` as a JSON array, and enforce `0 <= seats_available <= seats_total`.
+- Authenticated clients have SELECT but no direct INSERT/UPDATE/DELETE on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce ownership and cross-row invariants with an empty `search_path`.
+- `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
 
 ### Indexes
 
@@ -49,6 +54,14 @@ Modules 3-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 - `rides_host_created_at_idx`
 - `rides_status_date_idx`
 - `rides_vehicle_host_idx`
+- `rides_status_departure_at_idx`
+- `rides_host_status_departure_at_idx`
+- `ride_requests_one_active_per_requester_idx`
+- `ride_requests_ride_status_created_idx`
+- `ride_requests_requester_created_idx`
+- `ride_requests_pending_ride_idx`
+- `ride_reviews_reviewee_created_idx`
+- `ride_reviews_reviewer_created_idx`
 
 Fresh empty-table indexes may appear as "unused" in the performance advisor until normal traffic exercises them.
 
@@ -66,6 +79,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `010_m2_harden_rides.sql` - waypoints, seat/ownership constraints, indexes, grants, and authenticated RLS.
 - `011_project_advisor_followup.sql` - revokes client execution of the platform RLS event function and covers the composite ride FK.
 - `012_m2_require_host_vehicle.sql` - makes host-owned vehicle selection mandatory for every ride.
+- `013_m2_ride_requests_and_departure.sql` - authoritative departure instant, ride lifecycle metadata, multi-seat requests, RLS/grants, and atomic RPC mutations.
+- `014_m2_lifecycle_cron.sql` - minute lifecycle processor and service-role-only verified ride transition.
+- `015_m2_ride_reviews.sql` - mutual Completed-ride reviews and account-level average star rating updates.
 
 ## Rules for New Database Work
 

@@ -1,40 +1,72 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { RideService } from '../../../business-logic/RideService.js';
+import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { IconArrowLeft, IconCheck, IconStar, IconUsers } from '../icons.jsx';
 import '../../styles/ride.css';
 
-const initialRequests = [
-  { id: 'request_1', name: 'Aina Farhana', score: 4.9, tier: 'Gold', requested: '10 min ago', status: 'Pending' },
-  { id: 'request_2', name: 'Daniel Lim', score: 4.7, tier: 'Silver', requested: '28 min ago', status: 'Pending' },
-  { id: 'request_3', name: 'Priya Nair', score: 4.8, tier: 'Gold', requested: 'Yesterday', status: 'Accepted' },
-  { id: 'request_4', name: 'Hafiz Rahman', score: 4.5, tier: 'Bronze', requested: 'Yesterday', status: 'Rejected' }
-];
-
-function avatar(name) {
+function avatar(name = 'Member') {
   return name.split(' ').map((word) => word[0]).slice(0, 2).join('');
+}
+
+function tier(score = 0) {
+  return score >= 80 ? 'Gold' : score >= 60 ? 'Silver' : 'Bronze';
 }
 
 export default function ManageRequests() {
   const { rideId } = useParams();
   const navigate = useNavigate();
   const [ride, setRide] = useState(null);
-  const [requests, setRequests] = useState(initialRequests);
-  const [showRejected, setShowRejected] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
 
-  useEffect(() => { RideService.getRide(rideId).then(setRide); }, [rideId]);
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const [nextRide, nextRequests] = await Promise.all([
+        RideService.getRide(rideId),
+        RideRequestService.listRideRequests(rideId)
+      ]);
+      setRide(nextRide);
+      setRequests(nextRequests);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, [rideId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function decide(request, decision) {
+    setBusyId(request.id);
+    setError('');
+    try {
+      if (decision === 'Accepted') await RideRequestService.acceptRequest(request.id);
+      else await RideRequestService.rejectRequest(request.id);
+      await load();
+    } catch (err) { setError(err.message); }
+    finally { setBusyId(null); }
+  }
+
+  if (loading) return <div className="ride-page-loading">Loading requests…</div>;
+
   const pending = requests.filter((request) => request.status === 'Pending');
   const accepted = requests.filter((request) => request.status === 'Accepted');
-  const rejected = requests.filter((request) => request.status === 'Rejected');
-  const seats = ride?.seatsAvailable ?? 3;
-  const update = (id, status) => setRequests((current) => current.map((request) => request.id === id ? { ...request, status } : request));
+  const history = requests.filter((request) => !['Pending', 'Accepted'].includes(request.status));
 
   function RequestCard({ request, actions = false, muted = false }) {
+    const person = request.requester || { fullName: 'Member', reputationScore: 0, rating: null };
     return (
       <article className={`passenger-request-card ${muted ? 'muted' : ''}`}>
-        <span className="request-avatar">{avatar(request.name)}</span>
-        <div className="request-person"><strong>{request.name}</strong><span><IconStar size={11} /> {request.score} <b className="tier-badge">{request.tier}</b> <small>{request.requested}</small></span></div>
-        {actions && <div className="request-actions"><button onClick={() => update(request.id, 'Rejected')}>Reject</button><button onClick={() => update(request.id, 'Accepted')}>Accept</button></div>}
+        <span className="request-avatar">{avatar(person.fullName)}</span>
+        <div className="request-person">
+          <strong>{person.fullName} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</strong>
+          <span><IconStar size={11} /> {person.rating == null ? 'New' : Number(person.rating).toFixed(1)} <b className="tier-badge">{tier(person.reputationScore)}</b> <small>{request.status}</small></span>
+          {request.companionNames.length > 0 && <small>Companions: {request.companionNames.join(', ')}</small>}
+          {request.decisionReason && <small>Reason: {request.decisionReason}</small>}
+        </div>
+        {actions && <div className="request-actions"><button disabled={busyId === request.id} onClick={() => decide(request, 'Rejected')}>Reject</button><button disabled={busyId === request.id || request.seatsRequested > (ride?.seatsAvailable ?? 0)} onClick={() => decide(request, 'Accepted')}>Accept</button></div>}
       </article>
     );
   }
@@ -46,17 +78,18 @@ export default function ManageRequests() {
         <div><h1>Manage requests</h1><p>{ride ? `${ride.pickup.split(',')[0]} → ${ride.destination.split(',')[0]}` : 'Your ride'}</p></div>
       </header>
       <div className="requests-page-content">
+        {error && <div className="alert alert-error">{error}</div>}
         <section className="request-stats">
           <div><strong>{pending.length}</strong><span>Pending</span></div>
-          <div><strong>{accepted.length}</strong><span>Accepted</span></div>
-          <div><strong>{Math.max(0, seats - accepted.length)}</strong><span>Seats left</span></div>
+          <div><strong>{accepted.reduce((sum, request) => sum + request.seatsRequested, 0)}</strong><span>Accepted seats</span></div>
+          <div><strong>{ride?.seatsAvailable ?? 0}</strong><span>Seats left</span></div>
         </section>
 
         {accepted.length > 0 && <section className="request-group"><h2 className="accepted-heading"><IconCheck size={13} /> Accepted ({accepted.length})</h2>{accepted.map((request) => <RequestCard request={request} key={request.id} />)}</section>}
-        {pending.length > 0 ? <section className="request-group"><h2 className="pending-heading">◷ Pending ({pending.length})</h2>{pending.map((request) => <RequestCard request={request} actions key={request.id} />)}</section>
+        {pending.length > 0 ? <section className="request-group"><h2 className="pending-heading">Pending ({pending.length})</h2>{pending.map((request) => <RequestCard request={request} actions key={request.id} />)}</section>
           : <section className="empty-request-state"><IconUsers size={34} /><strong>No pending requests</strong><p>New passenger requests will appear here.</p></section>}
 
-        {rejected.length > 0 && <section className="request-group rejected-group"><button className="rejected-toggle" onClick={() => setShowRejected((show) => !show)}>⌄ Rejected ({rejected.length})</button>{showRejected && rejected.map((request) => <RequestCard request={request} muted key={request.id} />)}</section>}
+        {history.length > 0 && <section className="request-group rejected-group"><button className="rejected-toggle" onClick={() => setShowHistory((show) => !show)}>History ({history.length})</button>{showHistory && history.map((request) => <RequestCard request={request} muted key={request.id} />)}</section>}
       </div>
     </main>
   );

@@ -11,6 +11,7 @@ Keep this file intentionally small.
 - Important long-term or cross-module choices should be discussed before being treated as final.
 - The repository is shared by six module owners; reduce unnecessary edits to shared context files.
 - Codex and Claude Code should follow the same project working rules.
+- Google Maps work is zero-charge-first: use only Maps Embed API unless the team explicitly approves a billable SKU and its cost controls. Never rely on budget alerts alone as a spending limit.
 
 ## Development Mindset
 1. Think Before Coding.

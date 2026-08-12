@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideService } from '../../../business-logic/RideService.js';
+import { RideRequestService } from '../../../business-logic/RideRequestService.js';
+import { RideReviewService } from '../../../business-logic/RideReviewService.js';
+import { isAtLeastHoursAway } from '../../../business-logic/rideDateTime.js';
+import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedService.js';
+import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import {
   IconAlertTriangle, IconArrowLeft, IconCalendar, IconCheck, IconEdit,
   IconMapPin, IconRoute, IconStar, IconUsers, IconX
@@ -29,7 +34,7 @@ function MobileHeader({ title, onBack }) {
 
 function RouteMap({ ride }) {
   return (
-    <div className="ride-map" aria-label={`Route from ${ride.pickup} to ${ride.destination}`}>
+    <GoogleRouteMap pickup={ride.pickup} destination={ride.destination} waypoints={ride.waypoints} className="ride-map">
       <span className="map-grid map-grid-a" />
       <span className="map-grid map-grid-b" />
       <span className="map-route" />
@@ -37,13 +42,13 @@ function RouteMap({ ride }) {
       <span className="map-point map-point-end" />
       <span className="map-label map-label-start">{ride.pickup?.split(',')[0]}</span>
       <span className="map-label map-label-end">{ride.destination?.split(',')[0]}</span>
-    </div>
+    </GoogleRouteMap>
   );
 }
 
 function Lifecycle({ status }) {
   const active = LIFECYCLE.indexOf(status);
-  const cancelled = status === 'Cancelled';
+  const cancelled = ['Cancelled', 'Expired'].includes(status);
   return (
     <div className="lifecycle" aria-label={`Ride status: ${status}`}>
       {LIFECYCLE.map((label, index) => (
@@ -53,7 +58,7 @@ function Lifecycle({ status }) {
           {index < LIFECYCLE.length - 1 && <i className={!cancelled && index < active ? 'filled' : ''} />}
         </div>
       ))}
-      {cancelled && <span className="ride-status-badge status-cancelled">Cancelled</span>}
+      {cancelled && <span className={`ride-status-badge ${statusClass(status)}`}>{status}</span>}
     </div>
   );
 }
@@ -97,19 +102,52 @@ function CancelSheet({ onDismiss, onConfirm }) {
   );
 }
 
+function RequestSheet({ ride, onDismiss, onSubmit, saving, error }) {
+  const [seatsRequested, setSeatsRequested] = useState(1);
+  const [companionNames, setCompanionNames] = useState([]);
+  function setSeats(value) {
+    const next = Math.max(1, Math.min(ride.seatsAvailable, value));
+    setSeatsRequested(next);
+    setCompanionNames((names) => Array.from({ length: next - 1 }, (_, index) => names[index] || ''));
+  }
+  return (
+    <div className="sheet-backdrop" onMouseDown={onDismiss}>
+      <section className="bottom-sheet" onMouseDown={(event) => event.stopPropagation()}>
+        <span className="sheet-handle" />
+        <div className="sheet-title-row"><h2>Request to join</h2><button onClick={onDismiss} aria-label="Close"><IconX size={19} /></button></div>
+        <p>Seats include you. Pending requests do not reserve seats until the Host accepts them.</p>
+        <div className="field"><label>Seats requested</label><div className="seat-stepper"><button type="button" onClick={() => setSeats(seatsRequested - 1)}>−</button><span>{seatsRequested}</span><button type="button" onClick={() => setSeats(seatsRequested + 1)}>+</button></div></div>
+        {companionNames.map((name, index) => <div className="field" key={index}><label htmlFor={`companion-${index}`}>Companion {index + 1} name</label><input id={`companion-${index}`} value={name} onChange={(event) => setCompanionNames((names) => names.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /></div>)}
+        {error && <div className="alert alert-error" style={{ marginBottom: 10 }}>{error}</div>}
+        <button className="primary-action full" disabled={saving || companionNames.some((name) => !name.trim())} onClick={() => onSubmit({ seatsRequested, companionNames })}>{saving ? 'Sending…' : `Request ${seatsRequested} seat${seatsRequested === 1 ? '' : 's'}`}</button>
+      </section>
+    </div>
+  );
+}
+
 export default function RideDetail() {
   const { rideId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [ride, setRide] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [requestSent, setRequestSent] = useState(false);
+  const [activeRequest, setActiveRequest] = useState(null);
+  const [requesting, setRequesting] = useState(false);
+  const [showRequest, setShowRequest] = useState(false);
+  const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     let alive = true;
-    RideService.getRide(rideId, user?.id).then((found) => {
-      if (alive) setRide(found);
+    RideService.getRide(rideId).then(async (found) => {
+      if (!alive) return;
+      setRide(found);
+      if (found?.hostId) RideReviewService.listProfileReviews(found.hostId).then((items) => alive && setReviews(items)).catch(() => {});
+      if (user && found?.hostId !== user.id) {
+        const requests = await RideRequestService.listMyRequests(user.id);
+        if (alive) setActiveRequest(requests.find((request) => request.rideId === rideId && ['Pending', 'Accepted'].includes(request.status)) || null);
+      }
     }).finally(() => {
       if (alive) setLoading(false);
     });
@@ -120,16 +158,38 @@ export default function RideDetail() {
   if (!ride) return <div className="ride-page-loading">This ride could not be found.</div>;
 
   const isHost = ride.hostId === user?.id;
-  const canEdit = isHost && ['Draft', 'Published'].includes(ride.status);
+  const canEdit = isHost && ['Draft', 'Published'].includes(ride.status) && !ride.hasAcceptedRequests;
   const canCancel = isHost && ['Published', 'Matched'].includes(ride.status);
+  const canRequest = !isHost && ride.status === 'Published' && ride.seatsAvailable > 0 && isAtLeastHoursAway(ride.departureAt);
+  const requestDeadline = new Date(new Date(ride.departureAt).getTime() - 5 * 60 * 60 * 1000);
   const waypoints = ride.waypoints?.length ? ride.waypoints : ride.journeyScale === 'Intercity'
     ? [{ name: 'Ipoh Old Town', description: 'A food stop along the way.' }, { name: 'Taiping Lake Gardens', description: 'A cultural stop by the route.' }]
     : [];
 
-  async function cancelRide() {
-    await RideService.updateRide(ride.id, { status: 'Cancelled' });
-    setRide((current) => ({ ...current, status: 'Cancelled' }));
-    setCancelling(false);
+  async function cancelRide(reason) {
+    setError('');
+    try {
+      setRide(await RideService.cancelRide(ride.id, reason));
+      setCancelling(false);
+    } catch (err) { setError(err.message); }
+  }
+
+  async function submitRequest(payload) {
+    setRequesting(true);
+    setError('');
+    try {
+      const request = await RideRequestService.submitRequest(user.id, { rideId: ride.id, ...payload });
+      setActiveRequest(request);
+      setShowRequest(false);
+    } catch (err) { setError(err.message); }
+    finally { setRequesting(false); }
+  }
+
+  async function changeRecruitment(action) {
+    setError('');
+    try {
+      setRide(action === 'close' ? await RideService.closeRecruitment(ride.id) : await RideService.reopenRecruitment(ride.id));
+    } catch (err) { setError(err.message); }
   }
 
   return (
@@ -138,9 +198,11 @@ export default function RideDetail() {
         <RouteMap ride={ride} />
         <button className="map-back-button" onClick={() => navigate('/ride')} aria-label="Go back"><IconArrowLeft size={18} /></button>
         <span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span>
+        <a className="map-open-overlay" href={GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, destination: ride.destination, waypoints: ride.waypoints })} target="_blank" rel="noreferrer">Open map</a>
       </div>
 
       <div className="ride-detail-content">
+        {error && <div className="alert alert-error">{error}</div>}
         <section className="ride-info-card"><Lifecycle status={ride.status} /></section>
         <section className="ride-info-card trip-info-mobile">
           <div className="trip-title-row"><h1>{ride.pickup?.split(',')[0]} <span>→</span> {ride.destination?.split(',')[0]}</h1><b className="scale-badge">{ride.journeyScale}</b></div>
@@ -151,9 +213,10 @@ export default function RideDetail() {
             <div><span>◷ Time</span><strong>{formatTime(ride.time)}</strong></div>
           </div>
           <p className="seats-left"><IconUsers size={15} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} available</p>
+          <p className="request-date">Request deadline: {requestDeadline.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' })}</p>
         </section>
 
-        <section className="fixed-route-note"><IconAlertTriangle size={16} /><span>This ride follows a <strong>fixed route</strong> — requests with a significant detour are automatically declined.</span></section>
+        <section className="fixed-route-note"><IconAlertTriangle size={16} /><span>This ride follows a <strong>fixed route</strong>. Route-deviation automation is not enabled yet.</span></section>
 
         <section className="ride-info-card ride-preferences">
           <div><p className="eyebrow">RESTRICTIONS</p><div className="ride-tag-list">{ride.restrictionTags?.length ? ride.restrictionTags.map((tag) => <span key={tag}>{tag}</span>) : <small>No restrictions added</small>}</div></div>
@@ -162,6 +225,7 @@ export default function RideDetail() {
 
         {waypoints.length > 0 && <section className="waypoints-section"><h2>🗺️ Culinary & cultural waypoints</h2><div className="waypoint-scroller">{waypoints.map((waypoint) => <article key={waypoint.name}><div className="waypoint-art">✦</div><strong>{waypoint.name}</strong><p>{waypoint.description}</p></article>)}</div></section>}
         <HostIdentity ride={ride} />
+        <section className="ride-info-card"><p className="eyebrow">HOST REVIEWS</p>{reviews.length ? reviews.slice(0, 3).map((review) => <div className="review-row" key={review.id}><span>{review.reviewer?.fullName || 'Member'} · {review.rating}/5</span><strong>{review.comment || 'No written comment'}</strong></div>) : <p className="empty-waypoints">No reviews yet</p>}</section>
       </div>
 
       <div className="ride-bottom-actions">
@@ -170,12 +234,16 @@ export default function RideDetail() {
             {canEdit && <button className="outline-action" onClick={() => navigate(`/ride/${ride.id}/edit`)}><IconEdit size={15} /> Edit ride</button>}
             <button className="primary-action" onClick={() => navigate(`/ride/${ride.id}/requests`)}><IconUsers size={15} /> Manage requests</button>
           </div>
+          {ride.status === 'Published' && <button className="outline-action full" onClick={() => changeRecruitment('close')}>Close recruitment</button>}
+          {ride.status === 'Matched' && isAtLeastHoursAway(ride.departureAt) && <button className="outline-action full" onClick={() => changeRecruitment('reopen')}>Reopen recruitment</button>}
+          {ride.status === 'Completed' && <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate accepted passengers</button>}
           {canCancel && <button className="cancel-action" onClick={() => setCancelling(true)}>Cancel this ride</button>}
         </> : ride.status === 'Completed' ? <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate & review</button>
-          : requestSent ? <div className="request-sent"><IconCheck size={15} /> Request sent — awaiting approval</div>
-            : <button className="primary-action full" onClick={() => setRequestSent(true)}>Request to join</button>}
+          : activeRequest ? <div className="request-sent"><IconCheck size={15} /> {activeRequest.status === 'Accepted' ? 'Request accepted' : 'Request sent — awaiting approval'}</div>
+            : <button className="primary-action full" disabled={!canRequest} onClick={() => setShowRequest(true)}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
       </div>
       {cancelling && <CancelSheet onDismiss={() => setCancelling(false)} onConfirm={cancelRide} />}
+      {showRequest && <RequestSheet ride={ride} onDismiss={() => { setShowRequest(false); setError(''); }} onSubmit={submitRequest} saving={requesting} error={error} />}
     </main>
   );
 }

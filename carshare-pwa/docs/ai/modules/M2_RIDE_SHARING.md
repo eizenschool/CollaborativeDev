@@ -23,13 +23,32 @@ Module 1 eligibility/profile/vehicle; Google Maps; Module 6 lifecycle verificati
 Ride data, accepted participation context, lifecycle state, searchable rides.
 
 ## Current Status
-Module 2 ride CRUD/search is connected to the shared Supabase project through
-`RideService.js`. The deployed schema is `006-007` plus hardening in `010` and
-`012`: authenticated browsing, host-only management, persisted waypoints,
-seat constraints, indexed search/ownership, and a mandatory vehicle owned by
-the host. Drafts use the current Review-step save semantics and therefore need
-the same route, date, time, seats, and vehicle fields as published rides.
-Ride requests, reviews, and accepted-passenger persistence remain local/future.
+Module 2 is connected to the shared Supabase project through `RideService.js`,
+`RideRequestService.js`, and `RideReviewService.js`. Deployed SQL `006-015`
+covers ride publishing, authoritative `departure_at`, waypoints, multi-seat
+requests, atomic acceptance/cancellation, manual recruitment close/reopen,
+automatic departure-time lifecycle processing, and mutual Completed-ride
+reviews. The same interfaces and state rules exist in the offline mock adapter;
+its automatic lifecycle processing is deterministic and lazy.
 
-## Open Questions
-Ride/trip model; shared lifecycle; multi-passenger behaviour; route-deviation threshold; auto-expiry interpretation; identity/license verification ownership; matched-ride discoverability.
+Published rides must be at least five hours away. New requests close at that
+boundary, while existing Pending requests may still be accepted or rejected
+until departure. Pending requests do not reserve seats. A Host accepting a
+request locks and checks the ride before deducting the whole request, so partial
+acceptance and overselling are not allowed. Companion names are visible only to
+the requester and Host and do not become account participants.
+
+Module 2 owns `Draft -> Published`, `Published <-> Matched`, cancellation and
+expiry. `Matched -> In Transit -> Completed` is exposed only through the
+service-role `transition_verified_ride()` contract for a future trusted Module 6
+pipeline; no browser adapter can perform that production transition.
+
+Route and waypoint previews use the shared no-charge Maps Embed API directions
+component. It accepts the existing text locations and falls back to the local
+route illustration when the restricted key is absent or the app is offline.
+
+## Deferred
+Places autocomplete, stored coordinates, traffic-aware routing, and
+route-deviation automation; Module 3 conversation
+creation and notifications after acceptance; production Module 1/6 driver
+verification; wiring the trusted Module 6 pipeline to the service-role transition.

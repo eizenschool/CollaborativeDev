@@ -87,24 +87,43 @@ This avoids fragile `../` and `../../` references when context files are moved w
 
 ## D010 — Module 1 and Module 2 Initial Supabase Schema
 **Status:** Accepted
-`database/sql/001-012` is the deployed database history for the accepted first
-slice: Module 1 plus ride CRUD/search. The original `001-007` drafts are kept
-as history; `008-012` separate private profile data, harden Auth/RLS/grants,
-configure avatars, persist waypoints, and enforce a host-owned vehicle.
+`database/sql/001-015` is the deployed history for Module 1 and Module 2. The
+original `001-007` drafts are kept as history; `008-012` harden the first slice,
+and `013-015` add the accepted ride/request/lifecycle/review model.
 
 ## D011 — Supabase Scope and Authentication
 **Status:** Accepted
 The shared project is `pnetstmovctfwqcumodx`. Frontend configuration uses
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; the old anon-key name
 is compatibility-only. This slice uses email/password with email verification.
-Phone OTP, Google OAuth, account hard deletion, ride requests/reviews, and
-Messaging Realtime are deferred. Modules 3-6 retain their local adapters.
+Phone OTP, Google OAuth, account hard deletion, and Messaging Realtime are
+deferred. Modules 3-6 retain their local adapters.
+
+## D012 — Module 2 Lifecycle and Participation Contract
+**Status:** Accepted
+`departure_at` is the authoritative UTC ride instant and the application displays
+it in `Asia/Kuala_Lumpur`. A request can include its account holder plus named
+companions; only the account holder participates in access and reviews. Pending
+requests do not reserve seats, acceptance is all-or-nothing and transactional,
+and new requests stop five hours before departure. Module 2 owns lifecycle state
+through `Matched`; only a trusted service-role Module 6 pipeline may move a ride
+to `In Transit` or `Completed`. Reviews are mutual between the Host and each
+accepted account holder and update only the public average star rating.
+
+## D013 — Zero-Charge-First Google Maps Integration
+**Status:** Accepted
+The initial mapping integration uses only Maps Embed API directions mode because
+Google documents it as no-charge with unlimited requests. A dedicated browser
+key must be restricted both to approved website referrers and to Maps Embed API.
+The application keeps its local map fallback when that key is absent or offline.
+Places, Routes, Geocoding, Dynamic Maps, traffic data, and other billable SKUs
+must not be enabled or added without a separate team decision and cost-control
+review. Budget alerts are notifications, not the Maps spending boundary.
 
 ## Open Decisions
-- final ride/trip domain model;
 - database schemas/RLS for Modules 3-6;
-- detailed Google Maps integration;
-- shared lifecycle contract;
+- billable Google Maps features such as autocomplete and coordinate persistence;
+- production Module 6 verification pipeline integration;
 - messaging persistence/realtime architecture;
 - reputation and Host Impact formulas;
 - carbon model;

@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideService } from '../../../business-logic/RideService.js';
 import { VehicleService } from '../../../business-logic/VehicleService.js';
-import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck } from '../icons.jsx';
+import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
+import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck, IconPlus, IconX } from '../icons.jsx';
 import '../../styles/ride.css';
 
 const STEPS = ['Route', 'Schedule', 'Vehicle', 'Trip Details', 'Review & Publish'];
@@ -13,7 +14,7 @@ const RESTRICTION_OPTIONS = ['Pet-friendly', 'No smoking', 'Women-only', 'Child 
 const emptyForm = {
   pickup: '', destination: '', journeyScale: 'Urban',
   date: '', time: '', seatsTotal: 3,
-  vehicleId: null,
+  vehicleId: null, vehicleCapacity: null,
   contribution: '', restrictionTags: [],
   waypoints: []
 };
@@ -143,11 +144,11 @@ function RouteStep({ form, patch }) {
         </div>
       </div>
 
-      <div className="map-placeholder">
+      <GoogleRouteMap pickup={form.pickup} destination={form.destination} waypoints={form.waypoints} className="map-placeholder">
         <span className="map-pin map-pin-start"><span className="pin-dot" /> {form.pickup || 'Pickup point'}</span>
         <span className="map-pin map-pin-end"><span className="pin-dot pin-dot-end" /> {form.destination || 'Destination'}</span>
-        <span className="map-attribution">Let's Tumpang Maps</span>
-      </div>
+        <span className="map-attribution">Google Maps preview appears when the Embed key is configured</span>
+      </GoogleRouteMap>
 
       <p className="field-label-standalone">Journey Scale</p>
       <div className="scale-toggle">
@@ -219,7 +220,7 @@ function VehicleStep({ form, patch, userId }) {
           type="button"
           key={v.id}
           className={'vehicle-select-card' + (form.vehicleId === v.id ? ' active' : '')}
-          onClick={() => patch({ vehicleId: v.id })}
+          onClick={() => patch({ vehicleId: v.id, vehicleCapacity: v.seats, seatsTotal: Math.min(form.seatsTotal, v.seats) })}
         >
           <span className="vehicle-select-icon"><IconCar size={16} /></span>
           <div>
@@ -235,9 +236,17 @@ function VehicleStep({ form, patch, userId }) {
 
 // ---------- STEP 4: TRIP DETAILS ----------
 function TripDetailsStep({ form, patch }) {
+  const [waypoint, setWaypoint] = useState('');
   function toggleTag(tag) {
     const has = form.restrictionTags.includes(tag);
     patch({ restrictionTags: has ? form.restrictionTags.filter((t) => t !== tag) : [...form.restrictionTags, tag] });
+  }
+
+  function addWaypoint() {
+    const name = waypoint.trim();
+    if (!name) return;
+    patch({ waypoints: [...form.waypoints, { name, description: '' }] });
+    setWaypoint('');
   }
 
   return (
@@ -267,8 +276,13 @@ function TripDetailsStep({ form, patch }) {
         ))}
       </div>
 
-      <div className="alert alert-info" style={{ marginTop: 16 }}>
-        Culinary &amp; cultural waypoints aren't part of this build yet — this step is ready for that section to be added.
+      <div className="field" style={{ marginTop: 18 }}>
+        <label>Culinary &amp; cultural waypoints</label>
+        <div className="waypoint-add">
+          <input value={waypoint} onChange={(event) => setWaypoint(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addWaypoint(); } }} placeholder="Add an optional waypoint" />
+          <button type="button" onClick={addWaypoint} aria-label="Add waypoint"><IconPlus size={16} /></button>
+        </div>
+        {form.waypoints.length > 0 && <div className="waypoint-lines">{form.waypoints.map((item, index) => <div key={`${item.name}-${index}`}><span><IconMapPin size={14} />{item.name}</span><button type="button" onClick={() => patch({ waypoints: form.waypoints.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remove ${item.name}`}><IconX size={15} /></button></div>)}</div>}
       </div>
     </>
   );
@@ -286,6 +300,7 @@ function ReviewStep({ form, onPublish, onDraft, saving }) {
         <div className="review-row"><span>Seats available</span><strong>{form.seatsTotal}</strong></div>
         <div className="review-row"><span>Contribution</span><strong>{form.contribution || 'No contribution needed'}</strong></div>
         <div className="review-row"><span>Restriction tags</span><strong>{form.restrictionTags.length ? form.restrictionTags.join(', ') : 'None'}</strong></div>
+        <div className="review-row"><span>Waypoints</span><strong>{form.waypoints.length ? form.waypoints.map((item) => item.name).join(', ') : 'None'}</strong></div>
       </div>
       <div className="step-actions">
         <button className="btn-secondary" onClick={onDraft} disabled={saving}>Save as Draft</button>

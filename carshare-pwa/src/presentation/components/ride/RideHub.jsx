@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideService } from '../../../business-logic/RideService.js';
+import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import RideCard from './RideCard.jsx';
 import { IconSearch, IconMapPin, IconCalendar, IconPlus, IconFilter } from '../icons.jsx';
 import '../../styles/ride.css';
@@ -24,7 +25,8 @@ export default function RideHub() {
 
   useEffect(() => {
     if (tab === 'my' && !myRides && user) {
-      RideService.listMyRides(user.id).then(setMyRides);
+      Promise.all([RideService.listMyRides(user.id), RideRequestService.listMyRequests(user.id)])
+        .then(([rides, joining]) => setMyRides({ ...rides, joining }));
     }
   }, [tab, user, myRides]);
 
@@ -127,9 +129,7 @@ function MyRidesView({ myRides, onRideSelect, onRequests }) {
 
       <div className="ride-hub-header" style={{ marginTop: 24 }}><h2>Joining</h2><button className="btn-link" onClick={onRequests}>My requests</button></div>
       <div className="ride-grid">
-        <button className="my-requests-link" onClick={onRequests}>
-          Ride requests aren't part of this build yet — this section is ready for the "request to join" flow (FR-2.2/2.5) to populate.
-        </button>
+        {myRides.joining.length ? myRides.joining.map((request) => request.ride && <button className="my-requests-link" key={request.id} onClick={() => onRideSelect(request.ride)}>{request.ride.pickup.split(',')[0]} → {request.ride.destination.split(',')[0]} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'} · {request.status}</button>) : <button className="my-requests-link" onClick={onRequests}>You have no ride requests yet.</button>}
       </div>
     </>
   );

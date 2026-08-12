@@ -47,8 +47,9 @@ Backend/data:
 
 Mapping:
 - Google Maps Platform is the current project direction.
-- Earlier OpenStreetMap / Leaflet / OSRM planning is not the current intended mapping baseline.
-- Existing old map-cache/config references must be reviewed when Google Maps work begins.
+- Module 2 uses the no-charge Maps Embed API for directions previews, text locations, and waypoints, with a local fallback when unconfigured/offline.
+- Earlier OpenStreetMap / Leaflet / OSRM planning and tile caching have been removed from the active baseline.
+- Places autocomplete, geocoding, traffic-aware routing, and other billable Maps SKUs require a separate accepted cost-control decision.
 
 ## Current Commands
 Run from `carshare-pwa/`.

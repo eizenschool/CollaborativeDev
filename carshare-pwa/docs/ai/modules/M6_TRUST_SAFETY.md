@@ -20,6 +20,11 @@ Module 2 ride/participation/lifecycle; Module 1 reputation; Module 3 hazard advi
 
 ## Current Status
 Module 6 has a substantial prototype on `Development`, including tests for several verification engines. Do not restart from its old standalone branch without comparing to `Development`.
+Its ride snapshot now consumes Module 2's authoritative `departureAt` instant.
+The browser-side local verification adapter remains non-production and cannot
+write `rides.status`. Module 2 exposes `transition_verified_ride(ride_id,
+next_status)` only to `service_role` for a future trusted pipeline to perform
+`Matched -> In Transit -> Completed`.
 
 ## Important Existing Formula
 ```text

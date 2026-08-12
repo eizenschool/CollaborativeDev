@@ -31,6 +31,9 @@ does not establish an app session until Supabase returns one. Deactivation is
 reversible on the next successful login and hides published rides; hard account
 deletion is hidden until Auth identity deletion can be implemented safely.
 `MyProfile.jsx`'s consolidated layout (`.profile-page`/`.profile-sidebar`/`.rail-card` in `theme.css`) now has a `@media (max-width: 700px)` breakpoint matching Module 2's Ride Hub pattern - previously the sidebar had no mobile treatment.
+Module 2 reviews now recalculate `host_impact_stats.rating` as the account-level
+average star rating. They intentionally do not alter `reputation_score` or the
+unconfirmed Host Impact formula.
 
 ## Open Questions
 Reputation formula/weights; Host Impact formula; badge/publishing thresholds;

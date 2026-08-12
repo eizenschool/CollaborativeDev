@@ -16,6 +16,7 @@ export default function EditRide() {
   const [waypoints, setWaypoints] = useState([]);
   const [newWaypoint, setNewWaypoint] = useState('');
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     RideService.getRide(rideId).then((found) => {
@@ -28,23 +29,29 @@ export default function EditRide() {
   }, [rideId]);
 
   if (!ride) return <div className="ride-page-loading">Loading ride…</div>;
-  const locked = ['Matched', 'In Transit', 'Completed', 'Cancelled'].includes(ride.status);
+  const locked = !['Draft', 'Published'].includes(ride.status) || (ride.status === 'Published' && ride.hasAcceptedRequests);
   const toggleTag = (tag) => !locked && setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
   const addWaypoint = () => {
     const value = newWaypoint.trim();
     if (value && !locked) { setWaypoints((current) => [...current, value]); setNewWaypoint(''); }
   };
   async function save() {
-    await RideService.updateRide(rideId, { contribution, journeyScale, restrictionTags: tags, waypoints: waypoints.map((name) => ({ name, description: '' })) });
-    setSaved(true);
-    window.setTimeout(() => navigate(`/ride/${rideId}`), 600);
+    setError('');
+    try {
+      await RideService.updateRide(rideId, { contribution, journeyScale, restrictionTags: tags, waypoints: waypoints.map((name) => ({ name, description: '' })) });
+      setSaved(true);
+      window.setTimeout(() => navigate(`/ride/${rideId}`), 600);
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   return (
     <main className="phone-ride-page edit-ride-page">
       <header className="mobile-page-header"><button className="round-icon-button" onClick={() => navigate(`/ride/${rideId}`)} aria-label="Go back"><IconArrowLeft size={18} /></button><h1>Edit ride</h1></header>
       <div className={`edit-ride-content ${locked ? 'locked-form' : ''}`}>
-        {locked && <section className="locked-banner"><IconLock size={16} /><span>This ride has already been <strong>{ride.status.toLowerCase()}</strong> and can no longer be edited.</span></section>}
+        {locked && <section className="locked-banner"><IconLock size={16} /><span>{ride.hasAcceptedRequests ? 'This ride already has an accepted request and can no longer be edited.' : <>This ride is <strong>{ride.status.toLowerCase()}</strong> and can no longer be edited.</>}</span></section>}
+        {error && <div className="alert alert-error">{error}</div>}
         <section className="ride-info-card"><p className="eyebrow">JOURNEY SCALE</p><div className="scale-picker">{['Urban', 'Intercity'].map((scale) => <button key={scale} disabled={locked} className={journeyScale === scale ? 'selected' : ''} onClick={() => setJourneyScale(scale)}>{scale} route</button>)}</div></section>
         <section className="ride-info-card"><label className="eyebrow" htmlFor="contribution">NON-MONETARY CONTRIBUTION</label><input id="contribution" disabled={locked} value={contribution} onChange={(event) => setContribution(event.target.value)} placeholder="e.g. Snacks, toll fee, coffee…" /></section>
         <section className="ride-info-card"><p className="eyebrow">TRIP RESTRICTIONS</p><div className="restriction-picker">{restrictionOptions.map((tag) => <button key={tag} disabled={locked} className={tags.includes(tag) ? 'selected' : ''} onClick={() => toggleTag(tag)}>{tag}</button>)}</div></section>

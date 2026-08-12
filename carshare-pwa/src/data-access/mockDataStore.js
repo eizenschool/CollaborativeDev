@@ -158,25 +158,100 @@ const seedData = {
       time: '08:00',
       journeyScale: 'Urban',
       seatsTotal: 3,
-      seatsAvailable: 3,
+      seatsAvailable: 2,
       contribution: 'Toll contribution',
       restrictionTags: ['No smoking', 'Music OK'],
       status: 'Published',
       createdAt: '2026-08-02T00:00:00.000Z'
+    },
+    r_6: {
+      id: 'r_6',
+      hostId: 'u_host_ahmad',
+      pickup: 'KL Sentral, Kuala Lumpur',
+      destination: 'Melaka Sentral, Melaka',
+      date: '2026-08-10',
+      time: '09:00',
+      journeyScale: 'Intercity',
+      seatsTotal: 3,
+      seatsAvailable: 2,
+      contribution: 'Share snacks',
+      restrictionTags: ['No smoking'],
+      waypoints: [],
+      status: 'Completed',
+      createdAt: '2026-08-01T00:00:00.000Z'
     }
-  }
+  },
+  rideRequests: {
+    rq_1: {
+      id: 'rq_1', rideId: 'r_5', requesterId: 'u_host_ahmad', seatsRequested: 2,
+      companionNames: ['Nadia Rizal'], status: 'Pending', createdAt: '2026-08-11T01:00:00.000Z'
+    },
+    rq_2: {
+      id: 'rq_2', rideId: 'r_5', requesterId: 'u_host_sarah', seatsRequested: 1,
+      companionNames: [], status: 'Accepted', createdAt: '2026-08-11T02:00:00.000Z', processedAt: '2026-08-11T03:00:00.000Z'
+    },
+    rq_3: {
+      id: 'rq_3', rideId: 'r_1', requesterId: 'u_demo_1', seatsRequested: 1,
+      companionNames: [], status: 'Pending', createdAt: '2026-08-11T04:00:00.000Z'
+    },
+    rq_4: {
+      id: 'rq_4', rideId: 'r_6', requesterId: 'u_demo_1', seatsRequested: 1,
+      companionNames: [], status: 'Accepted', createdAt: '2026-08-05T04:00:00.000Z', processedAt: '2026-08-05T05:00:00.000Z'
+    }
+  },
+  rideReviews: {}
 };
+
+function toMockDepartureAt(date, time) {
+  return new Date(`${date}T${time}:00+08:00`).toISOString();
+}
+
+function normalizeModule2State(db) {
+  db.rideRequests ||= {};
+  db.rideReviews ||= {};
+  for (const ride of Object.values(db.rides || {})) {
+    ride.departureAt ||= toMockDepartureAt(ride.date, ride.time);
+    ride.date ||= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur', dateStyle: 'short' }).format(new Date(ride.departureAt));
+    ride.publishedAt ??= ride.status === 'Draft' ? null : ride.createdAt;
+    ride.recruitmentClosedAt ??= null;
+    ride.cancelReason ??= null;
+    ride.expiredAt ??= null;
+    ride.updatedAt ??= ride.createdAt;
+    ride.waypoints ||= [];
+  }
+  return db;
+}
+
+function processDueRides(db, now = new Date()) {
+  const instant = now instanceof Date ? now : new Date(now);
+  for (const ride of Object.values(db.rides || {})) {
+    if (ride.status !== 'Published' || new Date(ride.departureAt) > instant) continue;
+    const rideRequests = Object.values(db.rideRequests).filter((request) => request.rideId === ride.id);
+    for (const request of rideRequests.filter((item) => item.status === 'Pending')) {
+      request.status = 'Expired';
+      request.decisionReason = 'Departure time reached';
+      request.cancelledBy = 'System';
+      request.processedAt = instant.toISOString();
+      request.updatedAt = instant.toISOString();
+    }
+    const hasAccepted = rideRequests.some((request) => request.status === 'Accepted');
+    ride.status = hasAccepted ? 'Matched' : 'Expired';
+    ride.recruitmentClosedAt = hasAccepted ? (ride.recruitmentClosedAt || instant.toISOString()) : ride.recruitmentClosedAt;
+    ride.expiredAt = hasAccepted ? null : instant.toISOString();
+    ride.updatedAt = instant.toISOString();
+  }
+}
 
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(seedData));
-      return structuredClone(seedData);
+      return normalizeModule2State(structuredClone(seedData));
     }
-    return JSON.parse(raw);
+    return normalizeModule2State(JSON.parse(raw));
   } catch {
-    return structuredClone(seedData);
+    return normalizeModule2State(structuredClone(seedData));
   }
 }
 
@@ -340,6 +415,8 @@ export const mockDb = {
   async listRides({ from = '', to = '', date = '' } = {}) {
     await delay();
     const db = load();
+    processDueRides(db);
+    save(db);
     const f = from.trim().toLowerCase();
     const t = to.trim().toLowerCase();
     return Object.values(db.rides)
@@ -348,32 +425,52 @@ export const mockDb = {
       .filter((r) => !t || r.destination.toLowerCase().includes(t))
       .filter((r) => !date || r.date === date)
       .map((r) => enrichRide(db, r))
-      .sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time));
+      .sort((a, b) => new Date(a.departureAt) - new Date(b.departureAt));
   },
 
   async listMyRides(userId) {
     await delay();
     const db = load();
+    processDueRides(db);
+    save(db);
     const hosting = Object.values(db.rides)
       .filter((r) => r.hostId === userId)
       .map((r) => enrichRide(db, r))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    // Ride Request Component (join flow) isn't built in this pass - "Joining"
-    // is wired up and ready for Screen 4/5's request flow to populate later.
-    return { hosting, joining: [] };
+    const joining = Object.values(db.rideRequests)
+      .filter((request) => request.requesterId === userId)
+      .map((request) => enrichRequest(db, request))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return { hosting, joining };
   },
 
   async getRide(rideId) {
     await delay();
     const db = load();
+    processDueRides(db);
+    save(db);
     return db.rides[rideId] ? enrichRide(db, db.rides[rideId]) : null;
   },
 
   async updateRide(rideId, patch) {
     await delay();
     const db = load();
-    if (!db.rides[rideId]) throw new Error('Ride not found.');
-    db.rides[rideId] = { ...db.rides[rideId], ...patch };
+    processDueRides(db);
+    const ride = db.rides[rideId];
+    if (!ride) throw new Error('Ride not found.');
+    if (ride.hostId !== db.currentUserId) throw new Error('Ride not found or permission denied.');
+    if (!['Draft', 'Published'].includes(ride.status)) throw new Error('Only Draft or Published rides can be edited.');
+    if (Object.values(db.rideRequests).some((request) => request.rideId === rideId && request.status === 'Accepted')) {
+      throw new Error('A ride with accepted requests cannot be edited.');
+    }
+    const next = { ...ride, ...patch };
+    const vehicle = (db.vehicles[ride.hostId] || []).find((item) => item.id === next.vehicleId);
+    if (!vehicle) throw new Error('Select a vehicle you own.');
+    if (Number(next.seatsTotal) > vehicle.seats) throw new Error('Available seats exceed vehicle capacity.');
+    if (patch.date || patch.time) next.departureAt = toMockDepartureAt(next.date, next.time);
+    next.seatsAvailable = Number(next.seatsTotal);
+    next.updatedAt = new Date().toISOString();
+    db.rides[rideId] = next;
     save(db);
     return enrichRide(db, db.rides[rideId]);
   },
@@ -381,8 +478,16 @@ export const mockDb = {
   async createRide(hostId, rideData, status) {
     await delay();
     const db = load();
+    processDueRides(db);
+    const vehicle = (db.vehicles[hostId] || []).find((item) => item.id === rideData.vehicleId);
+    if (!vehicle) throw new Error('Select a vehicle you own.');
     const id = 'r_' + Date.now();
     const seats = Number(rideData.seatsTotal) || 1;
+    if (seats > vehicle.seats) throw new Error('Available seats exceed vehicle capacity.');
+    const departureAt = rideData.departureAt || toMockDepartureAt(rideData.date, rideData.time);
+    if (status === 'Published' && new Date(departureAt).getTime() - Date.now() < 5 * 60 * 60 * 1000) {
+      throw new Error('Published rides must depart at least 5 hours from now.');
+    }
     db.rides[id] = {
       id,
       hostId,
@@ -390,6 +495,7 @@ export const mockDb = {
       destination: rideData.destination,
       date: rideData.date,
       time: rideData.time,
+      departureAt,
       journeyScale: rideData.journeyScale,
       vehicleId: rideData.vehicleId || null,
       seatsTotal: seats,
@@ -398,12 +504,257 @@ export const mockDb = {
       restrictionTags: rideData.restrictionTags || [],
       waypoints: rideData.waypoints || [],
       status,
-      createdAt: new Date().toISOString()
+      publishedAt: status === 'Published' ? new Date().toISOString() : null,
+      recruitmentClosedAt: null,
+      cancelReason: null,
+      expiredAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
     save(db);
     return enrichRide(db, db.rides[id]);
+  },
+
+  async publishDraft(rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'Draft') throw new Error('Only your Draft rides can be published.');
+    if (new Date(ride.departureAt).getTime() - Date.now() < 5 * 60 * 60 * 1000) throw new Error('Published rides must depart at least 5 hours from now.');
+    ride.status = 'Published';
+    ride.publishedAt = new Date().toISOString();
+    ride.updatedAt = ride.publishedAt;
+    save(db);
+    return enrichRide(db, ride);
+  },
+
+  async deleteDraft(rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'Draft') throw new Error('Only your Draft rides can be deleted.');
+    delete db.rides[rideId];
+    save(db);
+    return true;
+  },
+
+  async cancelRide(rideId, reason) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!reason?.trim()) throw new Error('A cancellation reason is required.');
+    if (!ride || ride.hostId !== db.currentUserId) throw new Error('Ride not found or permission denied.');
+    if (!['Published', 'Matched'].includes(ride.status)) throw new Error('Only Published or Matched rides can be cancelled.');
+    const now = new Date().toISOString();
+    for (const request of Object.values(db.rideRequests).filter((item) => item.rideId === rideId && ['Pending', 'Accepted'].includes(item.status))) {
+      request.status = 'Cancelled';
+      request.decisionReason = reason.trim();
+      request.cancelledBy = 'Host';
+      request.cancelledAt = now;
+      request.updatedAt = now;
+    }
+    ride.status = 'Cancelled';
+    ride.cancelReason = reason.trim();
+    ride.seatsAvailable = ride.seatsTotal;
+    ride.recruitmentClosedAt ||= now;
+    ride.updatedAt = now;
+    save(db);
+    return enrichRide(db, ride);
+  },
+
+  async closeRideRecruitment(rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'Published' || new Date(ride.departureAt) <= new Date()) {
+      throw new Error('Only an upcoming Published ride can close recruitment.');
+    }
+    const now = new Date().toISOString();
+    for (const request of Object.values(db.rideRequests).filter((item) => item.rideId === rideId && item.status === 'Pending')) {
+      request.status = 'Expired';
+      request.decisionReason = 'Recruitment closed';
+      request.cancelledBy = 'System';
+      request.processedAt = now;
+      request.updatedAt = now;
+    }
+    ride.status = 'Matched';
+    ride.recruitmentClosedAt = now;
+    ride.updatedAt = now;
+    save(db);
+    return enrichRide(db, ride);
+  },
+
+  async reopenRideRecruitment(rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'Matched') throw new Error('Only Matched rides can reopen recruitment.');
+    if (new Date(ride.departureAt).getTime() - Date.now() < 5 * 60 * 60 * 1000) throw new Error('Recruitment can no longer be reopened.');
+    ride.status = 'Published';
+    ride.recruitmentClosedAt = null;
+    ride.updatedAt = new Date().toISOString();
+    save(db);
+    return enrichRide(db, ride);
+  },
+
+  async submitRideRequest(requesterId, { rideId, seatsRequested, companionNames }) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    const ride = db.rides[rideId];
+    if (!ride) throw new Error('Ride not found.');
+    if (ride.hostId === requesterId) throw new Error('Hosts cannot request their own ride.');
+    if (ride.status !== 'Published') throw new Error('This ride is not accepting requests.');
+    if (new Date(ride.departureAt).getTime() - Date.now() <= 5 * 60 * 60 * 1000) throw new Error('The request deadline has passed.');
+    if (seatsRequested > ride.seatsAvailable) throw new Error('Not enough seats are currently available.');
+    const previous = Object.values(db.rideRequests).filter((item) => item.rideId === rideId && item.requesterId === requesterId);
+    if (previous.some((item) => item.status === 'Rejected')) throw new Error('A rejected request cannot be submitted again.');
+    if (previous.some((item) => ['Pending', 'Accepted'].includes(item.status))) throw new Error('You already have an active request for this ride.');
+    const id = `rq_${Date.now()}`;
+    const now = new Date().toISOString();
+    db.rideRequests[id] = { id, rideId, requesterId, seatsRequested, companionNames, status: 'Pending', createdAt: now, updatedAt: now };
+    save(db);
+    return enrichRequest(db, db.rideRequests[id]);
+  },
+
+  async listMyRideRequests(requesterId) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    save(db);
+    return Object.values(db.rideRequests).filter((item) => item.requesterId === requesterId).map((item) => enrichRequest(db, item)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async listRideRequests(rideId) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    save(db);
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId) throw new Error('Only the ride Host can view these requests.');
+    return Object.values(db.rideRequests).filter((item) => item.rideId === rideId).map((item) => enrichRequest(db, item));
+  },
+
+  async respondToRideRequest(requestId, decision, reason = null) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    const request = db.rideRequests[requestId];
+    const ride = request && db.rides[request.rideId];
+    if (!request || !ride || ride.hostId !== db.currentUserId) throw new Error('Only the ride Host can process requests.');
+    if (ride.status !== 'Published' || new Date(ride.departureAt) <= new Date()) throw new Error('This ride can no longer process requests.');
+    if (request.status !== 'Pending') throw new Error('This request has already been processed.');
+    if (decision === 'Accepted') {
+      if (request.seatsRequested > ride.seatsAvailable) throw new Error('Not enough seats remain for this request.');
+      ride.seatsAvailable -= request.seatsRequested;
+      ride.updatedAt = new Date().toISOString();
+    } else if (decision !== 'Rejected') throw new Error('Unsupported request decision.');
+    request.status = decision;
+    request.decisionReason = reason;
+    request.processedAt = new Date().toISOString();
+    request.updatedAt = request.processedAt;
+    save(db);
+    return enrichRequest(db, request);
+  },
+
+  async cancelRideRequest(requestId, reason) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    const request = db.rideRequests[requestId];
+    const ride = request && db.rides[request.rideId];
+    if (!request || request.requesterId !== db.currentUserId) throw new Error('Only the requester can cancel this request.');
+    if (!['Pending', 'Accepted'].includes(request.status)) throw new Error('Only an active request can be cancelled.');
+    if (!ride || ['In Transit', 'Completed'].includes(ride.status) || new Date(ride.departureAt) <= new Date()) throw new Error('This request can no longer be cancelled.');
+    if (request.status === 'Accepted') ride.seatsAvailable = Math.min(ride.seatsTotal, ride.seatsAvailable + request.seatsRequested);
+    const now = new Date().toISOString();
+    request.status = 'Cancelled';
+    request.decisionReason = reason;
+    request.cancelledBy = 'Requester';
+    request.cancelledAt = now;
+    request.updatedAt = now;
+    ride.updatedAt = now;
+    save(db);
+    return enrichRequest(db, request);
+  },
+
+  async submitRideReview(reviewerId, { rideId, revieweeId, rating, comment }) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.status !== 'Completed') throw new Error('Only Completed rides can be reviewed.');
+    const accepted = Object.values(db.rideRequests).filter((item) => item.rideId === rideId && item.status === 'Accepted');
+    const valid = (reviewerId === ride.hostId && accepted.some((item) => item.requesterId === revieweeId)) || (revieweeId === ride.hostId && accepted.some((item) => item.requesterId === reviewerId));
+    if (!valid) throw new Error('You are not eligible to review this person for this ride.');
+    if (Object.values(db.rideReviews).some((item) => item.rideId === rideId && item.reviewerId === reviewerId && item.revieweeId === revieweeId)) throw new Error('You have already submitted this review.');
+    const id = `rv_${Date.now()}`;
+    db.rideReviews[id] = { id, rideId, reviewerId, revieweeId, rating, comment, createdAt: new Date().toISOString() };
+    const ratings = Object.values(db.rideReviews).filter((item) => item.revieweeId === revieweeId).map((item) => item.rating);
+    db.impact[revieweeId] ||= { completedTrips: 0, co2SavedKg: 0, reputationScore: 50 };
+    db.impact[revieweeId].rating = ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
+    save(db);
+    return enrichReview(db, db.rideReviews[id]);
+  },
+
+  async listProfileReviews(profileId) {
+    await delay();
+    const db = load();
+    return Object.values(db.rideReviews).filter((item) => item.revieweeId === profileId).map((item) => enrichReview(db, item)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async getRideReviewEligibility(reviewerId, rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.status !== 'Completed') return [];
+    const accepted = Object.values(db.rideRequests).filter((item) => item.rideId === rideId && item.status === 'Accepted');
+    const reviewees = reviewerId === ride.hostId ? accepted.map((item) => item.requesterId) : accepted.some((item) => item.requesterId === reviewerId) ? [ride.hostId] : [];
+    return reviewees.map((revieweeId) => {
+      const user = db.users[revieweeId];
+      const existing = Object.values(db.rideReviews).find((item) => item.rideId === rideId && item.reviewerId === reviewerId && item.revieweeId === revieweeId);
+      return { revieweeId, revieweeName: user?.fullName || 'Member', revieweeAvatarUrl: user?.profilePhotoUrl || null, reviewerRole: reviewerId === ride.hostId ? 'Host' : 'Passenger', existingRating: existing?.rating ?? null, existingComment: existing?.comment ?? null, reviewedAt: existing?.createdAt ?? null };
+    });
+  },
+
+  async processRideLifecycle(now = new Date()) {
+    const db = load();
+    processDueRides(db, now);
+    save(db);
+    return true;
   }
 };
+
+function enrichRequest(db, request) {
+  const requester = db.users[request.requesterId];
+  const impact = db.impact[request.requesterId] || {};
+  return {
+    ...request,
+    companionNames: request.companionNames || [],
+    requester: requester ? {
+      id: requester.id,
+      fullName: requester.fullName,
+      profilePhotoUrl: requester.profilePhotoUrl,
+      completedTrips: impact.completedTrips || 0,
+      reputationScore: impact.reputationScore || 0,
+      rating: impact.rating ?? null
+    } : null,
+    ride: db.rides[request.rideId] ? enrichRide(db, db.rides[request.rideId]) : null
+  };
+}
+
+function enrichReview(db, review) {
+  const person = (id) => {
+    const user = db.users[id];
+    return user ? { id: user.id, fullName: user.fullName, profilePhotoUrl: user.profilePhotoUrl } : null;
+  };
+  const ride = db.rides[review.rideId];
+  return {
+    ...review,
+    reviewer: person(review.reviewerId),
+    reviewee: person(review.revieweeId),
+    ride: ride ? { id: ride.id, pickup: ride.pickup, destination: ride.destination, departureAt: ride.departureAt } : null
+  };
+}
 
 function enrichRide(db, ride) {
   const host = db.users[ride.hostId];

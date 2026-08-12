@@ -24,13 +24,11 @@ import { HostImpactEngine } from '../HostImpactEngine.js';
 import { module6Db } from '../../data-access/module6Store.js';
 
 /**
- * Module 2 exposes searchRides()/listMyRides() but no getRideById() yet, so the
- * lookup is done here by filtering what search returns. Absorbing that here is the
- * whole point of the adapter - the rest of Module 6 just asks for a ride by id.
+ * Module 2 exposes a read-only ride snapshot. Production lifecycle writes remain a
+ * service-role-only backend contract and are intentionally unavailable here.
  */
 export async function getRideSnapshot(rideId) {
-  const rides = await RideService.searchRides();
-  const ride = rides.find((r) => r.id === rideId);
+  const ride = await RideService.getRide(rideId);
   if (!ride) return null;
 
   return {
@@ -44,25 +42,14 @@ export async function getRideSnapshot(rideId) {
     contribution: ride.contribution,
     host: ride.host,
 
-    // Derived, not stored by Module 2. UC6.5 needs a scheduled pickup instant to
-    // measure its 15-minute no-show window against, and the closest thing Module 2
-    // records is the published date + time.
-    scheduledPickupAt: toIsoInstant(ride.date, ride.time),
+    // Module 2 stores one authoritative UTC instant and only derives date/time for UI.
+    scheduledPickupAt: ride.departureAt,
 
     // UC6.11 (out of this slice) needs an ETA that Module 2's FR-2.17 will provide.
     // Explicitly null rather than guessed, so overdue detection cannot silently run
     // on a fabricated number when it is built.
     etaTimestamp: null
   };
-}
-
-// Module 2 stores date and time as separate plain strings with no zone. Treated as
-// UTC here so the whole module has one unambiguous instant to compare against;
-// swapped for the real value if Module 2 ever stores a zoned timestamp.
-function toIsoInstant(date, time) {
-  if (!date || !time) return null;
-  const parsed = new Date(`${date}T${time}:00.000Z`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 /**

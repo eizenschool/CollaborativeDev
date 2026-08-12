@@ -2,9 +2,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// 3.1(a) Offline resilience: precache the app shell + Leaflet tiles (once Module 4/5 add mapping)
-// so a Client can still view cached screens (e.g. itinerary, chat history) without a connection.
-// Write actions still require connectivity - this config only ever caches GET requests.
+// 3.1(a) Offline resilience: precache the app shell. Google Maps Embed is a
+// network iframe and intentionally falls back to the local route illustration
+// when unavailable; third-party map responses are not copied into the PWA cache.
 export default defineConfig({
   plugins: [
     react(),
@@ -28,17 +28,6 @@ export default defineConfig({
         // Core GUI screens (app shell) - cached for read-only offline viewing
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
-          {
-            // Leaflet.js map tiles (Module 4/5) - cache-first so a cached itinerary route
-            // is still viewable offline on signal-weak highway stretches.
-            urlPattern: /^https:\/\/[a-z]\.tile\.openstreetmap\.org\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'map-tiles-cache',
-              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
           {
             // Supabase reads (GET) may be served stale-while-revalidate for offline resilience.
             // Supabase writes are POST/PATCH/DELETE and are never matched by this GET-only pattern,

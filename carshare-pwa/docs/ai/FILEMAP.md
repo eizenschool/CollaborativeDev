@@ -16,6 +16,11 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 
 ## Business Logic
 - `src/business-logic/` — business-rule/service layer, including Module 6 verification logic.
+- `src/business-logic/GoogleMapsEmbedService.js` — shared zero-charge Maps Embed URL boundary; no paid Maps services.
+
+## Shared Mapping
+- `src/presentation/components/maps/GoogleRouteMap.jsx` — shared route iframe with an offline/unconfigured fallback.
+- `docs/GOOGLE-MAPS-SETUP.md` — Cloud project, restricted-key, environment, and cost-safety setup.
 
 ## Data Access / Backend Adapters
 - `src/data-access/supabaseClient.js` — shared Supabase client/configuration.
