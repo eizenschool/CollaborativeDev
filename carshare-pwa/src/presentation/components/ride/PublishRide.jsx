@@ -9,6 +9,13 @@ import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck, IconPlus
 import '../../styles/ride.css';
 
 const STEPS = ['Route', 'Schedule', 'Vehicle', 'Trip Details', 'Review & Publish'];
+const STEP_DESCRIPTIONS = [
+  'Set the fixed pickup and destination for this journey.',
+  'Choose when you leave and how many seats you can share.',
+  'Select the vehicle passengers should expect.',
+  'Add contribution details, preferences, and optional stops.',
+  'Check every detail before your ride becomes visible.'
+];
 const RESTRICTION_OPTIONS = ['Pet-friendly', 'No smoking', 'Women-only', 'Child seat available', 'Luggage-friendly', 'Toll contribution', 'Music OK', 'Quiet ride'];
 
 const emptyForm = {
@@ -80,16 +87,16 @@ export default function PublishRide() {
   }
 
   return (
-    <div className="publish-ride">
+    <main className="publish-ride">
       <header className="publish-mobile-header">
         <button className="round-icon-button" onClick={step === 0 ? () => navigate('/ride') : back} aria-label="Go back"><IconArrowLeft size={18} /></button>
         <div><p>Step {step + 1} of {STEPS.length}</p><h1>{STEPS[step]}</h1></div>
         {step === STEPS.length - 1 && <button className="save-draft-mobile" onClick={saveAsDraft} disabled={saving}>Save draft</button>}
-        <div className="publish-progress-dots">{STEPS.map((label, index) => <i key={label} className={index <= step ? 'active' : ''} />)}</div>
+        <div className="publish-progress-dots" role="progressbar" aria-label="Publish ride progress" aria-valuemin="1" aria-valuemax={STEPS.length} aria-valuenow={step + 1}>{STEPS.map((label, index) => <i key={label} className={index <= step ? 'active' : ''} />)}</div>
       </header>
       <div className="publish-left">
         <button className="back-link" onClick={() => navigate('/ride')}><IconArrowLeft size={15} /> Back</button>
-        <div className="step-list">
+        <div className="step-list" aria-label="Publish ride steps">
           {STEPS.map((label, i) => (
             <div key={label} className={'step-item' + (i === step ? ' active' : '') + (i < step ? ' done' : '')}>
               <span className="step-num">{i < step ? <IconCheck size={12} /> : i + 1}</span>
@@ -104,8 +111,9 @@ export default function PublishRide() {
       <div className="publish-right">
         <p className="step-eyebrow">Step {step + 1} of {STEPS.length}</p>
         <h2 className="step-title">{STEPS[step]}</h2>
+        <p className="step-description">{STEP_DESCRIPTIONS[step]}</p>
 
-        {error && <div className="alert alert-error" style={{ marginTop: 14 }}>{error}</div>}
+        {error && <div className="alert alert-error publish-error" role="alert">{error}</div>}
 
         {step === 0 && <RouteStep form={form} patch={patch} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}
@@ -116,7 +124,7 @@ export default function PublishRide() {
         {step < STEPS.length - 1 && (
           <div className="step-actions">
             {step > 0 && <button className="btn-secondary" onClick={back}>Back</button>}
-            <button className="btn-primary" style={{ width: 'auto', padding: '11px 24px', marginLeft: 'auto' }} onClick={next}>
+            <button className="btn-primary continue-button" onClick={next}>
               Continue <IconArrowRight size={15} />
             </button>
           </div>
@@ -125,7 +133,7 @@ export default function PublishRide() {
           {step < STEPS.length - 1 ? <button className="btn-primary" onClick={next}>Continue <IconArrowRight size={15} /></button> : <div><button className="btn-secondary" onClick={saveAsDraft} disabled={saving}>Save draft</button><button className="btn-primary" onClick={publish} disabled={saving}>Publish ride</button></div>}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -134,14 +142,20 @@ function RouteStep({ form, patch }) {
   return (
     <>
       <div className="route-inputs">
-        <div className="input-wrap">
+        <label className="route-field" htmlFor="ride-pickup">
+          <span>Pickup point</span>
+          <div className="input-wrap">
           <span className="prefix-icon" style={{ color: 'var(--teal)' }}><IconMapPin size={14} /></span>
-          <input placeholder="Pickup point" value={form.pickup} onChange={(e) => patch({ pickup: e.target.value })} />
-        </div>
-        <div className="input-wrap">
+          <input id="ride-pickup" autoComplete="street-address" placeholder="e.g. KL Sentral" value={form.pickup} onChange={(e) => patch({ pickup: e.target.value })} />
+          </div>
+        </label>
+        <label className="route-field" htmlFor="ride-destination">
+          <span>Destination</span>
+          <div className="input-wrap">
           <span className="prefix-icon" style={{ color: 'var(--danger)' }}><IconMapPin size={14} /></span>
-          <input placeholder="Destination" value={form.destination} onChange={(e) => patch({ destination: e.target.value })} />
-        </div>
+          <input id="ride-destination" autoComplete="street-address" placeholder="e.g. Georgetown" value={form.destination} onChange={(e) => patch({ destination: e.target.value })} />
+          </div>
+        </label>
       </div>
 
       <GoogleRouteMap pickup={form.pickup} destination={form.destination} waypoints={form.waypoints} className="map-placeholder">
@@ -150,11 +164,12 @@ function RouteStep({ form, patch }) {
         <span className="map-attribution">Google Maps preview appears when the Embed key is configured</span>
       </GoogleRouteMap>
 
-      <p className="field-label-standalone">Journey Scale</p>
+      <p className="field-label-standalone">Journey scale</p>
       <div className="scale-toggle">
         <button
           type="button"
           className={'scale-option' + (form.journeyScale === 'Urban' ? ' active' : '')}
+          aria-pressed={form.journeyScale === 'Urban'}
           onClick={() => patch({ journeyScale: 'Urban' })}
         >
           Urban Route
@@ -162,6 +177,7 @@ function RouteStep({ form, patch }) {
         <button
           type="button"
           className={'scale-option' + (form.journeyScale === 'Intercity' ? ' active' : '')}
+          aria-pressed={form.journeyScale === 'Intercity'}
           onClick={() => patch({ journeyScale: 'Intercity' })}
         >
           Intercity Route
@@ -175,20 +191,22 @@ function RouteStep({ form, patch }) {
 function ScheduleStep({ form, patch }) {
   return (
     <>
-      <div className="field">
-        <label>Departure date</label>
-        <div className="input-wrap"><input type="date" value={form.date} onChange={(e) => patch({ date: e.target.value })} /></div>
-      </div>
-      <div className="field">
-        <label>Departure time</label>
-        <div className="input-wrap"><input type="time" value={form.time} onChange={(e) => patch({ time: e.target.value })} /></div>
+      <div className="schedule-grid">
+        <div className="field">
+          <label htmlFor="ride-date">Departure date</label>
+          <div className="input-wrap"><input id="ride-date" type="date" value={form.date} onChange={(e) => patch({ date: e.target.value })} /></div>
+        </div>
+        <div className="field">
+          <label htmlFor="ride-time">Departure time</label>
+          <div className="input-wrap"><input id="ride-time" type="time" value={form.time} onChange={(e) => patch({ time: e.target.value })} /></div>
+        </div>
       </div>
       <div className="field">
         <label>Available seats</label>
-        <div className="seat-stepper">
-          <button type="button" onClick={() => patch({ seatsTotal: Math.max(1, form.seatsTotal - 1) })}>−</button>
-          <span>{form.seatsTotal}</span>
-          <button type="button" onClick={() => patch({ seatsTotal: Math.min(8, form.seatsTotal + 1) })}>+</button>
+        <div className="seat-stepper" aria-label="Available seats">
+          <button type="button" aria-label="Decrease available seats" onClick={() => patch({ seatsTotal: Math.max(1, form.seatsTotal - 1) })}>−</button>
+          <output aria-live="polite">{form.seatsTotal}</output>
+          <button type="button" aria-label="Increase available seats" onClick={() => patch({ seatsTotal: Math.min(8, form.seatsTotal + 1) })}>+</button>
         </div>
       </div>
     </>
@@ -220,6 +238,7 @@ function VehicleStep({ form, patch, userId }) {
           type="button"
           key={v.id}
           className={'vehicle-select-card' + (form.vehicleId === v.id ? ' active' : '')}
+          aria-pressed={form.vehicleId === v.id}
           onClick={() => patch({ vehicleId: v.id, vehicleCapacity: v.seats, seatsTotal: Math.min(form.seatsTotal, v.seats) })}
         >
           <span className="vehicle-select-icon"><IconCar size={16} /></span>
@@ -269,6 +288,7 @@ function TripDetailsStep({ form, patch }) {
             type="button"
             key={tag}
             className={'chip-select' + (form.restrictionTags.includes(tag) ? ' active' : '')}
+            aria-pressed={form.restrictionTags.includes(tag)}
             onClick={() => toggleTag(tag)}
           >
             {tag}
@@ -302,9 +322,9 @@ function ReviewStep({ form, onPublish, onDraft, saving }) {
         <div className="review-row"><span>Restriction tags</span><strong>{form.restrictionTags.length ? form.restrictionTags.join(', ') : 'None'}</strong></div>
         <div className="review-row"><span>Waypoints</span><strong>{form.waypoints.length ? form.waypoints.map((item) => item.name).join(', ') : 'None'}</strong></div>
       </div>
-      <div className="step-actions">
+      <div className="step-actions review-actions">
         <button className="btn-secondary" onClick={onDraft} disabled={saving}>Save as Draft</button>
-        <button className="btn-primary" style={{ width: 'auto', padding: '11px 24px', marginLeft: 'auto' }} onClick={onPublish} disabled={saving}>
+        <button className="btn-primary publish-confirm-button" onClick={onPublish} disabled={saving}>
           {saving ? 'Publishing…' : 'Publish Ride'}
         </button>
       </div>

@@ -26,8 +26,10 @@ export default function RideCard({ ride, statusChip, onClick }) {
   const tier = badge ? badge.name.replace(' Host', '') : null;
   const tierStyle = tier ? TIER_COLORS[tier] : null;
 
+  const CardElement = onClick ? 'button' : 'article';
+
   return (
-    <div className={'ride-card' + (onClick ? ' ride-card-clickable' : '')} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (event) => event.key === 'Enter' && onClick() : undefined}>
+    <CardElement type={onClick ? 'button' : undefined} className={'ride-card' + (onClick ? ' ride-card-clickable' : '')} onClick={onClick}>
       <div className="ride-card-top">
         <div className="ride-route">
           <div className="ride-route-line">
@@ -80,6 +82,6 @@ export default function RideCard({ ride, statusChip, onClick }) {
           <span className="contribution-tag">{ride.contribution || 'No contribution needed'}</span>
         )}
       </div>
-    </div>
+    </CardElement>
   );
 }
