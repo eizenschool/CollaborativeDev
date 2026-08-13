@@ -86,8 +86,12 @@ gate. 380 tests pass and make zero external calls.
 
 Not built yet: scheduled ingestion and enrichment (UC6.8, UC6.9 — needs the API),
 Street View (FR-6.15 — needs the API), notification dispatch (UC6.12 — needs
-Module 3), and the prefill handoff into Modules 2 and 4 (FR-6.35 — needs a short
-agreement with those owners, not an API).
+Module 3), and the implementation of the prefill handoff into Modules 2 and 4
+(FR-6.35 — its shared contract is accepted, but the form wiring remains).
+
+The accepted FR-6.35 handoff shape is defined in
+`docs/ai/FR-6.35_PREFILL_CONTRACT.md` (D019). The contract is shared by Modules
+2 and 4; it does not require the Google ingestion API.
 
 ## Repository Areas
 Business logic: `src/business-logic/discovery/`
@@ -108,7 +112,8 @@ preference prompt, score breakdown, unmet demand view, and `PlacePoster.jsx`
 (the FR-6.17 illustration tier).
 
 Data: `src/data-access/discoveryStore.js` (fixture catalogue, own localStorage key).
-Schema: `database/sql/024_m6_destination_discovery.sql` (written, not yet deployed).
+Schema: `database/sql/024_m6_destination_discovery.sql` (deployed as
+`m6_destination_discovery`; live catalogue population remains pending).
 API: `docs/MODULE6-API-SETUP.md`.
 
 ## Depends On

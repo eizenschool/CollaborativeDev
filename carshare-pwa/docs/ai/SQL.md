@@ -29,17 +29,19 @@ deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
 Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
 URLs for private chat media. Deployed history must not be rewritten; the next
-new file after the current `024` draft starts at `025`.
-`023_m1_m2_public_ride_browsing.sql` is a local,
-undeployed migration: it records the requested guest Ride browsing policy, but
-deploying its anonymous column-level access requires explicit approval of the
-public payload. The draft excludes Place IDs, precise coordinates, pickup
-instructions, and lifecycle timestamps from guest reads. It may still be edited
-until that approval is given.
+new file after the current `024` starts at `025`.
+`023_m1_m2_public_ride_browsing.sql` is live through the Dashboard SQL Editor;
+its anonymous column-level policies and grants were deployed after the public
+payload was approved. It is not present in the migration history returned by the
+project, so this file remains the repository record of the applied SQL. The
+payload excludes Place IDs, precise coordinates, pickup instructions, and
+lifecycle timestamps from guest reads.
 
-`024_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
-the Module 6 place catalogue, recorded interest, notification registrations, and
-stated travel preferences. Modules 4-5 still use local adapters.
+`024_m6_destination_discovery.sql` is **deployed** as the Supabase migration
+`m6_destination_discovery` - it adds the Module 6 place catalogue, recorded
+interest, notification registrations, and stated travel preferences. The live
+catalogue remains opt-in in the frontend; the fixture adapter is still the
+default for offline demos and tests.
 
 It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
@@ -137,7 +139,8 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
-- `023_m1_m2_public_ride_browsing.sql` - not deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
+- `023_m1_m2_public_ride_browsing.sql` - deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
+- `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 
 ## Rules for New Database Work
 

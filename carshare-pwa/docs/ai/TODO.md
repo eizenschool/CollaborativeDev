@@ -40,9 +40,14 @@ easier to change now than after you have built against it.
 - [ ] Enable Maps Embed API only in `my-project-cd-505310` and create a website/API-restricted key.
 - [ ] Add the final HTTPS deployment referrer to the restricted Maps Embed key.
 - [ ] Decide the next integrated vertical slice based on current code.
-- [ ] **Module 6 Google Cloud work (Brayden).** Everything needed is written up request by request in `docs/MODULE6-API-SETUP.md`: a third **server-side** key, four SKUs to authorise, and the daily hard quotas to set. Nothing in the module needs it to run, test, or demo today - `/discover` works offline on its fixture catalogue - so this is scheduling rather than a blocker.
-- [ ] Deploy `024_m6_destination_discovery.sql`. It needs Dashboard SQL Editor access; the publishable key cannot create tables.
-- [ ] Wire Module 6's prefill payload into Module 2's publish form and Module 4's search form (FR-6.35). `DestinationDiscoveryService.buildPrefillPayload()` already returns it; the two forms do not read it yet, so "I will drive" currently opens an empty form. Needs a short agreement with Yee and Eizen on how each form accepts an incoming destination.
+- [ ] **Module 6 Google Cloud work (Brayden).** Everything needed is written up request by request in `docs/MODULE6-API-SETUP.md`: a third **server-side** key, four API capabilities to authorise, and the Google Maps Platform quota controls that are actually exposed for the project. The four daily numbers are application budget targets; a persistent daily ledger still needs implementation before they are a true server-side cap.
+- [x] Deploy `024_m6_destination_discovery.sql`. It is live as the Supabase migration `m6_destination_discovery`; the catalogue remains authenticated-read until live mode is explicitly enabled.
+- [x] Deploy the versioned `supabase/functions/m6-ingest/index.ts` Edge Function with Supabase secret-key authorization on `apikey`; live function `m6-ingest` is active but waits for the Google secret.
+- [ ] Create the third server-side Google key, set the four documented hard quotas, and store it as the Supabase secret `GOOGLE_PLACES_SERVER_KEY`.
+- [ ] Run one controlled single-region ingestion smoke test and verify the expected Google SKU counters before enabling live discovery.
+- [ ] Add a persistent daily ingestion-budget ledger if the Google Maps quota page exposes only per-method/per-minute limits.
+- [x] Agree and document the shared FR-6.35 payload contract for Modules 6, 2, and 4. See `docs/ai/FR-6.35_PREFILL_CONTRACT.md` and D019.
+- [ ] Wire the accepted FR-6.35 payload into Module 2's publish form and Module 4's search form. `DestinationDiscoveryService.buildPrefillPayload()` still needs to produce the versioned shape, and the two forms must read navigation state without weakening confirmed-location validation.
 
 ## BLOCKED / NEEDS TEAM CONFIRMATION
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.

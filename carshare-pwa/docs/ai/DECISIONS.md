@@ -212,8 +212,21 @@ academic prototype; it is recorded as a limitation rather than left unstated.
 Weather integration also moves here from Module 5, which never carried a weather
 requirement in the report.
 
+## D019 — FR-6.35 Destination Prefill Contract
+**Status:** Accepted
+
+Module 6 is the producer of a versioned `discoveryPrefill` navigation-state
+payload. Modules 2 and 4 are consumers. Version 1 carries the origin, selected
+destination, optional confirmed location references, the Module 6 catalogue key
+for correlation only, and the selected travel date. The payload is transient:
+it is not placed in the URL or persisted in the database. A fixture catalogue key
+is never treated as a confirmed Google Place ID. Module 2 remains responsible
+for final confirmed-location validation, while Module 4 may consume the labels
+against its current text-based search fixture. The complete field and validation
+contract is `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
+
 ## Open Decisions
-- database schemas/RLS for Modules 4-5 (Module 6's is drafted in `024`, not yet deployed);
+- database schemas/RLS for Modules 4-5 (Module 6's `024` schema is deployed; live catalogue enablement remains pending);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;

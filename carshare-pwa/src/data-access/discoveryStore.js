@@ -20,8 +20,10 @@
 //   - one category with no ride serving it   -> the unserved section
 
 import { CATEGORY, PLACE_STATE } from '../business-logic/discovery/constants.js';
+import { liveDiscoveryDb } from './discoverySupabaseRepository.js';
 
 const STORAGE_KEY = 'letstumpang_discovery_v1';
+const USE_LIVE_DISCOVERY = import.meta.env.VITE_DISCOVERY_DATA_SOURCE?.trim() === 'supabase';
 
 // A simulated round trip, so the screens exercise their loading states instead of
 // resolving instantly and hiding them. Tests skip it: the orchestration calls
@@ -539,7 +541,7 @@ function save(state) {
 let state = load();
 const delay = () => new Promise((resolve) => setTimeout(resolve, LATENCY_MS));
 
-export const discoveryDb = {
+const fixtureDiscoveryDb = {
   async listPlaces() {
     await delay();
     return state.places.map((p) => ({ ...p }));
@@ -638,3 +640,5 @@ export const discoveryDb = {
     save(state);
   }
 };
+
+export const discoveryDb = USE_LIVE_DISCOVERY ? liveDiscoveryDb : fixtureDiscoveryDb;
