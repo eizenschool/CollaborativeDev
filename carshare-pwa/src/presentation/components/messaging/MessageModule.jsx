@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
-  getMessagingChangeConversationId,
   MessagingService,
 } from '../../../business-logic/MessagingService.js';
+import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
 import { IconArchive, IconMessage, IconTrash, IconX } from '../icons.jsx';
 import ConversationList from './ConversationList.jsx';
 import ChatWindow from './ChatWindow.jsx';
@@ -13,7 +13,6 @@ import TripInfoSidebar from './TripInfoSidebar.jsx';
 import '../../styles/message.css';
 
 const DESKTOP_BREAKPOINT = 900;
-const REALTIME_REFRESH_DELAY_MS = 80;
 
 function getIsDesktop() {
   return typeof window === 'undefined' || window.innerWidth > DESKTOP_BREAKPOINT;
@@ -89,81 +88,29 @@ export default function MessageModule() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const {
+    folder,
+    folderState,
+    getConversation,
+    setFolder,
+    refreshConversations,
+    refreshConversation,
+  } = useMessagingSession();
   const [isDesktop, setIsDesktop] = useState(getIsDesktop);
-  const [folder, setFolder] = useState('active');
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
   const [manageConversation, setManageConversation] = useState(null);
   const [manageError, setManageError] = useState('');
   const [isManaging, setIsManaging] = useState(false);
-  const [realtimeUpdate, setRealtimeUpdate] = useState({ version: 0, conversationIds: [] });
-  const [isLoading, setIsLoading] = useState(true);
-  const [listError, setListError] = useState('');
   const manageReturnFocusRef = useRef(null);
-  const hasLoadedConversationsRef = useRef(false);
-  const refreshRequestRef = useRef(0);
   const isHistory = Boolean(conversationId && location.pathname.endsWith('/history'));
 
-  const refreshConversations = useCallback(async () => {
-    if (!user) return;
-    const requestId = refreshRequestRef.current + 1;
-    refreshRequestRef.current = requestId;
-    const showLoading = !hasLoadedConversationsRef.current;
-    setListError('');
-    if (showLoading) setIsLoading(true);
-    try {
-      const nextConversations = await MessagingService.listConversations(folder);
-      if (requestId !== refreshRequestRef.current) return;
-      setConversations(nextConversations);
-      if (conversationId) {
-        const selected = nextConversations.find((item) => item.id === conversationId)
-          || await MessagingService.getConversation(conversationId);
-        if (requestId !== refreshRequestRef.current) return;
-        setSelectedConversation(selected);
-        if (selected?.isArchived && folder !== 'archived') setFolder('archived');
-      } else {
-        setSelectedConversation(null);
-      }
-      hasLoadedConversationsRef.current = true;
-    } catch (error) {
-      if (requestId === refreshRequestRef.current) {
-        setListError(error.message || 'Unable to load conversations.');
-      }
-    } finally {
-      if (requestId === refreshRequestRef.current) setIsLoading(false);
-    }
-  }, [conversationId, folder, user]);
-
   useEffect(() => {
+    if (isHistory) return;
     refreshConversations();
-  }, [refreshConversations, realtimeUpdate.version]);
-
-  useEffect(() => {
-    let timerId = null;
-    let refreshAll = false;
-    const conversationIds = new Set();
-    const flushChanges = () => {
-      timerId = null;
-      const nextConversationIds = refreshAll ? [] : [...conversationIds];
-      refreshAll = false;
-      conversationIds.clear();
-      setRealtimeUpdate((current) => ({
-        version: current.version + 1,
-        conversationIds: nextConversationIds,
-      }));
-    };
-    const unsubscribe = MessagingService.subscribeToMessaging((change) => {
-      const changedConversationId = getMessagingChangeConversationId(change);
-      if (changedConversationId) conversationIds.add(changedConversationId);
-      else refreshAll = true;
-      if (timerId) window.clearTimeout(timerId);
-      timerId = window.setTimeout(flushChanges, REALTIME_REFRESH_DELAY_MS);
+    if (!conversationId) return;
+    refreshConversation(conversationId, { markRead: true }).then((conversation) => {
+      if (conversation?.isArchived && folder !== 'archived') setFolder('archived');
     });
-    return () => {
-      if (timerId) window.clearTimeout(timerId);
-      unsubscribe();
-    };
-  }, []);
+  }, [conversationId, folder, isHistory, refreshConversation, refreshConversations, setFolder]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(min-width: ${DESKTOP_BREAKPOINT + 1}px)`);
@@ -201,16 +148,16 @@ export default function MessageModule() {
         await MessagingService.archiveConversation(manageConversation.id);
         setFolder('archived');
         navigate(`/message/${manageConversation.id}`);
+        refreshConversation(manageConversation.id);
+        refreshConversations('active');
+        refreshConversations('archived');
       } else {
         await MessagingService.leaveGroup(manageConversation.id);
         setFolder('active');
         navigate('/message');
+        refreshConversations('active');
       }
       setManageConversation(null);
-      setRealtimeUpdate((current) => ({
-        version: current.version + 1,
-        conversationIds: [manageConversation.id],
-      }));
     } catch (error) {
       setManageError(error.message || 'Unable to manage this conversation.');
     } finally {
@@ -230,16 +177,16 @@ export default function MessageModule() {
 
   const conversationList = (
     <ConversationList
-      conversations={conversations}
+      conversations={folderState.items}
       currentUserId={user?.id}
       selectedConversationId={conversationId}
       onSelectConversation={selectConversation}
       onManageConversation={openManage}
       folder={folder}
       onFolderChange={changeFolder}
-      isLoading={isLoading}
-      error={listError}
-      onRetry={refreshConversations}
+      isLoading={folderState.loading}
+      error={folderState.error}
+      onRetry={() => refreshConversations(folder)}
       onBrowseRides={() => navigate('/ride')}
     />
   );
@@ -248,7 +195,6 @@ export default function MessageModule() {
     <ChatWindow
       conversationId={conversationId}
       currentUser={user}
-      realtimeUpdate={realtimeUpdate}
       onBack={() => navigate('/message')}
       onManage={openManage}
       onOpenHistory={(id) => navigate(`/message/${id}/history`)}
@@ -263,7 +209,7 @@ export default function MessageModule() {
         <main className="message-module message-module-desktop">
           <section className="message-desktop-conversation-column">{conversationList}</section>
           <section className="message-desktop-chat-column">{chat}</section>
-          <section className="message-desktop-info-column"><TripInfoSidebar conversation={selectedConversation} currentUserId={user?.id} /></section>
+          <section className="message-desktop-info-column"><TripInfoSidebar conversation={getConversation(conversationId)} currentUserId={user?.id} /></section>
         </main>
       ) : (
         <main className="message-module message-module-mobile">{conversationId ? chat : conversationList}</main>
