@@ -1,5 +1,10 @@
 # Module 6 — Destination Discovery
 
+**Picking this module up cold? Read `docs/MODULE6-HANDOVER.md` first.** It carries
+the current state, the reasoning behind the load-bearing constants, the boundaries,
+what is still outstanding, and the traps already hit. This file stays compact by
+design and does not repeat it.
+
 ## Owner
 Brayden Toh Zhi Kang
 
