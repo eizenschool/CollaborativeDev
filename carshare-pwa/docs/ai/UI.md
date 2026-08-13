@@ -159,6 +159,21 @@ The persistent navigation has six destinations in this order:
 Use `TopNav.jsx`; do not implement a separate navigation bar inside a module.
 The current route determines the active state.
 
+- The default website entry is public Home. Guests may browse Home, Search,
+  Ride listings, and Published Ride Detail without creating a session.
+- Message, Favourite, Profile, Publish Ride, personal ride/request views, and
+  other account-specific services require authentication. A guest who selects
+  one is sent to the shared auth page with a clear reason and a safe return
+  destination; do not hide the navigation item or force login on initial entry.
+- On phone, the auth page is the login/sign-up form only. The desktop journey
+  scene must not consume mobile viewport space.
+- Sign out must remain directly reachable at the bottom of Profile content on
+  phone even though the desktop top-navigation action group is hidden there.
+- The desktop auth journey scene keeps the car animated on the complete KL
+  Sentral-Genting-Ipoh route; the car must follow the SVG curve rather than use
+  an unrelated screen position. Drive the car from the route's own SVG geometry
+  so browser CSS/SMIL motion settings do not detach or unexpectedly stop it.
+
 - Phone: fixed bottom bar, icon plus label, safe-area padding, active green state.
 - Compact width: top bar may show icons without labels; interactive items still
   need accessible names and tooltips where helpful.
@@ -168,6 +183,18 @@ Route content must remain reachable behind fixed navigation, sticky actions,
 the on-screen keyboard, and device safe areas.
 
 ## Component Behaviour
+
+### Scrolling and overflow
+
+- Keep page and local overflow regions scrollable, but do not show visible
+  browser scrollbars beside the UI on any supported viewport.
+- Implement the shared scrollbar suppression in `theme.css`; module styles must
+  not restore a visible scrollbar for an individual rail, panel, sheet, or list.
+- Do not use `overflow: hidden` merely to remove scrollbar chrome. Mouse wheel,
+  touch, trackpad, and keyboard scrolling must continue to work.
+- When a locally scrollable row or panel is not self-evident, use layout cues
+  such as a partially visible next item or concise helper text instead of a
+  visible scrollbar.
 
 ### Buttons and actions
 

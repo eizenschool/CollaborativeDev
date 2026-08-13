@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import RideCard from './RideCard.jsx';
@@ -44,6 +45,19 @@ export default function RideHub() {
     }
   }
 
+  function openMemberService(destination, reason) {
+    const target = getAuthNavigation(user, destination, reason);
+    navigate(target.to, { state: target.state });
+  }
+
+  function openMyRides() {
+    if (!user) {
+      openMemberService('/ride', 'Sign in to view the rides you host or requested.');
+      return;
+    }
+    setTab('my');
+  }
+
   return (
     <div className="ride-hub">
       <header className="ride-hub-mobile-heading">
@@ -57,7 +71,7 @@ export default function RideHub() {
       <div className="ride-hub-left">
         <div className="tabs" role="tablist" aria-label="Ride workspace">
           <button role="tab" aria-selected={tab === 'find'} className={'tab' + (tab === 'find' ? ' active' : '')} onClick={() => setTab('find')}>Find a ride</button>
-          <button role="tab" aria-selected={tab === 'my'} className={'tab' + (tab === 'my' ? ' active' : '')} onClick={() => setTab('my')}>My rides</button>
+          <button role="tab" aria-selected={tab === 'my'} className={'tab' + (tab === 'my' ? ' active' : '')} onClick={openMyRides}>My rides</button>
         </div>
 
         {tab === 'find' && (
@@ -96,7 +110,7 @@ export default function RideHub() {
           </section>
         )}
 
-        <button className="btn-primary btn-publish" onClick={() => navigate('/ride/publish')}>
+        <button className="btn-primary btn-publish" onClick={() => openMemberService('/ride/publish', 'Sign in before publishing a ride.') }>
           <IconPlus size={17} /> <span>Publish a ride</span>
         </button>
       </div>

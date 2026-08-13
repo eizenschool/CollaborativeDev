@@ -163,6 +163,20 @@ conversation access ends permanently seven days after the terminal timestamp,
 overriding UC3.8's older permanent archive wording. Translation and messaging
 notifications remain deferred.
 
+## D017 — Public-First Browsing and Action-Time Authentication
+**Status:** Accepted
+The application opens on public `/home` instead of forcing authentication.
+Guests may browse Home, Search, Ride listings, and Published Ride Detail. Login
+is required only when entering account-specific services, including Message,
+Favourite, Profile, Publish/My rides, ride requests, reviews, trips, and safety
+flows. Protected navigation and Ride actions use the shared `/auth` page with a
+safe internal return destination. Once its exact public payload is explicitly
+approved and deployed, Supabase `anon` access is read-only and limited by RLS
+and column grants to Published rides from active Hosts and the safe public Host
+profile/impact data required to render them; private profile, vehicle, request,
+review, and messaging data remains unavailable. Guest Ride reads exclude Place
+IDs, precise coordinates, and pickup instructions.
+
 ## Open Decisions
 - database schemas/RLS for Modules 4-6;
 - Routes API, traffic-aware computation, and map pin selection;

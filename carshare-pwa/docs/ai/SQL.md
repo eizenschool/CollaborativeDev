@@ -13,7 +13,7 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-022
-Repository SQL history: 001-022
+Repository SQL history: 001-023
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -28,8 +28,14 @@ replacement Ride RPC signatures. `021_m3_stabilize_realtime_reads.sql` was
 deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
 Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
-URLs for private chat media. Future changes start at `023`; deployed history
-must not be rewritten.
+URLs for private chat media. Deployed history must not be rewritten; the next
+new file after the current `023` draft starts at `024`.
+`023_m1_m2_public_ride_browsing.sql` is a local,
+undeployed migration: it records the requested guest Ride browsing policy, but
+deploying its anonymous column-level access requires explicit approval of the
+public payload. The draft excludes Place IDs, precise coordinates, pickup
+instructions, and lifecycle timestamps from guest reads. It may still be edited
+until that approval is given.
 
 Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 
@@ -114,6 +120,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
+- `023_m1_m2_public_ride_browsing.sql` - not deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 
 ## Rules for New Database Work
 

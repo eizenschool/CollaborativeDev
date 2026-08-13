@@ -14,7 +14,7 @@ import {
   IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart,
   IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle,
   IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar,
-  IconLayers, IconShield, IconAlertTriangle, IconSettings, IconCamera, IconChart, IconUsers
+  IconLayers, IconShield, IconAlertTriangle, IconSettings, IconCamera, IconChart, IconUsers, IconLogOut
 } from './icons.jsx';
 
 const REPUTATION_THRESHOLD = 60; // minimum reputation score required to publish rides (admin-configurable)
@@ -32,12 +32,14 @@ function initialsOf(name) {
 }
 
 export default function MyProfile() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, signOut } = useAuth();
   const navigate = useNavigate();
   const [panel, setPanel] = useState('overview');
   const [vehicles, setVehicles] = useState([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(true);
   const [summary, setSummary] = useState(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -56,6 +58,18 @@ export default function MyProfile() {
 
   async function refreshImpact() {
     setSummary(await HostImpactEngine.getImpactSummary(user.id));
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    setSignOutError('');
+    try {
+      await signOut();
+      navigate('/home', { replace: true });
+    } catch (error) {
+      setSignOutError(error.message || 'Could not sign out. Please try again.');
+      setSigningOut(false);
+    }
   }
 
   if (!user) return null;
@@ -128,6 +142,13 @@ export default function MyProfile() {
         )}
         {panel === 'settings' && <AccountSettingsPanel user={user} />}
       </main>
+
+      <div className="profile-mobile-signout-wrap">
+        <button className="profile-mobile-signout" type="button" onClick={handleSignOut} disabled={signingOut}>
+          <IconLogOut size={16} /> {signingOut ? 'Signing out…' : 'Sign out'}
+        </button>
+        {signOutError && <p className="profile-mobile-signout-error" role="alert">{signOutError}</p>}
+      </div>
     </div>
   );
 }

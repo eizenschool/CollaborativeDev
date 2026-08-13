@@ -47,8 +47,10 @@ pipeline; no browser adapter can perform that production transition.
 New Publish Ride drafts require at least one registered Host vehicle and
 confirmed Malaysia-only Google location suggestions for pickup and destination.
 The entry gate checks vehicles before requesting location permission. Eligible
-Hosts receive one automatic device-location request to centre the Embed preview;
-it is neither persisted nor treated as pickup. Pickup may use that location only
+Hosts receive one automatic device-location request that shows a current-position
+pin in the Embed preview; it is neither persisted nor treated as pickup. Once a
+complete route is selected, Directions Embed automatically fits the viewport to
+the journey distance. Pickup may use the device location only
 when GPS accuracy is 100 metres or better, reverse geocoding succeeds, and the
 Host confirms the result. Place IDs are stored for Google selections;
 device coordinates are stored only for a confirmed current-location pickup.
@@ -80,6 +82,15 @@ and safe area, interactive controls use visible labels and at least 44px touch
 targets, sheets become centred dialogs on wider screens, and ride listings and
 details reflow into tablet/desktop grids without changing the service contract.
 Responsive verification targets are 375px, 768px, 1024px, and 1440px.
+
+Ride search and Published Ride Detail are public browsing surfaces. Guests are
+sent to the shared auth page only when they select Publish/My rides, Request to
+join, Message host, or another account-specific Ride action. Pending migration
+`023_m1_m2_public_ride_browsing.sql` proposes column-scoped anon reads for only
+Published rides from active Hosts plus the safe profile and impact fields used
+by public ride cards. Place IDs, precise coordinates, and pickup instructions
+are excluded; the migration was not deployed without explicit payload approval.
+Requests, vehicles, reviews, and messaging remain authenticated/private.
 
 ## Deferred
 Routes API, route distance/time, traffic-aware routing, map-pin selection, and
