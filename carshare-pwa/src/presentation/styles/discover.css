@@ -264,12 +264,18 @@
 
 /* --- poster ------------------------------------------------------------- */
 
-.dsc-poster {
+/* The photograph and the illustration share one slot and must fill it
+   identically, so a place swapping between them never shifts the layout. */
+.dsc-poster,
+.dsc-photo {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+
+/* Held under the image while it loads, so the slot is never a bare white gap. */
+.dsc-photo { background: var(--teal-tint); }
 
 .dsc-photo-credit {
   position: absolute;

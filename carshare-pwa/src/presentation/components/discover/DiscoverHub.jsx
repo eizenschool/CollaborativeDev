@@ -15,7 +15,7 @@ import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconSearch, IconAlertTriangle, IconStar, IconArrowRight } from '../icons.jsx';
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
-import PlacePoster from './PlacePoster.jsx';
+import PlaceImage from './PlaceImage.jsx';
 import AudienceSwitch from './AudienceSwitch.jsx';
 import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 
@@ -44,7 +44,7 @@ function Hero({ candidate, onOpen }) {
   return (
     <button type="button" className="dsc-hero" onClick={() => onOpen(place.id)}>
       <span className="dsc-hero-media">
-        <PlacePoster seed={place.id} category={place.category} />
+        <PlaceImage place={place} widthPx={1200} />
         <span className="dsc-hero-scrim" />
         <span className="dsc-hero-text">
           <span className="dsc-hero-eyebrow"><IconStar size={12} /> Top pick for you</span>

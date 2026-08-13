@@ -17,7 +17,8 @@ import {
   IconArrowLeft, IconArrowRight, IconStar, IconMapPin, IconCar,
   IconUsers, IconAlertTriangle, IconBell, IconRoute
 } from '../icons.jsx';
-import PlacePoster from './PlacePoster.jsx';
+import PlaceImage from './PlaceImage.jsx';
+import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
@@ -36,21 +37,24 @@ function Stars({ rating }) {
 
 /**
  * Renders `photoReferences`. Each reference is a real record from the catalogue
- * carrying its photographer credit (FR-6.14); the image itself is not fetchable
- * yet, so each frame falls to the category illustration tier (FR-6.17) and says
- * so rather than passing artwork off as a photograph.
+ * carrying its photographer credit (FR-6.14). A live reference is fetched from
+ * Google at display time; a fixture reference is not fetchable, so that frame
+ * falls to the category illustration tier (FR-6.17) and labels itself rather
+ * than passing artwork off as a photograph.
  */
 function Carousel({ place }) {
   const [index, setIndex] = useState(0);
   const frames = place.photoReferences?.length ? place.photoReferences : [null];
   const current = frames[index];
   const move = (step) => setIndex((i) => (i + step + frames.length) % frames.length);
+  // The tag would otherwise call a real photograph an illustration.
+  const isIllustration = buildPlacePhotoUrl(current?.reference) === null;
 
   return (
     <div className="dsc-carousel">
       <div className="dsc-carousel-frame">
-        <PlacePoster seed={place.id} category={place.category} variant={index} />
-        <span className="dsc-illustration-tag">Illustration</span>
+        <PlaceImage place={place} variant={index} widthPx={1000} />
+        {isIllustration && <span className="dsc-illustration-tag">Illustration</span>}
         {current?.attribution && (
           <span className="dsc-photo-credit">Photo: {current.attribution}</span>
         )}

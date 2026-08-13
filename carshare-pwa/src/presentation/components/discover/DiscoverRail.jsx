@@ -16,7 +16,7 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconArrowRight, IconCar, IconUsers } from '../icons.jsx';
-import PlacePoster from './PlacePoster.jsx';
+import PlaceImage from './PlaceImage.jsx';
 import '../../styles/discover.css';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
@@ -98,7 +98,7 @@ export default function DiscoverRail() {
               onClick={() => open(place.id)}
             >
               <span className="dsc-rail-media">
-                <PlacePoster seed={place.id} category={place.category} />
+                <PlaceImage place={place} widthPx={400} />
               </span>
               <span className="dsc-rail-body">
                 <span className="dsc-rail-title">{place.name}</span>

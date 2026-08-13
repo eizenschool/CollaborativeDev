@@ -8,7 +8,7 @@
 // with no fetchable photograph falls to the category illustration (FR-6.17).
 import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin } from '../icons.jsx';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
-import PlacePoster from './PlacePoster.jsx';
+import PlaceImage from './PlaceImage.jsx';
 
 export function Rating({ rating, reviewCount }) {
   if (!rating || reviewCount < REVIEW_CONFIDENCE_SATURATION) {
@@ -36,7 +36,7 @@ export default function DestinationCard({ candidate, onOpen }) {
       onClick={() => onOpen(place.id)}
     >
       <span className="dsc-card-media">
-        <PlacePoster seed={place.id} category={place.category} />
+        <PlaceImage place={place} widthPx={600} />
         {credit && <span className="dsc-photo-credit">{credit}</span>}
       </span>
 
