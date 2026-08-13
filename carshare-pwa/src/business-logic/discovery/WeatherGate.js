@@ -92,36 +92,74 @@ export function applyWeatherGate(candidates = [], forecastsByPlaceId = new Map()
   return { candidates: kept, withheld };
 }
 
+// A forecast for one place on one date does not change between two screens
+// opening seconds apart, so it is held for the session. This is a weather cache,
+// not a ranking cache: the scores it feeds are still recomputed on every request,
+// which is what the specification actually forbids caching.
+const forecastCache = new Map();
+const cacheKey = (placeId, date) => `${date}::${placeId}`;
+
 /**
- * Retrieves a daily forecast per place. Returns an empty Map on any failure, so
- * the gate degrades to "no constraint" rather than taking the view down.
+ * Retrieves the daily forecast for every outdoor candidate in **one** request.
  *
- * One request per distinct coordinate, and only for outdoor candidates - an
- * indoor destination cannot be withheld on weather, so its forecast would be
- * fetched and then ignored.
+ * Open-Meteo accepts comma-separated coordinates and answers with an array in
+ * the same order. That matters: one request per place meant 24 calls and about
+ * six seconds of network time before the home screen could paint, for data that
+ * arrives in roughly 200ms when asked for together.
+ *
+ * Indoor candidates are never requested at all - an indoor destination cannot be
+ * withheld on weather, so its forecast would be fetched and then ignored.
+ *
+ * Returns an empty Map on any failure, so the gate degrades to "no constraint"
+ * rather than taking the view down.
  */
 export async function fetchForecasts(places = [], travelDate, { fetchImpl = globalThis.fetch } = {}) {
   const outdoor = places.filter((p) => isOutdoorCategory(p.category));
   if (!outdoor.length || !travelDate || typeof fetchImpl !== 'function') return new Map();
 
-  const results = await Promise.all(outdoor.map(async (place) => {
-    try {
-      const url = `${OPEN_METEO_URL}?latitude=${place.lat}&longitude=${place.lng}`
-        + `&daily=weather_code&start_date=${travelDate}&end_date=${travelDate}&timezone=Asia%2FKuala_Lumpur`;
-      const response = await fetchImpl(url);
-      if (!response?.ok) return null;
+  const found = new Map();
+  const missing = [];
+  for (const place of outdoor) {
+    const cached = forecastCache.get(cacheKey(place.id, travelDate));
+    if (cached) found.set(place.id, cached);
+    else missing.push(place);
+  }
 
-      const body = await response.json();
-      const weatherCode = body?.daily?.weather_code?.[0];
-      if (weatherCode === undefined || weatherCode === null) return null;
+  if (missing.length === 0) return found;
 
-      return [place.id, { weatherCode, summary: describeCode(weatherCode) }];
-    } catch {
-      return null;
-    }
-  }));
+  try {
+    const url = `${OPEN_METEO_URL}`
+      + `?latitude=${missing.map((p) => p.lat).join(',')}`
+      + `&longitude=${missing.map((p) => p.lng).join(',')}`
+      + `&daily=weather_code&start_date=${travelDate}&end_date=${travelDate}`
+      + `&timezone=Asia%2FKuala_Lumpur`;
 
-  return new Map(results.filter(Boolean));
+    const response = await fetchImpl(url);
+    if (!response?.ok) return found;
+
+    // A single coordinate returns one object; several return an array. Normalise
+    // so the same code reads both.
+    const body = await response.json();
+    const entries = Array.isArray(body) ? body : [body];
+
+    missing.forEach((place, index) => {
+      const weatherCode = entries[index]?.daily?.weather_code?.[0];
+      if (weatherCode === undefined || weatherCode === null) return;
+
+      const forecast = { weatherCode, summary: describeCode(weatherCode) };
+      forecastCache.set(cacheKey(place.id, travelDate), forecast);
+      found.set(place.id, forecast);
+    });
+
+    return found;
+  } catch {
+    return found;
+  }
+}
+
+/** Test hook, so one case's cached forecasts cannot leak into the next. */
+export function __clearForecastCache() {
+  forecastCache.clear();
 }
 
 function describeCode(code) {
@@ -135,5 +173,6 @@ export const WeatherGate = {
   isOutdoorCategory,
   classifyForecast,
   applyWeatherGate,
-  fetchForecasts
+  fetchForecasts,
+  __clearForecastCache
 };

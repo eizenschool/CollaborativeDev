@@ -224,7 +224,13 @@ export default function DestinationDetail() {
                   </span>
                 </div>
                 <div className="dsc-actions" style={{ marginTop: 16 }}>
-                  <button className="dsc-btn dsc-btn-primary" onClick={() => navigate('/ride')} type="button">
+                  <button
+                    className="dsc-btn dsc-btn-primary"
+                    type="button"
+                    onClick={() => navigate(DestinationDiscoveryService.buildPrefillUrl(
+                      'search', place, { origin: DEFAULT_ORIGIN, travelDate }
+                    ))}
+                  >
                     <IconCar size={16} /> Find a ride
                   </button>
                 </div>
@@ -242,8 +248,10 @@ export default function DestinationDetail() {
                 <div className="dsc-actions" style={{ marginTop: 16 }}>
                   <button
                     className="dsc-btn dsc-btn-primary"
-                    onClick={() => navigate('/ride/publish')}
                     type="button"
+                    onClick={() => navigate(DestinationDiscoveryService.buildPrefillUrl(
+                      'publish', place, { origin: DEFAULT_ORIGIN, travelDate }
+                    ))}
                   >
                     <IconRoute size={16} /> I will drive
                   </button>

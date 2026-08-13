@@ -104,7 +104,9 @@ export default function UnmetDemandView() {
                   <button
                     className="dsc-btn dsc-btn-primary"
                     type="button"
-                    onClick={() => navigate('/ride/publish')}
+                    onClick={() => navigate(DestinationDiscoveryService.buildPrefillUrl(
+                      'publish', row.place, { origin: DEFAULT_ORIGIN, travelDate }
+                    ))}
                   >
                     <IconRoute size={16} /> Publish a ride here
                   </button>

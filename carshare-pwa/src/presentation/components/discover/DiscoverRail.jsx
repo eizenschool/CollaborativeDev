@@ -29,20 +29,17 @@ export default function DiscoverRail() {
 
     (async () => {
       const today = new Date().toISOString().slice(0, 10);
-      let data = await DestinationDiscoveryService.getRecommendations({
-        userId: user?.id, origin: DEFAULT_ORIGIN, travelDate: today
-      });
 
-      // Prefer a date that actually has departures, so the rail leads with places
-      // someone is already driving to rather than with an all-unserved list.
-      const upcoming = data.departureDates?.find((d) => d >= today) || data.departureDates?.[0];
-      let date = today;
-      if (data.primary.length === 0 && upcoming && upcoming !== today) {
-        date = upcoming;
-        data = await DestinationDiscoveryService.getRecommendations({
-          userId: user?.id, origin: DEFAULT_ORIGIN, travelDate: date
-        });
-      }
+      // Ask which dates have departures before scoring anything. The rail used to
+      // run a full recommendation pass on today, discover there were no rides,
+      // then run a second one on the next departure date - paying for two rounds
+      // of weather and ride lookups to render one row of cards.
+      const dates = await DestinationDiscoveryService.getDepartureDates();
+      const date = dates.find((d) => d >= today) || dates[0] || today;
+
+      const data = await DestinationDiscoveryService.getRecommendations({
+        userId: user?.id, origin: DEFAULT_ORIGIN, travelDate: date
+      });
 
       if (cancelled) return;
       setTravelDate(date);

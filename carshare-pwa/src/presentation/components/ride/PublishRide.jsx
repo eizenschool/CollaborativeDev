@@ -1,6 +1,6 @@
 // ===== PRESENTATION LAYER (PublishRide) =====
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideService } from '../../../business-logic/RideService.js';
 import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
@@ -37,8 +37,18 @@ const emptyForm = {
 export default function PublishRide() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Optional destination prefill, so offering to drive from Module 6's unserved
+  // list (FR-6.35) carries the destination across rather than opening a blank
+  // form. Only the free-text field is filled: `destinationLocation` stays null
+  // because a confirmed Place ID must still come from a Google prediction the
+  // Host actually selects, per D013.
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => {
+    const destination = searchParams.get('destination');
+    return destination ? { ...emptyForm, destination } : emptyForm;
+  });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [vehicles, setVehicles] = useState(null);

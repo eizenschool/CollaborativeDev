@@ -1,6 +1,6 @@
 // ===== PRESENTATION LAYER (RideHub) =====
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
@@ -12,10 +12,16 @@ import '../../styles/ride.css';
 export default function RideHub() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Optional search prefill, so arriving from Module 6's Destination Discovery
+  // (FR-6.35) does not make the traveller retype the destination they just
+  // chose. Absent parameters leave every field empty, which is exactly the
+  // behaviour when opening /ride directly.
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState('find'); // 'find' | 'my'
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [date, setDate] = useState('');
+  const [from, setFrom] = useState(() => searchParams.get('from') || '');
+  const [to, setTo] = useState(() => searchParams.get('to') || '');
+  const [date, setDate] = useState(() => searchParams.get('date') || '');
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [myRides, setMyRides] = useState(null);

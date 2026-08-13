@@ -119,6 +119,17 @@ export const DestinationDiscoveryService = {
   },
 
   /**
+   * The dates that actually have departures, cheapest possible question.
+   *
+   * Lets a caller land on a useful date without first running a full scoring
+   * pass to discover the one it guessed has no rides on it.
+   */
+  async getDepartureDates() {
+    const rides = await DiscoveryContractAdapter.getPublishedRides();
+    return DiscoveryContractAdapter.departureDates(rides);
+  },
+
+  /**
    * UC6.2 - one destination, carrying the same scores the list showed.
    *
    * Deliberately runs the full ranking rather than scoring this place on its own.
@@ -255,5 +266,31 @@ export const DestinationDiscoveryService = {
       pickup: origin?.label || '',
       destinationPlaceId: place?.sourcePlaceId || null
     };
+  },
+
+  /**
+   * The same payload as a URL, which is how it actually reaches Modules 2 and 4.
+   *
+   * A query string rather than router state on purpose: it survives a reload,
+   * can be shared or bookmarked, and needs no shared in-memory contract between
+   * modules. Both forms treat every parameter as optional, so a link without
+   * them behaves exactly as opening the screen directly does.
+   *
+   * @param target 'search' for Module 4's ride search, 'publish' for Module 2's form
+   */
+  buildPrefillUrl(target, place, { origin, travelDate } = {}) {
+    const payload = this.buildPrefillPayload(place, origin);
+    const params = new URLSearchParams();
+
+    if (target === 'publish') {
+      if (payload.destination) params.set('destination', payload.destination);
+      if (travelDate) params.set('date', travelDate);
+      return `/ride/publish${params.toString() ? `?${params}` : ''}`;
+    }
+
+    if (payload.destination) params.set('to', payload.destination);
+    if (payload.pickup) params.set('from', payload.pickup);
+    if (travelDate) params.set('date', travelDate);
+    return `/ride${params.toString() ? `?${params}` : ''}`;
   }
 };
