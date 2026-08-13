@@ -1,6 +1,6 @@
 // ===== PRESENTATION LAYER (RideHistory) =====
 // Module 5, Screen 1 - FR-5.1 / FR-5.2 (UC5.1, UC5.2)
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
@@ -79,14 +79,52 @@ export default function RideHistory({ userId, onOpenTrip }) {
   );
 }
 
+// These groups pick exactly one option, so they are radio groups rather than
+// plain buttons. That also keeps the whole group to a single Tab stop - as
+// loose buttons the eleven filters sat between the page and the trip list.
+function useRovingRadioGroup(options, value, onChange) {
+  const refs = useRef([]);
+  const register = (index) => (node) => { refs.current[index] = node; };
+
+  function handleKeyDown(event, index) {
+    const last = options.length - 1;
+    let next = null;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = index === last ? 0 : index + 1;
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = index === 0 ? last : index - 1;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = last;
+    if (next === null) return;
+    event.preventDefault();
+    onChange(options[next]);
+    refs.current[next]?.focus();
+  }
+
+  // Roving tabindex: the checked option carries the tab stop, arrows do the rest.
+  const optionProps = (opt, index) => ({
+    ref: register(index),
+    role: 'radio',
+    'aria-checked': value === opt,
+    tabIndex: value === opt ? 0 : -1,
+    onClick: () => onChange(opt),
+    onKeyDown: (event) => handleKeyDown(event, index)
+  });
+
+  return optionProps;
+}
+
 function FilterGroup({ label, options, value, onChange }) {
+  const optionProps = useRovingRadioGroup(options, value, onChange);
+  const labelId = `m5-filter-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <div>
-      <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', color: COLORS.textSecondary, margin: '0 0 10px' }}>
+      <p
+        id={labelId}
+        style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', color: COLORS.textSecondary, margin: '0 0 10px' }}
+      >
         {label}
       </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {options.map((opt) => {
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} role="radiogroup" aria-labelledby={labelId}>
+        {options.map((opt, index) => {
           const active = value === opt;
           const palette = STATUS_COLORS[opt];
           const activeColor = palette ? palette.text : COLORS.primaryDark;
@@ -94,7 +132,7 @@ function FilterGroup({ label, options, value, onChange }) {
             <button
               key={opt}
               className="m5-chip"
-              onClick={() => onChange(opt)}
+              {...optionProps(opt, index)}
               style={{
                 borderColor: active ? activeColor : COLORS.border,
                 background: active ? (palette ? palette.bg : COLORS.primaryTint) : COLORS.surface,
@@ -112,14 +150,19 @@ function FilterGroup({ label, options, value, onChange }) {
 }
 
 function SegmentedRoleToggle({ value, onChange }) {
+  const optionProps = useRovingRadioGroup(ROLES, value, onChange);
   return (
-    <div style={{ display: 'inline-flex', background: COLORS.bg, borderRadius: 12, padding: 4, border: `1px solid ${COLORS.border}` }}>
-      {ROLES.map((opt) => {
+    <div
+      style={{ display: 'inline-flex', background: COLORS.bg, borderRadius: 12, padding: 4, border: `1px solid ${COLORS.border}` }}
+      role="radiogroup"
+      aria-label="Filter by your role"
+    >
+      {ROLES.map((opt, index) => {
         const active = value === opt;
         return (
           <button
             key={opt}
-            onClick={() => onChange(opt)}
+            {...optionProps(opt, index)}
             style={{
               padding: '7px 16px',
               borderRadius: 8,
