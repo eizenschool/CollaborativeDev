@@ -15,6 +15,7 @@ import {
   MessagingService,
   validateMessageDraft,
 } from '../../../business-logic/MessagingService.js';
+import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
 import MessageBubble from './MessageBubble.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
 
@@ -124,35 +125,43 @@ function ComposerMedia({ entries, onMove, onRemove }) {
 export default function ChatWindow({
   conversationId,
   currentUser,
-  realtimeUpdate,
   onBack,
   onManage,
   onOpenHistory,
   highlightedMessageId,
   isDesktop = false,
 }) {
-  const [conversation, setConversation] = useState(null);
-  const [messageList, setMessageList] = useState([]);
-  const [text, setText] = useState('');
-  const [mediaEntries, setMediaEntries] = useState([]);
-  const [location, setLocation] = useState(null);
-  const [editingMessage, setEditingMessage] = useState(null);
+  const {
+    getConversation,
+    getMessagesState,
+    refreshConversation,
+    getDraft,
+    saveDraft,
+    clearDraft,
+  } = useMessagingSession();
+  const initialDraft = getDraft(conversationId);
+  const [text, setText] = useState(() => initialDraft?.text || '');
+  const [mediaEntries, setMediaEntries] = useState(() => initialDraft?.mediaEntries || []);
+  const [location, setLocation] = useState(() => initialDraft?.location || null);
+  const [editingMessage, setEditingMessage] = useState(() => initialDraft?.editingMessage || null);
+  const [composerConversationId, setComposerConversationId] = useState(conversationId);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const [loadError, setLoadError] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const fileInputRef = useRef(null);
   const messageInputRef = useRef(null);
   const messageBottomRef = useRef(null);
-  const mediaEntriesRef = useRef([]);
   const deleteCancelRef = useRef(null);
   const deleteModalRef = useRef(null);
   const deleteReturnFocusRef = useRef(null);
-  const loadRequestRef = useRef(0);
-  const hasLoadedConversationRef = useRef(false);
   const lastMessageIdRef = useRef(null);
+
+  const conversation = getConversation(conversationId);
+  const messageState = getMessagesState(conversationId);
+  const messageList = messageState.items;
+  const isLoading = messageState.loading;
+  const loadError = messageState.error;
 
   const releaseMediaEntries = useCallback((entries) => {
     entries.filter((entry) => entry.source === 'new').forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
@@ -167,67 +176,27 @@ export default function ChatWindow({
     setLocation(null);
     setEditingMessage(null);
     setErrorMessage('');
+    clearDraft(conversationId);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (messageInputRef.current) messageInputRef.current.style.height = '';
-  }, [releaseMediaEntries]);
-
-  const loadConversation = useCallback(async ({ showLoading = false, markRead = false } = {}) => {
-    if (!conversationId) return;
-    const requestId = loadRequestRef.current + 1;
-    loadRequestRef.current = requestId;
-    if (showLoading) {
-      setLoadError('');
-      setIsLoading(true);
-    }
-    try {
-      const [nextConversation, nextMessages] = await Promise.all([
-        MessagingService.getConversation(conversationId),
-        MessagingService.listMessages(conversationId),
-      ]);
-      if (!nextConversation) throw new Error('This conversation is no longer available.');
-      if (requestId !== loadRequestRef.current) return;
-      setConversation(nextConversation);
-      setMessageList(nextMessages);
-      hasLoadedConversationRef.current = true;
-      if (markRead && requestId === loadRequestRef.current) {
-        await MessagingService.markConversationRead(conversationId).catch(() => {});
-      }
-    } catch (error) {
-      if (requestId !== loadRequestRef.current) return;
-      if (showLoading || !hasLoadedConversationRef.current) {
-        setConversation(null);
-        setMessageList([]);
-        setLoadError(error.message || 'Unable to load this conversation.');
-      } else {
-        setErrorMessage('Unable to refresh this conversation. Current messages are still shown.');
-      }
-    } finally {
-      if (requestId === loadRequestRef.current) setIsLoading(false);
-    }
-  }, [conversationId]);
+  }, [clearDraft, conversationId, releaseMediaEntries]);
 
   useEffect(() => {
-    hasLoadedConversationRef.current = false;
     lastMessageIdRef.current = null;
-    resetComposer();
-    loadConversation({ showLoading: true, markRead: true });
-    return () => {
-      loadRequestRef.current += 1;
-    };
-  }, [conversationId, loadConversation, resetComposer]);
+    const draft = getDraft(conversationId);
+    setText(draft?.text || '');
+    setMediaEntries(draft?.mediaEntries || []);
+    setLocation(draft?.location || null);
+    setEditingMessage(draft?.editingMessage || null);
+    setComposerConversationId(conversationId);
+    setErrorMessage('');
+    refreshConversation(conversationId, { markRead: true });
+  }, [conversationId, getDraft, refreshConversation]);
 
   useEffect(() => {
-    if (!realtimeUpdate?.version) return;
-    if (realtimeUpdate.conversationIds.length
-        && !realtimeUpdate.conversationIds.includes(conversationId)) return;
-    loadConversation({ markRead: true });
-  }, [conversationId, loadConversation, realtimeUpdate]);
-
-  useEffect(() => {
-    mediaEntriesRef.current = mediaEntries;
-  }, [mediaEntries]);
-
-  useEffect(() => () => releaseMediaEntries(mediaEntriesRef.current), [releaseMediaEntries]);
+    if (composerConversationId !== conversationId) return;
+    saveDraft(conversationId, { text, mediaEntries, location, editingMessage });
+  }, [composerConversationId, conversationId, editingMessage, location, mediaEntries, saveDraft, text]);
 
   useEffect(() => {
     if (!deleteTarget) return undefined;
@@ -366,7 +335,7 @@ export default function ChatWindow({
         });
       }
       resetComposer();
-      await loadConversation();
+      await refreshConversation(conversationId);
     } catch (error) {
       setErrorMessage(`${error.message || 'Unable to save message.'} Your draft has been kept for Retry.`);
     } finally {
@@ -381,7 +350,7 @@ export default function ChatWindow({
     try {
       await MessagingService.deleteMessage(deleteTarget.id);
       setDeleteTarget(null);
-      await loadConversation();
+      await refreshConversation(conversationId);
     } catch (error) {
       setErrorMessage(error.message || 'Unable to delete message.');
     } finally {
@@ -389,10 +358,10 @@ export default function ChatWindow({
     }
   }
 
-  if (loadError) {
+  if (loadError && !conversation) {
     return (
       <section className="message-chat-window">
-        <div className="message-inline-error" role="alert"><p>{loadError}</p><button type="button" onClick={() => loadConversation({ showLoading: true, markRead: true })}>Retry</button></div>
+        <div className="message-inline-error" role="alert"><p>{loadError}</p><button type="button" onClick={() => refreshConversation(conversationId, { markRead: true })}>Retry</button></div>
       </section>
     );
   }
@@ -424,6 +393,13 @@ export default function ChatWindow({
           <button type="button" className="message-chat-header-button" onClick={() => onManage(conversation)} aria-label="Manage conversation" title="Manage conversation"><IconMoreVertical size={19} /></button>
         </div>
       </header>
+
+      {loadError && (
+        <div className="message-inline-error" role="alert">
+          <p>{loadError} Current messages are still shown.</p>
+          <button type="button" onClick={() => refreshConversation(conversationId, { markRead: true })}>Retry</button>
+        </div>
+      )}
 
       <div className="message-chat-scroll" aria-live="polite">
         {messageList.length ? messageList.map((message) => (
