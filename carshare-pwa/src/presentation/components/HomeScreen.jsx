@@ -4,6 +4,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { IconRoute, IconCar, IconCheckCircle, IconUser } from './icons.jsx';
+import DiscoverRail from './discover/DiscoverRail.jsx';
 
 const ACTIONS = [
   { to: '/ride/publish', Icon: IconRoute, title: 'Publish a ride', sub: 'Offer your empty seats' },
@@ -35,6 +36,12 @@ export default function HomeScreen() {
           </button>
         ))}
       </div>
+
+      {/* Module 6 - Destination Discovery. Every action above assumes the visitor
+          can already name a destination; this is for when they cannot, which is
+          most of the point for the guest arriving here for the first time. The
+          rail owns its own data and renders nothing when it has nothing to show. */}
+      <DiscoverRail />
     </div>
   );
 }

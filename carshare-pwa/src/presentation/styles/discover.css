@@ -1,0 +1,767 @@
+/* ===== Module 6 - Destination Discovery =====
+   Follows docs/ai/UI.md: shared 700 / 900 / 1100 breakpoints, the px type scale
+   (24 page / 20 section / 16 card / 14-15 body / 12 caption), an 8px spacing
+   rhythm, and theme.css tokens rather than raw colours.
+
+   Every rule is namespaced .dsc-* so this file cannot reach into another
+   module's screens. Illustration colours live in PlacePoster.jsx, where the
+   reason for a module-local palette is documented. */
+
+.dsc-page {
+  padding: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+@media (min-width: 701px) {
+  .dsc-page { padding: 24px; }
+}
+
+@media (min-width: 1101px) {
+  .dsc-page { padding: 32px; }
+}
+
+/* --- hero --------------------------------------------------------------- */
+
+.dsc-hero {
+  position: relative;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  margin-bottom: 24px;
+  background: #fff;
+  border: 1px solid var(--border);
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* The card and hero interiors are <span> elements, because a <button> may not
+   contain block-level children. Spans are inline by default, so every one of
+   these containers has to declare its own display or the height simply does not
+   apply and the SVG expands to its own aspect ratio instead. */
+.dsc-hero-media { display: block; position: relative; height: 200px; }
+
+@media (min-width: 701px) { .dsc-hero-media { height: 260px; } }
+@media (min-width: 1101px) { .dsc-hero-media { height: 320px; } }
+
+.dsc-hero-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0) 35%, rgba(17, 24, 39, 0.78) 100%);
+}
+
+.dsc-hero-text {
+  display: block;
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  color: #fff;
+}
+
+.dsc-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--teal-dark);
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.dsc-hero-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+
+@media (min-width: 701px) { .dsc-hero-title { font-size: 24px; } }
+
+.dsc-hero-sub { display: block; font-size: 14px; margin: 0; opacity: 0.92; }
+
+/* --- header and controls ------------------------------------------------ */
+
+.dsc-header h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+
+.dsc-header p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.dsc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.dsc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dsc-field input {
+  /* 16px prevents iOS zooming the viewport on focus. */
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: #fff;
+  min-height: 44px;
+}
+
+.dsc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dsc-filter {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  text-transform: capitalize;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.dsc-filter:hover { border-color: var(--teal); color: var(--teal-dark); }
+
+.dsc-filter.active {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* --- sections ----------------------------------------------------------- */
+
+.dsc-section { margin-bottom: 32px; }
+
+.dsc-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dsc-section h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.dsc-section-note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.dsc-count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dsc-list {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 701px) { .dsc-list { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1101px) { .dsc-list { grid-template-columns: repeat(3, 1fr); } }
+
+.dsc-empty,
+.dsc-notice,
+.dsc-withheld {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+
+.dsc-empty {
+  background: #fff;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.dsc-notice {
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  padding: 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.dsc-withheld {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* --- poster ------------------------------------------------------------- */
+
+.dsc-poster {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dsc-photo-credit {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(17, 24, 39, 0.6);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.dsc-illustration-tag {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+/* --- card --------------------------------------------------------------- */
+
+.dsc-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+
+.dsc-card:hover {
+  border-color: #c9d1db;
+  box-shadow: 0 4px 14px rgba(17, 24, 39, .06);
+  transform: translateY(-1px);
+}
+
+.dsc-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-card-media { display: block; position: relative; height: 140px; }
+
+.dsc-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.dsc-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dsc-card-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.dsc-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: capitalize;
+  white-space: nowrap;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font-weight: 600;
+}
+
+.dsc-card-desc {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.dsc-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.dsc-meta-item { display: inline-flex; align-items: center; gap: 4px; }
+
+.dsc-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* FR-6.16: thin data is stated, not dressed up as a rating. */
+.dsc-rating-low { color: var(--muted); font-weight: 400; font-style: italic; }
+
+.dsc-review-count { color: var(--muted); font-weight: 400; }
+
+.dsc-weather {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: #92400e;
+  background: var(--warning-tint);
+  padding: 8px;
+  border-radius: var(--radius);
+}
+
+.dsc-availability {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  margin-top: auto;
+}
+
+.dsc-served { background: var(--teal-tint); color: var(--teal-dark); }
+.dsc-unserved { background: var(--gold-tint); color: #854d0e; }
+
+/* The unserved section is visually distinct because it asks for a different
+   action - offer to drive, rather than take a seat. */
+.dsc-card-unserved { border-style: dashed; }
+
+/* --- buttons ------------------------------------------------------------ */
+
+.dsc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dsc-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.dsc-btn:hover { border-color: var(--teal); }
+.dsc-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-btn-primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dsc-btn-primary:hover { background: var(--teal-dark); border-color: var(--teal-dark); }
+
+.dsc-btn-ghost { border-color: transparent; color: var(--muted); background: transparent; }
+
+.dsc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- preference prompt -------------------------------------------------- */
+
+.dsc-prompt {
+  border: 1px solid var(--teal);
+  background: var(--teal-tint);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.dsc-prompt h2 {
+  font-family: var(--font-display);
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.dsc-prompt p { margin: 0 0 16px; font-size: 14px; color: var(--muted); }
+
+.dsc-prompt-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dsc-prompt-choice {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--ink);
+  min-height: 44px;
+}
+
+.dsc-prompt-choice.selected {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* --- detail ------------------------------------------------------------- */
+
+.dsc-back {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.dsc-detail-layout { display: grid; gap: 24px; }
+
+@media (min-width: 1101px) {
+  .dsc-detail-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
+  .dsc-detail-aside { position: sticky; top: 88px; }
+}
+
+.dsc-carousel { position: relative; border-radius: var(--radius-card); overflow: hidden; }
+.dsc-carousel-frame { position: relative; height: 220px; }
+
+@media (min-width: 701px) { .dsc-carousel-frame { height: 300px; } }
+
+.dsc-carousel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dsc-carousel-prev { left: 8px; }
+.dsc-carousel-next { right: 8px; }
+
+.dsc-carousel-dots {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.dsc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 0;
+}
+
+.dsc-dot.active { background: #fff; width: 20px; border-radius: 999px; }
+
+.dsc-detail h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--ink);
+}
+
+.dsc-detail-desc {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 16px 0 8px;
+}
+
+.dsc-template-note {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0 0 16px;
+}
+
+.dsc-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.dsc-panel h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.dsc-panel p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+
+/* --- reviews ------------------------------------------------------------ */
+
+.dsc-review { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.dsc-review:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.dsc-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dsc-review-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.dsc-review-author { font-size: 14px; font-weight: 600; color: var(--ink); }
+.dsc-review-stars { display: inline-flex; gap: 2px; color: var(--gold); margin-left: auto; }
+.dsc-review-text { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+
+/* --- score breakdown ---------------------------------------------------- */
+
+.dsc-breakdown { display: grid; gap: 24px; }
+
+.dsc-breakdown-axis h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-family: var(--font-display);
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.dsc-axis-score { font-size: 20px; color: var(--teal-dark); }
+
+.dsc-axis-note { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+
+.dsc-axis-cap {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #854d0e;
+  background: var(--gold-tint);
+  padding: 12px;
+  border-radius: var(--radius);
+  line-height: 1.6;
+}
+
+.dsc-signal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 64px;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.dsc-signal-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.dsc-signal-fill { display: block; height: 100%; background: var(--teal); }
+.dsc-signal-value { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dsc-signal-weight { color: var(--muted); }
+
+/* Why a signal landed where it did, shown under its label. */
+.dsc-signal-reason {
+  display: block;
+  font-size: 12px;
+  color: var(--teal-dark);
+}
+
+.dsc-season-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+}
+
+.dsc-season-off { background: var(--gold-tint); color: #854d0e; }
+
+/* --- home rail ---------------------------------------------------------- */
+
+.dsc-rail { margin-top: 32px; }
+
+.dsc-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dsc-rail-head h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+
+.dsc-rail-link {
+  border: 0;
+  background: none;
+  color: var(--teal-dark);
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.dsc-rail-sub { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+
+/* A scrolling rail rather than a wrapping grid, so the row reads as "more to
+   the right" instead of quietly truncating. */
+.dsc-rail-track {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dsc-rail-item {
+  flex: 0 0 220px;
+  scroll-snap-align: start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #fff;
+  padding: 0;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dsc-rail-item:hover { border-color: #c9d1db; }
+.dsc-rail-item:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-rail-media { display: block; position: relative; height: 108px; }
+.dsc-rail-body { display: block; padding: 12px; }
+
+.dsc-rail-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+  line-height: 1.3;
+}
+
+.dsc-rail-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsc-card, .dsc-card:hover { transition: none; transform: none; }
+}

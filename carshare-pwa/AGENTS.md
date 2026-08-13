@@ -65,7 +65,7 @@ Let's Tumpang has six development modules:
 3. Messaging
 4. Smart Search & Favourite
 5. Trip Management & Eco Impact
-6. Trust & Safety
+6. Destination Discovery
 
 Each module has a compact context file under `docs/ai/modules`.
 Use the module file as the first specialised context for module work.

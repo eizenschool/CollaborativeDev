@@ -15,6 +15,7 @@ import MyProfile from './presentation/components/MyProfile.jsx';
 import RideHub from './presentation/components/ride/RideHub.jsx';
 import PublishRide from './presentation/components/ride/PublishRide.jsx';
 import SafetyRoutes from './presentation/components/safety/SafetyRoutes.jsx';
+import DiscoverRoutes from './presentation/components/discover/DiscoverRoutes.jsx';
 import RideDetail from './presentation/components/ride/RideDetail.jsx';
 import ManageRequests from './presentation/components/ride/ManageRequests.jsx';
 import MyRequests from './presentation/components/ride/MyRequests.jsx';
@@ -79,12 +80,18 @@ function AppShell() {
         {/* Module 5 - Trip Management & Eco Impact */}
         <Route path="/trip" element={<RequireAuth reason="Sign in to view your trips."><TripModule /></RequireAuth>} />
         <Route path="/trip/:tripId" element={<RequireAuth reason="Sign in to view this trip."><TripDetail /></RequireAuth>} />
-        {/* Module 6 - Trip Verification, Exchange Settlement & Safety: PIN pickup
-            verification, GPS cross-check, independent trip/exchange confirmation,
-            and the dispute confidence engine + admin console. Everything under
-            /safety is Module 6's own sub-router (SafetyRoutes.jsx) - this is the
-            only line App.jsx needs to know about it. */}
+        {/* Trip Verification, Exchange Settlement & Safety. Built under Module 6's
+            former scope; now owned by Modules 1/2/3/5 - see
+            docs/ai/modules/TRUST_SAFETY_HANDOVER.md. Everything under /safety is
+            its own sub-router (SafetyRoutes.jsx). */}
         <Route path="/safety/*" element={<RequireAuth reason="Sign in to use trust and safety services."><SafetyRoutes /></RequireAuth>} />
+        {/* Module 6 - Destination Discovery: recommends where to go to a traveller
+            who has no destination in mind, then hands off to Module 4 (find a ride)
+            or Module 2 (publish one). Public, like the other browsing surfaces: a
+            visitor who cannot yet name a destination is precisely who this module
+            exists for, and the service already scores an anonymous request with a
+            neutral affinity rather than requiring an account. */}
+        <Route path="/discover/*" element={<DiscoverRoutes />} />
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

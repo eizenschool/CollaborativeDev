@@ -16,7 +16,10 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/presentation/styles/` — shared and module style files.
 
 ## Business Logic
-- `src/business-logic/` — business-rule/service layer, including Module 6 verification logic.
+- `src/business-logic/` — business-rule/service layer.
+- `src/business-logic/discovery/` — Module 6 place scoring, lifecycle, seasonal calendar, and chain detection.
+- `src/business-logic/discovery/PlaceQueryService.js` — radius and route-corridor place queries served to Modules 2 and 4; callable now against the fixture catalogue with no API key.
+- `src/business-logic/verification/` — trip verification logic from the former Trust & Safety scope; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 - `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.
 - `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, and reverse-geocoding boundary.
 
@@ -29,7 +32,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/data-access/supabaseClient.js` — shared Supabase client/configuration.
 - `src/data-access/mockDataStore.js` — mock/local prototype store.
 - `src/data-access/mockMessageData.js` — messaging prototype/mock data.
-- `src/data-access/module6Store.js` — Module 6 prototype store.
+- `src/data-access/module6Store.js` — trip verification prototype store (former Trust & Safety scope).
 - `database/sql/` — numbered schema/RLS/trigger SQL files; see `docs/ai/SQL.md` for the current file map before reading these directly.
 
 ## Module Context
@@ -38,10 +41,12 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - M3 → `docs/ai/modules/M3_MESSAGING.md`
 - M4 → `docs/ai/modules/M4_SMART_SEARCH_FAVOURITE.md`
 - M5 → `docs/ai/modules/M5_TRIP_ECO.md`
-- M6 → `docs/ai/modules/M6_TRUST_SAFETY.md`
+- M6 → `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`
+- Former Trust & Safety scope → `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`
 
 ## Existing Technical Documentation
 - `docs/SUPABASE-SETUP.md` — existing Supabase setup notes; validate before treating as canonical.
-- `docs/MODULE6-SCHEMA.md` — Module 6 schema notes; validate against actual database state.
+- `docs/MODULE6-SCHEMA.md` — superseded draft for the former Trust & Safety scope; not Module 6's current schema.
+- `docs/MODULE6-API-SETUP.md` — every external request Destination Discovery makes, with field-mask billing tiers, quotas, and outstanding console work.
 
 Keep this file short. Do not list every source file.

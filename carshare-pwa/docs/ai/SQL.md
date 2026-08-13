@@ -13,7 +13,7 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-022
-Repository SQL history: 001-023
+Repository SQL history: 001-024
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -29,7 +29,7 @@ deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
 Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
 URLs for private chat media. Deployed history must not be rewritten; the next
-new file after the current `023` draft starts at `024`.
+new file after the current `024` draft starts at `025`.
 `023_m1_m2_public_ride_browsing.sql` is a local,
 undeployed migration: it records the requested guest Ride browsing policy, but
 deploying its anonymous column-level access requires explicit approval of the
@@ -37,7 +37,17 @@ public payload. The draft excludes Place IDs, precise coordinates, pickup
 instructions, and lifecycle timestamps from guest reads. It may still be edited
 until that approval is given.
 
-Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
+`024_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
+the Module 6 place catalogue, recorded interest, notification registrations, and
+stated travel preferences. Modules 4-5 still use local adapters.
+
+It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
+renumbered on merge rather than kept: two files sharing a number would leave
+nobody able to tell which one to run.
+
+`docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
+module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
+Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 
 ## Current Database State
 
@@ -54,6 +64,13 @@ Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 - `conversation_members`: role, join/leave, per-user archive, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata or one coordinate pair.
+
+Module 6 (in `024`, not yet deployed):
+
+- `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only.
+- `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
+- `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration.
+- `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
 ### Security and Storage
 
