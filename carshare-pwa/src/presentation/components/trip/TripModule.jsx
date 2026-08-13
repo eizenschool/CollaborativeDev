@@ -45,18 +45,21 @@ export default function TripModule() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: COLORS.bg }}>
+    <div className="m5-root">
+      {/* The banner repeats on all four tabs and carried no information beyond
+          its title, so it stays compact: it used to spend ~155px of every
+          screen on two lines of text. */}
       <div
         style={{
           position: 'relative',
           overflow: 'hidden',
-          padding: '32px 24px',
+          padding: '16px 24px',
           background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.teal} 100%)`
         }}
       >
         {/* decorative background circles, purely cosmetic */}
-        <div style={{ position: 'absolute', top: -60, right: -40, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-        <div style={{ position: 'absolute', bottom: -70, right: 120, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', top: -70, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+        <div style={{ position: 'absolute', bottom: -80, right: 120, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
 
         <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16 }}>
           <button
@@ -82,9 +85,9 @@ export default function TripModule() {
 
           <span
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: 14,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
               background: 'rgba(255,255,255,0.2)',
               border: '1px solid rgba(255,255,255,0.35)',
               display: 'flex',
@@ -95,14 +98,14 @@ export default function TripModule() {
               backdropFilter: 'blur(4px)'
             }}
           >
-            <IconLeafSmall size={26} />
+            <IconLeafSmall size={20} />
           </span>
 
           <div>
-            <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 28, margin: 0, color: '#FFFFFF', letterSpacing: -0.3 }}>
+            <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 22, margin: 0, color: '#FFFFFF', letterSpacing: -0.2 }}>
               My Trips &amp; Impact
             </h1>
-            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: 'rgba(255,255,255,0.85)', margin: '4px 0 0' }}>
+            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '2px 0 0' }}>
               Your ride history and environmental impact, all in one place
             </p>
           </div>

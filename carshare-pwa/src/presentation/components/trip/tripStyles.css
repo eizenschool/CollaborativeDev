@@ -5,6 +5,17 @@
    (status pills, tier colors) stay as inline styles in the components; this
    file only covers static layout + hover/transition polish. */
 
+/* The module fills whatever height .app-shell leaves it. It used to set
+   min-height: 100vh, which stacked a full viewport on top of the shell's own
+   100vh plus the 64px it reserves for the phone tab bar - so every screen
+   scrolled ~66px past its content and the last card sat under the fixed nav.
+   New rules here use theme.css tokens; the older rules below still carry the
+   raw hex this file was written with. */
+.m5-root {
+  flex: 1;
+  background: var(--bg);
+}
+
 .m5-page {
   max-width: 1100px;
   margin: 0 auto;
@@ -86,6 +97,21 @@
   padding: 24px;
 }
 
+/* This module had no media queries at all - every responsive decision lived in
+   useIsDesktop(). These use the shared 700px phone breakpoint from theme.css.
+   UI.md: 16px page padding on phone, and keep content clear of the fixed tab
+   bar including the safe-area inset. */
+@media (max-width: 700px) {
+  .m5-header,
+  .m5-tabs {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .m5-content {
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+}
+
 .m5-chip {
   flex-shrink: 0;
   padding: 6px 14px;
@@ -108,6 +134,29 @@
   border: 1px solid #E5E7EB;
   border-radius: 16px;
   box-shadow: 0px 2px 8px rgba(0,0,0,0.06);
+}
+
+/* Trip Details route map. GoogleRouteMap appends google-map-embed when it has
+   a live Embed URL and google-map-fallback when it does not, so the sizing is
+   shared and only the fallback carries the illustration's layout. Sized here
+   rather than reusing ride.css so Module 5 keeps its own styling boundary. */
+.m5-map {
+  height: 170px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.m5-map iframe {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+}
+.m5-map.google-map-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: linear-gradient(135deg, #DCFCE7 0%, #F6FAF7 100%);
 }
 
 .m5-trip-card {

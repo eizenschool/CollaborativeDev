@@ -94,6 +94,11 @@ export function toHistoryCard(ride, role, now = new Date()) {
     role, // 'Host' | 'Passenger'
     pickup: ride.pickup,
     destination: ride.destination,
+    // Module 2's confirmed route references (database/sql/020). Carried through
+    // so the trip map can ask the Embed for the exact place rather than
+    // re-geocoding the free-text address.
+    pickupLocation: ride.pickupLocation || null,
+    destinationLocation: ride.destinationLocation || null,
     departureAt: ride.departureAt,
     date,
     time,
