@@ -25,7 +25,10 @@ export const STATUS_COLORS = {
   Matched: { text: '#7C3AED', bg: '#EDE9FE' },
   'In Transit': { text: '#F59E0B', bg: '#FEF3C7' },
   Completed: { text: '#16A34A', bg: '#DCFCE7' },
-  Cancelled: { text: '#EF4444', bg: '#FEE2E2' }
+  Cancelled: { text: '#EF4444', bg: '#FEE2E2' },
+  // Published, nobody joined, departure passed - Module 2's lifecycle job
+  // sets this. Distinct from Cancelled: nothing went wrong, it just lapsed.
+  Expired: { text: '#78716C', bg: '#F5F5F4' }
 };
 
 export const TIER_COLORS = {
