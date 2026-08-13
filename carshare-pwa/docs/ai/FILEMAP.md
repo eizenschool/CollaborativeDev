@@ -15,9 +15,13 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/presentation/components/icons.jsx` — shared icons.
 - `src/presentation/styles/` — shared and module style files.
 
+## Shared Integration Contracts
+- `docs/ai/FR-6.35_PREFILL_CONTRACT.md` — accepted Module 6 destination handoff payload consumed by Modules 2 and 4.
+
 ## Business Logic
 - `src/business-logic/` — business-rule/service layer.
 - `src/business-logic/discovery/` — Module 6 place scoring, lifecycle, seasonal calendar, and chain detection.
+- `supabase/functions/m6-ingest/` — server-side Module 6 Nearby Search sweep, Place Details enrichment, and catalogue upsert; reads `GOOGLE_PLACES_SERVER_KEY` only from Supabase secrets.
 - `src/business-logic/discovery/PlaceQueryService.js` — radius and route-corridor place queries served to Modules 2 and 4; callable now against the fixture catalogue with no API key.
 - `src/business-logic/verification/` — trip verification logic from the former Trust & Safety scope; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 - `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.

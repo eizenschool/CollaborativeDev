@@ -85,12 +85,17 @@ Responsive verification targets are 375px, 768px, 1024px, and 1440px.
 
 Ride search and Published Ride Detail are public browsing surfaces. Guests are
 sent to the shared auth page only when they select Publish/My rides, Request to
-join, Message host, or another account-specific Ride action. Pending migration
-`023_m1_m2_public_ride_browsing.sql` proposes column-scoped anon reads for only
-Published rides from active Hosts plus the safe profile and impact fields used
-by public ride cards. Place IDs, precise coordinates, and pickup instructions
-are excluded; the migration was not deployed without explicit payload approval.
+join, Message host, or another account-specific Ride action. Migration
+`023_m1_m2_public_ride_browsing.sql` is deployed with column-scoped anon reads
+for only Published rides from active Hosts plus the safe profile and impact
+fields used by public ride cards. Place IDs, precise coordinates, and pickup
+instructions are excluded.
 Requests, vehicles, reviews, and messaging remain authenticated/private.
+
+For FR-6.35, Module 2 consumes the versioned `discoveryPrefill` navigation
+state defined in `docs/ai/FR-6.35_PREFILL_CONTRACT.md`. It may display incoming
+labels, but it must not treat a fixture catalogue key as a confirmed Google
+location.
 
 ## Deferred
 Routes API, route distance/time, traffic-aware routing, map-pin selection, and

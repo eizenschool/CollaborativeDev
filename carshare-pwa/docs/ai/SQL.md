@@ -12,7 +12,7 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-022 + 025-026
+ Deployed SQL history: 001-026
 Repository SQL history: 001-026
 ```
 
@@ -30,16 +30,18 @@ Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
 URLs for private chat media. Deployed history must not be rewritten; the next
 new migration after this work starts at `027`.
-`023_m1_m2_public_ride_browsing.sql` is a local,
-undeployed migration: it records the requested guest Ride browsing policy, but
-deploying its anonymous column-level access requires explicit approval of the
-public payload. The draft excludes Place IDs, precise coordinates, pickup
-instructions, and lifecycle timestamps from guest reads. It may still be edited
-until that approval is given.
+`023_m1_m2_public_ride_browsing.sql` is live through the Dashboard SQL Editor;
+its anonymous column-level policies and grants were deployed after the public
+payload was approved. It is not present in the migration history returned by the
+project, so this file remains the repository record of the applied SQL. The
+payload excludes Place IDs, precise coordinates, pickup instructions, and
+lifecycle timestamps from guest reads.
 
-`024_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
-the Module 6 place catalogue, recorded interest, notification registrations, and
-stated travel preferences. Modules 4-5 still use local adapters.
+`024_m6_destination_discovery.sql` is **deployed** as the Supabase migration
+`m6_destination_discovery` - it adds the Module 6 place catalogue, recorded
+interest, notification registrations, and stated travel preferences. The live
+catalogue remains opt-in in the frontend; the fixture adapter is still the
+default for offline demos and tests.
 
 `025_m3_add_voice_messages.sql` was deployed on 2026-08-13. It adds standalone
 1-180 second private voice messages, a 10 MB audio limit, Audio WebM/MP4/Ogg
@@ -75,7 +77,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
 
-Module 6 (in `024`, not yet deployed):
+Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 
 - `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only.
 - `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
@@ -147,8 +149,8 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
-- `023_m1_m2_public_ride_browsing.sql` - not deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
-- `024_m6_destination_discovery.sql` - not deployed; proposed Module 6 place catalogue, interest, notification registration, and travel-preference schema.
+- `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
+- `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
 - `026_m3_add_wav_voice_fallback.sql` - deployed; adds Audio WAV to the voice attachment, send RPC, and private bucket allowlists for reliable Chromium/Electron playback.
 

@@ -1,30 +1,42 @@
 // ===== PRESENTATION LAYER (RideHistory) =====
 // Module 5, Screen 1 - FR-5.1 / FR-5.2 (UC5.1, UC5.2)
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { IconLeafSmall } from './tripIcons.jsx';
+import { ErrorState } from './tripStates.jsx';
 
-const STAGES = ['All', 'Draft', 'Published', 'Matched', 'In Transit', 'Completed', 'Cancelled'];
+// The seven lifecycle states Module 2 actually stores on a ride. 'Expired'
+// belongs here too - a published ride nobody joined lapses rather than
+// completing, and without a chip it would only ever appear under 'All'.
+const STAGES = ['All', 'Draft', 'Published', 'Matched', 'In Transit', 'Completed', 'Expired', 'Cancelled'];
 const ROLES = ['All', 'Hosted', 'Joined'];
 
 export default function RideHistory({ userId, onOpenTrip }) {
   const isDesktop = useIsDesktop();
-  const [trips, setTrips] = useState(null);
+  const [state, setState] = useState({ phase: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
   const [stage, setStage] = useState('All');
   const [role, setRole] = useState('All');
 
   useEffect(() => {
     let active = true;
     if (!userId) return;
-    TripHistoryEngine.listHistory(userId).then((data) => {
-      if (active) setTrips(data);
-    });
+    setState({ phase: 'loading' });
+    TripHistoryEngine.listHistory(userId)
+      .then((data) => {
+        if (active) setState({ phase: 'ready', trips: data });
+      })
+      .catch((error) => {
+        if (active) setState({ phase: 'error', message: error.message });
+      });
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, reloadToken]);
+
+  const trips = state.phase === 'ready' ? state.trips : null;
 
   const filtered = useMemo(() => {
     if (!trips) return [];
@@ -36,7 +48,11 @@ export default function RideHistory({ userId, onOpenTrip }) {
     });
   }, [trips, stage, role]);
 
-  if (trips === null) {
+  if (state.phase === 'error') {
+    return <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />;
+  }
+
+  if (state.phase === 'loading') {
     return <p style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>Loading your trips…</p>;
   }
 
@@ -63,14 +79,52 @@ export default function RideHistory({ userId, onOpenTrip }) {
   );
 }
 
+// These groups pick exactly one option, so they are radio groups rather than
+// plain buttons. That also keeps the whole group to a single Tab stop - as
+// loose buttons the eleven filters sat between the page and the trip list.
+function useRovingRadioGroup(options, value, onChange) {
+  const refs = useRef([]);
+  const register = (index) => (node) => { refs.current[index] = node; };
+
+  function handleKeyDown(event, index) {
+    const last = options.length - 1;
+    let next = null;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = index === last ? 0 : index + 1;
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = index === 0 ? last : index - 1;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = last;
+    if (next === null) return;
+    event.preventDefault();
+    onChange(options[next]);
+    refs.current[next]?.focus();
+  }
+
+  // Roving tabindex: the checked option carries the tab stop, arrows do the rest.
+  const optionProps = (opt, index) => ({
+    ref: register(index),
+    role: 'radio',
+    'aria-checked': value === opt,
+    tabIndex: value === opt ? 0 : -1,
+    onClick: () => onChange(opt),
+    onKeyDown: (event) => handleKeyDown(event, index)
+  });
+
+  return optionProps;
+}
+
 function FilterGroup({ label, options, value, onChange }) {
+  const optionProps = useRovingRadioGroup(options, value, onChange);
+  const labelId = `m5-filter-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <div>
-      <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', color: COLORS.textSecondary, margin: '0 0 10px' }}>
+      <p
+        id={labelId}
+        style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', color: COLORS.textSecondary, margin: '0 0 10px' }}
+      >
         {label}
       </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {options.map((opt) => {
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} role="radiogroup" aria-labelledby={labelId}>
+        {options.map((opt, index) => {
           const active = value === opt;
           const palette = STATUS_COLORS[opt];
           const activeColor = palette ? palette.text : COLORS.primaryDark;
@@ -78,7 +132,7 @@ function FilterGroup({ label, options, value, onChange }) {
             <button
               key={opt}
               className="m5-chip"
-              onClick={() => onChange(opt)}
+              {...optionProps(opt, index)}
               style={{
                 borderColor: active ? activeColor : COLORS.border,
                 background: active ? (palette ? palette.bg : COLORS.primaryTint) : COLORS.surface,
@@ -96,14 +150,19 @@ function FilterGroup({ label, options, value, onChange }) {
 }
 
 function SegmentedRoleToggle({ value, onChange }) {
+  const optionProps = useRovingRadioGroup(ROLES, value, onChange);
   return (
-    <div style={{ display: 'inline-flex', background: COLORS.bg, borderRadius: 12, padding: 4, border: `1px solid ${COLORS.border}` }}>
-      {ROLES.map((opt) => {
+    <div
+      style={{ display: 'inline-flex', background: COLORS.bg, borderRadius: 12, padding: 4, border: `1px solid ${COLORS.border}` }}
+      role="radiogroup"
+      aria-label="Filter by your role"
+    >
+      {ROLES.map((opt, index) => {
         const active = value === opt;
         return (
           <button
             key={opt}
-            onClick={() => onChange(opt)}
+            {...optionProps(opt, index)}
             style={{
               padding: '7px 16px',
               borderRadius: 8,

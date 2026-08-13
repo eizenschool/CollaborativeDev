@@ -21,6 +21,16 @@ function Svg({ size = 24, children, ...props }) {
   );
 }
 
+export function IconAlertSmall(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v4.5" />
+      <path d="M12 16h.01" />
+    </Svg>
+  );
+}
+
 export function IconLeafSmall(props) {
   return (
     <Svg {...props}>
