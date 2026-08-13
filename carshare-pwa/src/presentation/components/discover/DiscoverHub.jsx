@@ -26,6 +26,18 @@ const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+// Candidates below both thresholds are withheld from the default view, and the
+// presentation rule has always allowed reaching them by category instead.
+// Selecting a category is a narrower, explicit request, so it is the moment to
+// show them; `All` stays the ranked recommendation list it was.
+//
+// Exported for test because the include patterns cover business-logic only, and
+// this is the rule worth pinning rather than the markup around it.
+export function selectWithheldForCategory(withheld, categoryFilter) {
+  if (categoryFilter === 'all') return [];
+  return (withheld || []).filter((candidate) => candidate.place?.category === categoryFilter);
+}
+
 function Hero({ candidate, onOpen }) {
   const place = candidate.place;
   return (
@@ -148,6 +160,10 @@ export default function DiscoverHub() {
 
   const primary = useMemo(() => filter(result?.primary || []), [result, filter]);
   const unserved = useMemo(() => filter(result?.unserved || []), [result, filter]);
+  const moreInCategory = useMemo(
+    () => selectWithheldForCategory(result?.withheld, categoryFilter),
+    [result, categoryFilter]
+  );
 
   // The hero is the strongest served candidate; the grid below then starts from
   // the second, so the same place is never shown twice on one screen.
@@ -291,6 +307,27 @@ export default function DiscoverHub() {
             )}
           </section>
 
+          {/* FR-6.19: reachable by category, withheld from the default view.
+              Named for what it is, so an empty ranked list plus a populated
+              catalogue does not read as "the API returned nothing". */}
+          {moreInCategory.length > 0 && (
+            <section className="dsc-section">
+              <div className="dsc-section-head">
+                <h2>More {categoryFilter} places</h2>
+                <span className="dsc-count">{moreInCategory.length}</span>
+              </div>
+              <p className="dsc-section-note">
+                Below the recommendation threshold for this date - no ride serves them and
+                nobody has asked to go yet. Open one to register interest.
+              </p>
+              <div className="dsc-list">
+                {moreInCategory.map((candidate) => (
+                  <DestinationCard key={candidate.placeId} candidate={candidate} onOpen={openDestination} />
+                ))}
+              </div>
+            </section>
+          )}
+
           {result?.weatherWithheld?.length > 0 && (
             <p className="dsc-withheld">
               <IconAlertTriangle size={14} />
@@ -300,12 +337,12 @@ export default function DiscoverHub() {
             </p>
           )}
 
-          {result?.withheld?.length > 0 && (
+          {categoryFilter === 'all' && result?.withheld?.length > 0 && (
             <p className="dsc-withheld">
               <IconSearch size={14} />
               {result.withheld.length} further destination
               {result.withheld.length > 1 ? 's are' : ' is'} below the recommendation thresholds
-              for this date.
+              for this date — pick a category above to browse them.
             </p>
           )}
         </>
