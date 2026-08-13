@@ -7,7 +7,9 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
+import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import { IconArrowLeftSmall, IconLeafSmall, IconMapPinSmall, IconUsersSmall } from './tripIcons.jsx';
+import { ErrorState, NotFoundState } from './tripStates.jsx';
 import './tripStyles.css';
 
 export default function TripDetail() {
@@ -15,27 +17,58 @@ export default function TripDetail() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const [trip, setTrip] = useState(null);
+  // 'loading' and 'not found' used to be the same value, so UC5.3's A1 branch
+  // could never render - a missing or forbidden trip sat on "Loading trip…"
+  // forever. They are separate phases now.
+  const [state, setState] = useState({ phase: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let active = true;
     if (!user?.id) return;
-    TripHistoryEngine.getTripDetail(tripId, user.id).then((data) => {
-      if (active) setTrip(data);
-    });
+    setState({ phase: 'loading' });
+    TripHistoryEngine.getTripDetail(tripId, user.id)
+      .then((data) => {
+        if (!active) return;
+        setState(data ? { phase: 'ready', trip: data } : { phase: 'notFound' });
+      })
+      .catch((error) => {
+        if (active) setState({ phase: 'error', message: error.message });
+      });
     return () => {
       active = false;
     };
-  }, [tripId, user?.id]);
+  }, [tripId, user?.id, reloadToken]);
 
-  if (!trip) {
-    return <p style={{ padding: 24, fontFamily: 'Inter, sans-serif', color: COLORS.textSecondary }}>Loading trip…</p>;
+  if (state.phase !== 'ready') {
+    return (
+      <div className="m5-root">
+        <div className="m5-header">
+          <button className="m5-back-btn" onClick={() => navigate('/trip')} aria-label="Back to my trips">
+            <IconArrowLeftSmall size={18} />
+          </button>
+          <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 18, margin: 0, flex: 1, color: COLORS.textPrimary }}>
+            Trip Details
+          </h1>
+        </div>
+        <div style={{ padding: 24, maxWidth: 680, margin: '0 auto' }}>
+          {state.phase === 'loading' && (
+            <p style={{ fontFamily: 'Inter, sans-serif', color: COLORS.textSecondary }}>Loading trip…</p>
+          )}
+          {state.phase === 'error' && (
+            <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+          )}
+          {state.phase === 'notFound' && <NotFoundState onBack={() => navigate('/trip')} />}
+        </div>
+      </div>
+    );
   }
 
+  const trip = state.trip;
   const palette = STATUS_COLORS[trip.status] || STATUS_COLORS.Published;
 
   return (
-    <div style={{ minHeight: '100vh', background: COLORS.bg }}>
+    <div className="m5-root">
       <div className="m5-header">
         <button className="m5-back-btn" onClick={() => navigate('/trip')}>
           <IconArrowLeftSmall size={18} />
@@ -50,7 +83,7 @@ export default function TripDetail() {
 
       <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto', display: isDesktop ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '65% 1fr' : undefined, gap: 24 }}>
         <div>
-          <MapPreview pickup={trip.pickup} destination={trip.destination} />
+          <MapPreview trip={trip} />
 
           <div className="m5-card" style={{ padding: 20, marginBottom: 16 }}>
             <InfoRow icon={<IconMapPinSmall size={16} />} label="Pickup" value={trip.pickup} />
@@ -113,34 +146,37 @@ export default function TripDetail() {
   );
 }
 
-function MapPreview({ pickup, destination }) {
+// The shared Maps Embed component (maps/GoogleRouteMap.jsx), the same one
+// Module 2's RideDetail uses - this screen used to draw its own two-pins-and-a-
+// dashed-line graphic instead, which UI.md rules out ("do not create
+// module-local copies of shared UI").
+//
+// That graphic is not thrown away: it is now the children GoogleRouteMap falls
+// back to when no Embed key is configured or the network is unavailable, which
+// is the role it should have had all along.
+function MapPreview({ trip }) {
   return (
-    <div
-      className="m5-card"
-      style={{
-        height: 170,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 28px',
-        marginBottom: 16,
-        background: `linear-gradient(135deg, ${COLORS.primaryTint} 0%, ${COLORS.bg} 100%)`
-      }}
+    <GoogleRouteMap
+      className="m5-card m5-map"
+      pickup={trip.pickup}
+      pickupLocation={trip.pickupLocation}
+      destination={trip.destination}
+      destinationLocation={trip.destinationLocation}
     >
       <div style={{ textAlign: 'center' }}>
         <span className="m5-icon-circle" style={{ background: COLORS.surface, color: COLORS.primary, margin: '0 auto 6px', boxShadow: '0px 2px 8px rgba(0,0,0,0.08)' }}>
           <IconMapPinSmall size={20} />
         </span>
-        <p style={{ fontSize: 11, fontWeight: 600, color: COLORS.textPrimary, margin: 0, maxWidth: 110 }}>{pickup}</p>
+        <p style={{ fontSize: 11, fontWeight: 600, color: COLORS.textPrimary, margin: 0, maxWidth: 110 }}>{trip.pickup}</p>
       </div>
       <div style={{ flex: 1, borderTop: `2px dashed ${COLORS.primary}`, opacity: 0.4, margin: '0 16px' }} />
       <div style={{ textAlign: 'center' }}>
         <span className="m5-icon-circle" style={{ background: COLORS.surface, color: COLORS.error, margin: '0 auto 6px', boxShadow: '0px 2px 8px rgba(0,0,0,0.08)' }}>
           <IconMapPinSmall size={20} />
         </span>
-        <p style={{ fontSize: 11, fontWeight: 600, color: COLORS.textPrimary, margin: 0, maxWidth: 110 }}>{destination}</p>
+        <p style={{ fontSize: 11, fontWeight: 600, color: COLORS.textPrimary, margin: 0, maxWidth: 110 }}>{trip.destination}</p>
       </div>
-    </div>
+    </GoogleRouteMap>
   );
 }
 

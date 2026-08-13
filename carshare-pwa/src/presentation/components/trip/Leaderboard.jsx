@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, TIER_COLORS } from './tripTheme.js';
 import { IconTrophySmall } from './tripIcons.jsx';
+import { ErrorState } from './tripStates.jsx';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -27,45 +28,65 @@ function gradientFor(name) {
 }
 
 export default function Leaderboard({ userId }) {
-  const [entries, setEntries] = useState(null);
-  const now = new Date();
+  const [state, setState] = useState({ phase: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let active = true;
     if (!userId) return;
-    TripHistoryEngine.getLeaderboard(userId).then((data) => {
-      if (active) setEntries(data);
-    });
+    setState({ phase: 'loading' });
+    TripHistoryEngine.getLeaderboard(userId)
+      .then((data) => {
+        if (active) setState({ phase: 'ready', board: data });
+      })
+      .catch((error) => {
+        if (active) setState({ phase: 'error', message: error.message });
+      });
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, reloadToken]);
 
-  if (entries === null) {
+  if (state.phase === 'error') {
+    return <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />;
+  }
+
+  if (state.phase === 'loading') {
     return <p style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>Loading leaderboard…</p>;
   }
+
+  // The heading used to print today's month while getLeaderboard() ranked
+  // all-time scores. Both now describe the same period the engine queried.
+  const { year, month, entries } = state.board;
 
   if (entries.length === 0) {
     return (
       <div className="m5-card m5-empty">
         <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, color: COLORS.textPrimary, margin: 0 }}>No leaderboard data available yet</p>
         <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, marginTop: 6 }}>
-          Check back once more hosts have completed rides this month.
+          Check back once more hosts have completed rides in {MONTH_NAMES[month]} {year}.
         </p>
       </div>
     );
   }
 
-  const podium = entries.slice(0, 3);
-  const rest = entries.slice(3);
+  // A podium is a claim about first, second and third. With one or two hosts
+  // ranked it reads as a broken chart, so the plain ranking list carries the
+  // whole board until there is an actual top three.
+  const hasPodium = entries.length >= 3;
+  const podium = hasPodium ? entries.slice(0, 3) : [];
+  const rest = hasPodium ? entries.slice(3) : entries;
   const currentUserEntry = entries.find((e) => e.isCurrentUser);
 
   return (
     <div style={{ maxWidth: 860, margin: '0 auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: 28 }}>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
         <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 22, margin: 0, color: COLORS.textPrimary }}>Community Leaderboard</h2>
         <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, margin: '4px 0 0' }}>
-          {MONTH_NAMES[now.getMonth()]} {now.getFullYear()}
+          {MONTH_NAMES[month]} {year} · {entries.length} host{entries.length === 1 ? '' : 's'} with a completed trip
+        </p>
+        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: COLORS.textSecondary, margin: '6px 0 0' }}>
+          Ranked by Composite Host Impact Score
         </p>
       </div>
 
@@ -83,7 +104,9 @@ export default function Leaderboard({ userId }) {
         ))}
       </div>
 
-      {currentUserEntry && currentUserEntry.rank > 3 && (
+      {/* Only pin the viewer's row when a podium pushed it out of the list's
+          natural reading order - without one the list already holds everyone. */}
+      {hasPodium && currentUserEntry && currentUserEntry.rank > 3 && (
         <div style={{ marginTop: 16, position: 'sticky', bottom: 0 }}>
           <LeaderboardRow entry={currentUserEntry} />
         </div>

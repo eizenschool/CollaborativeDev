@@ -1,0 +1,292 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  getMessagingChangeConversationId,
+  MessagingService,
+} from '../business-logic/MessagingService.js';
+import { createMessagingSessionCache } from '../business-logic/MessagingSessionCache.js';
+import { useAuth } from './AuthContext.jsx';
+
+const REALTIME_REFRESH_DELAY_MS = 80;
+
+const MessagingSessionContext = createContext(null);
+
+function createFolderState() {
+  return {
+    items: [],
+    loaded: false,
+    loading: false,
+    error: '',
+  };
+}
+
+function createMessageState() {
+  return {
+    items: [],
+    loaded: false,
+    loading: false,
+    error: '',
+  };
+}
+
+function createSession(userId = null) {
+  return {
+    userId,
+    folder: 'active',
+    folders: {
+      active: createFolderState(),
+      archived: createFolderState(),
+    },
+    conversations: {},
+    messages: {},
+  };
+}
+
+function replaceConversationInFolders(folders, conversation) {
+  return Object.fromEntries(Object.entries(folders).map(([folder, state]) => [
+    folder,
+    state.items.some((item) => item.id === conversation.id)
+      ? { ...state, items: state.items.map((item) => item.id === conversation.id ? conversation : item) }
+      : state,
+  ]));
+}
+
+export function MessagingSessionProvider({ children }) {
+  const { user } = useAuth();
+  const userId = user?.id || null;
+  const [session, setSession] = useState(() => createSession());
+  const sessionRef = useRef(session);
+  const activeUserIdRef = useRef(null);
+  const draftsRef = useRef(createMessagingSessionCache());
+  const inFlightRef = useRef(new Map());
+
+  const commitSession = useCallback((updater) => {
+    const nextSession = updater(sessionRef.current);
+    sessionRef.current = nextSession;
+    setSession(nextSession);
+    return nextSession;
+  }, []);
+
+  const refreshConversations = useCallback(async (folder = sessionRef.current.folder) => {
+    if (!userId || !['active', 'archived'].includes(folder)) return [];
+    const requestKey = `folder:${userId}:${folder}`;
+    const activeRequest = inFlightRef.current.get(requestKey);
+    if (activeRequest) return activeRequest;
+
+    const currentFolderState = sessionRef.current.folders[folder];
+    if (!currentFolderState.loaded) {
+      commitSession((current) => current.userId !== userId ? current : ({
+        ...current,
+        folders: {
+          ...current.folders,
+          [folder]: { ...current.folders[folder], loading: true, error: '' },
+        },
+      }));
+    }
+
+    const request = (async () => {
+      try {
+        const conversations = await MessagingService.listConversations(folder);
+        if (activeUserIdRef.current !== userId) return [];
+        commitSession((current) => {
+          if (current.userId !== userId) return current;
+          const conversationMap = { ...current.conversations };
+          conversations.forEach((conversation) => { conversationMap[conversation.id] = conversation; });
+          return {
+            ...current,
+            conversations: conversationMap,
+            folders: {
+              ...current.folders,
+              [folder]: { items: conversations, loaded: true, loading: false, error: '' },
+            },
+          };
+        });
+        return conversations;
+      } catch (error) {
+        if (activeUserIdRef.current === userId) {
+          commitSession((current) => current.userId !== userId ? current : ({
+            ...current,
+            folders: {
+              ...current.folders,
+              [folder]: {
+                ...current.folders[folder],
+                loading: false,
+                error: error.message || 'Unable to load conversations.',
+              },
+            },
+          }));
+        }
+        return [];
+      } finally {
+        if (inFlightRef.current.get(requestKey) === request) {
+          inFlightRef.current.delete(requestKey);
+        }
+      }
+    })();
+    inFlightRef.current.set(requestKey, request);
+    return request;
+  }, [commitSession, userId]);
+
+  const refreshConversation = useCallback(async (conversationId, { markRead = false } = {}) => {
+    if (!userId || !conversationId) return null;
+    const requestKey = `conversation:${userId}:${conversationId}`;
+    const activeRequest = inFlightRef.current.get(requestKey);
+    if (activeRequest) return activeRequest;
+
+    const cachedMessages = sessionRef.current.messages[conversationId];
+    const hasCachedConversation = Boolean(
+      sessionRef.current.conversations[conversationId]
+      && cachedMessages?.loaded,
+    );
+    if (!hasCachedConversation) {
+      commitSession((current) => current.userId !== userId ? current : ({
+        ...current,
+        messages: {
+          ...current.messages,
+          [conversationId]: { ...(current.messages[conversationId] || createMessageState()), loading: true, error: '' },
+        },
+      }));
+    }
+
+    const request = (async () => {
+      try {
+        const [conversation, messages] = await Promise.all([
+          MessagingService.getConversation(conversationId),
+          MessagingService.listMessages(conversationId),
+        ]);
+        if (!conversation) throw new Error('This conversation is no longer available.');
+        if (activeUserIdRef.current !== userId) return null;
+        commitSession((current) => {
+          if (current.userId !== userId) return current;
+          return {
+            ...current,
+            conversations: { ...current.conversations, [conversationId]: conversation },
+            folders: replaceConversationInFolders(current.folders, conversation),
+            messages: {
+              ...current.messages,
+              [conversationId]: { items: messages, loaded: true, loading: false, error: '' },
+            },
+          };
+        });
+        if (markRead && activeUserIdRef.current === userId) {
+          await MessagingService.markConversationRead(conversationId).catch(() => {});
+        }
+        return conversation;
+      } catch (error) {
+        if (activeUserIdRef.current === userId) {
+          commitSession((current) => {
+            if (current.userId !== userId) return current;
+            const previous = current.messages[conversationId] || createMessageState();
+            return {
+              ...current,
+              messages: {
+                ...current.messages,
+                [conversationId]: {
+                  ...previous,
+                  loading: false,
+                  error: error.message || 'Unable to load this conversation.',
+                },
+              },
+            };
+          });
+        }
+        return null;
+      } finally {
+        if (inFlightRef.current.get(requestKey) === request) {
+          inFlightRef.current.delete(requestKey);
+        }
+      }
+    })();
+    inFlightRef.current.set(requestKey, request);
+    return request;
+  }, [commitSession, userId]);
+
+  const setFolder = useCallback((folder) => {
+    if (!['active', 'archived'].includes(folder)) return;
+    commitSession((current) => ({ ...current, folder }));
+  }, [commitSession]);
+
+  const getDraft = useCallback((conversationId) => draftsRef.current.getDraft(conversationId), []);
+
+  const saveDraft = useCallback((conversationId, draft) => {
+    draftsRef.current.saveDraft(conversationId, draft);
+  }, []);
+
+  const clearDraft = useCallback((conversationId) => {
+    draftsRef.current.clearDraft(conversationId);
+  }, []);
+
+  useEffect(() => {
+    if (activeUserIdRef.current === userId) return;
+    activeUserIdRef.current = userId;
+    inFlightRef.current.clear();
+    draftsRef.current.setActiveUser(userId);
+    commitSession(() => createSession(userId));
+  }, [commitSession, userId]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    let timerId = null;
+    let refreshAll = false;
+    const conversationIds = new Set();
+    const flushChanges = () => {
+      timerId = null;
+      const current = sessionRef.current;
+      const folders = ['active', 'archived'].filter((folder) => current.folders[folder].loaded);
+      const affectedConversationIds = refreshAll
+        ? Object.keys(current.messages).filter((id) => current.messages[id].loaded)
+        : [...conversationIds].filter((id) => current.messages[id]?.loaded);
+      refreshAll = false;
+      conversationIds.clear();
+      folders.forEach((folder) => { refreshConversations(folder); });
+      affectedConversationIds.forEach((id) => { refreshConversation(id); });
+    };
+    const unsubscribe = MessagingService.subscribeToMessaging((change) => {
+      const changedConversationId = getMessagingChangeConversationId(change);
+      if (changedConversationId) conversationIds.add(changedConversationId);
+      else refreshAll = true;
+      if (timerId) window.clearTimeout(timerId);
+      timerId = window.setTimeout(flushChanges, REALTIME_REFRESH_DELAY_MS);
+    });
+    return () => {
+      if (timerId) window.clearTimeout(timerId);
+      unsubscribe();
+    };
+  }, [refreshConversation, refreshConversations, userId]);
+
+  const value = useMemo(() => ({
+    folder: session.folder,
+    folderState: session.folders[session.folder],
+    getConversation: (conversationId) => session.conversations[conversationId] || null,
+    getMessagesState: (conversationId) => session.messages[conversationId] || createMessageState(),
+    setFolder,
+    refreshConversations,
+    refreshConversation,
+    getDraft,
+    saveDraft,
+    clearDraft,
+  }), [
+    clearDraft,
+    getDraft,
+    refreshConversation,
+    refreshConversations,
+    saveDraft,
+    session,
+    setFolder,
+  ]);
+
+  return <MessagingSessionContext.Provider value={value}>{children}</MessagingSessionContext.Provider>;
+}
+
+export function useMessagingSession() {
+  const context = useContext(MessagingSessionContext);
+  if (!context) throw new Error('useMessagingSession must be used within MessagingSessionProvider');
+  return context;
+}
