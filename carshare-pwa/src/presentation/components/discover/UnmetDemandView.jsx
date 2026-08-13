@@ -11,6 +11,8 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { IconArrowLeft, IconUsers, IconRoute, IconMapPin } from '../icons.jsx';
 import PlacePoster from './PlacePoster.jsx';
+import AudienceSwitch from './AudienceSwitch.jsx';
+import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
 const today = () => new Date().toISOString().slice(0, 10);
@@ -19,6 +21,7 @@ export default function UnmetDemandView() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const demo = searchParams.get('demo') === '1';
 
   // Carried from whichever screen linked here, so the Host sees demand for the
   // date they were already looking at rather than being silently reset to today.
@@ -50,6 +53,17 @@ export default function UnmetDemandView() {
           these and the seats are more likely to fill.
         </p>
       </header>
+
+      <AudienceSwitch active="demand" travelDate={travelDate} demo={demo} />
+      <DemoActiveBanner />
+
+      {demo && (
+        <DemoControls
+          travelDate={travelDate}
+          onTravelDateChange={setTravelDate}
+          onChanged={() => load(travelDate)}
+        />
+      )}
 
       <div className="dsc-controls">
         <label className="dsc-field">

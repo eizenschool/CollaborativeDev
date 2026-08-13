@@ -7,7 +7,7 @@
 // both thresholds are withheld from the default view and reachable only by
 // category browsing, as the presentation rule requires.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
@@ -15,6 +15,8 @@ import { IconSearch, IconAlertTriangle, IconStar, IconArrowRight } from '../icon
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
 import PlacePoster from './PlacePoster.jsx';
+import AudienceSwitch from './AudienceSwitch.jsx';
+import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 
 // Kuala Lumpur city centre, standing in for the device location until the
 // geolocation permission flow lands. UC6.1 A1 asks for a location rather than
@@ -48,8 +50,10 @@ function Hero({ candidate, onOpen }) {
 export default function DiscoverHub() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const demo = searchParams.get('demo') === '1';
 
-  const [travelDate, setTravelDate] = useState(today);
+  const [travelDate, setTravelDate] = useState(() => searchParams.get('date') || today());
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -110,7 +114,7 @@ export default function DiscoverHub() {
   // because choosing to look at a destination is itself the weak signal.
   const openDestination = async (placeId) => {
     await DestinationDiscoveryService.recordInterest(user?.id, placeId, travelDate);
-    navigate(`/discover/${placeId}?date=${travelDate}`);
+    navigate(`/discover/${placeId}?date=${travelDate}${demo ? '&demo=1' : ''}`);
   };
 
   const filter = useCallback((list) => (
@@ -131,6 +135,17 @@ export default function DiscoverHub() {
         <h1>Where should you go?</h1>
         <p>Ranked by how well each place suits you and how easily you can get there.</p>
       </header>
+
+      <AudienceSwitch active="explore" travelDate={travelDate} demo={demo} />
+      <DemoActiveBanner />
+
+      {demo && (
+        <DemoControls
+          travelDate={travelDate}
+          onTravelDateChange={(date) => { setDateAdjusted(true); setTravelDate(date); }}
+          onChanged={() => load(travelDate)}
+        />
+      )}
 
       {showPrompt && <PreferencePrompt onSave={savePreferences} onDismiss={dismissPrompt} />}
 

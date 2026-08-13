@@ -610,6 +610,164 @@
 .dsc-review-stars { display: inline-flex; gap: 2px; color: var(--gold); margin-left: auto; }
 .dsc-review-text { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
 
+/* --- audience switch ---------------------------------------------------- */
+
+.dsc-audience {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dsc-audience-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.dsc-audience-tab.active {
+  color: var(--teal-dark);
+  border-bottom-color: var(--teal);
+  font-weight: 600;
+}
+
+.dsc-audience-tab:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+
+/* --- demonstration controls (only rendered at ?demo=1) ------------------- */
+
+.dsc-demo {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 24px;
+  background: #fff;
+}
+
+.dsc-demo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dsc-demo-head h2 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.dsc-demo-note { margin: 4px 0 16px; font-size: 12px; color: var(--muted); }
+
+.dsc-demo-group { margin-bottom: 16px; }
+.dsc-demo-group:last-child { margin-bottom: 0; }
+
+.dsc-demo-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+
+.dsc-demo-months { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.dsc-demo-chip {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.dsc-demo-chip.active {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dsc-demo-hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+.dsc-demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--warning-tint);
+  color: #854d0e;
+  font-size: 13px;
+}
+
+/* --- why we are suggesting this ----------------------------------------- */
+
+.dsc-reasons,
+.dsc-caveats {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dsc-reasons li,
+.dsc-caveats li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.dsc-reasons li svg { color: var(--teal); flex-shrink: 0; margin-top: 2px; }
+
+.dsc-caveats li {
+  font-size: 14px;
+  color: var(--muted);
+  background: var(--gold-tint);
+  padding: 12px;
+  border-radius: var(--radius);
+}
+
+.dsc-caveats li svg { color: #854d0e; flex-shrink: 0; margin-top: 2px; }
+
+.dsc-working-toggle {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.dsc-working-toggle:hover { color: var(--teal-dark); }
+.dsc-working-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-caret-open { transform: rotate(90deg); }
+
 /* --- score breakdown ---------------------------------------------------- */
 
 .dsc-breakdown { display: grid; gap: 24px; }

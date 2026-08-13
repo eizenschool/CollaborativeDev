@@ -206,7 +206,7 @@ export default function DestinationDetail() {
 
           {candidate && (
             <section className="dsc-panel">
-              <h2>Why this is ranked here</h2>
+              <h2>Why we are suggesting this</h2>
               <ScoreBreakdown candidate={candidate} />
             </section>
           )}

@@ -20,6 +20,7 @@ import { resolveAffinity } from './AffinityResolver.js';
 import { distanceKm, maxDistanceKm } from './geo.js';
 import { applyWeatherGate, fetchForecasts } from './WeatherGate.js';
 import { resolveSeason } from './SeasonalCalendar.js';
+import { buildReasons } from './RecommendationReasons.js';
 import { DiscoveryContractAdapter } from './DiscoveryContractAdapter.js';
 
 // FR-6.24 now resolves against the declared calendar in SeasonalCalendar.js
@@ -77,12 +78,19 @@ export const DestinationDiscoveryService = {
       [place.id, resolveSeason(place, travelDate)]
     ));
 
-    const scored = rankCandidates(afterWeather.map((place) => ({
-      placeId: place.id,
-      affinity: resolveAffinity(place.category, {
+    // Resolved once and kept, because the reasons need to say *where* a match
+    // came from - "similar to trips you have taken" and "you said you enjoy
+    // this" are different claims and only one of them is true at a time.
+    const affinityByPlace = new Map(afterWeather.map((place) =>
+      [place.id, resolveAffinity(place.category, {
         completedTrips,
         preferredCategories: preferences?.preferredCategories
-      }).value,
+      })]
+    ));
+
+    const scored = rankCandidates(afterWeather.map((place) => ({
+      placeId: place.id,
+      affinity: affinityByPlace.get(place.id).value,
       season: seasonByPlace.get(place.id).value,
       local: localEconomySignal(place, chainIndex),
       rating: place.rating,
@@ -97,14 +105,33 @@ export const DestinationDiscoveryService = {
     // Re-attach the place records the UI needs to render. The engine works on
     // ids and numbers alone so it never has to know about photos or descriptions.
     const byId = new Map(afterWeather.map((p) => [p.id, p]));
-    const decorate = (entry) => ({
-      ...entry,
-      place: byId.get(entry.placeId),
-      rides: ridesByPlace.get(entry.placeId) || [],
-      interestedUsers: demand.get(entry.placeId) || 0,
-      distanceKm: distanceByPlace.get(entry.placeId),
-      season: seasonByPlace.get(entry.placeId)
-    });
+    const decorate = (entry) => {
+      const place = byId.get(entry.placeId);
+      const enriched = {
+        ...entry,
+        place,
+        rides: ridesByPlace.get(entry.placeId) || [],
+        interestedUsers: demand.get(entry.placeId) || 0,
+        distanceKm: distanceByPlace.get(entry.placeId),
+        season: seasonByPlace.get(entry.placeId)
+      };
+
+      // Built here rather than in the component so the sentences are testable
+      // without rendering anything, and so both the list and the detail screen
+      // are guaranteed to explain a destination the same way.
+      const { reasons, caveats } = buildReasons(enriched, {
+        place,
+        rides: enriched.rides,
+        season: enriched.season,
+        affinitySource: affinityByPlace.get(entry.placeId)?.source,
+        distanceKm: enriched.distanceKm,
+        interestedUsers: enriched.interestedUsers,
+        weatherAdvisory: place?.weatherAdvisory,
+        travelDate
+      });
+
+      return { ...enriched, reasons, caveats };
+    };
 
     return {
       primary: scored.primary.map(decorate),

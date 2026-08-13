@@ -18,6 +18,7 @@
 // later moves to a keyed provider, only fetchForecasts() moves server-side.
 
 import { OUTDOOR_CATEGORIES } from './constants.js';
+import { getWeatherOverrideCode } from './DiscoveryDemoControls.js';
 
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast';
 
@@ -79,8 +80,15 @@ export function applyWeatherGate(candidates = [], forecastsByPlaceId = new Map()
       continue;
     }
 
-    // An indoor candidate under a severe warning still gets the advisory: the
-    // journey there is outdoors even when the destination is not.
+    // An indoor candidate is never withheld, but is downgraded to an advisory
+    // rather than passed through as severe: the journey there is outdoors even
+    // when the destination is not.
+    //
+    // In practice this only fires if a caller supplies a forecast for an indoor
+    // place. `fetchForecasts` deliberately does not - an indoor destination
+    // cannot be withheld on weather, so buying a forecast to produce a soft
+    // advisory is not worth a request. Indoor candidates therefore carry
+    // UNKNOWN, which is the honest answer: nothing was checked.
     const weather = verdict === WEATHER.SEVERE ? WEATHER.ADVISORY : verdict;
     kept.push({
       ...candidate,
@@ -115,7 +123,21 @@ const cacheKey = (placeId, date) => `${date}::${placeId}`;
  */
 export async function fetchForecasts(places = [], travelDate, { fetchImpl = globalThis.fetch } = {}) {
   const outdoor = places.filter((p) => isOutdoorCategory(p.category));
-  if (!outdoor.length || !travelDate || typeof fetchImpl !== 'function') return new Map();
+  if (!outdoor.length || !travelDate) return new Map();
+
+  // A demonstration override replaces what the forecast *says*, never what the
+  // gate does with it - applyWeatherGate below cannot tell the difference, so
+  // what gets demonstrated is the real rule. Short-circuits before the network,
+  // so simulating weather costs nothing and works offline.
+  const overrideCode = getWeatherOverrideCode();
+  if (overrideCode !== null) {
+    return new Map(outdoor.map((place) => [
+      place.id,
+      { weatherCode: overrideCode, summary: `${describeCode(overrideCode)} (simulated)` }
+    ]));
+  }
+
+  if (typeof fetchImpl !== 'function') return new Map();
 
   const found = new Map();
   const missing = [];
