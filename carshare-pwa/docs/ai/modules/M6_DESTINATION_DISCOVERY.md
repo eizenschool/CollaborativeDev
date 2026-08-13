@@ -77,11 +77,39 @@ Three behaviours follow from the weighting itself and need no separate rule:
 
 Do not change these constants casually.
 
+## What Works Today
+`/discover` runs end to end with no Google key, no deployed schema, and no
+network: recommendations, the two-section presentation, destination detail with
+reviews and the score breakdown, first-use preferences, interest recording,
+notification registration, the host-facing unmet demand view, and the weather
+gate. 380 tests pass and make zero external calls.
+
+Not built yet: scheduled ingestion and enrichment (UC6.8, UC6.9 — needs the API),
+Street View (FR-6.15 — needs the API), notification dispatch (UC6.12 — needs
+Module 3), and the prefill handoff into Modules 2 and 4 (FR-6.35 — needs a short
+agreement with those owners, not an API).
+
 ## Repository Areas
-Business logic: `src/business-logic/discovery/` — `constants.js` (every weight and
-threshold), `DestinationScoringEngine.js`, `PlaceLifecycle.js`, `ChainDetection.js`,
-`AffinityResolver.js`, and `__tests__/`.
+Business logic: `src/business-logic/discovery/`
+- `constants.js` — every weight and threshold in one place
+- `DestinationScoringEngine.js` — the two-axis score and presentation rule
+- `SeasonalCalendar.js` — FR-6.24 declared windows, wrap-around and leap-day safe
+- `PlaceLifecycle.js` — Pending Enrichment → Active/Provisional → Stale → Retired
+- `ChainDetection.js` — state-scoped name recurrence
+- `AffinityResolver.js` — trip history → stated preference → neutral
+- `WeatherGate.js` — UC6.11, pure rules plus a thin Open-Meteo fetcher
+- `PlaceQueryService.js` — **the interface Modules 2 and 4 consume**
+- `DiscoveryContractAdapter.js` — the only file importing another module
+- `DestinationDiscoveryService.js` — orchestration
+- `geo.js`, `__tests__/`
+
+Presentation: `src/presentation/components/discover/` — hub, detail, card, rail,
+preference prompt, score breakdown, unmet demand view, and `PlacePoster.jsx`
+(the FR-6.17 illustration tier).
+
+Data: `src/data-access/discoveryStore.js` (fixture catalogue, own localStorage key).
 Schema: `database/sql/024_m6_destination_discovery.sql` (written, not yet deployed).
+API: `docs/MODULE6-API-SETUP.md`.
 
 ## Depends On
 Module 2 published rides and remaining seats (read-only, for seat headroom);
@@ -90,8 +118,18 @@ Module 1 profile region/language (read-only); Module 5 completed trip history
 Places API; a meteorological service for the weather gate.
 
 ## Serves
-Module 4 FR-4.1/4.2 — `places_near_point()` for landmark proximity filtering.
-Module 2 FR-2.15/2.16 — route corridor queries for waypoint tagging.
+`PlaceQueryService.js` — callable now, against the fixture catalogue, with no key
+and no deployment:
+
+- Module 4 FR-4.1/4.2 — `queryPlacesNearPoint({ lat, lng, radiusKm, category })`
+- Module 2 FR-2.15/2.16 — `queryPlacesAlongRoute({ origin, destination, corridorWidthKm, category })`
+
+Both return `{ placeId, sourcePlaceId, name, category, lat, lng, state, rating,
+reviewCount, photoReference }` and exclude Retired places. The corridor query
+orders by position along the route, not by proximity, because a Host wants stops
+in the order they will pass them. `places_near_point()` in `024` mirrors the
+radius query in SQL for when the catalogue moves to Supabase.
+
 Neither module maintains its own place data; one catalogue serves all three.
 
 ## Known Limitation — Google Maps Platform Terms (accepted risk)

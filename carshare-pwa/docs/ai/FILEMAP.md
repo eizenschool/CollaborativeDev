@@ -17,7 +17,8 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 
 ## Business Logic
 - `src/business-logic/` — business-rule/service layer.
-- `src/business-logic/discovery/` — Module 6 place scoring, lifecycle, and chain detection.
+- `src/business-logic/discovery/` — Module 6 place scoring, lifecycle, seasonal calendar, and chain detection.
+- `src/business-logic/discovery/PlaceQueryService.js` — radius and route-corridor place queries served to Modules 2 and 4; callable now against the fixture catalogue with no API key.
 - `src/business-logic/verification/` — trip verification logic from the former Trust & Safety scope; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 - `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.
 - `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, and reverse-geocoding boundary.

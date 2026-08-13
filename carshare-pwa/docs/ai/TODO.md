@@ -12,14 +12,37 @@ Project-level coordination only. Module work belongs in `docs/ai/modules/Mx_*.md
 - [x] Replace Module 2 route placeholders with a zero-charge Google Maps Embed integration and local fallback.
 - [x] Remove stale OpenStreetMap tile-cache assumptions from the PWA configuration.
 
+## READY FOR OTHER MODULES TO USE
+
+Module 6 now serves place data so Modules 2 and 4 do not have to build or
+maintain a catalogue of their own. Both are callable today against the fixture
+catalogue and need no API key, no Supabase deployment, and no work from Brayden
+first. Import from `src/business-logic/discovery/PlaceQueryService.js`.
+
+- **Module 4 (FR-4.1, FR-4.2)** — `queryPlacesNearPoint({ lat, lng, radiusKm, category })`
+  returns places within a radius, nearest first, for landmark-proximity filtering
+  and transfer-point selection.
+- **Module 2 (FR-2.15, FR-2.16)** — `queryPlacesAlongRoute({ origin, destination, corridorWidthKm, category })`
+  returns places inside a corridor of the route, **ordered by position along it**
+  rather than by distance, so a Host sees stops in the order they will pass them.
+
+Both return the same narrow shape - `placeId, sourcePlaceId, name, category, lat,
+lng, state, rating, reviewCount, photoReference` - and exclude Retired places, so
+neither caller has to know Module 6's internals or remember a withholding rule.
+When the live catalogue replaces the fixture, this contract does not change.
+
+Please tell Brayden if the shape or the ordering does not suit your screen; it is
+easier to change now than after you have built against it.
+
 ## NEXT
 - [ ] Update module file maps during each module's next task.
 - [ ] Review CI branch names because the workflow references `dev` while the repository uses `Development`.
 - [ ] Enable Maps Embed API only in `my-project-cd-505310` and create a website/API-restricted key.
 - [ ] Add the final HTTPS deployment referrer to the restricted Maps Embed key.
 - [ ] Decide the next integrated vertical slice based on current code.
-- [ ] Module 6 console work: every request, field mask, quota and cost lever is specified in `docs/MODULE6-API-SETUP.md`. Nothing in the module needs it to run today - it works offline on its fixture catalogue - so this is scheduling, not a blocker.
+- [ ] **Module 6 Google Cloud work (Brayden).** Everything needed is written up request by request in `docs/MODULE6-API-SETUP.md`: a third **server-side** key, four SKUs to authorise, and the daily hard quotas to set. Nothing in the module needs it to run, test, or demo today - `/discover` works offline on its fixture catalogue - so this is scheduling rather than a blocker.
 - [ ] Deploy `024_m6_destination_discovery.sql`. It needs Dashboard SQL Editor access; the publishable key cannot create tables.
+- [ ] Wire Module 6's prefill payload into Module 2's publish form and Module 4's search form (FR-6.35). `DestinationDiscoveryService.buildPrefillPayload()` already returns it; the two forms do not read it yet, so "I will drive" currently opens an empty form. Needs a short agreement with Yee and Eizen on how each form accepts an incoming destination.
 
 ## BLOCKED / NEEDS TEAM CONFIRMATION
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.
