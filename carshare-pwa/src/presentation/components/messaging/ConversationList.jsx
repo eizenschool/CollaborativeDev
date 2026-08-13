@@ -203,12 +203,13 @@ export default function ConversationList({
       </header>
 
       <div className="message-conversation-scroll" aria-busy={isLoading}>
-        {error ? (
+        {error && (
           <div className="message-inline-error" role="alert">
             <p>{error}</p>
             <button type="button" onClick={onRetry}>Try again</button>
           </div>
-        ) : isLoading ? (
+        )}
+        {isLoading ? (
           <ConversationSkeleton />
         ) : filteredConversations.length > 0 ? (
           filteredConversations.map((conversation) => (
@@ -221,7 +222,7 @@ export default function ConversationList({
               onManage={onManageConversation}
             />
           ))
-        ) : (
+        ) : !error && (
           <EmptyConversationState
             folder={folder}
             hasSearchQuery={Boolean(normalizedSearchQuery)}
