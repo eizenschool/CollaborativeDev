@@ -9,13 +9,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
+import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconArrowLeft, IconUsers, IconRoute, IconMapPin } from '../icons.jsx';
 import PlacePoster from './PlacePoster.jsx';
 import AudienceSwitch from './AudienceSwitch.jsx';
 import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayIso;
 
 export default function UnmetDemandView() {
   const { user } = useAuth();

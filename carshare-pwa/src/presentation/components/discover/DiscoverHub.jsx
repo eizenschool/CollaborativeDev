@@ -11,6 +11,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
+import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconSearch, IconAlertTriangle, IconStar, IconArrowRight } from '../icons.jsx';
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
@@ -24,7 +25,7 @@ import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 // of dropping it entirely.
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayIso;
 
 // Candidates below both thresholds are withheld from the default view, and the
 // presentation rule has always allowed reaching them by category instead.

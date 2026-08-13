@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
+import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconArrowRight, IconCar, IconUsers } from '../icons.jsx';
 import PlacePoster from './PlacePoster.jsx';
 import '../../styles/discover.css';
@@ -32,7 +33,7 @@ export default function DiscoverRail() {
     let cancelled = false;
 
     (async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayIso();
 
       try {
         // Ask which dates have departures before scoring anything. The rail used to

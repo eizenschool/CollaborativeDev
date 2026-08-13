@@ -12,6 +12,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
+import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import {
   IconArrowLeft, IconArrowRight, IconStar, IconMapPin, IconCar,
   IconUsers, IconAlertTriangle, IconBell, IconRoute
@@ -20,7 +21,7 @@ import PlacePoster from './PlacePoster.jsx';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayIso;
 
 const initialsOf = (name) =>
   (name || '?').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
