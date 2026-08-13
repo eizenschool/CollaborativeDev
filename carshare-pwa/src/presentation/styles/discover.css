@@ -899,6 +899,25 @@
 
 .dsc-rail-sub { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
 
+/* Shown in place of the track when nothing ranked. The rail keeps its heading
+   and this control so Discovery never loses its entry point on the home screen. */
+.dsc-rail-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--teal-dark);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dsc-rail-cta:hover { border-color: var(--teal); border-style: solid; }
+
 /* A scrolling rail rather than a wrapping grid, so the row reads as "more to
    the right" instead of quietly truncating. */
 .dsc-rail-track {
