@@ -235,6 +235,33 @@
   font-size: 12px;
 }
 
+/* A failed read, distinct from an empty one: solid rather than dashed, so it
+   does not read as "nothing here" at a glance. */
+.dsc-failed {
+  border-style: solid;
+  border-color: var(--border);
+}
+
+.dsc-failed-title {
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+.dsc-failed-action {
+  margin-top: 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius);
+  background: var(--teal);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dsc-failed-action:hover { background: var(--teal-dark); border-color: var(--teal-dark); }
+
 /* --- poster ------------------------------------------------------------- */
 
 .dsc-poster {

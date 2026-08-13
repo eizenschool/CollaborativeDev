@@ -7,7 +7,7 @@
 // both thresholds are withheld from the default view and reachable only by
 // category browsing, as the presentation rule requires.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
@@ -50,26 +50,43 @@ function Hero({ candidate, onOpen }) {
 export default function DiscoverHub() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const demo = searchParams.get('demo') === '1';
 
   const [travelDate, setTravelDate] = useState(() => searchParams.get('date') || today());
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateAdjusted, setDateAdjusted] = useState(false);
 
   const load = useCallback(async (date) => {
     setLoading(true);
-    const data = await DestinationDiscoveryService.getRecommendations({
-      userId: user?.id,
-      origin: DEFAULT_ORIGIN,
-      travelDate: date
-    });
-    setResult(data);
-    setLoading(false);
-    return data;
+    setFailed(false);
+    try {
+      const data = await DestinationDiscoveryService.getRecommendations({
+        userId: user?.id,
+        origin: DEFAULT_ORIGIN,
+        travelDate: date
+      });
+      setResult(data);
+      return data;
+    } catch (cause) {
+      // A failure here is not an empty catalogue, and must not be shown as one.
+      // Against the live backend the catalogue is readable by authenticated
+      // users only, so a signed-out session is the likeliest cause - which the
+      // screen distinguishes below, because the two remedies differ.
+      console.error('Discovery recommendations failed', cause);
+      setFailed(true);
+      setResult(null);
+      return null;
+    } finally {
+      // In `finally` so the screen leaves its loading state on both paths. It
+      // used to sit on "Finding destinations…" forever whenever the read threw.
+      setLoading(false);
+    }
   }, [user?.id]);
 
   useEffect(() => {
@@ -77,7 +94,9 @@ export default function DiscoverHub() {
 
     (async () => {
       const data = await load(travelDate);
-      if (cancelled) return;
+      // `load` reports its own failure; there is nothing further to decide
+      // without a result, and the date-adjustment below would read undefined.
+      if (cancelled || !data) return;
 
       // Open on a date that actually has departures. Landing on a day with none
       // shows an empty served list and misrepresents the platform as having no
@@ -91,8 +110,14 @@ export default function DiscoverHub() {
         }
       }
 
-      if (await DestinationDiscoveryService.shouldPromptForPreferences(user?.id)) {
-        if (!cancelled) setShowPrompt(true);
+      // The prompt is an enhancement, not part of the result. If asking whether
+      // to show it fails, the destinations are still on screen and stay there.
+      try {
+        if (await DestinationDiscoveryService.shouldPromptForPreferences(user?.id)) {
+          if (!cancelled) setShowPrompt(true);
+        }
+      } catch (cause) {
+        console.error('Preference prompt check failed', cause);
       }
     })();
 
@@ -176,7 +201,41 @@ export default function DiscoverHub() {
 
       {loading && <p className="dsc-empty">Finding destinations…</p>}
 
-      {!loading && (
+      {/* A failed read is not an empty catalogue. Saying "no destinations"
+          here would blame the data for what is actually an access or network
+          problem, and leave the reader with nothing to act on. */}
+      {!loading && failed && (
+        <div className="dsc-empty dsc-failed" role="alert">
+          {user ? (
+            <>
+              <p className="dsc-failed-title">We could not load destinations.</p>
+              <p>The place catalogue did not respond. It may be a connection problem.</p>
+              <button type="button" className="dsc-failed-action" onClick={() => load(travelDate)}>
+                Try again
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="dsc-failed-title">Sign in to see destinations.</p>
+              <p>The place catalogue is available to signed-in members.</p>
+              <button
+                type="button"
+                className="dsc-failed-action"
+                onClick={() => navigate('/auth', {
+                  state: {
+                    from: `${location.pathname}${location.search}`,
+                    reason: 'Sign in to discover destinations.'
+                  }
+                })}
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {!loading && !failed && (
         <>
           {hero && <Hero candidate={hero} onOpen={openDestination} />}
 
