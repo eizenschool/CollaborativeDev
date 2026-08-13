@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
@@ -196,6 +197,11 @@ export default function RideDetail() {
   }
 
   async function messageHost() {
+    if (!user) {
+      const target = getAuthNavigation(null, `/ride/${ride.id}`, 'Sign in before messaging this Host.');
+      navigate(target.to, { state: target.state });
+      return;
+    }
     setError('');
     setIsOpeningChat(true);
     try {
@@ -206,6 +212,15 @@ export default function RideDetail() {
     } finally {
       setIsOpeningChat(false);
     }
+  }
+
+  function openRequest() {
+    if (!user) {
+      const target = getAuthNavigation(null, `/ride/${ride.id}`, 'Sign in before requesting to join this ride.');
+      navigate(target.to, { state: target.state });
+      return;
+    }
+    setShowRequest(true);
   }
 
   return (
@@ -260,7 +275,7 @@ export default function RideDetail() {
           {canMessageHost && <button className="outline-action full" disabled={isOpeningChat} onClick={messageHost}><IconMessage size={15} /> {isOpeningChat ? 'Opening chat…' : 'Message host'}</button>}
           {ride.status === 'Completed' ? <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate & review</button>
             : activeRequest ? <div className="request-sent"><IconCheck size={15} /> {activeRequest.status === 'Accepted' ? 'Request accepted' : 'Request sent — awaiting approval'}</div>
-              : <button className="primary-action full" disabled={!canRequest} onClick={() => setShowRequest(true)}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
+              : <button className="primary-action full" disabled={!canRequest} onClick={openRequest}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
         </>}
       </div>
       {cancelling && <CancelSheet onDismiss={() => setCancelling(false)} onConfirm={cancelRide} />}

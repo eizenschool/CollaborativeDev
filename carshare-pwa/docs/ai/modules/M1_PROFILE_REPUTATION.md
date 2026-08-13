@@ -45,10 +45,18 @@ be created; the value is never persisted or sent to Supabase - format check
 only. Adding a vehicle now also requires a driver's license number
 (`vehicles.driver_license_number`, `database/sql/016`), an input-capture
 eligibility gate rather than a verified Module 6 check.
-The post-login landing route changed from `/profile` to `/home`
-(`HomeScreen.jsx`), a lightweight welcome + quick-actions screen; Profile's
-Overview panel dropped its now-redundant "Quick actions" card since Home
-owns primary navigation.
+`/home` is now the public website entry rather than a post-login-only route.
+Guests can browse Home, Search, Ride listings, and Published Ride Detail; the
+shared auth gate is applied only when they enter account-specific services.
+`AuthPage.jsx` defaults to Login for a gated action, explains why authentication
+is needed, and returns email/password users to the requested internal route.
+Its journey scene remains a desktop treatment and is hidden on phone, where the
+form is the complete auth experience. The desktop car follows the full KL
+Sentral-Genting-Ipoh route using the route's SVG geometry.
+Profile exposes an explicit Sign out action after the page content on phone
+because the desktop top-navigation actions are hidden below 700px.
+Profile's Overview panel continues to omit the redundant Quick actions card
+because Home owns primary navigation.
 
 ## Open Questions
 Reputation formula/weights; Host Impact formula; badge/publishing thresholds;

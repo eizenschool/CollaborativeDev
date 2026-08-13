@@ -3,6 +3,9 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
 const MEDIA_BUCKET = 'message-media';
 const SIGNED_URL_SECONDS = 60 * 60;
+// Attachment mutations are committed with a messages or conversations change,
+// so subscribing to them separately only produces duplicate refreshes.
+const REALTIME_TABLES = ['conversations', 'conversation_members', 'messages'];
 
 const CONVERSATION_SELECT = `
   *,
@@ -44,24 +47,64 @@ async function requireUserId() {
   return data.user.id;
 }
 
-async function attachSignedUrls(rows) {
-  const paths = rows.flatMap((row) =>
+function getSignedUrl(data) {
+  return data?.signedUrl || data?.signedURL || null;
+}
+
+function getStorageErrorMessage(error, fallback) {
+  if (typeof error === 'string') return error;
+  return error?.message || fallback;
+}
+
+export async function attachSignedUrls(rows, client = requireSupabase()) {
+  const paths = [...new Set(rows.flatMap((row) =>
     (row.attachments || [])
       .filter((attachment) => attachment.storage_path)
       .map((attachment) => attachment.storage_path),
-  );
+  ))];
 
   if (!paths.length) return rows;
 
-  const client = requireSupabase();
-  const { data, error } = await client.storage
-    .from(MEDIA_BUCKET)
-    .createSignedUrls(paths, SIGNED_URL_SECONDS);
+  const bucket = client.storage.from(MEDIA_BUCKET);
+  const { data, error } = await bucket.createSignedUrls(paths, SIGNED_URL_SECONDS);
 
   if (error) throw normalizeError(error, 'Unable to load message media.');
-  const urlsByPath = new Map(
-    (data || []).map((item, index) => [paths[index], item.signedUrl || null]),
-  );
+  const urlsByPath = new Map();
+  const errorsByPath = new Map();
+
+  (data || []).forEach((item, index) => {
+    const path = paths.includes(item?.path) ? item.path : paths[index];
+    if (!path) return;
+    const signedUrl = getSignedUrl(item);
+    if (signedUrl) {
+      urlsByPath.set(path, signedUrl);
+    } else {
+      errorsByPath.set(
+        path,
+        getStorageErrorMessage(item?.error, 'No signed URL was returned.'),
+      );
+    }
+  });
+
+  // Batch signing can succeed at the HTTP level while individual entries contain
+  // an error and a null URL. Retry only those entries with the single-file API so
+  // one bad attachment cannot leave every media tile blank.
+  await Promise.all(paths.filter((path) => !urlsByPath.has(path)).map(async (path) => {
+    const { data: signedData, error: signedError } = await bucket.createSignedUrl(
+      path,
+      SIGNED_URL_SECONDS,
+    );
+    const signedUrl = getSignedUrl(signedData);
+    if (signedUrl) {
+      urlsByPath.set(path, signedUrl);
+      errorsByPath.delete(path);
+      return;
+    }
+    errorsByPath.set(
+      path,
+      getStorageErrorMessage(signedError, errorsByPath.get(path) || 'Unable to load this media.'),
+    );
+  }));
 
   return rows.map((row) => ({
     ...row,
@@ -69,6 +112,9 @@ async function attachSignedUrls(rows) {
       ...attachment,
       signed_url: attachment.storage_path
         ? urlsByPath.get(attachment.storage_path) || null
+        : null,
+      media_error: attachment.storage_path
+        ? errorsByPath.get(attachment.storage_path) || null
         : null,
     })),
   }));
@@ -258,7 +304,7 @@ export const supabaseMessagingRepository = {
     }
     const client = supabase;
     let channel = client.channel(`messaging-${Date.now()}-${Math.random()}`);
-    ['conversations', 'conversation_members', 'messages', 'message_attachments']
+    REALTIME_TABLES
       .forEach((table) => {
         channel = channel.on(
           'postgres_changes',
@@ -267,6 +313,8 @@ export const supabaseMessagingRepository = {
         );
       });
     channel.subscribe();
-    return () => client.removeChannel(channel);
+    return () => {
+      void client.removeChannel(channel);
+    };
   },
 };

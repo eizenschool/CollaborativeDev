@@ -12,8 +12,8 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-020
-Repository SQL history: 001-021
+Deployed SQL history: 001-022
+Repository SQL history: 001-024
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -24,12 +24,26 @@ on 2026-08-13 for production Module 3 messaging, advisor follow-up, and versione
 media paths. `019_m1_add_vehicle_driver_license.sql` and
 `020_m2_add_route_locations.sql` were deployed on 2026-08-13 for the vehicle
 driver-licence field, confirmed route references, pickup instructions, and the
-replacement Ride RPC signatures. Future changes start at `022`; deployed history
-must not be rewritten.
+replacement Ride RPC signatures. `021_m3_stabilize_realtime_reads.sql` was
+deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
+Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
+on 2026-08-13 to allow current conversation members to generate short-lived
+URLs for private chat media. Deployed history must not be rewritten; the next
+new file after the current `024` draft starts at `025`.
+`023_m1_m2_public_ride_browsing.sql` is a local,
+undeployed migration: it records the requested guest Ride browsing policy, but
+deploying its anonymous column-level access requires explicit approval of the
+public payload. The draft excludes Place IDs, precise coordinates, pickup
+instructions, and lifecycle timestamps from guest reads. It may still be edited
+until that approval is given.
 
-`021_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
+`024_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
 the Module 6 place catalogue, recorded interest, notification registrations, and
 stated travel preferences. Modules 4-5 still use local adapters.
+
+It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
+renumbered on merge rather than kept: two files sharing a number would leave
+nobody able to tell which one to run.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -51,7 +65,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata or one coordinate pair.
 
-Module 6 (in `021`, not yet deployed):
+Module 6 (in `024`, not yet deployed):
 
 - `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only.
 - `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
@@ -65,12 +79,13 @@ Module 6 (in `021`, not yet deployed):
 - `authenticated` has explicit least-privilege table/column grants plus owner policies with `USING` and `WITH CHECK`.
 - `public.handle_new_user()` is `SECURITY DEFINER`, has an empty `search_path`, uses schema-qualified names, and is not executable by `anon` or `authenticated`.
 - The public `avatars` bucket allows JPEG, PNG, and WebP up to 5 MB. Authenticated users can write only below their own UUID folder.
-- The private `message-media` bucket accepts the approved image/video MIME types up to 50 MB per object. Listing is blocked and committed downloads require current conversation access.
+- The private `message-media` bucket accepts the approved image/video MIME types up to 50 MB per object. Listing is blocked; only current conversation members can create a short-lived URL for committed media, and the signed download does not need a public bucket.
 - Rides require a vehicle owned by the host, persist `waypoints` as a JSON array, and enforce `0 <= seats_available <= seats_total`.
 - Pickup coordinates must be stored as a valid latitude/longitude pair, and pickup instructions are limited to 300 characters.
 - Authenticated clients have SELECT but no direct INSERT/UPDATE/DELETE on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
 - Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
 - All four messaging tables are in the `supabase_realtime` publication.
 
 ### Indexes
@@ -120,6 +135,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `018_m3_versioned_media_paths.sql` - sender/conversation/message/version Storage paths and matching RPC/policy contract.
 - `019_m1_add_vehicle_driver_license.sql` - deployed; adds `vehicles.driver_license_number` plus its column grants.
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
+- `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
+- `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
+- `023_m1_m2_public_ride_browsing.sql` - not deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 
 ## Rules for New Database Work
 

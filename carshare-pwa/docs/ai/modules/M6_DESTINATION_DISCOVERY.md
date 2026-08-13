@@ -81,7 +81,7 @@ Do not change these constants casually.
 Business logic: `src/business-logic/discovery/` — `constants.js` (every weight and
 threshold), `DestinationScoringEngine.js`, `PlaceLifecycle.js`, `ChainDetection.js`,
 `AffinityResolver.js`, and `__tests__/`.
-Schema: `database/sql/021_m6_destination_discovery.sql` (written, not yet deployed).
+Schema: `database/sql/024_m6_destination_discovery.sql` (written, not yet deployed).
 
 ## Depends On
 Module 2 published rides and remaining seats (read-only, for seat headroom);

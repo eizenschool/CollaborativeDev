@@ -3,8 +3,10 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
 } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
+import { resolveAuthReturnPath } from './business-logic/authAccess.js';
 import TopNav from './presentation/components/nav/TopNav.jsx';
 import ComingSoonScreen from './presentation/components/placeholders/ComingSoonScreen.jsx';
 import AuthPage from './presentation/components/AuthPage.jsx';
@@ -24,6 +26,26 @@ import MessageModule from './presentation/components/messaging/MessageModule.jsx
 import TripModule from './presentation/components/trip/TripModule.jsx';
 import TripDetail from './presentation/components/trip/TripDetail.jsx';
 
+function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
+  const { user } = useAuth();
+  const location = useLocation();
+
+  if (!user) {
+    const from = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to="/auth" replace state={{ from, reason }} />;
+  }
+
+  return children;
+}
+
+function AuthEntry() {
+  const { user } = useAuth();
+  const location = useLocation();
+  return user
+    ? <Navigate to={resolveAuthReturnPath(location.state)} replace />
+    : <AuthPage />;
+}
+
 function AppShell() {
   return (
     <div className="app-shell">
@@ -34,42 +56,43 @@ function AppShell() {
             Settings are consolidated into one "My Profile" page (hero + in-page
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
             /host still land on the right panel. */}
-        <Route path="/profile" element={<MyProfile />} />
+        <Route path="/profile" element={<RequireAuth reason="Sign in to view your profile."><MyProfile /></RequireAuth>} />
         <Route path="/vehicles" element={<Navigate to="/profile" replace />} />
         <Route path="/reputation" element={<Navigate to="/profile" replace />} />
         <Route path="/host" element={<Navigate to="/profile" replace />} />
         {/* Module 2 - Ride Sharing Management mobile flow. */}
         <Route path="/ride" element={<RideHub />} />
-        <Route path="/ride/publish" element={<PublishRide />} />
-        <Route path="/ride/requests" element={<MyRequests />} />
-        <Route path="/ride/:rideId/requests" element={<ManageRequests />} />
-        <Route path="/ride/:rideId/edit" element={<EditRide />} />
-        <Route path="/ride/:rideId/review" element={<RateReview />} />
+        <Route path="/ride/publish" element={<RequireAuth reason="Sign in before publishing a ride."><PublishRide /></RequireAuth>} />
+        <Route path="/ride/requests" element={<RequireAuth reason="Sign in to view your ride requests."><MyRequests /></RequireAuth>} />
+        <Route path="/ride/:rideId/requests" element={<RequireAuth reason="Sign in to manage ride requests."><ManageRequests /></RequireAuth>} />
+        <Route path="/ride/:rideId/edit" element={<RequireAuth reason="Sign in to edit this ride."><EditRide /></RequireAuth>} />
+        <Route path="/ride/:rideId/review" element={<RequireAuth reason="Sign in to review this ride."><RateReview /></RequireAuth>} />
         <Route path="/ride/:rideId" element={<RideDetail />} />
-        {/* Home is the post-login landing page (Module 1). Search/Favourite
-            still belong to Modules 4-6 and aren't built yet - each nav tab is
-            a real, clickable route so the shared nav bar's final shape is
-            demonstrable, backed by one shared stub screen instead of faking
-            each one individually. */}
+        {/* Home, Search, Ride browse, and Ride Detail form the public browsing
+            surface. Account-specific destinations are guarded at the route. */}
         <Route path="/home" element={<HomeScreen />} />
         <Route path="/search" element={<ComingSoonScreen icon={IconSearch} label="Search" />} />
         {/* Module 3 - Messaging */}
-        <Route path="/message" element={<MessageModule />} />
-        <Route path="/message/:conversationId" element={<MessageModule />} />
-        <Route path="/message/:conversationId/history" element={<MessageModule />} />
-        <Route path="/favourite" element={<ComingSoonScreen icon={IconHeart} label="Favourite" />} />
+        <Route path="/message" element={<RequireAuth reason="Sign in to open your messages."><MessageModule /></RequireAuth>} />
+        <Route path="/message/:conversationId" element={<RequireAuth reason="Sign in to open this conversation."><MessageModule /></RequireAuth>} />
+        <Route path="/message/:conversationId/history" element={<RequireAuth reason="Sign in to view message history."><MessageModule /></RequireAuth>} />
+        <Route path="/favourite" element={<RequireAuth reason="Sign in to view your favourite rides."><ComingSoonScreen icon={IconHeart} label="Favourite" /></RequireAuth>} />
         {/* Module 5 - Trip Management & Eco Impact */}
-        <Route path="/trip" element={<TripModule />} />
-        <Route path="/trip/:tripId" element={<TripDetail />} />
+        <Route path="/trip" element={<RequireAuth reason="Sign in to view your trips."><TripModule /></RequireAuth>} />
+        <Route path="/trip/:tripId" element={<RequireAuth reason="Sign in to view this trip."><TripDetail /></RequireAuth>} />
         {/* Trip Verification, Exchange Settlement & Safety. Built under Module 6's
             former scope; now owned by Modules 1/2/3/5 - see
             docs/ai/modules/TRUST_SAFETY_HANDOVER.md. Everything under /safety is
             its own sub-router (SafetyRoutes.jsx). */}
-        <Route path="/safety/*" element={<SafetyRoutes />} />
+        <Route path="/safety/*" element={<RequireAuth reason="Sign in to use trust and safety services."><SafetyRoutes /></RequireAuth>} />
         {/* Module 6 - Destination Discovery: recommends where to go to a traveller
             who has no destination in mind, then hands off to Module 4 (find a ride)
-            or Module 2 (publish one). Own sub-router under /discover. */}
+            or Module 2 (publish one). Public, like the other browsing surfaces: a
+            visitor who cannot yet name a destination is precisely who this module
+            exists for, and the service already scores an anonymous request with a
+            neutral affinity rather than requiring an account. */}
         <Route path="/discover/*" element={<DiscoverRoutes />} />
+        <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </div>
@@ -117,7 +140,7 @@ function useOnlineStatus() {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
   const online = useOnlineStatus();
 
   if (loading) {
@@ -145,16 +168,10 @@ export default function App() {
         </div>
       )}
 
-      {!user ? (
-        <Routes>
-          <Route
-            path="*"
-            element={<AuthPage />}
-          />
-        </Routes>
-      ) : (
-        <AppShell />
-      )}
+      <Routes>
+        <Route path="/auth" element={<AuthEntry />} />
+        <Route path="*" element={<AppShell />} />
+      </Routes>
     </>
   );
 }

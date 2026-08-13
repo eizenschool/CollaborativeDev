@@ -204,6 +204,7 @@ function mapAttachment(row) {
     latitude: row.latitude,
     longitude: row.longitude,
     url: row.signed_url || null,
+    loadError: row.media_error || null,
   };
 }
 
@@ -307,6 +308,18 @@ function containsKeyword(message, keyword) {
     || message.attachments.some((attachment) =>
       attachment.fileName?.toLocaleLowerCase().includes(normalized),
     );
+}
+
+export function getMessagingChangeConversationId(change) {
+  const row = change?.new && Object.keys(change.new).length
+    ? change.new
+    : change?.old;
+  if (!row) return null;
+  if (change.table === 'conversations') return row.id || null;
+  if (['conversation_members', 'messages'].includes(change.table)) {
+    return row.conversation_id || null;
+  }
+  return null;
 }
 
 /** Creates the Module 3 service against a compatible data repository. */

@@ -1,7 +1,6 @@
 // ===== PRESENTATION LAYER (HomeScreen) =====
-// The post-login landing page. Keeps the first screen a user sees simple - a
-// greeting plus the handful of actions people actually come here to do -
-// instead of dropping them straight into the denser Profile page.
+// The public landing page. Guests can browse Home and Ride content first;
+// account-specific actions are protected by the shared route gate.
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { IconRoute, IconCar, IconCheckCircle, IconUser } from './icons.jsx';
@@ -22,8 +21,8 @@ export default function HomeScreen() {
   return (
     <div className="home-page">
       <div className="home-greeting">
-        <h1>Hi, {firstName}</h1>
-        <p>Where are you headed today?</p>
+        <h1>{user ? `Hi, ${firstName}` : 'Travel better, together'}</h1>
+        <p>{user ? 'Where are you headed today?' : 'Browse shared rides freely. Sign in only when you are ready to join, host, or manage your account.'}</p>
       </div>
 
       <div className="home-actions">
@@ -38,10 +37,10 @@ export default function HomeScreen() {
         ))}
       </div>
 
-      {/* Module 6 - Destination Discovery. The greeting above asks where the user
-          is headed; every action assumes they can already answer. This is for
-          when they cannot. The rail owns its own data and renders nothing when
-          it has nothing to show. */}
+      {/* Module 6 - Destination Discovery. Every action above assumes the visitor
+          can already name a destination; this is for when they cannot, which is
+          most of the point for the guest arriving here for the first time. The
+          rail owns its own data and renders nothing when it has nothing to show. */}
       <DiscoverRail />
     </div>
   );

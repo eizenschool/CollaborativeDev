@@ -16,6 +16,7 @@ import { mockDb } from '../../data-access/mockDataStore.js';
 import {
   buildDirectionsEmbedUrl,
   buildGoogleMapsDirectionsUrl,
+  buildPlaceEmbedUrl,
   buildViewEmbedUrl
 } from '../GoogleMapsEmbedService.js';
 import { hasRegisteredVehicle } from '../VehicleService.js';
@@ -143,6 +144,17 @@ describe('Module 2 ride workflow contracts', () => {
     expect(view.searchParams.get('zoom')).toBe('15');
     expect(buildViewEmbedUrl({ location: { latitude: null, longitude: null }, apiKey: 'test-browser-key' })).toBeNull();
     expect(buildViewEmbedUrl({ location: { latitude: 91, longitude: 101.6869 }, apiKey: 'test-browser-key' })).toBeNull();
+  });
+
+  it('builds a Place Embed marker for the Publish Ride current-location preview', () => {
+    const marker = new URL(buildPlaceEmbedUrl({
+      latitude: 3.139,
+      longitude: 101.6869,
+      apiKey: 'test-browser-key'
+    }));
+    expect(`${marker.origin}${marker.pathname}`).toBe('https://www.google.com/maps/embed/v1/place');
+    expect(marker.searchParams.get('q')).toBe('3.139,101.6869');
+    expect(marker.searchParams.get('zoom')).toBe('16');
   });
 
   it('allows the Publish Ride flow only when the Host has a registered vehicle', () => {

@@ -163,7 +163,26 @@ conversation access ends permanently seven days after the terminal timestamp,
 overriding UC3.8's older permanent archive wording. Translation and messaging
 notifications remain deferred.
 
-## D017 — Module 6 Becomes Destination Discovery, With a Google Places Catalogue
+## D017 — Public-First Browsing and Action-Time Authentication
+**Status:** Accepted
+The application opens on public `/home` instead of forcing authentication.
+Guests may browse Home, Search, Ride listings, and Published Ride Detail. Login
+is required only when entering account-specific services, including Message,
+Favourite, Profile, Publish/My rides, ride requests, reviews, trips, and safety
+flows. Protected navigation and Ride actions use the shared `/auth` page with a
+safe internal return destination. Once its exact public payload is explicitly
+approved and deployed, Supabase `anon` access is read-only and limited by RLS
+and column grants to Published rides from active Hosts and the safe public Host
+profile/impact data required to render them; private profile, vehicle, request,
+review, and messaging data remains unavailable. Guest Ride reads exclude Place
+IDs, precise coordinates, and pickup instructions.
+
+Destination Discovery (`/discover`, D018) is part of that public browsing
+surface: a visitor who cannot yet name a destination is exactly who it serves,
+and it scores an anonymous request with a neutral personal-affinity value rather
+than requiring an account.
+
+## D018 — Module 6 Becomes Destination Discovery, With a Google Places Catalogue
 **Status:** Accepted
 Module 6's Trust & Safety scope was redistributed with tutor approval: trip
 verification and dispute settlement to Module 2, hazard reporting and the Panic
@@ -194,9 +213,9 @@ Weather integration also moves here from Module 5, which never carried a weather
 requirement in the report.
 
 ## Open Decisions
-- database schemas/RLS for Modules 4-5 (Module 6's is drafted in `021`, not yet deployed);
+- database schemas/RLS for Modules 4-5 (Module 6's is drafted in `024`, not yet deployed);
 - Routes API, traffic-aware computation, and map pin selection;
-- production trip-verification pipeline integration (now Module 2's, per D017);
+- production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;
 - reputation and Host Impact formulas;
 - carbon model;

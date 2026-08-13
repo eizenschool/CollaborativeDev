@@ -66,14 +66,14 @@ export default function PublishRide() {
     if (!hasRegisteredVehicle(vehicles) || locationRequested.current) return;
     locationRequested.current = true;
     let active = true;
-    setPreviewStatus({ state: 'locating', message: 'Finding your current location to centre the map…' });
+    setPreviewStatus({ state: 'locating', message: 'Finding your current location to place a pin on the map…' });
     GooglePlacesService.getCurrentLocationPreview()
       .then((location) => {
         if (!active) return;
         setPreviewLocation(location);
         setPreviewStatus({
           state: 'ready',
-          message: `Map centred near your current location (±${Math.round(location.accuracy)} m). This is not your pickup until you confirm it.`
+          message: `Current-location pin shown (±${Math.round(location.accuracy)} m). This is not your pickup until you confirm it.`
         });
       })
       .catch((err) => {

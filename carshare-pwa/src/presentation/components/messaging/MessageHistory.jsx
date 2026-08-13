@@ -103,7 +103,11 @@ export default function MessageHistory({ conversationId, onBack, onOpenMessage }
     <main className="message-history-page">
       <header className="message-history-header">
         <button type="button" onClick={onBack} aria-label="Back to conversation"><IconArrowLeft size={18} /></button>
-        <div><h1>Message history</h1><p>{conversation?.title || 'Conversation'}</p></div>
+        <div>
+          <span className="message-history-eyebrow">Conversation archive</span>
+          <h1>Message history</h1>
+          <p>{conversation?.title || 'Conversation'}</p>
+        </div>
       </header>
       <section className="message-history-body">
         <div className="message-history-search">
@@ -111,6 +115,12 @@ export default function MessageHistory({ conversationId, onBack, onOpenMessage }
           <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search text, system messages or file names" aria-label="Search message history" />
           {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search"><IconX size={14} /></button>}
         </div>
+        {!isLoading && !loadError && !searchError && (
+          <div className="message-history-summary" aria-live="polite">
+            <span>{query.trim() ? `Results for “${query.trim()}”` : 'All messages'}</span>
+            <strong>{results.length}</strong>
+          </div>
+        )}
         {loadError ? (
           <div className="message-inline-error" role="alert"><p>Unable to load message history. {loadError}</p><button type="button" onClick={loadHistory}>Retry</button></div>
         ) : searchError ? (

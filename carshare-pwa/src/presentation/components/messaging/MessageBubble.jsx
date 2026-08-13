@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { IconCheck, IconEdit, IconMoreVertical, IconTrash } from '../icons.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
 
@@ -17,21 +18,45 @@ function SenderAvatar({ message }) {
 }
 
 function MediaAttachment({ attachment }) {
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [attachment.url]);
+
+  if (!attachment.url || loadFailed) {
+    const mediaLabel = attachment.kind === 'image' ? 'Photo' : 'Video';
+    return (
+      <div
+        className="message-media-item message-media-unavailable"
+        role="img"
+        aria-label={`${mediaLabel} unavailable${attachment.fileName ? `: ${attachment.fileName}` : ''}`}
+        title={attachment.loadError || `${mediaLabel} could not be loaded.`}
+      >
+        <span>{mediaLabel} unavailable</span>
+        {attachment.fileName && <small>{attachment.fileName}</small>}
+      </div>
+    );
+  }
+
   if (attachment.kind === 'image') {
     return (
-      <a href={attachment.url || undefined} target="_blank" rel="noreferrer" className="message-media-item">
-        <img src={attachment.url || ''} alt={attachment.fileName || 'Shared photo'} loading="lazy" />
+      <a href={attachment.url} target="_blank" rel="noreferrer" className="message-media-item">
+        <img
+          src={attachment.url}
+          alt={attachment.fileName || 'Shared photo'}
+          loading="lazy"
+          onError={() => setLoadFailed(true)}
+        />
       </a>
     );
   }
   return (
     <div className="message-media-item message-media-video">
-      {attachment.url ? (
-        <video controls preload="metadata">
-          <source src={attachment.url} type={attachment.mimeType} />
-        </video>
-      ) : null}
-      <a href={attachment.url || undefined} target="_blank" rel="noreferrer" download={attachment.fileName || undefined}>
+      <video controls preload="metadata" onError={() => setLoadFailed(true)}>
+        <source src={attachment.url} type={attachment.mimeType} />
+      </video>
+      <a href={attachment.url} target="_blank" rel="noreferrer" download={attachment.fileName || undefined}>
         Open or download {attachment.fileName || 'video'}
       </a>
     </div>
@@ -42,7 +67,7 @@ function MessageActions({ message, onEdit, onDelete }) {
   if (!message.canEdit && !message.canDelete) return null;
   return (
     <details className="message-bubble-actions">
-      <summary aria-label="Message actions"><IconMoreVertical size={16} /></summary>
+      <summary aria-label="Message actions" title="Message actions"><IconMoreVertical size={18} /></summary>
       <div>
         {message.canEdit && <button type="button" onClick={() => onEdit(message)}><IconEdit size={14} /> Edit</button>}
         {message.canDelete && <button type="button" className="danger" onClick={() => onDelete(message)}><IconTrash size={14} /> Delete</button>}
@@ -60,7 +85,7 @@ export default function MessageBubble({
 }) {
   if (message.kind === 'system') {
     return (
-      <div id={`message-${message.id}`} className={`message-system-row ${highlighted ? 'message-highlighted' : ''}`}>
+      <div id={`message-${message.id}`} className={`message-system-row ${highlighted ? 'message-highlighted' : ''}`} role="status">
         <span className="message-system-text">{message.text}</span>
       </div>
     );
@@ -70,7 +95,7 @@ export default function MessageBubble({
   if (message.deletedAt) {
     return (
       <div id={`message-${message.id}`} className={`message-deleted-row ${isCurrentUser ? 'message-deleted-row-current-user' : ''} ${highlighted ? 'message-highlighted' : ''}`}>
-        <span className="message-deleted-text">message deleted</span>
+        <span className="message-deleted-text">Message deleted</span>
       </div>
     );
   }

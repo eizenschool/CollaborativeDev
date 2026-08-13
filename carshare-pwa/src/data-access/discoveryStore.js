@@ -7,7 +7,7 @@
 //      key and no deployed `places` table - the same "clickable out of the box"
 //      standard mockDataStore sets for Module 1.
 //   2. Mirror the shape of the real Supabase calls, so when
-//      `021_m6_destination_discovery.sql` is deployed the service layer swaps
+//      `024_m6_destination_discovery.sql` is deployed the service layer swaps
 //      source without a rewrite.
 //
 // The fixture is deliberately constructed so every scoring and lifecycle rule
@@ -25,7 +25,7 @@ const STORAGE_KEY = 'letstumpang_discovery_v1';
 const LATENCY_MS = 200;
 
 // Photo references are stored, never image bytes - see the compliance note in
-// `database/sql/021_m6_destination_discovery.sql`. In the fixture these are
+// `database/sql/024_m6_destination_discovery.sql`. In the fixture these are
 // descriptive placeholders; the real ones come from Place Details.
 const photo = (label, author) => ({ reference: `fixture:${label}`, attribution: author });
 
