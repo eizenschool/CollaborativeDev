@@ -4,9 +4,13 @@
 // instead of dropping them straight into the denser Profile page.
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { IconRoute, IconCar, IconCheckCircle, IconUser } from './icons.jsx';
+import { IconRoute, IconCar, IconCheckCircle, IconUser, IconMapPin } from './icons.jsx';
 
 const ACTIONS = [
+  // Module 6. The greeting above asks "Where are you headed today?" - every other
+  // action here assumes the user can already answer that. This one is for when
+  // they cannot.
+  { to: '/discover', Icon: IconMapPin, title: 'Not sure where to go?', sub: 'Discover destinations near you' },
   { to: '/ride/publish', Icon: IconRoute, title: 'Publish a ride', sub: 'Offer your empty seats' },
   { to: '/ride', Icon: IconCar, title: 'Find a ride', sub: 'Browse available rides' },
   { to: '/ride/requests', Icon: IconCheckCircle, title: 'My requests', sub: 'Track rides you asked to join' },
