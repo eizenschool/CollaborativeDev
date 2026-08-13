@@ -3,7 +3,12 @@ import { withSupabase } from "npm:@supabase/server";
 
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1";
 const GOOGLE_FIELD_MASK = "places.id,places.types,places.location,places.photos";
-const DETAILS_FIELD_MASK = "displayName,rating,userRatingCount,reviews,photos,types,location";
+// `primaryType` is the place's own single classification, as opposed to the
+// unordered bag in `types`. It costs nothing extra: Places API (New) prices a
+// request at the highest tier present, and `reviews` already puts this one at
+// Enterprise + Atmosphere.
+const DETAILS_FIELD_MASK =
+  "displayName,rating,userRatingCount,reviews,photos,types,primaryType,location";
 const DEFAULT_INCLUDED_TYPES = ["restaurant", "tourist_attraction", "museum", "park"];
 const DEFAULT_REGION = {
   id: "kuala-lumpur",
@@ -12,6 +17,11 @@ const DEFAULT_REGION = {
   longitude: 101.6869,
   radiusMeters: 50_000,
 };
+
+// Carried by almost every landmark, park and theme park Google returns, so
+// these say "this is somewhere worth visiting" and nothing about which of the
+// four categories it belongs to. They are matched last, never first.
+const GENERIC_TYPES = ["tourist_attraction", "point_of_interest", "establishment"];
 
 const CATEGORY_TYPES: Record<string, string[]> = {
   culinary: [
@@ -59,6 +69,7 @@ type PlaceDetails = {
     authorAttributions?: Array<{ displayName?: string }>;
   }>;
   types?: string[];
+  primaryType?: string;
   location?: { latitude?: number; longitude?: number };
 };
 
@@ -130,11 +141,39 @@ function normalizeRegion(input: unknown, index: number): Region | null {
   };
 }
 
-function categoryFor(types: string[] = []): string {
-  for (const category of ["culinary", "heritage", "nature", "event"]) {
-    if (types.some((type) => CATEGORY_TYPES[category].includes(type))) return category;
+// Classification used to scan a fixed order - culinary, heritage, nature, event -
+// and return the first category holding any of the place's types. Because
+// `tourist_attraction` sat in the heritage list and nearly everything carries
+// it, heritage swallowed the catalogue: KLCC Park, the botanical gardens, the
+// bird park and a theme park all came back heritage, and nature and event were
+// permanently empty. Menara KL went the other way and came back culinary,
+// because it has a restaurant and culinary was checked first of all.
+//
+// So: trust Google's own primary classification first, consider only the
+// specific types second, and let the generic ones decide nothing but the
+// fallback.
+function specificTypes(category: string): string[] {
+  return CATEGORY_TYPES[category].filter((type) => !GENERIC_TYPES.includes(type));
+}
+
+function categoryFor(types: string[] = [], primaryType = ""): string {
+  const categories = ["nature", "event", "culinary", "heritage"];
+
+  if (primaryType) {
+    for (const category of categories) {
+      if (specificTypes(category).includes(primaryType)) return category;
+    }
+    // A place whose own primary type is merely "tourist attraction" is a
+    // destination rather than a business, whatever else sits in its type bag.
+    // This is what keeps a landmark with a restaurant in it out of culinary.
+    if (GENERIC_TYPES.includes(primaryType)) return "heritage";
   }
-  return "event";
+
+  for (const category of categories) {
+    if (types.some((type) => specificTypes(category).includes(type))) return category;
+  }
+
+  return types.some((type) => GENERIC_TYPES.includes(type)) ? "heritage" : "event";
 }
 
 function sentence(text: string): string {
@@ -361,7 +400,7 @@ async function runIngestion(request: Request) {
     try {
       const detail = await details(placeId, googleKey);
       const types = detail.types?.length ? detail.types : item.nearby.types || [];
-      const category = categoryFor(types);
+      const category = categoryFor(types, detail.primaryType || "");
       const name = detail.displayName?.text?.trim() || placeId;
       const description = descriptionFor(name, category, detail);
       const location = detail.location || item.nearby.location || {};
