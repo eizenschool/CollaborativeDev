@@ -5,11 +5,6 @@
   background: var(--bg);
 }
 
-@media (max-width: 880px) {
-  .auth-page { grid-template-columns: 1fr; }
-  .auth-scene { display: none; }
-}
-
 /* ---------------- Left: the "journey" scene ---------------- */
 .auth-scene {
   position: relative;
@@ -72,17 +67,15 @@
 .route-node circle { fill: #14532d; stroke: #fbbf24; stroke-width: 2; }
 .route-node text { fill: rgba(255,255,255,0.85); font-size: 11px; font-family: var(--font); font-weight: 600; }
 .route-car {
-  display: inline-flex;
   color: #fbbf24;
-  offset-path: path('M8,120 C 90,120 90,40 170,40 S 300,110 392,26');
-  animation: travel 7s ease-in-out infinite;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));
 }
-@keyframes travel {
-  0%   { offset-distance: 0%; }
-  50%  { offset-distance: 100%; }
-  100% { offset-distance: 0%; }
-}
+.route-car-icon { transform: translate(-12px, -12px); }
 
 .scene-stats { position: relative; z-index: 1; display: flex; gap: 28px; }
 .scene-stat-value { font-family: var(--font-display); font-size: 26px; font-weight: 600; color: #fff; }
@@ -107,6 +100,17 @@
   font-family: var(--font-display); font-size: 30px; font-weight: 500; margin: 0 0 6px; color: var(--ink);
 }
 .auth-subtitle { color: var(--muted); font-size: 13.5px; margin: 0 0 26px; line-height: 1.6; }
+
+.auth-back-home {
+  display: block; border: 0; background: none; color: var(--teal-dark); cursor: pointer; padding: 0;
+  margin: -12px 0 20px; font: 700 12.5px var(--font); text-align: left;
+}
+.auth-back-home:hover { text-decoration: underline; }
+.auth-required-note {
+  margin: 0 0 18px; padding: 10px 12px; border: 1px solid #bbf7d0;
+  border-radius: 10px; background: var(--teal-tint); color: var(--teal-dark);
+  font-size: 12.5px; line-height: 1.45;
+}
 
 .segmented {
   display: inline-flex; padding: 3px; background: var(--bg); border-radius: 999px; margin-bottom: 22px;
@@ -188,3 +192,24 @@
   border-radius: 10px; padding: 10px 13px; font-size: 12.5px; margin-bottom: 16px;
 }
 .auth-demo-hint { text-align: center; font-size: 11px; color: #b7bec8; margin-top: 14px; }
+
+@media (max-width: 880px) {
+  .auth-page { grid-template-columns: 1fr; }
+  .auth-scene { display: none; }
+}
+
+@media (max-width: 700px) {
+  .auth-page { min-height: 100svh; background: #fff; }
+  .auth-form-side {
+    min-height: 100svh; align-items: flex-start;
+    padding: max(28px, env(safe-area-inset-top)) 20px max(40px, env(safe-area-inset-bottom));
+  }
+  .auth-form-wrap { max-width: 440px; margin: 0 auto; }
+  .auth-title { font-size: 26px; }
+  .auth-subtitle { margin-bottom: 22px; }
+  .segmented { width: 100%; }
+  .segmented button { min-height: 44px; flex: 1; }
+  .google-btn, .auth-submit { min-height: 48px; }
+  .auth-input-wrap input { min-height: 44px; font-size: 16px; }
+  .auth-input-wrap .toggle-visibility { width: 44px; height: 44px; }
+}

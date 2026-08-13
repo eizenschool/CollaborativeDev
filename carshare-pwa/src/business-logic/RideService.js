@@ -11,6 +11,15 @@ import { isConfirmedLocation } from './GooglePlacesService.js';
 
 const JOURNEY_SCALES = ['Urban', 'Intercity'];
 const RIDE_SELECT = '*, host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))';
+const PUBLIC_RIDE_SELECT = `
+  id, host_id, pickup, destination,
+  departure_at, journey_scale,
+  seats_total, seats_available, contribution, restriction_tags, waypoints,
+  status,
+  host:profiles(id, full_name, profile_photo_url,
+    host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)
+  )
+`;
 
 function normalizeWaypoints(waypoints = []) {
   return waypoints
@@ -214,7 +223,7 @@ export const RideService = {
 
   async searchRides({ from, to, date } = {}) {
     if (isSupabaseConfigured) {
-      let query = supabase.from('rides').select(RIDE_SELECT).eq('status', 'Published');
+      let query = supabase.from('rides').select(PUBLIC_RIDE_SELECT).eq('status', 'Published');
       if (from) query = query.ilike('pickup', `%${from}%`);
       if (to) query = query.ilike('destination', `%${to}%`);
       if (date) {
@@ -243,7 +252,9 @@ export const RideService = {
 
   async getRide(rideId) {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('rides').select(RIDE_SELECT).eq('id', rideId).maybeSingle();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const select = sessionData.session ? RIDE_SELECT : PUBLIC_RIDE_SELECT;
+      const { data, error } = await supabase.from('rides').select(select).eq('id', rideId).maybeSingle();
       if (error) throw rpcError(error);
       return data ? mapRideRow(data) : null;
     }
