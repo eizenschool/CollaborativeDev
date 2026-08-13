@@ -22,7 +22,12 @@
 import { CATEGORY, PLACE_STATE } from '../business-logic/discovery/constants.js';
 
 const STORAGE_KEY = 'letstumpang_discovery_v1';
-const LATENCY_MS = 200;
+
+// A simulated round trip, so the screens exercise their loading states instead of
+// resolving instantly and hiding them. Tests skip it: the orchestration calls
+// this store several times per request, so keeping the delay made the suite
+// spend most of its time asleep and turned a busy machine into a timeout.
+const LATENCY_MS = import.meta.env?.MODE === 'test' ? 0 : 200;
 
 // Photo references are stored, never image bytes - see the compliance note in
 // `database/sql/024_m6_destination_discovery.sql`. In the fixture these are

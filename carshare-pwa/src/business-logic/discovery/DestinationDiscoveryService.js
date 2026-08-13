@@ -155,6 +155,54 @@ export const DestinationDiscoveryService = {
   },
 
   /**
+   * UC6.7 / FR-6.34 - the demand side of the platform made visible to the supply
+   * side: where people want to go that nobody is driving to.
+   *
+   * A destination already served by a ride with a seat left is suppressed
+   * deliberately. Sending a second Host to a route that still has capacity would
+   * create exactly the duplicate journey this module exists to prevent.
+   *
+   * Ranked by demand first, then by how close the destination sits to where this
+   * Host has published before - a Host is far likelier to drive a route they
+   * already know than an equally popular one across the country.
+   */
+  async getUnmetDemand({ userId, travelDate, origin } = {}) {
+    const [places, rides, demand] = await Promise.all([
+      discoveryDb.listPlaces(),
+      DiscoveryContractAdapter.getPublishedRides(),
+      discoveryDb.latentDemand(travelDate)
+    ]);
+
+    const recommendable = selectRecommendable(places);
+    const ridesByPlace = DiscoveryContractAdapter.getRidesByPlace(recommendable, rides, travelDate);
+
+    const hostAnchor = await DiscoveryContractAdapter.getHostPublishingAnchor(userId, places)
+      || origin
+      || null;
+
+    return recommendable
+      .map((place) => {
+        const serving = ridesByPlace.get(place.id) || [];
+        const seatsLeft = serving.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
+        return { place, serving, seatsLeft, interestedUsers: demand.get(place.id) || 0 };
+      })
+      // UC6.7 step 3: exclude destinations already served by a ride with a seat.
+      .filter((entry) => entry.interestedUsers > 0 && entry.seatsLeft === 0)
+      .map((entry) => ({
+        placeId: entry.place.id,
+        place: entry.place,
+        interestedUsers: entry.interestedUsers,
+        travelDate,
+        distanceKm: hostAnchor
+          ? distanceKm(hostAnchor, { lat: entry.place.lat, lng: entry.place.lng })
+          : null
+      }))
+      .sort((a, b) =>
+        b.interestedUsers - a.interestedUsers
+        || (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+  },
+
+  /**
    * FR-6.30 - interest, the weak signal. Recorded on selection, before the user
    * commits to anything, because a selection expresses that the destination was
    * considered regardless of whether a ride was ultimately found.

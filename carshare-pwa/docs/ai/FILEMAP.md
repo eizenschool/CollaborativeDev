@@ -46,5 +46,6 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 ## Existing Technical Documentation
 - `docs/SUPABASE-SETUP.md` — existing Supabase setup notes; validate before treating as canonical.
 - `docs/MODULE6-SCHEMA.md` — superseded draft for the former Trust & Safety scope; not Module 6's current schema.
+- `docs/MODULE6-API-SETUP.md` — every external request Destination Discovery makes, with field-mask billing tiers, quotas, and outstanding console work.
 
 Keep this file short. Do not list every source file.

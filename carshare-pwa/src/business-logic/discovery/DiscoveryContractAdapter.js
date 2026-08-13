@@ -123,10 +123,46 @@ export async function getCompletedTripCategories(userId, places = []) {
     .filter(Boolean);
 }
 
+/**
+ * Where this Host has published rides to before, as a single coordinate.
+ *
+ * UC6.7 ranks unmet demand partly by "proximity to the host's previous
+ * publishing pattern". Module 2 stores a destination string rather than a
+ * coordinate, so the pattern is recovered by matching those strings back to the
+ * catalogue and averaging the coordinates of whatever matched.
+ *
+ * Returns null rather than a guess when nothing matches. A Host with no usable
+ * history is ranked on demand alone, which is the right answer - inventing an
+ * anchor would silently reorder their list around a place they have never been.
+ */
+export async function getHostPublishingAnchor(userId, places = []) {
+  if (!userId) return null;
+
+  let hosted = [];
+  try {
+    const history = await TripHistoryEngine.listHistory(userId) || [];
+    hosted = history.filter((trip) => trip?.role === 'Host');
+  } catch {
+    return null;
+  }
+
+  const matched = hosted
+    .map((trip) => places.find((place) => referencesPlace(trip.destination, place)))
+    .filter(Boolean);
+
+  if (matched.length === 0) return null;
+
+  return {
+    lat: matched.reduce((sum, p) => sum + p.lat, 0) / matched.length,
+    lng: matched.reduce((sum, p) => sum + p.lng, 0) / matched.length
+  };
+}
+
 export const DiscoveryContractAdapter = {
   getPublishedRides,
   getRidesByPlace,
   departureDates,
   getCompletedTripCategories,
+  getHostPublishingAnchor,
   referencesPlace
 };

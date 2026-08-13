@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
-import { IconSearch, IconAlertTriangle, IconStar } from '../icons.jsx';
+import { IconSearch, IconAlertTriangle, IconStar, IconArrowRight } from '../icons.jsx';
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
 import PlacePoster from './PlacePoster.jsx';
@@ -192,7 +192,15 @@ export default function DiscoverHub() {
           <section className="dsc-section">
             <div className="dsc-section-head">
               <h2>Nobody is driving here yet</h2>
-              {unserved.length > 0 && <span className="dsc-count">{unserved.length} waiting</span>}
+              {/* UC6.7 is a different question for a different person, so it gets
+                  its own screen rather than another filter on this one. */}
+              <button
+                type="button"
+                className="dsc-rail-link"
+                onClick={() => navigate(`/discover/demand?date=${travelDate}`)}
+              >
+                Where is demand? <IconArrowRight size={14} />
+              </button>
             </div>
             <p className="dsc-section-note">
               Places people want to reach. Offer to drive and the seats fill themselves.

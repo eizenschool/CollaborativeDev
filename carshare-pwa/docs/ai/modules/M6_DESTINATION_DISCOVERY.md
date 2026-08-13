@@ -108,6 +108,12 @@ copied into project Storage; only photo references are held. Attribution
 requirements (author name for photos and reviews, "Google Maps" attribution) still
 apply wherever the data is displayed.
 
+## External Requests
+Every request this module will make - endpoint, field mask, billing tier, quota,
+and the console work still outstanding - is specified in
+`docs/MODULE6-API-SETUP.md`. None of it is needed to run, test, or demo the
+module today: the screens work offline on the fixture catalogue.
+
 ## Cost Boundary
 Free monthly caps: Nearby/Text Search 1,000 each, Place Details 1,000, Place
 Photos 1,000, Street View Static 10,000, Street View **metadata unlimited** — which

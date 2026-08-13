@@ -279,6 +279,85 @@ describe('degraded inputs', () => {
   });
 });
 
+describe('getUnmetDemand - UC6.7 / FR-6.34', () => {
+  beforeEach(() => discoveryDb.__reset());
+
+  it('returns nothing when no destination carries interest', async () => {
+    const rows = await DestinationDiscoveryService.getUnmetDemand({
+      userId: 'u_demo_1', travelDate: RIDE_DATE
+    });
+    expect(rows).toEqual([]);
+  });
+
+  it('surfaces a destination once someone has expressed interest in it', async () => {
+    await DestinationDiscoveryService.recordInterest('u_a', 'p_cameron', RIDE_DATE);
+
+    const rows = await DestinationDiscoveryService.getUnmetDemand({
+      userId: 'u_demo_1', travelDate: RIDE_DATE
+    });
+
+    expect(rows.map((r) => r.placeId)).toContain('p_cameron');
+    expect(rows.find((r) => r.placeId === 'p_cameron').interestedUsers).toBe(1);
+  });
+
+  // The suppression rule that stops the module creating the duplicate journeys
+  // it exists to prevent: a destination someone is already driving to, with a
+  // seat left, must not be advertised to a second Host.
+  it('suppresses a destination already served by a ride with a seat left', async () => {
+    await DestinationDiscoveryService.recordInterest('u_a', 'p_georgetown', RIDE_DATE);
+
+    const rows = await DestinationDiscoveryService.getUnmetDemand({
+      userId: 'u_demo_1', travelDate: RIDE_DATE
+    });
+
+    expect(rows.some((r) => r.placeId === 'p_georgetown')).toBe(false);
+  });
+
+  it('ranks by how many people want to go', async () => {
+    await DestinationDiscoveryService.recordInterest('u_a', 'p_cameron', RIDE_DATE);
+    await DestinationDiscoveryService.recordInterest('u_a', 'p_taman_negara', RIDE_DATE);
+    await DestinationDiscoveryService.recordInterest('u_b', 'p_taman_negara', RIDE_DATE);
+    await DestinationDiscoveryService.recordInterest('u_c', 'p_taman_negara', RIDE_DATE);
+
+    const rows = await DestinationDiscoveryService.getUnmetDemand({
+      userId: 'u_demo_1', travelDate: RIDE_DATE
+    });
+
+    expect(rows[0].placeId).toBe('p_taman_negara');
+    expect(rows[0].interestedUsers).toBe(3);
+  });
+
+  it('counts demand against the travel window, not the place alone', async () => {
+    await DestinationDiscoveryService.recordInterest('u_a', 'p_cameron', RIDE_DATE);
+
+    const otherDay = await DestinationDiscoveryService.getUnmetDemand({
+      userId: 'u_demo_1', travelDate: '2026-09-09'
+    });
+
+    expect(otherDay).toEqual([]);
+  });
+
+  it('never surfaces a Retired place', async () => {
+    await DestinationDiscoveryService.recordInterest('u_a', 'p_retired_museum', RIDE_DATE);
+
+    const rows = await DestinationDiscoveryService.getUnmetDemand({
+      userId: 'u_demo_1', travelDate: RIDE_DATE
+    });
+
+    expect(rows.some((r) => r.placeId === 'p_retired_museum')).toBe(false);
+  });
+
+  it('works for a host with no publishing history', async () => {
+    await DestinationDiscoveryService.recordInterest('u_a', 'p_cameron', RIDE_DATE);
+
+    const rows = await DestinationDiscoveryService.getUnmetDemand({
+      travelDate: RIDE_DATE
+    });
+
+    expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
 describe('buildPrefillPayload - UC6.3 / FR-6.35 handoff to Modules 2 and 4', () => {
   it('carries the destination and origin the ride forms need', () => {
     const payload = DestinationDiscoveryService.buildPrefillPayload(
