@@ -13,7 +13,7 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-022
-Repository SQL history: 001-024
+Repository SQL history: 001-025
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -29,7 +29,7 @@ deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
 Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
 URLs for private chat media. Deployed history must not be rewritten; the next
-new file after the current `024` starts at `025`.
+new file after the current `025` starts at `026`.
 `023_m1_m2_public_ride_browsing.sql` is live through the Dashboard SQL Editor;
 its anonymous column-level policies and grants were deployed after the public
 payload was approved. It is not present in the migration history returned by the
@@ -46,6 +46,15 @@ default for offline demos and tests.
 It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
 nobody able to tell which one to run.
+
+`025_m6_place_reviews.sql` adds `places.reviews` (jsonb, default `[]`, checked to
+be an array). The enrichment pass already requests review text from Place
+Details - that request is what prices enrichment at the Enterprise + Atmosphere
+tier - but nothing stored it: the first review's text was written into
+`description` verbatim and unattributed, and the rest were discarded. Reviews are
+now stored with their author attribution and shown as reviews, and `description`
+returns to the generated sentence FR-6.8 specifies. The compliance note in `024`
+extends to this column and is restated in the file header.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination

@@ -28,9 +28,12 @@ const initialsOf = (name) =>
   (name || '?').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 
 function Stars({ rating }) {
+  // Place Details can return a review with no rating attached, so the stars are
+  // omitted rather than announced as "null out of 5" to a screen reader.
+  if (!Number.isFinite(rating) || rating < 1) return null;
   return (
     <span className="dsc-review-stars" aria-label={`${rating} out of 5`}>
-      {Array.from({ length: rating }, (_, i) => <IconStar key={i} size={12} />)}
+      {Array.from({ length: Math.round(rating) }, (_, i) => <IconStar key={i} size={12} />)}
     </span>
   );
 }

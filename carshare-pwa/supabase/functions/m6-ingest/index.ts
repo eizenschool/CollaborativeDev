@@ -62,6 +62,7 @@ type PlaceDetails = {
   userRatingCount?: number;
   reviews?: Array<{
     text?: { text?: string };
+    rating?: number;
     authorAttribution?: { displayName?: string };
   }>;
   photos?: Array<{
@@ -182,14 +183,38 @@ function sentence(text: string): string {
   return /[.!?]$/.test(compact) ? compact : `${compact}.`;
 }
 
-function descriptionFor(name: string, category: string, details: PlaceDetails) {
-  const reviews = details.reviews || [];
-  const reviewText = reviews.length >= 3 ? sentence(reviews[0]?.text?.text || "") : "";
-  if (reviewText) return { description: reviewText, description_is_template: false };
+// The description used to be the first review's text, written in verbatim and
+// unattributed as though the application had written it. Nothing trimmed it to
+// a sentence either - `sentence()` only collapses whitespace - so whole reviews
+// became descriptions: "Awesome and amazing and better than expectation!!!" for
+// Central Market, and one for Merdeka Square naming the hotel its author stayed
+// in. FR-6.8 asks for a generated sentence, and a review is somebody's opinion
+// rather than a description of the place.
+//
+// Reviews now go to `reviews`, with their authors, and are shown as reviews.
+function descriptionFor(name: string, category: string, state: string) {
+  const where = state?.trim() ? ` in ${state.trim()}` : " in Malaysia";
   return {
-    description: `${name} is a ${category} destination in Malaysia.`,
+    description: `${name} is a ${category} destination${where}.`,
     description_is_template: true,
   };
+}
+
+// Up to five, matching what Place Details returns and what the detail screen
+// renders. Author attribution is not optional: it is the condition under which
+// this content may be displayed at all, so a review without one is dropped
+// rather than shown anonymously.
+function reviewsFor(details: PlaceDetails) {
+  return (details.reviews || []).slice(0, 5).flatMap((review) => {
+    const text = sentence(review.text?.text || "");
+    const author = review.authorAttribution?.displayName?.trim() || "";
+    if (!text || !author) return [];
+    return [{
+      author,
+      rating: typeof review.rating === "number" ? review.rating : null,
+      text,
+    }];
+  });
 }
 
 function photoReferences(details: PlaceDetails) {
@@ -371,6 +396,9 @@ async function runIngestion(request: Request) {
     ? Math.max(0, Math.min(50, Math.floor(input.maxDetails)))
     : 50;
   const dryRun = input.dryRun === true;
+  // Off by default: re-enriching costs one Place Details request per place, so
+  // it has to be asked for rather than happening on every sweep.
+  const refreshDetails = input.refreshDetails === true;
 
   const discovered = new Map<string, { nearby: NearbyPlace; region: Region }>();
   for (const region of regions) {
@@ -391,7 +419,12 @@ async function runIngestion(request: Request) {
 
   for (const [placeId, item] of discovered) {
     const alreadyKnown = existing.get(placeId);
-    if (alreadyKnown && !dryRun) {
+    // A known place is normally only touched, never re-enriched, because Place
+    // Details is the expensive half of ingestion. `refreshDetails` re-enriches
+    // it in place: the upsert matches on source_place_id, so the row keeps its
+    // id and the interest and notification rows pointing at it survive. That is
+    // the difference between this and deleting the catalogue and re-ingesting.
+    if (alreadyKnown && !dryRun && !refreshDetails) {
       await markSeen(baseUrl, databaseKey, placeId, alreadyKnown);
       refreshed += 1;
       continue;
@@ -402,8 +435,9 @@ async function runIngestion(request: Request) {
       const types = detail.types?.length ? detail.types : item.nearby.types || [];
       const category = categoryFor(types, detail.primaryType || "");
       const name = detail.displayName?.text?.trim() || placeId;
-      const description = descriptionFor(name, category, detail);
       const location = detail.location || item.nearby.location || {};
+      const state = item.region.state;
+      const description = descriptionFor(name, category, state);
       const reviewCount = Number.isFinite(detail.userRatingCount) ? Number(detail.userRatingCount) : 0;
       const photos = photoReferences(detail);
       upserts.push({
@@ -413,9 +447,10 @@ async function runIngestion(request: Request) {
         ...description,
         rating: typeof detail.rating === "number" ? detail.rating : null,
         review_count: reviewCount,
+        reviews: reviewsFor(detail),
         lat: location.latitude,
         lng: location.longitude,
-        state: item.region.state,
+        state,
         photo_references: photos,
         lifecycle_state: reviewCount >= 3 && photos.length ? "Active" : "Provisional",
         state_before_demotion: null,
@@ -432,6 +467,7 @@ async function runIngestion(request: Request) {
   if (!dryRun) await upsertPlaces(baseUrl, databaseKey, upserts);
   return json({
     dryRun,
+    refreshDetails,
     regions: regions.map((region) => region.id),
     discovered: sourceIds.length,
     enriched,
