@@ -3,8 +3,10 @@
 //
 // Everything in this module is READ-ONLY for the user - no create/edit/delete
 // of rides happens here (that's Module 2's RideService). It reuses:
-//   - mockDb.listMyRides() / listAllRides() / getRide()  -> Module 2's ride and
-//     request data, including the real Accepted-request participation list
+//   - RideService / RideRequestService -> Module 2's ride and request data.
+//     Going through those services rather than a data-access store is what
+//     makes FR-5.1/5.2/5.3 work against Supabase as well as the mock: both
+//     already branch on isSupabaseConfigured and return the same shapes.
 //   - HostImpactEngine  -> the SAME Composite Host Impact Score formula already
 //     used on the Profile/Reputation screen, so the Leaderboard here always
 //     matches a host's own profile
@@ -14,11 +16,19 @@
 // `departure_at` is the authoritative ride instant (D012). The `date`/`time`
 // columns were dropped in database/sql/013, so nothing here may read them.
 
+import { isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
+import { RideService } from './RideService.js';
+import { RideRequestService } from './RideRequestService.js';
 import { HostImpactEngine } from './HostImpactEngine.js';
 import { departureParts } from './rideDateTime.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
+
+// Shown instead of a blank board when the app runs against Supabase. Says what
+// is missing and why, rather than implying the module is unfinished.
+export const LEADERBOARD_NEEDS_COMPLETED_TRIPS =
+  'The community leaderboard is not available on the live backend yet. Ranking hosts needs completed trips, and no ride has reached Completed on the connected database.';
 
 const SHORT_MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -139,7 +149,7 @@ function buildMonthlyTrend(completedTrips, now = new Date(), months = 6) {
 // UC5.3's participant list. mockDb.listRideRequests() deliberately refuses
 // non-hosts, which is the right privacy boundary: a Host sees everyone they
 // accepted, a passenger sees the Host and their own party.
-async function buildParticipants(ride, userId, ownRequest) {
+async function buildParticipants(ride, userId, ownRequest, listRideRequests) {
   const host = ride.host
     ? { id: ride.host.id, name: ride.host.fullName, role: 'Host' }
     : { id: ride.hostId, name: 'Host', role: 'Host' };
@@ -159,7 +169,7 @@ async function buildParticipants(ride, userId, ownRequest) {
 
   if (ride.hostId === userId) {
     try {
-      const requests = await mockDb.listRideRequests(ride.id);
+      const requests = await listRideRequests(ride.id);
       return [host, ...requests.filter((request) => request.status === 'Accepted').flatMap(partyOf)];
     } catch {
       // Losing the passenger list should not take the whole trip page down.
@@ -171,14 +181,22 @@ async function buildParticipants(ride, userId, ownRequest) {
 }
 
 export const TripHistoryEngine = {
+  backend: isSupabaseConfigured ? 'supabase' : 'mock',
+
   // ---------- FR-5.1 / FR-5.2 - Ride History, lifecycle filtering ----------
   async listHistory(userId, now = new Date()) {
-    const { hosting, joining } = await mockDb.listMyRides(userId);
+    // RideService.listMyRides() returns joining: [] on its Supabase path, so
+    // joined trips always come from RideRequestService - which reads the same
+    // ride_requests rows on both backends.
+    const [{ hosting }, requests] = await Promise.all([
+      RideService.listMyRides(userId),
+      RideRequestService.listMyRequests(userId)
+    ]);
 
     const hostedCards = hosting.map((ride) => toHistoryCard(ride, 'Host', now));
-    // `joining` holds ride requests, and request.status is the REQUEST state -
-    // only an Accepted request means the user actually joined the trip.
-    const joinedCards = joining
+    // request.status is the REQUEST state - only an Accepted request means the
+    // user actually joined the trip.
+    const joinedCards = requests
       .filter((request) => request.status === 'Accepted' && request.ride)
       .map((request) => toHistoryCard(request.ride, 'Passenger', now));
 
@@ -190,11 +208,14 @@ export const TripHistoryEngine = {
 
   // ---------- FR-5.3 / FR-5.4 / FR-5.5 - Trip Detail (read-only) ----------
   async getTripDetail(tripId, userId, now = new Date()) {
-    const [ride, myRides] = await Promise.all([mockDb.getRide(tripId), mockDb.listMyRides(userId)]);
+    const [ride, requests] = await Promise.all([
+      RideService.getRide(tripId),
+      RideRequestService.listMyRequests(userId)
+    ]);
     if (!ride) return null;
 
     const isHost = ride.hostId === userId;
-    const ownRequest = myRides.joining.find(
+    const ownRequest = requests.find(
       (request) => request.rideId === tripId && request.status === 'Accepted'
     );
     // UC5.3 C1 - users may only view trips they hosted or joined. A
@@ -203,7 +224,12 @@ export const TripHistoryEngine = {
     if (!isHost && !ownRequest) return null;
 
     const card = toHistoryCard(ride, isHost ? 'Host' : 'Passenger', now);
-    const participants = await buildParticipants(ride, userId, ownRequest);
+    const participants = await buildParticipants(
+      ride,
+      userId,
+      ownRequest,
+      (id) => RideRequestService.listRideRequests(id)
+    );
 
     return { ...card, participants };
   },
@@ -246,7 +272,17 @@ export const TripHistoryEngine = {
   // month; they are then ranked by the SAME Composite Host Impact Score
   // formula as My Profile (HostImpactEngine) - reused, not reimplemented, so a
   // host's rank here always matches the score shown on their own profile.
+  //
+  // Ranking needs every host's completed trips, and Module 2 exposes no
+  // all-hosts ride query - only the Published marketplace. Rather than add a
+  // speculative one, this stays on the demo store: the connected database
+  // currently holds no Completed ride at all, because the only function that
+  // can write that status (transition_verified_ride, database/sql/014) is
+  // service_role-only with no caller yet. Drop this branch and read live rides
+  // once Module 6's verified-trip pipeline starts completing trips.
   async getLeaderboard(userId, year, month, now = new Date()) {
+    if (isSupabaseConfigured) throw new Error(LEADERBOARD_NEEDS_COMPLETED_TRIPS);
+
     const period = year == null || month == null
       ? { year: now.getFullYear(), month: now.getMonth() }
       : { year, month };
