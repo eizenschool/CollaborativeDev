@@ -383,6 +383,33 @@ export function IconCamera(props) {
     </Svg>
   );
 }
+
+export function IconVideo(props) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="6.5" width="12.5" height="11" rx="2" />
+      <path d="m16 10 4.5-2.5v9L16 14" />
+    </Svg>
+  );
+}
+
+export function IconMicrophone(props) {
+  return (
+    <Svg {...props}>
+      <rect x="8.5" y="3" width="7" height="12" rx="3.5" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" />
+    </Svg>
+  );
+}
+
+export function IconStop(props) {
+  return (
+    <Svg {...props}>
+      <rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 export function IconSend(props) {
   return (
     <Svg {...props}>

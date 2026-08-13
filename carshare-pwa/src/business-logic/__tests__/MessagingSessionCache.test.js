@@ -6,6 +6,7 @@ function draft(overrides = {}) {
     text: 'Meet at the lobby',
     mediaEntries: [{ token: 'new:photo-1', source: 'new', previewUrl: 'blob:photo-1', file: { name: 'photo.jpg' } }],
     location: { latitude: 3.139, longitude: 101.6869 },
+    voiceRecording: null,
     editingMessage: null,
     ...overrides,
   };
@@ -51,5 +52,27 @@ describe('MessagingSessionCache', () => {
     cache.saveDraft('conversation-2', draft({ mediaEntries: [] }));
     cache.setActiveUser(null);
     expect(cache.getDraft('conversation-2')).toBeNull();
+  });
+
+  it('keeps completed voice drafts and releases their preview URLs when removed', () => {
+    const releasePreviewUrl = vi.fn();
+    const cache = createMessagingSessionCache({ releasePreviewUrl });
+    cache.setActiveUser('user-1');
+    const voiceRecording = {
+      file: { name: 'voice.webm' },
+      durationSeconds: 14,
+      previewUrl: 'blob:voice-1',
+    };
+
+    cache.saveDraft('conversation-1', draft({
+      text: '', mediaEntries: [], location: null, voiceRecording,
+    }));
+    expect(cache.getDraft('conversation-1').voiceRecording).toEqual(voiceRecording);
+
+    cache.saveDraft('conversation-1', draft({
+      text: '', mediaEntries: [], location: null, voiceRecording: null,
+    }));
+    expect(releasePreviewUrl).toHaveBeenCalledWith('blob:voice-1');
+    expect(cache.getDraft('conversation-1')).toBeNull();
   });
 });

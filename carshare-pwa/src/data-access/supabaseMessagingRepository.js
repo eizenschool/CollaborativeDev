@@ -56,6 +56,10 @@ function getStorageErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
+function storageMimeType(value) {
+  return typeof value === 'string' ? value.split(';')[0].trim().toLowerCase() : '';
+}
+
 export async function attachSignedUrls(rows, client = requireSupabase()) {
   const paths = [...new Set(rows.flatMap((row) =>
     (row.attachments || [])
@@ -222,7 +226,7 @@ export const supabaseMessagingRepository = {
       file,
       {
         cacheControl: '3600',
-        contentType: file.type,
+        contentType: storageMimeType(file.type),
         upsert: false,
       },
     );

@@ -20,10 +20,17 @@ function HighlightedText({ text = '', keyword = '' }) {
   return parts;
 }
 
+function formatDuration(totalSeconds = 0) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function HistoryMessage({ message, keyword, onOpen }) {
   const attachmentNames = message.attachments
-    .filter((item) => item.fileName)
+    .filter((item) => item.fileName && item.kind !== 'audio')
     .map((item) => item.fileName);
+  const voiceMessage = message.attachments.find((item) => item.kind === 'audio');
   return (
     <button type="button" className="message-history-result" onClick={() => onOpen(message.id)}>
       <div className="message-history-result-heading">
@@ -33,7 +40,8 @@ function HistoryMessage({ message, keyword, onOpen }) {
       {message.deletedAt ? <em>message deleted</em> : (
         <>
           {message.text && <p><HighlightedText text={message.text} keyword={keyword} /></p>}
-          {attachmentNames.map((name) => <small key={name}><HighlightedText text={name} keyword={keyword} /></small>)}
+           {attachmentNames.map((name) => <small key={name}><HighlightedText text={name} keyword={keyword} /></small>)}
+           {voiceMessage && <small>Voice message · {formatDuration(voiceMessage.durationSeconds)}</small>}
           {message.messageTypes.includes('location') && <small>Shared location</small>}
           <div className="message-history-types">
             {message.messageTypes.map((type) => <span key={type}>{type}</span>)}

@@ -5,6 +5,7 @@ export const MESSAGE_TYPE = {
   TEXT: 'text',
   IMAGE: 'image',
   VIDEO: 'video',
+  AUDIO: 'audio',
   LOCATION: 'location',
   SYSTEM: 'system',
 };
@@ -18,19 +19,49 @@ export const MAX_MESSAGE_LENGTH = 1000;
 export const MAX_MEDIA_COUNT = 10;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+export const MAX_VOICE_BYTES = 10 * 1024 * 1024;
+export const MAX_VOICE_DURATION_SECONDS = 180;
 export const MAX_MESSAGE_MEDIA_BYTES = 100 * 1024 * 1024;
 
 export const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 export const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+export const AUDIO_MIME_TYPES = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav'];
 
 function cleanText(text) {
   return typeof text === 'string' ? text.trim() : '';
 }
 
+function normalizedMimeType(value) {
+  return typeof value === 'string' ? value.split(';')[0].trim().toLowerCase() : '';
+}
+
 function mediaKind(file) {
-  if (IMAGE_MIME_TYPES.includes(file?.type)) return MESSAGE_TYPE.IMAGE;
-  if (VIDEO_MIME_TYPES.includes(file?.type)) return MESSAGE_TYPE.VIDEO;
+  const mimeType = normalizedMimeType(file?.type);
+  if (IMAGE_MIME_TYPES.includes(mimeType)) return MESSAGE_TYPE.IMAGE;
+  if (VIDEO_MIME_TYPES.includes(mimeType)) return MESSAGE_TYPE.VIDEO;
+  if (AUDIO_MIME_TYPES.includes(mimeType)) return MESSAGE_TYPE.AUDIO;
   return null;
+}
+
+function validateVoiceRecording(voiceRecording) {
+  if (voiceRecording == null) return null;
+  const file = voiceRecording.file;
+  if (mediaKind(file) !== MESSAGE_TYPE.AUDIO) {
+    throw new Error('This recording is not a supported voice-message format.');
+  }
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    throw new Error('The voice recording is empty. Please record it again.');
+  }
+  if (file.size > MAX_VOICE_BYTES) {
+    throw new Error('Voice message exceeds the 10 MB limit.');
+  }
+  const durationSeconds = Number(voiceRecording.durationSeconds);
+  if (!Number.isInteger(durationSeconds)
+      || durationSeconds < 1
+      || durationSeconds > MAX_VOICE_DURATION_SECONDS) {
+    throw new Error(`Voice message must be between 1 and ${MAX_VOICE_DURATION_SECONDS} seconds.`);
+  }
+  return { file, durationSeconds };
 }
 
 export function validateLocation(location) {
@@ -44,9 +75,10 @@ export function validateLocation(location) {
   return { latitude, longitude };
 }
 
-export function validateMessageDraft({ text, files = [], location = null }) {
+export function validateMessageDraft({ text, files = [], location = null, voiceRecording = null }) {
   const messageText = cleanText(text);
   const mediaFiles = files.map((item) => item?.file || item);
+  const cleanVoiceRecording = validateVoiceRecording(voiceRecording);
 
   if (messageText.length > MAX_MESSAGE_LENGTH) {
     throw new Error(`Message must not exceed ${MAX_MESSAGE_LENGTH} characters.`);
@@ -58,7 +90,7 @@ export function validateMessageDraft({ text, files = [], location = null }) {
   let totalBytes = 0;
   mediaFiles.forEach((file) => {
     const kind = mediaKind(file);
-    if (!kind) {
+    if (!kind || kind === MESSAGE_TYPE.AUDIO) {
       throw new Error(`${file?.name || 'This file'} is not a supported photo or video.`);
     }
     if (kind === MESSAGE_TYPE.IMAGE && file.size > MAX_IMAGE_BYTES) {
@@ -75,11 +107,19 @@ export function validateMessageDraft({ text, files = [], location = null }) {
   }
 
   const cleanLocation = validateLocation(location);
-  if (!messageText && !mediaFiles.length && !cleanLocation) {
-    throw new Error('Add text, media, or a location before sending.');
+  if (cleanVoiceRecording && (messageText || mediaFiles.length || cleanLocation)) {
+    throw new Error('Voice messages must be sent on their own.');
+  }
+  if (!messageText && !mediaFiles.length && !cleanLocation && !cleanVoiceRecording) {
+    throw new Error('Add text, media, a location, or a voice message before sending.');
   }
 
-  return { text: messageText, files: mediaFiles, location: cleanLocation };
+  return {
+    text: messageText,
+    files: mediaFiles,
+    location: cleanLocation,
+    voiceRecording: cleanVoiceRecording,
+  };
 }
 
 function formatMessageTime(timestamp) {
@@ -151,6 +191,7 @@ function messagePreview(message) {
   const kinds = (message.attachments || []).map((item) => item.kind);
   if (kinds.includes(MESSAGE_TYPE.IMAGE)) return 'Photo';
   if (kinds.includes(MESSAGE_TYPE.VIDEO)) return 'Video';
+  if (kinds.includes(MESSAGE_TYPE.AUDIO)) return 'Voice message';
   if (kinds.includes(MESSAGE_TYPE.LOCATION)) return 'Location';
   return message.kind === 'system' ? 'Group update' : 'Message';
 }
@@ -201,6 +242,7 @@ function mapAttachment(row) {
     fileName: row.file_name,
     mimeType: row.mime_type,
     fileSize: row.file_size,
+    durationSeconds: row.duration_seconds,
     latitude: row.latitude,
     longitude: row.longitude,
     url: row.signed_url || null,
@@ -245,6 +287,7 @@ export function mapMessageRow(row, conversation, currentUserId) {
     canEdit: row.sender_id === currentUserId
       && !row.deleted_at
       && !isRead
+      && !attachments.some((attachment) => attachment.kind === MESSAGE_TYPE.AUDIO)
       && !conversation?.isReadOnly,
     canDelete: row.sender_id === currentUserId
       && !row.deleted_at
@@ -252,14 +295,15 @@ export function mapMessageRow(row, conversation, currentUserId) {
   };
 }
 
-function fileDescriptor(file, storagePath, sortOrder) {
+function fileDescriptor(file, storagePath, sortOrder, durationSeconds = null) {
   return {
     kind: mediaKind(file),
     sort_order: sortOrder,
     storage_path: storagePath,
     file_name: file.name,
-    mime_type: file.type,
+    mime_type: normalizedMimeType(file.type),
     file_size: file.size,
+    duration_seconds: durationSeconds,
   };
 }
 
@@ -374,12 +418,25 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       return messages.filter((message) => containsKeyword(message, query));
     },
 
-    async sendMessage({ conversationId, text, files = [], location = null }) {
-      const draft = validateMessageDraft({ text, files, location });
+    async sendMessage({
+      conversationId,
+      text,
+      files = [],
+      location = null,
+      voiceRecording = null,
+    }) {
+      const draft = validateMessageDraft({ text, files, location, voiceRecording });
       const fileEntries = draft.files.map((file, index) => ({
         file,
         clientId: `new-${index}`,
       }));
+      if (draft.voiceRecording) {
+        fileEntries.push({
+          file: draft.voiceRecording.file,
+          clientId: 'voice',
+          durationSeconds: draft.voiceRecording.durationSeconds,
+        });
+      }
       const messageId = createUuid();
       const versionId = createUuid();
       const uploaded = await uploadAll(
@@ -390,7 +447,7 @@ export function createMessagingService(repository = supabaseMessagingRepository)
         fileEntries,
       );
       const attachments = uploaded.map(({ entry, storagePath }, index) =>
-        fileDescriptor(entry.file, storagePath, index),
+        fileDescriptor(entry.file, storagePath, index, entry.durationSeconds),
       );
       const locationItem = locationDescriptor(draft.location);
       if (locationItem) attachments.push(locationItem);
@@ -427,6 +484,9 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       const originalMedia = (original.attachments || []).filter(
         (attachment) => attachment.kind !== MESSAGE_TYPE.LOCATION,
       );
+      if (originalMedia.some((attachment) => attachment.kind === MESSAGE_TYPE.AUDIO)) {
+        throw new Error('Voice messages cannot be edited.');
+      }
       const existingById = new Map(originalMedia.map((item) => [item.id, item]));
       const selectedExisting = existingAttachmentIds.map((id) => {
         const attachment = existingById.get(id);

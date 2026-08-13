@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_VOICE_BYTES,
+  MAX_VOICE_DURATION_SECONDS,
   MAX_IMAGE_BYTES,
   MAX_MEDIA_COUNT,
   MAX_MESSAGE_MEDIA_BYTES,
@@ -24,6 +26,18 @@ function image(name = 'photo.jpg', size = 1024) {
 
 function video(name = 'clip.mp4', size = 2048) {
   return file(name, 'video/mp4', size);
+}
+
+function audio(name = 'voice.webm', size = 1024) {
+  return file(name, 'audio/webm', size);
+}
+
+function voiceRecording(overrides = {}) {
+  return {
+    file: audio(),
+    durationSeconds: 12,
+    ...overrides,
+  };
 }
 
 function rawConversation(overrides = {}) {
@@ -126,6 +140,7 @@ describe('composite message validation', () => {
     [{ files: [image()] }, ['image']],
     [{ files: [video()] }, ['video']],
     [{ location: { latitude: 3.139, longitude: 101.6869 } }, ['location']],
+    [{ voiceRecording: voiceRecording() }, ['audio']],
     [{ text: 'all', files: [image(), video()], location: { latitude: 3, longitude: 101 } }, ['text', 'image', 'video', 'location']],
   ])('accepts supported combinations %#', (draft) => {
     expect(validateMessageDraft(draft)).toMatchObject({ text: draft.text?.trim() || '' });
@@ -144,7 +159,40 @@ describe('composite message validation', () => {
     expect(() => validateMessageDraft({ files: [video('one.mp4', MAX_VIDEO_BYTES), video('two.mp4', MAX_VIDEO_BYTES), image('extra.jpg', 1)] })).toThrow('100 MB');
     expect(MAX_MESSAGE_MEDIA_BYTES).toBe(100 * 1024 * 1024);
     expect(() => validateMessageDraft({ location: { latitude: 91, longitude: 0 } })).toThrow('coordinates');
-    expect(() => validateMessageDraft({ text: '  ' })).toThrow('Add text, media, or a location');
+    expect(() => validateMessageDraft({ text: '  ' })).toThrow('Add text, media, a location, or a voice message');
+  });
+
+  it('accepts one standalone voice message and enforces its format, size and duration', () => {
+    const valid = validateMessageDraft({ voiceRecording: voiceRecording() });
+    expect(valid.voiceRecording).toMatchObject({ durationSeconds: 12 });
+    expect(() => validateMessageDraft({
+      text: 'caption',
+      voiceRecording: voiceRecording(),
+    })).toThrow('sent on their own');
+    expect(() => validateMessageDraft({
+      files: [audio()],
+    })).toThrow('supported photo or video');
+    expect(() => validateMessageDraft({
+      voiceRecording: voiceRecording({ file: audio('large.webm', MAX_VOICE_BYTES + 1) }),
+    })).toThrow('10 MB');
+    expect(() => validateMessageDraft({
+      voiceRecording: voiceRecording({ durationSeconds: MAX_VOICE_DURATION_SECONDS + 1 }),
+    })).toThrow('between 1 and 180 seconds');
+    expect(() => validateMessageDraft({
+      voiceRecording: voiceRecording({ file: file('voice.aac', 'audio/aac', 1024) }),
+    })).toThrow('supported voice-message format');
+  });
+
+  it.each([
+    'audio/webm;codecs=opus',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+    'audio/wav',
+  ])('accepts supported recorder MIME %s', (mimeType) => {
+    const valid = validateMessageDraft({
+      voiceRecording: voiceRecording({ file: file('voice', mimeType, 1024) }),
+    });
+    expect(valid.voiceRecording.file.type).toBe(mimeType);
   });
 });
 
@@ -180,6 +228,25 @@ describe('MessagingService repository orchestration', () => {
     expect(repository.getStoredMessages()).toHaveLength(1);
   });
 
+  it('uploads and maps a standalone voice message with duration metadata', async () => {
+    const repository = createRepository();
+    const service = createMessagingService(repository);
+    const message = await service.sendMessage({
+      conversationId,
+      voiceRecording: voiceRecording({
+        file: file('voice.webm', 'audio/webm;codecs=opus', 2048),
+        durationSeconds: 27,
+      }),
+    });
+    expect(message.messageTypes).toEqual(['audio']);
+    expect(message.attachments[0]).toMatchObject({
+      kind: 'audio',
+      mimeType: 'audio/webm',
+      durationSeconds: 27,
+    });
+    expect(repository.uploads).toHaveLength(1);
+  });
+
   it('sends no message and cleans successful uploads when any upload fails', async () => {
     const repository = createRepository({ failUploadName: 'broken.mp4' });
     const service = createMessagingService(repository);
@@ -210,6 +277,29 @@ describe('MessagingService repository orchestration', () => {
     const deleted = mapMessageRow(rawMessage({ text_content: null, deleted_at: '2026-08-10T01:30:00Z' }), conversation, userId);
     expect(edited).toMatchObject({ isRead: true, canEdit: false, canDelete: true });
     expect(deleted).toMatchObject({ text: '', canEdit: false, canDelete: false });
+  });
+
+  it('never exposes edit for voice messages and rejects direct edit attempts', async () => {
+    const voiceMessage = rawMessage({
+      attachments: [{
+        id: 'voice',
+        kind: 'audio',
+        sort_order: 0,
+        storage_path: `${userId}/${conversationId}/30000000-0000-4000-8000-000000000001/v1/voice.webm`,
+        file_name: 'voice.webm',
+        mime_type: 'audio/webm',
+        file_size: 1024,
+        duration_seconds: 8,
+      }],
+    });
+    const mapped = mapMessageRow(voiceMessage, { members: [], isReadOnly: false }, userId);
+    expect(mapped).toMatchObject({ canEdit: false, canDelete: true });
+
+    const service = createMessagingService(createRepository({ messages: [voiceMessage] }));
+    await expect(service.editMessage({
+      messageId: voiceMessage.id,
+      text: 'replace',
+    })).rejects.toThrow('Voice messages cannot be edited');
   });
 
   it('keeps the complete old version on edit failure and switches all parts on success', async () => {
