@@ -659,6 +659,28 @@
 .dsc-signal-value { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
 .dsc-signal-weight { color: var(--muted); }
 
+/* Why a signal landed where it did, shown under its label. */
+.dsc-signal-reason {
+  display: block;
+  font-size: 12px;
+  color: var(--teal-dark);
+}
+
+.dsc-season-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+}
+
+.dsc-season-off { background: var(--gold-tint); color: #854d0e; }
+
 /* --- home rail ---------------------------------------------------------- */
 
 .dsc-rail { margin-top: 32px; }

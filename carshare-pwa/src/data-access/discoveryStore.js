@@ -469,7 +469,14 @@ const seedPlaces = [
     state: 'Sarawak',
     photoReferences: [photo('rwmf-1', 'Melissa Anak Jipin'), photo('rwmf-2', 'Joseph Anak Ubang')],
     lifecycleState: PLACE_STATE.ACTIVE,
-    isVm2026Event: true,
+    // FR-6.24 weights a destination against the travel date, so a registered
+    // event carries the dates it actually runs on. A festival in August should
+    // not lift a trip planned for March.
+    vm2026Event: {
+      name: 'Rainforest World Music Festival 2026',
+      start: '2026-07-10',
+      end: '2026-07-12'
+    },
     travelNote: 'Held at the Sarawak Cultural Village near Kuching, about 45 minutes from the city. Tickets and accommodation both sell out well ahead of the festival weekend.',
     reviews: [
       review('Elaine Chong', 5, 'Workshops in the afternoon are the best part and most people skip them for the evening stage.'),
@@ -482,7 +489,9 @@ const seedPlaces = [
 const defaults = {
   absenceCounter: 0,
   stateBeforeDemotion: null,
-  isVm2026Event: false,
+  // { name, start, end } for a registered VM2026 event; null where the place is
+  // not one. See SeasonalCalendar.resolveSeason().
+  vm2026Event: null,
   photoReferences: [],
   rideDestinationAliases: [],
   // A place with too few reviews to summarise also has too few to display - the

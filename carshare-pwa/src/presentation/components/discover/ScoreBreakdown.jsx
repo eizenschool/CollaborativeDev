@@ -11,6 +11,7 @@ import {
   PRESENTATION_THRESHOLDS
 } from '../../../business-logic/discovery/constants.js';
 import { maxUnservedAccessibility } from '../../../business-logic/discovery/DestinationScoringEngine.js';
+import { IconCalendar } from '../icons.jsx';
 
 const DESIRABILITY_LABELS = {
   affinity: 'Matches your travel history',
@@ -26,12 +27,19 @@ const ACCESSIBILITY_LABELS = {
   demandConvergence: 'Others want to go too'
 };
 
-function SignalRows({ signals, weights, labels }) {
+function SignalRows({ signals, weights, labels, reasons = {} }) {
   return Object.entries(labels).map(([key, label]) => {
     const value = signals?.[key] ?? 0;
+    const reason = reasons[key];
     return (
       <div className="dsc-signal" key={key}>
-        <span>{label}</span>
+        <span>
+          {label}
+          {/* A weighted number on its own is not an explanation. Where the module
+              knows why a signal landed where it did - which season applies, which
+              festival is on - it says so. */}
+          {reason && <span className="dsc-signal-reason">{reason}</span>}
+        </span>
         <span className="dsc-signal-bar" aria-hidden="true">
           <span className="dsc-signal-fill" style={{ width: `${Math.round(value * 100)}%` }} />
         </span>
@@ -54,10 +62,17 @@ export default function ScoreBreakdown({ candidate }) {
           <span className="dsc-axis-score">{candidate.desirability.toFixed(2)}</span>
         </h3>
         <p className="dsc-axis-note">Independent of whether anyone is driving there.</p>
+
+        {candidate.season?.note && (
+          <p className={'dsc-season-note' + (candidate.season.state === 'off-season' ? ' dsc-season-off' : '')}>
+            <IconCalendar size={13} /> {candidate.season.note}
+          </p>
+        )}
         <SignalRows
           signals={candidate.signals.desirability}
           weights={DESIRABILITY_WEIGHTS}
           labels={DESIRABILITY_LABELS}
+          reasons={{ season: candidate.season?.label }}
         />
       </div>
 

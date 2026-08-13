@@ -19,21 +19,11 @@ import { buildNameRecurrenceIndex, localEconomySignal } from './ChainDetection.j
 import { resolveAffinity } from './AffinityResolver.js';
 import { distanceKm, maxDistanceKm } from './geo.js';
 import { applyWeatherGate, fetchForecasts } from './WeatherGate.js';
-import { SEASON_VALUES } from './constants.js';
+import { resolveSeason } from './SeasonalCalendar.js';
 import { DiscoveryContractAdapter } from './DiscoveryContractAdapter.js';
 
-/**
- * Seasonal fit (FR-6.24). A registered VM2026 event is aligned by definition;
- * everything else sits at the undeclared value.
- *
- * Declared seasonal windows per category are a catalogue concern that ingestion
- * will supply. Until it does, scoring an unknown season as "undeclared" (0.7)
- * rather than guessing keeps the signal honest - it neither rewards nor punishes
- * a place for data the system does not yet hold.
- */
-function seasonSignal(place) {
-  return place.isVm2026Event ? SEASON_VALUES.ALIGNED : SEASON_VALUES.UNDECLARED;
-}
+// FR-6.24 now resolves against the declared calendar in SeasonalCalendar.js
+// rather than treating everything without an event as undeclared.
 
 /** The highest review count among same-category, same-state peers (headroom denominator). */
 function peerMaxReviewCount(place, places) {
@@ -81,13 +71,19 @@ export const DestinationDiscoveryService = {
     ));
     const furthest = maxDistanceKm([...distanceByPlace.values()]);
 
+    // Resolved once per place and kept, because the detail screen has to explain
+    // the seasonal score in words and recomputing it there could drift.
+    const seasonByPlace = new Map(afterWeather.map((place) =>
+      [place.id, resolveSeason(place, travelDate)]
+    ));
+
     const scored = rankCandidates(afterWeather.map((place) => ({
       placeId: place.id,
       affinity: resolveAffinity(place.category, {
         completedTrips,
         preferredCategories: preferences?.preferredCategories
       }).value,
-      season: seasonSignal(place),
+      season: seasonByPlace.get(place.id).value,
       local: localEconomySignal(place, chainIndex),
       rating: place.rating,
       reviewCount: place.reviewCount,
@@ -106,7 +102,8 @@ export const DestinationDiscoveryService = {
       place: byId.get(entry.placeId),
       rides: ridesByPlace.get(entry.placeId) || [],
       interestedUsers: demand.get(entry.placeId) || 0,
-      distanceKm: distanceByPlace.get(entry.placeId)
+      distanceKm: distanceByPlace.get(entry.placeId),
+      season: seasonByPlace.get(entry.placeId)
     });
 
     return {
