@@ -22,5 +22,7 @@ Project-level coordination only. Module work belongs in `docs/ai/modules/Mx_*.md
 ## BLOCKED / NEEDS TEAM CONFIRMATION
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.
 - Several existing module branches are behind current `Development`.
-- Google Cloud Console setup remains unverified until the restricted Embed-only key is created; do not enable billable Maps SKUs to unblock it.
+- Google Cloud Console setup remains unverified until the restricted Embed-only key is created. Billable Maps SKUs stay disabled except the Module 6 catalogue SKUs accepted in D017.
+- D017 needs Console work before Module 6 ingestion can run against live data: authorise Nearby/Text Search, Place Details and Place Photos, and create a **server-side** key (the two existing keys are website-restricted and unusable from an Edge Function). Store it as a Supabase secret with no `VITE_` prefix.
+- Module 6 caches Google place content that the Maps Platform terms say should not be stored (D017). Accepted as a prototype limitation; it must appear in the report's limitations section.
 - Google OAuth (D015): code is in place, but someone with Supabase Dashboard + Google Cloud Console access still needs to register the OAuth Client ID/Secret and enable the provider - see `docs/SUPABASE-SETUP.md`. Cannot demo "Continue with Google" against the live project until that's done.

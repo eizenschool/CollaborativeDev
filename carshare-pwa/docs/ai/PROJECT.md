@@ -14,7 +14,10 @@ The application is developed collaboratively across six modules:
 3. Messaging
 4. Smart Search & Favourite
 5. Trip Management & Eco Impact
-6. Trust & Safety
+6. Destination Discovery
+
+Module 6's former Trust & Safety scope was redistributed to Modules 1, 2, 3 and 5
+with tutor approval; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 
 ## Repository
 
@@ -82,7 +85,10 @@ Existing business-logic services may use the shared Supabase client from `src/da
 Do not replace this established pattern with a new repository architecture unless a concrete need is accepted.
 
 ## Current Implementation Reality
-`Development` already contains implementation from several modules, including Module 1 profile/auth/vehicle/reputation-related UI and services, Module 2 ride-management components, Module 3 messaging UI/data prototypes, Module 4 search UI components, Module 5 trip/eco components, and Module 6 safety/verification logic and UI.
+`Development` already contains implementation from several modules, including Module 1 profile/auth/vehicle/reputation-related UI and services, Module 2 ride-management components, Module 3 messaging UI/data prototypes, Module 4 search UI components, Module 5 trip/eco components, and the safety/verification logic and UI built under
+Module 6's former Trust & Safety scope, now owned by Modules 1/2/3/5
+(`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`). Module 6's current Destination
+Discovery work is the scoring and lifecycle logic in `src/business-logic/discovery/`.
 
 Some routes, integration points, data persistence, and real backend behaviour are incomplete or prototype/mock based.
 Do not assume "not wired in App.jsx" means "not implemented anywhere".

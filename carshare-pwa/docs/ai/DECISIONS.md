@@ -163,10 +163,41 @@ conversation access ends permanently seven days after the terminal timestamp,
 overriding UC3.8's older permanent archive wording. Translation and messaging
 notifications remain deferred.
 
+## D017 — Module 6 Becomes Destination Discovery, With a Google Places Catalogue
+**Status:** Accepted
+Module 6's Trust & Safety scope was redistributed with tutor approval: trip
+verification and dispute settlement to Module 2, hazard reporting and the Panic
+Button to Module 3, Trust Cases and appeals to Module 1, overdue monitoring to
+Module 5. The existing prototype code stays in place under its new owners
+(`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`). Module 6 is now Destination
+Discovery (`docs/ai/modules/M6_DESTINATION_DISCOVERY.md`).
+
+The place catalogue is sourced from Google Places API rather than an open dataset,
+which extends the D013 cost boundary. Newly in scope: Nearby/Text Search, Place
+Details, and Place Photos, plus Street View metadata (unlimited and free) with
+Static Street View only where metadata confirms coverage. Each carries a 1,000
+per month free cap except Street View Static at 10,000; ingestion is bounded by
+its own per-cycle request quota that halts and resumes rather than overrunning.
+Photos are the only continuing cost because references rather than image bytes
+are stored, so every view spends a request.
+
+Ingestion is a server-side scheduled process, so it needs a key that is **not**
+website-restricted and must never carry a `VITE_` prefix. The two existing D013
+browser keys cannot be reused for it.
+
+**Accepted risk:** the Maps Platform terms permit indefinite storage of place IDs
+only, while this module caches rating, review count, description and photo
+references because FR-6.11 forbids enrichment at request time and the scoring
+formula consumes those fields on every pass. The team accepted this for an
+academic prototype; it is recorded as a limitation rather than left unstated.
+Weather integration also moves here from Module 5, which never carried a weather
+requirement in the report.
+
 ## Open Decisions
-- database schemas/RLS for Modules 4-6;
+- database schemas/RLS for Modules 4-5 (Module 6's is drafted in `021`, not yet deployed);
 - Routes API, traffic-aware computation, and map pin selection;
-- production Module 6 verification pipeline integration;
+- production trip-verification pipeline integration (now Module 2's, per D017);
+- whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;
 - reputation and Host Impact formulas;
 - carbon model;
 - complete offline behaviour;

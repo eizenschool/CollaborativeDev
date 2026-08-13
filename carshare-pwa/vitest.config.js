@@ -12,6 +12,7 @@ export default defineConfig({
     environment: 'node',
     include: [
       'src/business-logic/verification/__tests__/**/*.test.js',
+      'src/business-logic/discovery/__tests__/**/*.test.js',
       'src/business-logic/__tests__/**/*.test.js'
     ]
   }

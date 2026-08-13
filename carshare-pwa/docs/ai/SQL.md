@@ -13,7 +13,7 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-020
-Repository SQL history: 001-020
+Repository SQL history: 001-021
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -24,10 +24,16 @@ on 2026-08-13 for production Module 3 messaging, advisor follow-up, and versione
 media paths. `019_m1_add_vehicle_driver_license.sql` and
 `020_m2_add_route_locations.sql` were deployed on 2026-08-13 for the vehicle
 driver-licence field, confirmed route references, pickup instructions, and the
-replacement Ride RPC signatures. Future changes start at `021`; deployed history
+replacement Ride RPC signatures. Future changes start at `022`; deployed history
 must not be rewritten.
 
-Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
+`021_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
+the Module 6 place catalogue, recorded interest, notification registrations, and
+stated travel preferences. Modules 4-5 still use local adapters.
+
+`docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
+module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
+Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 
 ## Current Database State
 
@@ -44,6 +50,13 @@ Modules 4-6 still use local adapters. `docs/MODULE6-SCHEMA.md` remains a draft.
 - `conversation_members`: role, join/leave, per-user archive, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata or one coordinate pair.
+
+Module 6 (in `021`, not yet deployed):
+
+- `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only.
+- `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
+- `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration.
+- `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
 ### Security and Storage
 
