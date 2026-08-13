@@ -29,6 +29,21 @@ const LATENCY_MS = 200;
 // descriptive placeholders; the real ones come from Place Details.
 const photo = (label, author) => ({ reference: `fixture:${label}`, attribution: author });
 
+// FIXTURE CONTENT ONLY.
+//
+// Place Details returns up to five reviews per place, and those are what the
+// detail screen is built to show. Until the live catalogue exists there is
+// nothing to return, so these stand in - written in the register real reviews are
+// written in, so the screen is laid out against realistic content rather than
+// lorem ipsum. They are NOT presented as real reviews of real businesses and are
+// replaced wholesale on first ingestion.
+//
+// `description` stays a single sentence throughout, because FR-6.8 specifies a
+// single generated sentence. The depth on the detail screen comes from reviews
+// and structured facts, not from writing longer editorial copy that the live
+// system would never produce.
+const review = (author, rating, text) => ({ author, rating, text });
+
 const seedPlaces = [
   {
     id: 'p_georgetown',
@@ -46,7 +61,13 @@ const seedPlaces = [
     // Hosts type a destination freehand, so the catalogue name and the ride text
     // rarely match exactly. Aliases bridge that until ingestion gives both sides
     // a shared Place ID - see DiscoveryContractAdapter.referencesPlace().
-    rideDestinationAliases: ['Georgetown', 'Georgetown, Penang']
+    rideDestinationAliases: ['Georgetown', 'Georgetown, Penang'],
+    travelNote: 'About 4 hours north of Kuala Lumpur by road. The core is walkable end to end, so most visitors park once and stay on foot.',
+    reviews: [
+      review('Priya Devarajan', 5, 'Went for the street art and stayed for the clan jetties. Get there before nine if you want the lanes to yourself.'),
+      review('Marcus Loh', 4, 'Beautiful, but genuinely hot by midday. The museums are a good way to break up the afternoon.'),
+      review('Hannah Yusof', 5, 'Three days was not enough. Every second shophouse is a cafe, a workshop or somebody’s front room.')
+    ]
   },
   {
     id: 'p_jonker',
@@ -61,7 +82,13 @@ const seedPlaces = [
     state: 'Melaka',
     photoReferences: [photo('jonker-1', 'Tan Boon Hock')],
     lifecycleState: PLACE_STATE.ACTIVE,
-    rideDestinationAliases: ['Melaka Sentral', 'Melaka']
+    rideDestinationAliases: ['Melaka Sentral', 'Melaka'],
+    travelNote: 'Roughly 2 hours from Kuala Lumpur. The street closes to traffic on Friday, Saturday and Sunday evenings, which is when the night market runs.',
+    reviews: [
+      review('Chen Yi Ling', 5, 'Come hungry and start at the far end. The chicken rice ball queues get long after seven.'),
+      review('Amir Hakim', 4, 'Packed on a Saturday night, much calmer on a weekday afternoon if crowds are not your thing.'),
+      review('Grace Sim', 4, 'Half food, half antique shops. Worth wandering the side lanes rather than staying on the main strip.')
+    ]
   },
   {
     id: 'p_cameron',
@@ -75,7 +102,13 @@ const seedPlaces = [
     lat: 4.4710, lng: 101.3776,
     state: 'Pahang',
     photoReferences: [photo('cameron-1', 'Nurul Huda')],
-    lifecycleState: PLACE_STATE.ACTIVE
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'A 4 hour climb from Kuala Lumpur on winding road. Bring a jacket - it drops to around 15C at night, which catches most first-time visitors out.',
+    reviews: [
+      review('Daniel Ooi', 5, 'The tea terraces are the postcard shot, but the mossy forest trail was the part I remember.'),
+      review('Siti Nurhaliza binti Rahman', 4, 'Weekends are bumper to bumper on the way up. Left at 6am on a Sunday and it was fine.'),
+      review('Kelvin Tan', 4, 'Cool, green and quiet once you get off the main road. The strawberry farms are a tourist trap, skip them.')
+    ]
   },
   {
     id: 'p_gurney',
@@ -89,7 +122,13 @@ const seedPlaces = [
     lat: 5.4380, lng: 100.3090,
     state: 'Penang',
     photoReferences: [photo('gurney-1', 'Kavitha Menon')],
-    lifecycleState: PLACE_STATE.ACTIVE
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'On the Penang seafront, a short drive from George Town. Stalls open from late afternoon; most are cash only.',
+    reviews: [
+      review('Wong Mei Fong', 4, 'Char kway teow here is the benchmark. Sit at the plastic tables by the water.'),
+      review('Ravi Chandran', 4, 'Touristy now, but the rojak and the cendol still hold up. Go on a weekday.'),
+      review('Lisa Abdullah', 5, 'Sea breeze, cheap food, no pretence. Exactly what a hawker centre should be.')
+    ]
   },
   {
     id: 'p_kellie',
@@ -103,7 +142,13 @@ const seedPlaces = [
     lat: 4.4690, lng: 101.0630,
     state: 'Perak',
     photoReferences: [photo('kellie-1', 'Daniel Wong')],
-    lifecycleState: PLACE_STATE.ACTIVE
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'Near Batu Gajah in Perak, about 2.5 hours from Kuala Lumpur. Small site - an hour covers it, so most people pair it with Ipoh.',
+    reviews: [
+      review('Nathan Fernandez', 4, 'Smaller than the photos suggest, but the half-finished rooms are genuinely eerie.'),
+      review('Aina Sofea', 5, 'The story behind it is better than the building. Read up before you go.'),
+      review('Terence Lim', 3, 'Worth an hour if you are passing through Ipoh. Not worth a trip on its own.')
+    ]
   },
   {
     id: 'p_sekinchan',
@@ -118,7 +163,13 @@ const seedPlaces = [
     state: 'Selangor',
     photoReferences: [photo('sekinchan-1', 'Farid Hakim')],
     lifecycleState: PLACE_STATE.ACTIVE,
-    rideDestinationAliases: ['Cyberjaya', 'Cyberjaya, Selangor']
+    rideDestinationAliases: ['Cyberjaya', 'Cyberjaya, Selangor'],
+    travelNote: 'About 1.5 hours north-west of Kuala Lumpur on the coast road. The fields are green after planting and gold before harvest - timing changes the whole trip.',
+    reviews: [
+      review('Yusof Kamal', 5, 'Went during harvest and the whole plain was gold. Completely different to the photos I had seen.'),
+      review('Michelle Teoh', 4, 'Flat, open and very quiet. Good half day trip, pair it with the fishing village for seafood.'),
+      review('Arun Segar', 4, 'Not much infrastructure - bring water and sun cover, there is no shade out there.')
+    ]
   },
 
   // --- Provisional tier: two reviews. Rating must be suppressed in favour of a
@@ -218,6 +269,188 @@ const seedPlaces = [
     absenceCounter: 11
   },
 
+  // --- Peer places.
+  //
+  // Visitation headroom is measured against the highest review count among
+  // candidates of the same category in the same state. A place that is the only
+  // one of its category in its state is therefore trivially the most-visited in
+  // its own group and scores 0 - which drags every score down and hides most of
+  // the catalogue behind the presentation thresholds.
+  //
+  // That is an artefact of a small fixture, not of the rule: a real catalogue has
+  // many places per category and state. These entries give each group actual
+  // members so the anti-overtourism signal does what it is meant to - the busiest
+  // place in a group scores 0, the quieter ones score high.
+  {
+    id: 'p_kek_lok_si',
+    sourcePlaceId: 'fixture_kek_lok_si',
+    name: 'Kek Lok Si Temple',
+    category: CATEGORY.HERITAGE,
+    description: 'A hillside temple complex crowned by a bronze statue of Kuan Yin.',
+    descriptionIsTemplate: false,
+    rating: 4.5, reviewCount: 9800,
+    lat: 5.3993, lng: 100.2734,
+    state: 'Penang',
+    photoReferences: [photo('keklokis-1', 'Ong Chin Hui')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    // Air Itam is a short drive from George Town, so a ride advertised to
+    // "Georgetown, Penang" genuinely serves this destination too.
+    rideDestinationAliases: ['Georgetown'],
+    travelNote: 'In Air Itam, a short drive inland from George Town. There is an inclined lift to the upper terrace if the climb is not for you.',
+    reviews: [
+      review('Jason Teoh', 5, 'Go late afternoon and stay for the lights. The climb is worth it.'),
+      review('Farah Idris', 4, 'Beautiful, but very busy on public holidays. Weekday mornings are calm.')
+    ]
+  },
+  {
+    id: 'p_chulia',
+    sourcePlaceId: 'fixture_chulia',
+    name: 'Chulia Street Night Hawkers',
+    category: CATEGORY.CULINARY,
+    description: 'A street of after-dark stalls trading duck kway chap, wantan mee and koay teow.',
+    descriptionIsTemplate: false,
+    rating: 4.2, reviewCount: 3100,
+    lat: 5.4165, lng: 100.3357,
+    state: 'Penang',
+    photoReferences: [photo('chulia-1', 'Ismail Bakar')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    // This street is inside George Town, so a ride there serves it directly.
+    rideDestinationAliases: ['Georgetown'],
+    travelNote: 'In the middle of George Town, so easy to reach on foot. Most stalls open after 7pm and run past midnight.',
+    reviews: [
+      review('Adeline Kwan', 4, 'Cheaper and less touristy than Gurney. The duck kway chap is the one to get.'),
+      review('Vikram Nair', 4, 'Chaotic in a good way. Bring cash and be ready to share a table.')
+    ]
+  },
+  {
+    id: 'p_taman_negara',
+    sourcePlaceId: 'fixture_taman_negara',
+    name: 'Taman Negara Canopy Walkway',
+    category: CATEGORY.NATURE,
+    description: 'A suspended walkway strung through one of the oldest rainforests on earth.',
+    descriptionIsTemplate: false,
+    rating: 4.6, reviewCount: 4200,
+    lat: 4.3833, lng: 102.4000,
+    state: 'Pahang',
+    photoReferences: [photo('tamannegara-1', 'Zaharah Omar')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'Around 3.5 hours from Kuala Lumpur, then a boat leg upriver. Most people stay a night rather than attempt it in a day.',
+    reviews: [
+      review('Nicholas Lai', 5, 'The canopy walk is the headline but the night jungle trek was better.'),
+      review('Rohana Ismail', 4, 'Humid and buggy. Bring repellent and accept you will be damp all day.')
+    ]
+  },
+  {
+    id: 'p_a_famosa',
+    sourcePlaceId: 'fixture_a_famosa',
+    name: 'A Famosa and St Paul’s Hill',
+    category: CATEGORY.HERITAGE,
+    description: 'The surviving gate of a Portuguese fortress, below a ruined hilltop church.',
+    descriptionIsTemplate: false,
+    rating: 4.1, reviewCount: 11200,
+    lat: 2.1919, lng: 102.2501,
+    state: 'Melaka',
+    photoReferences: [photo('afamosa-1', 'Rohan Menon')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    rideDestinationAliases: ['Melaka Sentral'],
+    travelNote: 'Central Melaka, walkable from Jonker Street. Little shade on the hill, so go early or late.',
+    reviews: [
+      review('Emily Choo', 4, 'Small site, big history. Read the plaques or you will miss the point of it.'),
+      review('Hafiz Rahman', 3, 'Very crowded midday. The view from the top is the best part.')
+    ]
+  },
+  {
+    id: 'p_christ_church',
+    sourcePlaceId: 'fixture_christ_church',
+    name: 'Christ Church Melaka',
+    category: CATEGORY.HERITAGE,
+    description: 'An eighteenth-century Dutch church of handmade brick, still in weekly use.',
+    descriptionIsTemplate: false,
+    rating: 4.3, reviewCount: 8600,
+    lat: 2.1943, lng: 102.2493,
+    state: 'Melaka',
+    photoReferences: [photo('christchurch-1', 'Sylvia Lim')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'On Dutch Square in central Melaka. Free to enter outside service times; the interior beams are single lengths of timber.',
+    reviews: [
+      review('Andrew Pang', 4, 'Photographed to death from outside, but almost nobody goes in. Worth stepping inside.'),
+      review('Noraini Yaakob', 5, 'The ceiling beams alone are worth the visit.')
+    ]
+  },
+  {
+    id: 'p_batu_caves',
+    sourcePlaceId: 'fixture_batu_caves',
+    name: 'Batu Caves',
+    category: CATEGORY.HERITAGE,
+    description: 'A limestone cave temple reached by 272 painted steps under a gilded statue.',
+    descriptionIsTemplate: false,
+    rating: 4.4, reviewCount: 45000,
+    lat: 3.2379, lng: 101.6840,
+    state: 'Selangor',
+    photoReferences: [photo('batucaves-1', 'Kumar Selvam')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    rideDestinationAliases: ['KLCC', 'Kuala Lumpur'],
+    travelNote: 'Half an hour north of Kuala Lumpur and on the commuter rail line. Cover shoulders and knees to enter the temple.',
+    reviews: [
+      review('Deepa Krishnan', 4, 'Go before 8am. By ten it is shoulder to shoulder on the steps.'),
+      review('Tom Lau', 4, 'The macaques will take food straight out of your hand. Do not carry it openly.')
+    ]
+  },
+  {
+    id: 'p_blue_mosque',
+    sourcePlaceId: 'fixture_blue_mosque',
+    name: 'Sultan Salahuddin Abdul Aziz Mosque',
+    category: CATEGORY.HERITAGE,
+    description: 'A blue-domed mosque in Shah Alam with four of the tallest minarets in the region.',
+    descriptionIsTemplate: false,
+    rating: 4.6, reviewCount: 6200,
+    lat: 3.0787, lng: 101.5209,
+    state: 'Selangor',
+    photoReferences: [photo('bluemosque-1', 'Aisyah Kamarudin')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'In Shah Alam, about 40 minutes from central Kuala Lumpur. Robes are lent at the entrance and guided visits run outside prayer times.',
+    reviews: [
+      review('Iman Zulkifli', 5, 'Far quieter than Batu Caves and every bit as striking. The guides are generous with their time.'),
+      review('Charles Ng', 5, 'Went as a non-Muslim visitor and was made very welcome. Check the visiting hours first.')
+    ]
+  },
+  {
+    id: 'p_ipoh_old_town',
+    sourcePlaceId: 'fixture_ipoh_old_town',
+    name: 'Ipoh Old Town',
+    category: CATEGORY.HERITAGE,
+    description: 'A grid of tin-boom shophouses now holding white coffee kopitiams and mural lanes.',
+    descriptionIsTemplate: false,
+    rating: 4.3, reviewCount: 7600,
+    lat: 4.5975, lng: 101.0901,
+    state: 'Perak',
+    photoReferences: [photo('ipoh-1', 'Lee Chee Meng')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'Roughly 2 hours from Kuala Lumpur and on the electric train line. The old town is compact enough to cover on foot in a morning.',
+    reviews: [
+      review('Serena Yap', 5, 'The kopitiams are the reason to come. Sit in one for an hour and watch the street.'),
+      review('Zulkarnain Aziz', 4, 'Quieter than Penang for the same kind of shophouse architecture.')
+    ]
+  },
+  {
+    id: 'p_gua_tempurung',
+    sourcePlaceId: 'fixture_gua_tempurung',
+    name: 'Gua Tempurung',
+    category: CATEGORY.NATURE,
+    description: 'A limestone cave system with a river passage running through its lower level.',
+    descriptionIsTemplate: false,
+    rating: 4.4, reviewCount: 2400,
+    lat: 4.4147, lng: 101.1836,
+    state: 'Perak',
+    photoReferences: [photo('guatempurung-1', 'Michael Toh')],
+    lifecycleState: PLACE_STATE.ACTIVE,
+    travelNote: 'Near Gopeng in Perak, about 2 hours from Kuala Lumpur. The wet route involves wading and crawling; the dry route is a walkway.',
+    reviews: [
+      review('Preeti Sharma', 5, 'Did the full wet route. Cold, muddy and the best few hours of the trip.'),
+      review('Boon Keat Sim', 4, 'The dry route is fine for kids. Bring a torch even though it is lit.')
+    ]
+  },
+
   // --- VM2026 event: seasonal alignment scores 1.0 while its window is open.
   {
     id: 'p_vm2026_rainforest',
@@ -229,9 +462,15 @@ const seedPlaces = [
     rating: 4.7, reviewCount: 2890,
     lat: 1.7500, lng: 110.3200,
     state: 'Sarawak',
-    photoReferences: [photo('rwmf-1', 'Melissa Anak Jipin')],
+    photoReferences: [photo('rwmf-1', 'Melissa Anak Jipin'), photo('rwmf-2', 'Joseph Anak Ubang')],
     lifecycleState: PLACE_STATE.ACTIVE,
-    isVm2026Event: true
+    isVm2026Event: true,
+    travelNote: 'Held at the Sarawak Cultural Village near Kuching, about 45 minutes from the city. Tickets and accommodation both sell out well ahead of the festival weekend.',
+    reviews: [
+      review('Elaine Chong', 5, 'Workshops in the afternoon are the best part and most people skip them for the evening stage.'),
+      review('Bilal Zainuddin', 5, 'Rainforest setting makes it. Nothing else in the region sounds or feels like this.'),
+      review('Sarah Kupang', 4, 'Muddy if it rains, and it will rain. Wear something you do not mind ruining.')
+    ]
   }
 ];
 
@@ -240,7 +479,11 @@ const defaults = {
   stateBeforeDemotion: null,
   isVm2026Event: false,
   photoReferences: [],
-  rideDestinationAliases: []
+  rideDestinationAliases: [],
+  // A place with too few reviews to summarise also has too few to display - the
+  // same thin-data condition FR-6.10 and FR-6.16 both turn on.
+  reviews: [],
+  travelNote: ''
 };
 
 function freshState() {

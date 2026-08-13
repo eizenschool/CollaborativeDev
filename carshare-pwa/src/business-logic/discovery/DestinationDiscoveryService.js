@@ -121,20 +121,36 @@ export const DestinationDiscoveryService = {
     };
   },
 
-  /** UC6.2 - one destination, with the same rides/demand context the list used. */
-  async getDestination(placeId, { travelDate } = {}) {
-    const [place, rides, demand] = await Promise.all([
-      discoveryDb.getPlace(placeId),
-      DiscoveryContractAdapter.getPublishedRides(),
-      discoveryDb.latentDemand(travelDate)
-    ]);
+  /**
+   * UC6.2 - one destination, carrying the same scores the list showed.
+   *
+   * Deliberately runs the full ranking rather than scoring this place on its own.
+   * Two of the signals are relative to the candidate set - visitation headroom is
+   * measured against same-category peers, journey cost against the furthest
+   * candidate - so a place scored in isolation would produce different numbers
+   * from the card the user just tapped. Reusing the ranking guarantees the detail
+   * screen and the list can never disagree.
+   */
+  async getDestination(placeId, { userId, origin, travelDate } = {}) {
+    const place = await discoveryDb.getPlace(placeId);
     if (!place) return null;
 
-    const serving = DiscoveryContractAdapter.getRidesByPlace([place], rides, travelDate);
+    const ranked = await this.getRecommendations({ userId, origin, travelDate });
+    const candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
+      .find((entry) => entry.placeId === placeId);
+
+    // A place withheld by the weather gate never reaches scoring, so the detail
+    // screen still opens - it simply has no score to explain.
+    const weatherWithheld = ranked.weatherWithheld.find((entry) => entry.id === placeId);
+
     return {
       place,
-      rides: serving.get(place.id) || [],
-      interestedUsers: demand.get(place.id) || 0
+      candidate: candidate || null,
+      rides: candidate?.rides || [],
+      interestedUsers: candidate?.interestedUsers || 0,
+      distanceKm: candidate?.distanceKm ?? null,
+      weatherWithheld: Boolean(weatherWithheld),
+      weatherReason: weatherWithheld?.weatherReason || null
     };
   },
 

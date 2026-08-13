@@ -23,7 +23,7 @@ export default function PreferencePrompt({ onSave, onDismiss }) {
 
   return (
     <section className="dsc-prompt">
-      <h3>Tell us what you enjoy</h3>
+      <h2>Tell us what you enjoy</h2>
       <p>You have no trips yet, so pick what interests you and we will start from there.</p>
 
       <div className="dsc-prompt-choices">
@@ -40,7 +40,7 @@ export default function PreferencePrompt({ onSave, onDismiss }) {
         ))}
       </div>
 
-      <div className="dsc-prompt-actions">
+      <div className="dsc-actions">
         <button
           className="dsc-btn dsc-btn-primary"
           onClick={() => onSave(selected)}
