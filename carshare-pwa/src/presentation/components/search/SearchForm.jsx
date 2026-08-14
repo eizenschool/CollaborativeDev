@@ -1,56 +1,75 @@
-import { MapPin, Calendar, Clock, Search } from 'lucide-react'
+import {
+  IconCalendar,
+  IconClock,
+  IconMapPin,
+  IconSearch
+} from '../icons.jsx';
 
-export default function SearchForm({
-  from, setFrom, to, setTo, date, setDate, time, setTime, onSearch, isDesktop,
-}) {
-  const inputBase = {
-    backgroundColor: '#F9FAFB', border: '1.5px solid #E5E7EB', color: '#111827',
-    borderRadius: 12, outline: 'none', fontSize: 14, width: '100%',
-  }
-  const iconStyle = { color: '#9CA3AF', flexShrink: 0 }
-  const labelStyle = { color: '#6B7280', fontSize: 11, fontWeight: 600, marginBottom: 4 }
-
-  const Field = ({ icon, label, value, onChange, type = 'text', placeholder }) => (
-    <div className="flex-1 min-w-0">
-      <p style={labelStyle}>{label}</p>
-      <div className="flex items-center gap-2 px-3 py-2.5" style={inputBase}>
-        <span>{icon}</span>
-        <input
-          type={type} value={value} onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="flex-1 min-w-0 bg-transparent outline-none text-sm"
-          style={{ color: '#111827' }}
-        />
-      </div>
-    </div>
-  )
+export default function SearchForm({ criteria, onChange, onSubmit, loading }) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+  const patch = (values) => onChange({ ...criteria, ...values });
 
   return (
-    <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid #E5E7EB' }}>
-      <div className={isDesktop ? 'flex items-end gap-3' : 'space-y-3'}>
-        <Field icon={<MapPin size={14} style={iconStyle} />} label="DEPARTURE" value={from} onChange={setFrom} placeholder="From where?" />
-        <Field icon={<MapPin size={14} style={{ ...iconStyle, color: '#EF4444' }} />} label="DESTINATION" value={to} onChange={setTo} placeholder="Where to?" />
-        <Field icon={<Calendar size={14} style={iconStyle} />} label="DATE" value={date} onChange={setDate} type="date" />
-        <Field icon={<Clock size={14} style={iconStyle} />} label="TIME" value={time} onChange={setTime} type="time" />
-        <div className={isDesktop ? 'flex-shrink-0' : ''}>
-          {isDesktop && <p style={labelStyle}>&nbsp;</p>}
-          <button
-            onClick={onSearch}
-            className="flex items-center justify-center gap-2 font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-95"
-            style={{
-              backgroundColor: '#16A34A',
-              padding: isDesktop ? '10px 24px' : '12px',
-              width: isDesktop ? 'auto' : '100%',
-              fontFamily: "'Poppins', sans-serif",
-              fontSize: 14,
-              boxShadow: '0 4px 12px rgba(22,163,74,0.3)',
-            }}>
-            <Search size={16} />
-            {!isDesktop && 'Search Rides'}
-            {isDesktop && 'Search'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+    <form className="smart-search-form" onSubmit={onSubmit} aria-label="Search available rides">
+      <label className="smart-field smart-field-route" htmlFor="smart-search-pickup">
+        <span>Pickup</span>
+        <span className="smart-input-wrap">
+          <IconMapPin size={16} aria-hidden="true" />
+          <input
+            id="smart-search-pickup"
+            autoComplete="street-address"
+            value={criteria.pickup}
+            onChange={(event) => patch({ pickup: event.target.value })}
+            placeholder="e.g. KL Sentral"
+          />
+        </span>
+      </label>
+
+      <label className="smart-field smart-field-route" htmlFor="smart-search-destination">
+        <span>Destination</span>
+        <span className="smart-input-wrap destination">
+          <IconMapPin size={16} aria-hidden="true" />
+          <input
+            id="smart-search-destination"
+            autoComplete="street-address"
+            value={criteria.destination}
+            onChange={(event) => patch({ destination: event.target.value, destinationPlaceId: '' })}
+            placeholder="e.g. Georgetown"
+          />
+        </span>
+      </label>
+
+      <label className="smart-field" htmlFor="smart-search-date">
+        <span>Travel date</span>
+        <span className="smart-input-wrap">
+          <IconCalendar size={16} aria-hidden="true" />
+          <input
+            id="smart-search-date"
+            type="date"
+            min={today}
+            value={criteria.date}
+            onChange={(event) => patch({ date: event.target.value })}
+          />
+        </span>
+      </label>
+
+      <label className="smart-field" htmlFor="smart-search-time">
+        <span>Depart after</span>
+        <span className="smart-input-wrap">
+          <IconClock size={16} aria-hidden="true" />
+          <input
+            id="smart-search-time"
+            type="time"
+            value={criteria.departAfter}
+            onChange={(event) => patch({ departAfter: event.target.value })}
+          />
+        </span>
+      </label>
+
+      <button className="smart-search-submit" type="submit" disabled={loading}>
+        <IconSearch size={18} aria-hidden="true" />
+        {loading ? 'Searching…' : 'Search rides'}
+      </button>
+    </form>
+  );
 }

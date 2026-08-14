@@ -1,311 +1,251 @@
-import { useState, useMemo } from 'react'
-import { SlidersHorizontal, X, Search, Star, MapPin, Clock, Dog, Route, Users } from 'lucide-react'
-import SearchForm from './SearchForm'
-import { RideCard, MultiLegCard, StatusBadge } from './RideCards'
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext.jsx';
+import { getAuthNavigation } from '../../../business-logic/authAccess.js';
+import { FavouriteService } from '../../../business-logic/FavouriteService.js';
+import {
+  SEARCH_RESTRICTION_OPTIONS,
+  SMART_SEARCH_SORTS,
+  SmartSearchService,
+  normalizeSmartSearchCriteria,
+  smartSearchCriteriaFromParams,
+  smartSearchCriteriaToParams,
+  validateSmartSearchCriteria
+} from '../../../business-logic/SmartSearchService.js';
+import { IconFilter, IconSearch, IconX } from '../icons.jsx';
+import SearchForm from './SearchForm.jsx';
+import { SearchRideCard } from './RideCards.jsx';
+import '../../styles/search.css';
 
-const hosts = [
-  { name: 'Ahmad Rizal', avatar: 'https://i.pravatar.cc/150?u=1', score: 4.9, tier: 'Gold' },
-  { name: 'Sarah Tan', avatar: 'https://i.pravatar.cc/150?u=2', score: 4.7, tier: 'Silver' },
-  { name: 'Raj', avatar: 'https://i.pravatar.cc/150?u=3', score: 4.8, tier: 'Bronze' },
-  { name: 'Nurul', avatar: 'https://i.pravatar.cc/150?u=4', score: 4.6, tier: 'Silver' }
-];
+function FilterPanel({ criteria, onChange, onClear, mobile, onClose, onApply }) {
+  const patch = (values) => onChange({ ...criteria, ...values });
+  const toggleTag = (tag) => patch({
+    tags: criteria.tags.includes(tag)
+      ? criteria.tags.filter((current) => current !== tag)
+      : [...criteria.tags, tag]
+  });
 
-const RESULTS = [
-  {
-    id: 'sr1', from: 'KL Sentral, Brickfields', to: 'Georgetown, Penang',
-    date: 'Sat, 21 Dec 2024', departTime: '7:00 AM', arrivalTime: '11:30 AM',
-    durationLabel: '4h 30m', seats: 3, host: hosts[0],
-    tags: ['Pet-friendly', 'No smoking'], status: 'Available',
-    scale: 'Intercity', contribution: 'Snacks & drinks',
-  },
-  {
-    id: 'sr2', from: 'SS2, Petaling Jaya', to: 'USJ 10, Subang Jaya',
-    date: 'Mon, 23 Dec 2024', departTime: '7:30 AM', arrivalTime: '8:00 AM',
-    durationLabel: '30m', seats: 2, host: hosts[1],
-    tags: ['No smoking', 'Women-only'], status: 'Departing soon',
-    scale: 'Urban', contribution: 'Toll contribution',
-  },
-  {
-    id: 'sr_ml', multiLeg: true,
-    from: 'KL Sentral', to: 'Georgetown, Penang',
-    transferAt: 'Ipoh Old Town',
-    date: 'Sat, 21 Dec 2024',
-    totalDuration: '5h 15m',
-    status: 'Available',
-    leg1: { from: 'KL Sentral', to: 'Ipoh Old Town', time: '6:30 AM', host: hosts[2], duration: '3h' },
-    leg2: { from: 'Ipoh Old Town', to: 'Georgetown, Penang', time: '9:45 AM', host: hosts[3], duration: '2h 15m' },
-  },
-  {
-    id: 'sr3', from: 'Ampang Point', to: 'KLCC, Kuala Lumpur',
-    date: 'Tue, 24 Dec 2024', departTime: '8:15 AM', arrivalTime: '8:40 AM',
-    durationLabel: '25m', seats: 1, host: hosts[2],
-    tags: ['No smoking'], status: 'Full',
-    scale: 'Urban', contribution: 'No contribution needed',
-  },
-  {
-    id: 'sr4', from: 'Shah Alam City Centre', to: 'Putrajaya IOI City Mall',
-    date: 'Wed, 25 Dec 2024', departTime: '8:30 AM', arrivalTime: '9:15 AM',
-    durationLabel: '45m', seats: 4, host: hosts[3],
-    tags: ['Pet-friendly', 'No smoking', 'Child seat available'], status: 'Available',
-    scale: 'Intercity', contribution: 'Hot drinks',
-  },
-  {
-    id: 'sr5', from: 'Bangsar South, KL', to: 'Putrajaya Sentral',
-    date: 'Thu, 26 Dec 2024', departTime: '9:00 AM', arrivalTime: '9:50 AM',
-    durationLabel: '50m', seats: 2, host: hosts[1],
-    tags: ['No smoking', 'Women-only'], status: 'Available',
-    scale: 'Intercity', contribution: 'Coffee',
-  },
-]
-
-const FILTERS = [
-  { id: 'morning', label: 'Morning', icon: <Clock size={11} /> },
-  { id: 'reputation', label: 'Top Rated', icon: <Star size={11} /> },
-  { id: 'pet', label: 'Pet-Friendly', icon: <Dog size={11} /> },
-  { id: 'urban', label: 'Urban Route', icon: <Route size={11} /> },
-  { id: 'intercity', label: 'Intercity', icon: <MapPin size={11} /> },
-  { id: 'women', label: "Women-only", icon: <Users size={11} /> },
-]
-
-function FilterChips({ active, toggle }) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-      {FILTERS.map(f => {
-        const on = active.has(f.id)
-        return (
-          <button key={f.id} onClick={() => toggle(f.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border whitespace-nowrap flex-shrink-0 transition-all"
-            style={{
-              backgroundColor: on ? '#16A34A' : 'white',
-              color: on ? 'white' : '#374151',
-              borderColor: on ? '#16A34A' : '#E5E7EB',
-              boxShadow: on ? '0 2px 8px rgba(22,163,74,0.25)' : 'none',
-            }}>
-            <span style={{ opacity: on ? 1 : 0.6 }}>{f.icon}</span>
-            {f.label}
-            {on && <X size={10} />}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function FavouritesPanel({ favIds, results }) {
-  const favs = results.filter(r => favIds.has(r.id))
-  if (favs.length === 0) return (
-    <div className="flex flex-col items-center justify-center py-10 text-center">
-      <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ backgroundColor: '#FEF9C3' }}>
-        <Star size={20} style={{ color: '#F59E0B' }} />
+    <div className={mobile ? 'search-filter-sheet' : 'search-filter-panel'} role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-label="Search filters">
+      <div className="search-filter-heading">
+        <div><p>REFINE RESULTS</p><h2>Filters and sorting</h2></div>
+        {mobile && <button type="button" autoFocus onClick={onClose} aria-label="Close filters"><IconX size={20} /></button>}
       </div>
-      <p className="text-sm font-semibold" style={{ color: '#9CA3AF' }}>No favourites saved yet</p>
-      <p className="text-xs mt-1" style={{ color: '#D1D5DB' }}>Tap ★ on any ride card to save it here</p>
-    </div>
-  )
-  return (
-    <div className="space-y-2">
-      {favs.filter(r => !r.multiLeg).map(sr => (
-        <div key={sr.id} className="flex items-center gap-3 bg-white px-3 py-2.5 rounded-xl"
-          style={{ border: '1px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-          <Star size={14} fill="#F59E0B" style={{ color: '#F59E0B', flexShrink: 0 }} />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold truncate" style={{ color: '#111827' }}>
-              {sr.from.split(',')[0]} → {sr.to.split(',')[0]}
-            </p>
-            <p className="text-xs" style={{ color: '#9CA3AF' }}>{sr.date} · {sr.departTime}</p>
-          </div>
-          <StatusBadge status={sr.status} />
+
+      <fieldset>
+        <legend>Journey scale</legend>
+        <div className="search-segmented-control">
+          {['', 'Urban', 'Intercity'].map((scale) => (
+            <button key={scale || 'all'} type="button" aria-pressed={criteria.journeyScale === scale} onClick={() => patch({ journeyScale: scale })}>
+              {scale || 'All'}
+            </button>
+          ))}
         </div>
-      ))}
+      </fieldset>
+
+      <div className="search-filter-grid">
+        <label>Minimum seats
+          <select value={criteria.minSeats} onChange={(event) => patch({ minSeats: Number(event.target.value) })}>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((count) => <option value={count} key={count}>{count}+</option>)}
+          </select>
+        </label>
+        <label>Host rating
+          <select value={criteria.minRating} onChange={(event) => patch({ minRating: Number(event.target.value) })}>
+            <option value="0">Any</option>
+            <option value="4">4.0+</option>
+            <option value="4.5">4.5+</option>
+            <option value="4.8">4.8+</option>
+          </select>
+        </label>
+      </div>
+
+      <label className="search-filter-label" htmlFor="search-contribution">Contribution contains
+        <input id="search-contribution" value={criteria.contribution} onChange={(event) => patch({ contribution: event.target.value })} placeholder="e.g. snacks or toll" />
+      </label>
+
+      <fieldset>
+        <legend>Ride preferences</legend>
+        <div className="search-filter-tags">
+          {SEARCH_RESTRICTION_OPTIONS.map((tag) => (
+            <button type="button" key={tag} aria-pressed={criteria.tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</button>
+          ))}
+        </div>
+      </fieldset>
+
+      <label className="search-filter-label" htmlFor="search-sort">Sort results
+        <select id="search-sort" value={criteria.sort} onChange={(event) => patch({ sort: event.target.value })}>
+          <option value={SMART_SEARCH_SORTS.DEPARTURE}>Earliest departure</option>
+          <option value={SMART_SEARCH_SORTS.HOST_IMPACT}>Highest Host Impact</option>
+        </select>
+      </label>
+
+      <div className="search-filter-actions">
+        <button type="button" className="search-clear-button" onClick={onClear}>Clear filters</button>
+        {mobile && <button type="button" className="search-apply-button" onClick={onApply}>Apply filters</button>}
+      </div>
     </div>
-  )
+  );
 }
 
 export default function SearchModule() {
-  const isDesktop = true; 
-  const [from, setFrom] = useState('KL Sentral, Brickfields')
-  const [to, setTo] = useState('')
-  const [date, setDate] = useState('2024-12-21')
-  const [time, setTime] = useState('07:00')
-  const [searched, setSearched] = useState(true)
-  const [activeFilters, setActiveFilters] = useState(new Set())
-  const [favIds, setFavIds] = useState(new Set(['sr1']))
-  const [sideTab, setSideTab] = useState('results')
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const parameterKey = searchParams.toString();
+  const appliedCriteria = useMemo(() => smartSearchCriteriaFromParams(searchParams), [parameterKey]);
+  const [criteria, setCriteria] = useState(appliedCriteria);
+  const [rides, setRides] = useState([]);
+  const [favouriteIds, setFavouriteIds] = useState(new Set());
+  const [pendingRideId, setPendingRideId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterTriggerRef = useRef(null);
 
-  const toggleFilter = (id) =>
-    setActiveFilters(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  useEffect(() => setCriteria(appliedCriteria), [parameterKey]);
 
-  const toggleFav = (id) =>
-    setFavIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    SmartSearchService.search(appliedCriteria)
+      .then((results) => active && setRides(results))
+      .catch((searchError) => active && setError(searchError.message))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [parameterKey]);
 
-  const filtered = useMemo(() => {
-    if (activeFilters.size === 0) return RESULTS
-    return RESULTS.filter(r => {
-      if (r.multiLeg) return !activeFilters.has('urban')
-      if (activeFilters.has('morning')) {
-        const h = parseInt(r.departTime)
-        if (h >= 12) return false
-      }
-      if (activeFilters.has('reputation') && r.host.score < 4.7) return false
-      if (activeFilters.has('pet') && !r.tags.includes('Pet-friendly')) return false
-      if (activeFilters.has('urban') && r.scale !== 'Urban') return false
-      if (activeFilters.has('intercity') && r.scale !== 'Intercity') return false
-      if (activeFilters.has('women') && !r.tags.includes('Women-only')) return false
-      return true
-    })
-  }, [activeFilters])
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setFavouriteIds(new Set());
+      return undefined;
+    }
+    FavouriteService.list(user.id)
+      .then((saved) => active && setFavouriteIds(new Set(saved.map((ride) => ride.id))))
+      .catch(() => active && setFavouriteIds(new Set()));
+    return () => { active = false; };
+  }, [user]);
 
-  if (isDesktop) {
-    return (
-      <div className="min-h-screen" style={{ backgroundColor: '#F6FAF7' }}>
-        <div className="max-w-[1280px] mx-auto px-8 py-8">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold" style={{ color: '#111827', fontFamily: "'Poppins', sans-serif" }}>Smart Search</h1>
-            <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>Find rides across Malaysia with intelligent route matching</p>
-          </div>
+  useEffect(() => {
+    if (!filtersOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') closeFilters();
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [filtersOpen]);
 
-          <div className="mb-5">
-            <SearchForm from={from} setFrom={setFrom} to={to} setTo={setTo}
-              date={date} setDate={setDate} time={time} setTime={setTime}
-              onSearch={() => setSearched(true)} isDesktop />
-          </div>
-
-          <div className="flex gap-8 items-start">
-            <aside className="w-64 flex-shrink-0 sticky top-[88px] space-y-4">
-              <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #E5E7EB' }}>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-bold" style={{ color: '#9CA3AF' }}>FILTERS</p>
-                  {activeFilters.size > 0 && (
-                    <button onClick={() => setActiveFilters(new Set())} className="text-xs" style={{ color: '#EF4444' }}>Clear all</button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {FILTERS.map(f => {
-                    const on = activeFilters.has(f.id)
-                    return (
-                      <button key={f.id} onClick={() => toggleFilter(f.id)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all"
-                        style={{ backgroundColor: on ? '#16A34A' : 'white', color: on ? 'white' : '#374151', borderColor: on ? '#16A34A' : '#E5E7EB' }}>
-                        <span style={{ opacity: on ? 1 : 0.6 }}>{f.icon}</span>{f.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #E5E7EB' }}>
-                <div className="flex items-center gap-2 mb-3">
-                  <Star size={13} fill="#F59E0B" style={{ color: '#F59E0B' }} />
-                  <p className="text-xs font-bold" style={{ color: '#9CA3AF' }}>SAVED RIDES</p>
-                </div>
-                <FavouritesPanel favIds={favIds} results={RESULTS} />
-              </div>
-            </aside>
-
-            <main className="flex-1 min-w-0">
-              {searched && (
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-sm font-semibold" style={{ color: '#374151' }}>
-                    {filtered.length} result{filtered.length !== 1 ? 's' : ''}
-                    {activeFilters.size > 0 && <span style={{ color: '#9CA3AF', fontWeight: 400 }}> · filtered</span>}
-                  </p>
-                  <div className="flex items-center gap-1.5 text-xs" style={{ color: '#9CA3AF' }}>
-                    <SlidersHorizontal size={12} />
-                    Sort: Departure time
-                  </div>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-4">
-                {filtered.map(r =>
-                  r.multiLeg
-                    ? <div key={r.id} className="col-span-2"><MultiLegCard ride={r} isFav={favIds.has(r.id)} onToggleFav={() => toggleFav(r.id)} /></div>
-                    : <RideCard key={r.id} ride={r} isFav={favIds.has(r.id)} onToggleFav={() => toggleFav(r.id)} onView={() => {}} />
-                )}
-                {filtered.length === 0 && (
-                  <div className="col-span-2 text-center py-16">
-                    <Search size={32} style={{ color: '#D1D5DB', margin: '0 auto 12px' }} />
-                    <p className="text-sm font-semibold" style={{ color: '#9CA3AF' }}>No rides match your filters</p>
-                    <button onClick={() => setActiveFilters(new Set())} className="text-xs mt-2" style={{ color: '#16A34A' }}>Clear filters</button>
-                  </div>
-                )}
-              </div>
-            </main>
-          </div>
-        </div>
-      </div>
-    )
+  function closeFilters() {
+    setFiltersOpen(false);
+    window.setTimeout(() => filterTriggerRef.current?.focus(), 0);
   }
 
+  function submitSearch(event) {
+    event?.preventDefault();
+    setError('');
+    try {
+      const normalized = validateSmartSearchCriteria(criteria);
+      if (filtersOpen) closeFilters();
+      setSearchParams(smartSearchCriteriaToParams(normalized));
+    } catch (validationError) {
+      setError(validationError.message);
+    }
+  }
+
+  function clearFilters() {
+    setCriteria((current) => normalizeSmartSearchCriteria({
+      pickup: current.pickup,
+      destination: current.destination,
+      destinationPlaceId: current.destinationPlaceId,
+      date: current.date,
+      departAfter: current.departAfter
+    }));
+  }
+
+  async function toggleFavourite(ride) {
+    if (!user) {
+      const returnPath = `${location.pathname}${location.search}`;
+      const target = getAuthNavigation(user, returnPath, 'Sign in to save rides to your favourites.');
+      navigate(target.to, { state: target.state });
+      return;
+    }
+    const saved = favouriteIds.has(ride.id);
+    setPendingRideId(ride.id);
+    setNotice('');
+    try {
+      if (saved) await FavouriteService.remove(user.id, ride.id);
+      else await FavouriteService.add(user.id, ride.id);
+      setFavouriteIds((current) => {
+        const next = new Set(current);
+        saved ? next.delete(ride.id) : next.add(ride.id);
+        return next;
+      });
+      setNotice(saved ? 'Ride removed from favourites.' : 'Ride saved to favourites.');
+    } catch (favouriteError) {
+      setError(favouriteError.message);
+    } finally {
+      setPendingRideId('');
+    }
+  }
+
+  const activeFilterCount = [criteria.journeyScale, criteria.minSeats > 1, criteria.minRating > 0, criteria.contribution, ...criteria.tags].filter(Boolean).length;
+
   return (
-    <div className="min-h-screen pb-24" style={{ backgroundColor: '#F6FAF7' }}>
-      <div className="bg-white pt-12 px-4 pb-3" style={{ borderBottom: '1px solid #E5E7EB', boxShadow: '0 1px 0 #E5E7EB' }}>
-        <h1 className="text-lg font-bold mb-3" style={{ color: '#111827', fontFamily: "'Poppins', sans-serif" }}>Smart Search</h1>
-        <SearchForm from={from} setFrom={setFrom} to={to} setTo={setTo}
-          date={date} setDate={setDate} time={time} setTime={setTime}
-          onSearch={() => setSearched(true)} isDesktop={false} />
-      </div>
+    <main className="smart-search-page">
+      <header className="smart-search-hero">
+        <div><p>SMARTER SHARED JOURNEYS</p><h1>Find the right ride</h1><span>Search available seats, then refine the results around your journey.</span></div>
+        <span className="smart-search-hero-icon" aria-hidden="true"><IconSearch size={27} /></span>
+      </header>
 
-      <div className="flex bg-white" style={{ borderBottom: '1px solid #E5E7EB' }}>
-        {['results', 'favourites'].map(tab => (
-          <button key={tab} onClick={() => setSideTab(tab)}
-            className="flex-1 py-3 text-sm font-semibold capitalize transition-colors"
-            style={{
-              color: sideTab === tab ? '#16A34A' : '#9CA3AF',
-              borderBottom: sideTab === tab ? '2px solid #16A34A' : '2px solid transparent',
-              fontFamily: sideTab === tab ? "'Poppins', sans-serif" : 'inherit',
-            }}>
-            {tab === 'results' ? `Results${searched ? ` (${filtered.length})` : ''}` : `★ Saved`}
-          </button>
-        ))}
-      </div>
+      <section className="smart-search-box">
+        <SearchForm criteria={criteria} onChange={setCriteria} onSubmit={submitSearch} loading={loading} />
+        <button ref={filterTriggerRef} className="search-mobile-filter-button" type="button" onClick={() => setFiltersOpen(true)}>
+          <IconFilter size={17} aria-hidden="true" /> Filters {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
+        </button>
+      </section>
 
-      {sideTab === 'favourites' ? (
-        <div className="px-4 pt-4">
-          <FavouritesPanel favIds={favIds} results={RESULTS} />
-        </div>
-      ) : (
-        <>
-          {searched && (
-            <div className="px-4 pt-3 pb-2">
-              <FilterChips active={activeFilters} toggle={toggleFilter} />
-            </div>
+      {error && <div className="search-feedback error" role="alert">{error}<button type="button" onClick={submitSearch}>Retry</button></div>}
+      {notice && <div className="search-feedback success" role="status">{notice}</div>}
+
+      <div className="smart-search-layout">
+        <aside className="search-desktop-filters">
+          <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} />
+          <button className="search-apply-desktop" type="button" onClick={submitSearch}>Apply filters</button>
+        </aside>
+
+        <section className="search-results" aria-busy={loading} aria-labelledby="search-results-title">
+          <div className="search-results-heading">
+            <div><p>AVAILABLE JOURNEYS</p><h2 id="search-results-title">{loading ? 'Searching rides…' : `${rides.length} ride${rides.length === 1 ? '' : 's'} found`}</h2></div>
+            {!loading && <span>{appliedCriteria.sort === SMART_SEARCH_SORTS.HOST_IMPACT ? 'Highest impact' : 'Earliest first'}</span>}
+          </div>
+
+          {!loading && !error && rides.length === 0 && (
+            <div className="search-empty-state"><IconSearch size={28} /><h3>No matching rides yet</h3><p>Try a broader route, another date, or fewer filters.</p><button type="button" onClick={() => { setCriteria(normalizeSmartSearchCriteria()); setSearchParams(new URLSearchParams()); }}>Start over</button></div>
           )}
 
-          <div className="px-4 pt-2 space-y-3">
-            {!searched ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: '#DCFCE7' }}>
-                  <Search size={24} style={{ color: '#16A34A' }} />
-                </div>
-                <p className="text-sm font-semibold mb-1" style={{ color: '#374151', fontFamily: "'Poppins', sans-serif" }}>Find your ride</p>
-                <p className="text-xs" style={{ color: '#9CA3AF' }}>Enter your route above and tap Search</p>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Search size={28} style={{ color: '#D1D5DB', margin: '0 auto 12px' }} />
-                <p className="text-sm font-semibold" style={{ color: '#9CA3AF' }}>No rides match your filters</p>
-                <button onClick={() => setActiveFilters(new Set())} className="text-xs mt-2" style={{ color: '#16A34A' }}>Clear filters</button>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between py-1">
-                  <p className="text-xs font-semibold" style={{ color: '#374151' }}>
-                    {filtered.length} ride{filtered.length !== 1 ? 's' : ''} found
-                  </p>
-                  <div className="flex items-center gap-1 text-xs" style={{ color: '#9CA3AF' }}>
-                    <SlidersHorizontal size={11} />Sort: Time
-                  </div>
-                </div>
-                {filtered.map(r =>
-                  r.multiLeg
-                    ? <MultiLegCard key={r.id} ride={r} isFav={favIds.has(r.id)} onToggleFav={() => toggleFav(r.id)} />
-                    : <RideCard key={r.id} ride={r} isFav={favIds.has(r.id)} onToggleFav={() => toggleFav(r.id)} onView={() => {}} />
-                )}
-              </>
-            )}
+          <div className="search-result-grid">
+            {rides.map((ride) => (
+              <SearchRideCard
+                key={ride.id}
+                ride={ride}
+                saved={favouriteIds.has(ride.id)}
+                favouritePending={pendingRideId === ride.id}
+                onToggleFavourite={() => toggleFavourite(ride)}
+                onView={() => navigate(`/ride/${ride.id}`)}
+              />
+            ))}
           </div>
-        </>
+        </section>
+      </div>
+
+      {filtersOpen && (
+        <div className="search-filter-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closeFilters()}>
+          <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} mobile onClose={closeFilters} onApply={submitSearch} />
+        </div>
       )}
-    </div>
-  )
+    </main>
+  );
 }

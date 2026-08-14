@@ -34,8 +34,11 @@ const BADGE_TIERS = [
   }
 ];
 
-function computeCompositeScore({ completedTrips, co2SavedKg, reputationScore }) {
-  return completedTrips * WEIGHTS.trips + co2SavedKg * WEIGHTS.co2 + reputationScore * WEIGHTS.reputation;
+export function calculateCompositeHostImpact({ completedTrips = 0, co2SavedKg = 0, reputationScore = 0 } = {}) {
+  const trips = Number.isFinite(Number(completedTrips)) ? Number(completedTrips) : 0;
+  const co2 = Number.isFinite(Number(co2SavedKg)) ? Number(co2SavedKg) : 0;
+  const reputation = Number.isFinite(Number(reputationScore)) ? Number(reputationScore) : 0;
+  return trips * WEIGHTS.trips + co2 * WEIGHTS.co2 + reputation * WEIGHTS.reputation;
 }
 
 function badgeForScore(score) {
@@ -46,7 +49,7 @@ function badgeForScore(score) {
 // host tier pills) can get a badge from stats they already have, without a second
 // getImpactSummary fetch. Same formula, same tiers - one Host Impact Engine.
 export function getBadgeForStats(stats) {
-  return badgeForScore(computeCompositeScore(stats));
+  return badgeForScore(calculateCompositeHostImpact(stats));
 }
 
 export const HostImpactEngine = {
@@ -59,7 +62,7 @@ export const HostImpactEngine = {
       ? await fetchFromSupabase(userId)
       : await mockDb.getImpactStats(userId);
 
-    const compositeScore = computeCompositeScore(stats);
+    const compositeScore = calculateCompositeHostImpact(stats);
     const badge = badgeForScore(compositeScore);
     const nextTier = BADGE_TIERS.find((t) => t.minScore > compositeScore);
 

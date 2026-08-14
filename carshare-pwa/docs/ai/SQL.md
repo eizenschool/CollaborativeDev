@@ -12,6 +12,8 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
+Deployed SQL history: 001-022
+Repository SQL history: 001-025
  Deployed SQL history: 001-026
 Repository SQL history: 001-026
 ```
@@ -29,6 +31,17 @@ deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
 Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
 URLs for private chat media. Deployed history must not be rewritten; the next
+new file after the current `025` draft starts at `026`.
+`023_m1_m2_public_ride_browsing.sql` is a local,
+undeployed migration: it records the requested guest Ride browsing policy, but
+deploying its anonymous column-level access requires explicit approval of the
+public payload. The draft excludes Place IDs, precise coordinates, pickup
+instructions, and lifecycle timestamps from guest reads. It may still be edited
+until that approval is given.
+
+`024_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
+the Module 6 place catalogue, recorded interest, notification registrations, and
+stated travel preferences. Modules 4-5 still use local adapters.
 new migration after this work starts at `027`.
 `023_m1_m2_public_ride_browsing.sql` is live through the Dashboard SQL Editor;
 its anonymous column-level policies and grants were deployed after the public
@@ -57,6 +70,11 @@ It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
 nobody able to tell which one to run.
 
+`025_m4_smart_search_favourites.sql` is **written but not yet deployed** - it
+adds owner-scoped ride favourites and authenticated RPCs for idempotent
+add/remove plus a safe card projection that continues showing unavailable saved
+rides. Module 4 retains its mock fallback until this migration is deployed.
+
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
 Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
@@ -83,6 +101,11 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 - `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
 - `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
+
+Module 4 (in `025`, not yet deployed):
+
+- `ride_favourites`: one owner-scoped saved reference per user and ride. The
+  reference survives ride lifecycle changes and is deleted with either parent.
 
 ### Security and Storage
 
@@ -122,6 +145,7 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 - `conversation_members_user_active_idx`
 - `messages_conversation_created_idx`
 - `message_attachments_message_sort_idx`
+- `ride_favourites_user_created_idx` (in undeployed `025`)
 
 Fresh empty-table indexes may appear as "unused" in the performance advisor until normal traffic exercises them.
 
@@ -149,6 +173,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
+- `023_m1_m2_public_ride_browsing.sql` - not deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
+- `024_m6_destination_discovery.sql` - not deployed; Module 6 place catalogue, interest, notification registration, and travel-preference persistence.
+- `025_m4_smart_search_favourites.sql` - not deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
