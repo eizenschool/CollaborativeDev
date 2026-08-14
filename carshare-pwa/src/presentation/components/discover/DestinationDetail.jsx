@@ -136,17 +136,6 @@ export default function DestinationDetail() {
       : 'We will tell you when a ride to this destination is published.');
   };
 
-  const findRide = () => {
-    const prefill = DestinationDiscoveryService.buildPrefillPayload(place, DEFAULT_ORIGIN);
-    const params = new URLSearchParams({
-      pickup: prefill.pickup,
-      destination: prefill.destination,
-      date: travelDate
-    });
-    if (prefill.destinationPlaceId) params.set('destinationPlaceId', prefill.destinationPlaceId);
-    navigate(`/search?${params.toString()}`);
-  };
-
   return (
     <div className="dsc-page dsc-detail">
       <button className="dsc-back" onClick={() => navigate('/discover')} type="button">
@@ -235,7 +224,7 @@ export default function DestinationDetail() {
                   </span>
                 </div>
                 <div className="dsc-actions" style={{ marginTop: 16 }}>
-                  <button className="dsc-btn dsc-btn-primary" onClick={findRide} type="button">
+                  <button className="dsc-btn dsc-btn-primary" onClick={() => navigate('/ride')} type="button">
                     <IconCar size={16} /> Find a ride
                   </button>
                 </div>
