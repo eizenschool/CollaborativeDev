@@ -1,4 +1,5 @@
 -- Module 4 Smart Search & Favourites core persistence.
+-- Numbered after Module 3's 025/026 migrations to keep deployment order unambiguous.
 -- Depends on the deployed Module 1 and Module 2 schema through 020.
 -- This file is repository-authored but must be deployed separately.
 

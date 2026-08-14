@@ -44,7 +44,7 @@ Business logic: `src/business-logic/SmartSearchService.js` and
 Presentation: `src/presentation/components/search/` and
 `src/presentation/styles/search.css`.
 
-Database: `database/sql/025_m4_smart_search_favourites.sql` (undeployed).
+Database: `database/sql/027_m4_smart_search_favourites.sql` (undeployed).
 
 ## Open Questions
 Deferred beyond the core slice: vehicle-type and spoken-language contracts;

@@ -70,7 +70,7 @@ It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
 nobody able to tell which one to run.
 
-`025_m4_smart_search_favourites.sql` is **written but not yet deployed** - it
+`027_m4_smart_search_favourites.sql` is **written but not yet deployed** - it
 adds owner-scoped ride favourites and authenticated RPCs for idempotent
 add/remove plus a safe card projection that continues showing unavailable saved
 rides. Module 4 retains its mock fallback until this migration is deployed.
@@ -175,7 +175,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
 - `023_m1_m2_public_ride_browsing.sql` - not deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - not deployed; Module 6 place catalogue, interest, notification registration, and travel-preference persistence.
-- `025_m4_smart_search_favourites.sql` - not deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
+- `027_m4_smart_search_favourites.sql` - not deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

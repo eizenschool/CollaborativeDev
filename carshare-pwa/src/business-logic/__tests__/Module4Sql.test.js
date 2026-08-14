@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 describe('Module 4 SQL contract', () => {
+  it('keeps migration sequence numbers unique', async () => {
+    const migrations = await import('node:fs/promises').then(({ readdir }) => readdir(
+      new URL('../../../database/sql/', import.meta.url)
+    ));
+    const sequenceNumbers = migrations
+      .map((fileName) => fileName.match(/^(\d{3})_.*\.sql$/)?.[1])
+      .filter(Boolean);
+
+    expect(new Set(sequenceNumbers).size).toBe(sequenceNumbers.length);
+  });
+
   it('locks favourites to authenticated owners and returns only safe ride-card fields', async () => {
     const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
-      new URL('../../../database/sql/025_m4_smart_search_favourites.sql', import.meta.url),
+      new URL('../../../database/sql/027_m4_smart_search_favourites.sql', import.meta.url),
       'utf8'
     ));
     expect(sql).toContain('alter table public.ride_favourites enable row level security');
