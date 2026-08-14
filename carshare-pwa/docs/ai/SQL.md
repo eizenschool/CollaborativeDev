@@ -14,6 +14,8 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-022
 Repository SQL history: 001-025
+ Deployed SQL history: 001-026
+Repository SQL history: 001-026
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -40,6 +42,29 @@ until that approval is given.
 `024_m6_destination_discovery.sql` is **written but not yet deployed** - it adds
 the Module 6 place catalogue, recorded interest, notification registrations, and
 stated travel preferences. Modules 4-5 still use local adapters.
+new migration after this work starts at `027`.
+`023_m1_m2_public_ride_browsing.sql` is live through the Dashboard SQL Editor;
+its anonymous column-level policies and grants were deployed after the public
+payload was approved. It is not present in the migration history returned by the
+project, so this file remains the repository record of the applied SQL. The
+payload excludes Place IDs, precise coordinates, pickup instructions, and
+lifecycle timestamps from guest reads.
+
+`024_m6_destination_discovery.sql` is **deployed** as the Supabase migration
+`m6_destination_discovery` - it adds the Module 6 place catalogue, recorded
+interest, notification registrations, and stated travel preferences. The live
+catalogue remains opt-in in the frontend; the fixture adapter is still the
+default for offline demos and tests.
+
+`025_m3_add_voice_messages.sql` was deployed on 2026-08-13. It adds standalone
+1-180 second private voice messages, a 10 MB audio limit, Audio WebM/MP4/Ogg
+validation, duration metadata, non-editability, Storage-object verification,
+and the matching private bucket MIME allowlist.
+
+`026_m3_add_wav_voice_fallback.sql` was deployed on 2026-08-14. It permits the
+16 kHz mono PCM WAV fallback used when Chromium/Electron MediaRecorder output
+cannot be decoded, while retaining the same standalone, duration, size, private
+Storage, and signed-URL rules.
 
 It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
@@ -68,9 +93,9 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `conversations`: one ride/traveller direct chat and one ride group, lifecycle snapshot, last-message pointer, and terminal retention.
 - `conversation_members`: role, join/leave, per-user archive, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
-- `message_attachments`: ordered image/video Storage metadata or one coordinate pair.
+- `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
 
-Module 6 (in `024`, not yet deployed):
+Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 
 - `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only.
 - `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
@@ -89,7 +114,7 @@ Module 4 (in `025`, not yet deployed):
 - `authenticated` has explicit least-privilege table/column grants plus owner policies with `USING` and `WITH CHECK`.
 - `public.handle_new_user()` is `SECURITY DEFINER`, has an empty `search_path`, uses schema-qualified names, and is not executable by `anon` or `authenticated`.
 - The public `avatars` bucket allows JPEG, PNG, and WebP up to 5 MB. Authenticated users can write only below their own UUID folder.
-- The private `message-media` bucket accepts the approved image/video MIME types up to 50 MB per object. Listing is blocked; only current conversation members can create a short-lived URL for committed media, and the signed download does not need a public bucket.
+- The private `message-media` bucket accepts the approved image/video/audio MIME types up to 50 MB per object. Message RPCs further limit audio to 10 MB. Listing is blocked; only current conversation members can create a short-lived URL for committed media, and the signed download does not need a public bucket.
 - Rides require a vehicle owned by the host, persist `waypoints` as a JSON array, and enforce `0 <= seats_available <= seats_total`.
 - Pickup coordinates must be stored as a valid latitude/longitude pair, and pickup instructions are limited to 300 characters.
 - Authenticated clients have SELECT but no direct INSERT/UPDATE/DELETE on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce ownership and cross-row invariants with an empty `search_path`.
@@ -151,6 +176,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `023_m1_m2_public_ride_browsing.sql` - not deployed; proposed anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - not deployed; Module 6 place catalogue, interest, notification registration, and travel-preference persistence.
 - `025_m4_smart_search_favourites.sql` - not deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
+- `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
+- `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
+- `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
+- `026_m3_add_wav_voice_fallback.sql` - deployed; adds Audio WAV to the voice attachment, send RPC, and private bucket allowlists for reliable Chromium/Electron playback.
 
 ## Rules for New Database Work
 

@@ -45,5 +45,11 @@ export default defineConfig({
       }
     })
   ],
-  server: { port: 5173 }
+  server: {
+    port: 5173,
+    host: '0.0.0.0',
+    // Tunnels forward their generated subdomain as the Host header. Keep the
+    // suffixes explicit instead of allowing arbitrary Host headers.
+    allowedHosts: ['.trycloudflare.com'],
+  }
 });

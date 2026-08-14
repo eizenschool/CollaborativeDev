@@ -17,6 +17,12 @@ function SenderAvatar({ message }) {
   );
 }
 
+function formatDuration(totalSeconds = 0) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function MediaAttachment({ attachment }) {
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -24,7 +30,37 @@ function MediaAttachment({ attachment }) {
     setLoadFailed(false);
   }, [attachment.url]);
 
-  if (!attachment.url || loadFailed) {
+  if (!attachment.url) {
+    const mediaLabel = attachment.kind === 'image'
+      ? 'Photo'
+      : attachment.kind === 'audio'
+        ? 'Voice message'
+        : 'Video';
+    return (
+      <div
+        className="message-media-item message-media-unavailable"
+        role="img"
+        aria-label={`${mediaLabel} unavailable${attachment.fileName ? `: ${attachment.fileName}` : ''}`}
+        title={attachment.loadError || `${mediaLabel} could not be loaded.`}
+      >
+        <span>{mediaLabel} unavailable</span>
+        {attachment.fileName && <small>{attachment.fileName}</small>}
+      </div>
+    );
+  }
+
+  if (attachment.kind === 'audio' && loadFailed) {
+    return (
+      <div className="message-audio-attachment message-audio-unavailable" role="status">
+        <span>Voice message cannot play in this browser.</span>
+        <a href={attachment.url} target="_blank" rel="noreferrer" download={attachment.fileName || undefined}>
+          Open or download voice message
+        </a>
+      </div>
+    );
+  }
+
+  if (loadFailed) {
     const mediaLabel = attachment.kind === 'image' ? 'Photo' : 'Video';
     return (
       <div
@@ -49,6 +85,20 @@ function MediaAttachment({ attachment }) {
           onError={() => setLoadFailed(true)}
         />
       </a>
+    );
+  }
+  if (attachment.kind === 'audio') {
+    return (
+      <div className="message-audio-attachment">
+        <audio
+          controls
+          preload="metadata"
+          src={attachment.url}
+          onError={() => setLoadFailed(true)}
+          aria-label="Voice message"
+        />
+        <span>{formatDuration(attachment.durationSeconds)}</span>
+      </div>
     );
   }
   return (
@@ -101,6 +151,7 @@ export default function MessageBubble({
   }
 
   const media = message.attachments.filter((attachment) => ['image', 'video'].includes(attachment.kind));
+  const audio = message.attachments.find((attachment) => attachment.kind === 'audio');
   const location = message.attachments.find((attachment) => attachment.kind === 'location');
 
   return (
@@ -122,6 +173,7 @@ export default function MessageBubble({
               {media.map((attachment) => <MediaAttachment key={attachment.id} attachment={attachment} />)}
             </div>
           )}
+          {audio && <MediaAttachment attachment={audio} />}
           {location && <GoogleLocationMap latitude={location.latitude} longitude={location.longitude} compact />}
         </div>
         <div className={`message-bubble-meta ${isCurrentUser ? 'message-bubble-meta-current-user' : ''}`}>

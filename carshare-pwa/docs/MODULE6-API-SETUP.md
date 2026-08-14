@@ -7,9 +7,12 @@ this file.
 
 Accepted scope is D018 in `docs/ai/DECISIONS.md`.
 
-**Status: none of this is live.** The module runs entirely on the local fixture
-catalogue (`src/data-access/discoveryStore.js`) and works offline. Nothing below
-is required for the current build, tests, or demo.
+**Status: the database schema is live, but external ingestion is not live yet.**
+`024_m6_destination_discovery.sql` is deployed as the Supabase migration
+`m6_destination_discovery`; the module still runs on the local fixture catalogue
+(`src/data-access/discoveryStore.js`) until the server key, Edge Function, and
+controlled smoke test below are complete. Nothing below is required for the
+current offline build, tests, or demo.
 
 ---
 
@@ -24,7 +27,8 @@ is required for the current build, tests, or demo.
 | Place Photos authorised on that key | Not done | Brayden |
 | Street View Static authorised on that key | Not done, optional | Brayden |
 | Per-service daily hard quotas (§5) | Not done | Brayden |
-| `024_m6_destination_discovery.sql` deployed | Not deployed | Brayden |
+| `024_m6_destination_discovery.sql` deployed | **Deployed** as `m6_destination_discovery` | done |
+| `supabase/functions/m6-ingest/index.ts` deployed | **Deployed and active** as `m6-ingest`; validates a Supabase secret on `apikey` | done |
 | `GOOGLE_PLACES_SERVER_KEY` set as a Supabase secret | Not done | Brayden |
 
 ## 2. The key: why the two existing ones cannot be reused
@@ -174,7 +178,7 @@ again unless the source changes.
 Merging them into a single "just fetch everything" call would reprice the entire
 recurring sweep at the most expensive tier for no functional gain.
 
-## 5. Quotas to set before enabling
+## 5. Quotas and budget boundaries before enabling
 
 Free monthly caps, per the pricing table current at the time of writing:
 
@@ -188,8 +192,18 @@ Free monthly caps, per the pricing table current at the time of writing:
 | Street View metadata | unlimited |
 | Maps Embed | unlimited |
 
-Suggested daily hard quotas, following the D013 precedent that a hard quota — not
-an alert — is the spending boundary:
+The Google Cloud console does **not** necessarily show one quota row per billing
+SKU. Open **Google Maps Platform → Quotas** (direct link:
+`https://console.cloud.google.com/project/_/google/maps-apis/quotas?project=my-project-cd-505310`),
+choose the project, then choose **Places API** from the API selector. Places API
+(New) limits are normally shown per API method and per minute; search the table
+for the relevant method or request quota, select its checkbox, choose the
+three-dot menu, and choose **Edit quota**. Place Photos is part of Places API
+(New), not a separate Google Cloud API to select.
+
+If the page exposes a daily request row, the following are our application
+budget targets, following the D013 precedent that a hard quota — not an alert —
+is the spending boundary:
 
 ```text
 Nearby Search          30 / day
@@ -198,14 +212,55 @@ Place Details Photos  200 / day
 Street View Static     50 / day
 ```
 
-A low quota does not break ingestion. FR-6.6 halts a cycle when it reaches its
-request budget and resumes at the next scheduled run, so a 200-place catalogue
-simply fills over several days instead of failing.
+A low quota does not break ingestion. The ingestion function caps each run with
+`maxResultCount` and `maxDetails`. A persistent per-day ledger still needs to be
+added before these numbers can be described as a true daily server-side cap;
+until then, do not assume that a Google console per-minute limit is equivalent
+to the four application budgets above.
 
 Disable automatic quota increases. Set 50/75/90% alerts, and treat them as
 notifications rather than as a stop.
 
-## 6. Terms of service — accepted risk
+## 6. Invoking the deployed ingestion function
+
+`m6-ingest` is a service-to-service function. It uses Supabase's `secret` auth
+mode and expects the Supabase secret key in the `apikey` header, not as a
+`Bearer` token. The platform JWT check is disabled for this function because
+modern `sb_secret_...` keys are not JWTs; the function's Supabase auth wrapper
+validates the key before the handler runs.
+
+Run one small test only after setting `GOOGLE_PLACES_SERVER_KEY`:
+
+```powershell
+$headers = @{
+  apikey = $env:SUPABASE_SECRET_KEY
+  'Content-Type' = 'application/json'
+}
+$body = @{
+  regions = @(@{
+    id = 'kl-smoke'
+    state = 'Kuala Lumpur'
+    latitude = 3.139
+    longitude = 101.6869
+    radiusMeters = 5000
+  })
+  maxResultCount = 5
+  maxDetails = 1
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri 'https://pnetstmovctfwqcumodx.supabase.co/functions/v1/m6-ingest' `
+  -Headers $headers `
+  -Body $body
+```
+
+Keep `$env:SUPABASE_SECRET_KEY` in the current terminal only; never commit it
+or place it in a Vite `VITE_` variable. The response should report one
+`upserted` place. Confirm the row in the Dashboard Table Editor before turning
+on `VITE_DISCOVERY_DATA_SOURCE=supabase` locally.
+
+## 7. Terms of service — accepted risk
 
 Google permits indefinite storage of **place IDs only**. Names, ratings, review
 counts, review text and photographs are to be requested live and displayed with
@@ -221,7 +276,7 @@ D018, in `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`, and in the header of
 report's limitations section**. Image bytes are never copied into project
 storage; only references are held.
 
-## 7. Controlled smoke test
+## 8. Controlled smoke test
 
 Run only once the hard quotas are visible in the console, following the same
 discipline `GOOGLE-MAPS-SETUP.md` sets for Module 2:

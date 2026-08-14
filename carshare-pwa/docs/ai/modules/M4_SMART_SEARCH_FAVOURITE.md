@@ -16,6 +16,10 @@ Routing must be checked because search components may not yet be wired to active
 ## Depends On
 Module 2 ride data; Module 1 reputation/Host Impact; Google Maps/Places/Routes.
 
+For FR-6.35, Module 4 consumes the versioned `discoveryPrefill` navigation
+state defined in `docs/ai/FR-6.35_PREFILL_CONTRACT.md`. It pre-fills the current
+text-based search fields and keeps the normal defaults when no payload is passed.
+
 ## Current Status
 The core vertical slice is implemented on the Module 4 branch:
 

@@ -9,6 +9,7 @@ function normalizeDraft(draft = {}) {
     text: draft.text || '',
     mediaEntries: Array.isArray(draft.mediaEntries) ? draft.mediaEntries : [],
     location: draft.location || null,
+    voiceRecording: draft.voiceRecording || null,
     editingMessage: draft.editingMessage || null,
   };
 }
@@ -18,8 +19,15 @@ export function hasMessageDraftContent(draft) {
     draft?.text?.trim()
     || draft?.mediaEntries?.length
     || draft?.location
+    || draft?.voiceRecording
     || draft?.editingMessage,
   );
+}
+
+function releaseRemovedVoice(previousVoice, nextVoice, releasePreviewUrl) {
+  if (previousVoice?.previewUrl && previousVoice.previewUrl !== nextVoice?.previewUrl) {
+    releasePreviewUrl(previousVoice.previewUrl);
+  }
 }
 
 function releaseRemovedMedia(previousEntries, nextEntries, releasePreviewUrl) {
@@ -43,6 +51,7 @@ export function createMessagingSessionCache({ releasePreviewUrl = defaultRelease
     const existing = drafts.get(conversationId);
     if (!existing) return false;
     releaseRemovedMedia(existing.mediaEntries, [], releasePreviewUrl);
+    releaseRemovedVoice(existing.voiceRecording, null, releasePreviewUrl);
     drafts.delete(conversationId);
     return true;
   }
@@ -67,6 +76,7 @@ export function createMessagingSessionCache({ releasePreviewUrl = defaultRelease
       const previousDraft = drafts.get(conversationId);
       if (previousDraft) {
         releaseRemovedMedia(previousDraft.mediaEntries, nextDraft.mediaEntries, releasePreviewUrl);
+        releaseRemovedVoice(previousDraft.voiceRecording, nextDraft.voiceRecording, releasePreviewUrl);
       }
       drafts.set(conversationId, nextDraft);
       return true;
