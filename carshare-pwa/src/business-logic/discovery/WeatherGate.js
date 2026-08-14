@@ -18,6 +18,7 @@
 // later moves to a keyed provider, only fetchForecasts() moves server-side.
 
 import { OUTDOOR_CATEGORIES } from './constants.js';
+import { getWeatherOverrideCode } from './DiscoveryDemoControls.js';
 
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast';
 
@@ -79,8 +80,15 @@ export function applyWeatherGate(candidates = [], forecastsByPlaceId = new Map()
       continue;
     }
 
-    // An indoor candidate under a severe warning still gets the advisory: the
-    // journey there is outdoors even when the destination is not.
+    // An indoor candidate is never withheld, but is downgraded to an advisory
+    // rather than passed through as severe: the journey there is outdoors even
+    // when the destination is not.
+    //
+    // In practice this only fires if a caller supplies a forecast for an indoor
+    // place. `fetchForecasts` deliberately does not - an indoor destination
+    // cannot be withheld on weather, so buying a forecast to produce a soft
+    // advisory is not worth a request. Indoor candidates therefore carry
+    // UNKNOWN, which is the honest answer: nothing was checked.
     const weather = verdict === WEATHER.SEVERE ? WEATHER.ADVISORY : verdict;
     kept.push({
       ...candidate,
@@ -92,36 +100,88 @@ export function applyWeatherGate(candidates = [], forecastsByPlaceId = new Map()
   return { candidates: kept, withheld };
 }
 
+// A forecast for one place on one date does not change between two screens
+// opening seconds apart, so it is held for the session. This is a weather cache,
+// not a ranking cache: the scores it feeds are still recomputed on every request,
+// which is what the specification actually forbids caching.
+const forecastCache = new Map();
+const cacheKey = (placeId, date) => `${date}::${placeId}`;
+
 /**
- * Retrieves a daily forecast per place. Returns an empty Map on any failure, so
- * the gate degrades to "no constraint" rather than taking the view down.
+ * Retrieves the daily forecast for every outdoor candidate in **one** request.
  *
- * One request per distinct coordinate, and only for outdoor candidates - an
- * indoor destination cannot be withheld on weather, so its forecast would be
- * fetched and then ignored.
+ * Open-Meteo accepts comma-separated coordinates and answers with an array in
+ * the same order. That matters: one request per place meant 24 calls and about
+ * six seconds of network time before the home screen could paint, for data that
+ * arrives in roughly 200ms when asked for together.
+ *
+ * Indoor candidates are never requested at all - an indoor destination cannot be
+ * withheld on weather, so its forecast would be fetched and then ignored.
+ *
+ * Returns an empty Map on any failure, so the gate degrades to "no constraint"
+ * rather than taking the view down.
  */
 export async function fetchForecasts(places = [], travelDate, { fetchImpl = globalThis.fetch } = {}) {
   const outdoor = places.filter((p) => isOutdoorCategory(p.category));
-  if (!outdoor.length || !travelDate || typeof fetchImpl !== 'function') return new Map();
+  if (!outdoor.length || !travelDate) return new Map();
 
-  const results = await Promise.all(outdoor.map(async (place) => {
-    try {
-      const url = `${OPEN_METEO_URL}?latitude=${place.lat}&longitude=${place.lng}`
-        + `&daily=weather_code&start_date=${travelDate}&end_date=${travelDate}&timezone=Asia%2FKuala_Lumpur`;
-      const response = await fetchImpl(url);
-      if (!response?.ok) return null;
+  // A demonstration override replaces what the forecast *says*, never what the
+  // gate does with it - applyWeatherGate below cannot tell the difference, so
+  // what gets demonstrated is the real rule. Short-circuits before the network,
+  // so simulating weather costs nothing and works offline.
+  const overrideCode = getWeatherOverrideCode();
+  if (overrideCode !== null) {
+    return new Map(outdoor.map((place) => [
+      place.id,
+      { weatherCode: overrideCode, summary: `${describeCode(overrideCode)} (simulated)` }
+    ]));
+  }
 
-      const body = await response.json();
-      const weatherCode = body?.daily?.weather_code?.[0];
-      if (weatherCode === undefined || weatherCode === null) return null;
+  if (typeof fetchImpl !== 'function') return new Map();
 
-      return [place.id, { weatherCode, summary: describeCode(weatherCode) }];
-    } catch {
-      return null;
-    }
-  }));
+  const found = new Map();
+  const missing = [];
+  for (const place of outdoor) {
+    const cached = forecastCache.get(cacheKey(place.id, travelDate));
+    if (cached) found.set(place.id, cached);
+    else missing.push(place);
+  }
 
-  return new Map(results.filter(Boolean));
+  if (missing.length === 0) return found;
+
+  try {
+    const url = `${OPEN_METEO_URL}`
+      + `?latitude=${missing.map((p) => p.lat).join(',')}`
+      + `&longitude=${missing.map((p) => p.lng).join(',')}`
+      + `&daily=weather_code&start_date=${travelDate}&end_date=${travelDate}`
+      + `&timezone=Asia%2FKuala_Lumpur`;
+
+    const response = await fetchImpl(url);
+    if (!response?.ok) return found;
+
+    // A single coordinate returns one object; several return an array. Normalise
+    // so the same code reads both.
+    const body = await response.json();
+    const entries = Array.isArray(body) ? body : [body];
+
+    missing.forEach((place, index) => {
+      const weatherCode = entries[index]?.daily?.weather_code?.[0];
+      if (weatherCode === undefined || weatherCode === null) return;
+
+      const forecast = { weatherCode, summary: describeCode(weatherCode) };
+      forecastCache.set(cacheKey(place.id, travelDate), forecast);
+      found.set(place.id, forecast);
+    });
+
+    return found;
+  } catch {
+    return found;
+  }
+}
+
+/** Test hook, so one case's cached forecasts cannot leak into the next. */
+export function __clearForecastCache() {
+  forecastCache.clear();
 }
 
 function describeCode(code) {
@@ -135,5 +195,6 @@ export const WeatherGate = {
   isOutdoorCategory,
   classifyForecast,
   applyWeatherGate,
-  fetchForecasts
+  fetchForecasts,
+  __clearForecastCache
 };

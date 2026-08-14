@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient.js';
 const PLACE_SELECT = [
   'id', 'source_place_id', 'name', 'category', 'description',
   'description_is_template', 'rating', 'review_count', 'lat', 'lng', 'state',
-  'photo_references', 'lifecycle_state', 'state_before_demotion',
+  'photo_references', 'reviews', 'lifecycle_state', 'state_before_demotion',
   'absence_counter', 'last_seen_at', 'created_at', 'updated_at'
 ].join(',');
 
@@ -37,10 +37,19 @@ function mapPlace(row) {
     lastSeenAt: row.last_seen_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    // Enrichment stores up to five reviews, each with the author attribution
+    // under which the text may be shown at all. Guarded because the column was
+    // added in 025: a row written before that migration has no reviews key.
+    reviews: Array.isArray(row.reviews)
+      ? row.reviews.map((review) => ({
+        author: review?.author || '',
+        rating: typeof review?.rating === 'number' ? review.rating : null,
+        text: review?.text || ''
+      })).filter((review) => review.author && review.text)
+      : [],
     // These fixture-only fields deliberately remain empty for live rows. The
     // shared discovery contract does not expose them to Modules 2 or 4.
     rideDestinationAliases: [],
-    reviews: [],
     travelNote: '',
     vm2026Event: null
   };

@@ -377,3 +377,49 @@ describe('buildPrefillPayload - UC6.3 / FR-6.35 handoff to Modules 2 and 4', () 
       .toEqual({ destination: '', pickup: '', destinationPlaceId: null });
   });
 });
+
+describe('buildPrefillUrl - the link that actually carries the destination across', () => {
+  const place = { name: 'Cameron Highlands Tea Terraces', sourcePlaceId: 'fixture_cameron' };
+  const origin = { label: 'Kuala Lumpur' };
+
+  it('sends the destination to Module 4 search as "to"', () => {
+    const url = DestinationDiscoveryService.buildPrefillUrl('search', place, {
+      origin, travelDate: '2026-08-15'
+    });
+
+    expect(url.startsWith('/ride?')).toBe(true);
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('to')).toBe('Cameron Highlands Tea Terraces');
+    expect(params.get('from')).toBe('Kuala Lumpur');
+    expect(params.get('date')).toBe('2026-08-15');
+  });
+
+  it('sends the destination to Module 2 publish as "destination"', () => {
+    const url = DestinationDiscoveryService.buildPrefillUrl('publish', place, {
+      origin, travelDate: '2026-08-15'
+    });
+
+    expect(url.startsWith('/ride/publish?')).toBe(true);
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('destination')).toBe('Cameron Highlands Tea Terraces');
+    // The Host's own pickup is theirs to set; carrying an assumed origin into a
+    // ride they are publishing would put words in their mouth.
+    expect(params.get('from')).toBeNull();
+  });
+
+  it('escapes names that would otherwise break the query string', () => {
+    const url = DestinationDiscoveryService.buildPrefillUrl('search', {
+      name: "Kellie's Castle & Gardens"
+    }, {});
+
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('to')).toBe("Kellie's Castle & Gardens");
+  });
+
+  // A bare path has to keep working, because both forms treat every parameter as
+  // optional and must behave exactly as they do when opened directly.
+  it('returns a bare path when there is nothing to carry', () => {
+    expect(DestinationDiscoveryService.buildPrefillUrl('search', null, {})).toBe('/ride');
+    expect(DestinationDiscoveryService.buildPrefillUrl('publish', null, {})).toBe('/ride/publish');
+  });
+});

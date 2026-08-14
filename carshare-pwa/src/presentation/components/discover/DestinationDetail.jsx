@@ -12,44 +12,52 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
+import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import {
   IconArrowLeft, IconArrowRight, IconStar, IconMapPin, IconCar,
   IconUsers, IconAlertTriangle, IconBell, IconRoute
 } from '../icons.jsx';
-import PlacePoster from './PlacePoster.jsx';
+import PlaceImage from './PlaceImage.jsx';
+import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayIso;
 
 const initialsOf = (name) =>
   (name || '?').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 
 function Stars({ rating }) {
+  // Place Details can return a review with no rating attached, so the stars are
+  // omitted rather than announced as "null out of 5" to a screen reader.
+  if (!Number.isFinite(rating) || rating < 1) return null;
   return (
     <span className="dsc-review-stars" aria-label={`${rating} out of 5`}>
-      {Array.from({ length: rating }, (_, i) => <IconStar key={i} size={12} />)}
+      {Array.from({ length: Math.round(rating) }, (_, i) => <IconStar key={i} size={12} />)}
     </span>
   );
 }
 
 /**
  * Renders `photoReferences`. Each reference is a real record from the catalogue
- * carrying its photographer credit (FR-6.14); the image itself is not fetchable
- * yet, so each frame falls to the category illustration tier (FR-6.17) and says
- * so rather than passing artwork off as a photograph.
+ * carrying its photographer credit (FR-6.14). A live reference is fetched from
+ * Google at display time; a fixture reference is not fetchable, so that frame
+ * falls to the category illustration tier (FR-6.17) and labels itself rather
+ * than passing artwork off as a photograph.
  */
 function Carousel({ place }) {
   const [index, setIndex] = useState(0);
   const frames = place.photoReferences?.length ? place.photoReferences : [null];
   const current = frames[index];
   const move = (step) => setIndex((i) => (i + step + frames.length) % frames.length);
+  // The tag would otherwise call a real photograph an illustration.
+  const isIllustration = buildPlacePhotoUrl(current?.reference) === null;
 
   return (
     <div className="dsc-carousel">
       <div className="dsc-carousel-frame">
-        <PlacePoster seed={place.id} category={place.category} variant={index} />
-        <span className="dsc-illustration-tag">Illustration</span>
+        <PlaceImage place={place} variant={index} widthPx={1000} />
+        {isIllustration && <span className="dsc-illustration-tag">Illustration</span>}
         {current?.attribution && (
           <span className="dsc-photo-credit">Photo: {current.attribution}</span>
         )}
@@ -206,7 +214,7 @@ export default function DestinationDetail() {
 
           {candidate && (
             <section className="dsc-panel">
-              <h2>Why this is ranked here</h2>
+              <h2>Why we are suggesting this</h2>
               <ScoreBreakdown candidate={candidate} />
             </section>
           )}
@@ -224,7 +232,13 @@ export default function DestinationDetail() {
                   </span>
                 </div>
                 <div className="dsc-actions" style={{ marginTop: 16 }}>
-                  <button className="dsc-btn dsc-btn-primary" onClick={() => navigate('/ride')} type="button">
+                  <button
+                    className="dsc-btn dsc-btn-primary"
+                    type="button"
+                    onClick={() => navigate(DestinationDiscoveryService.buildPrefillUrl(
+                      'search', place, { origin: DEFAULT_ORIGIN, travelDate }
+                    ))}
+                  >
                     <IconCar size={16} /> Find a ride
                   </button>
                 </div>
@@ -242,8 +256,10 @@ export default function DestinationDetail() {
                 <div className="dsc-actions" style={{ marginTop: 16 }}>
                   <button
                     className="dsc-btn dsc-btn-primary"
-                    onClick={() => navigate('/ride/publish')}
                     type="button"
+                    onClick={() => navigate(DestinationDiscoveryService.buildPrefillUrl(
+                      'publish', place, { origin: DEFAULT_ORIGIN, travelDate }
+                    ))}
                   >
                     <IconRoute size={16} /> I will drive
                   </button>

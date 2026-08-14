@@ -9,30 +9,46 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
+import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconArrowLeft, IconUsers, IconRoute, IconMapPin } from '../icons.jsx';
-import PlacePoster from './PlacePoster.jsx';
+import PlaceImage from './PlaceImage.jsx';
+import AudienceSwitch from './AudienceSwitch.jsx';
+import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayIso;
 
 export default function UnmetDemandView() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const demo = searchParams.get('demo') === '1';
 
   // Carried from whichever screen linked here, so the Host sees demand for the
   // date they were already looking at rather than being silently reset to today.
   const [travelDate, setTravelDate] = useState(() => searchParams.get('date') || today());
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(async (date) => {
     setLoading(true);
-    const data = await DestinationDiscoveryService.getUnmetDemand({
-      userId: user?.id, travelDate: date, origin: DEFAULT_ORIGIN
-    });
-    setRows(data);
-    setLoading(false);
+    setFailed(false);
+    try {
+      const data = await DestinationDiscoveryService.getUnmetDemand({
+        userId: user?.id, travelDate: date, origin: DEFAULT_ORIGIN
+      });
+      setRows(data);
+    } catch (cause) {
+      // Same reasoning as DiscoverHub: this screen is one link away from it and
+      // failed the same way, sitting on "Checking demand…" for a signed-out
+      // reader the live catalogue will never answer.
+      console.error('Unmet demand lookup failed', cause);
+      setFailed(true);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }, [user?.id]);
 
   useEffect(() => { load(travelDate); }, [load, travelDate]);
@@ -51,6 +67,17 @@ export default function UnmetDemandView() {
         </p>
       </header>
 
+      <AudienceSwitch active="demand" travelDate={travelDate} demo={demo} />
+      <DemoActiveBanner />
+
+      {demo && (
+        <DemoControls
+          travelDate={travelDate}
+          onTravelDateChange={setTravelDate}
+          onChanged={() => load(travelDate)}
+        />
+      )}
+
       <div className="dsc-controls">
         <label className="dsc-field">
           <span>Travel date</span>
@@ -64,19 +91,52 @@ export default function UnmetDemandView() {
 
       {loading && <p className="dsc-empty">Checking demand…</p>}
 
-      {!loading && rows.length === 0 && (
+      {/* "Nothing needs a driver" is a strong claim to make about a read that
+          never returned - it would send a Host away believing the work is done. */}
+      {!loading && failed && (
+        <div className="dsc-empty dsc-failed" role="alert">
+          {user ? (
+            <>
+              <p className="dsc-failed-title">We could not check demand.</p>
+              <p>The place catalogue did not respond. It may be a connection problem.</p>
+              <button type="button" className="dsc-failed-action" onClick={() => load(travelDate)}>
+                Try again
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="dsc-failed-title">Sign in to see where people want to go.</p>
+              <p>Demand is available to signed-in members.</p>
+              <button
+                type="button"
+                className="dsc-failed-action"
+                onClick={() => navigate('/auth', {
+                  state: {
+                    from: `/discover/demand?date=${travelDate}`,
+                    reason: 'Sign in to see where people want to go.'
+                  }
+                })}
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {!loading && !failed && rows.length === 0 && (
         <p className="dsc-empty">
           Every destination people want on this date is already covered by a ride
           with a seat left. Nothing here needs another driver.
         </p>
       )}
 
-      {!loading && rows.length > 0 && (
+      {!loading && !failed && rows.length > 0 && (
         <div className="dsc-list">
           {rows.map((row) => (
             <article className="dsc-card dsc-card-unserved" key={row.placeId}>
               <span className="dsc-card-media">
-                <PlacePoster seed={row.place.id} category={row.place.category} />
+                <PlaceImage place={row.place} widthPx={600} />
               </span>
 
               <span className="dsc-card-body">
@@ -104,7 +164,9 @@ export default function UnmetDemandView() {
                   <button
                     className="dsc-btn dsc-btn-primary"
                     type="button"
-                    onClick={() => navigate('/ride/publish')}
+                    onClick={() => navigate(DestinationDiscoveryService.buildPrefillUrl(
+                      'publish', row.place, { origin: DEFAULT_ORIGIN, travelDate }
+                    ))}
                   >
                     <IconRoute size={16} /> Publish a ride here
                   </button>

@@ -12,8 +12,9 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
- Deployed SQL history: 001-026
-Repository SQL history: 001-026
+Deployed SQL history: 001-026, plus 023 and 027 applied through the Dashboard
+  SQL Editor (not in the tracked Supabase migration history - see below)
+Repository SQL history: 001-027
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -29,7 +30,7 @@ deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
 Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
 URLs for private chat media. Deployed history must not be rewritten; the next
-new migration after this work starts at `027`.
+new migration after this work starts at `028`.
 `023_m1_m2_public_ride_browsing.sql` is live through the Dashboard SQL Editor;
 its anonymous column-level policies and grants were deployed after the public
 payload was approved. It is not present in the migration history returned by the
@@ -54,6 +55,22 @@ cannot be decoded, while retaining the same standalone, duration, size, private
 Storage, and signed-URL rules.
 
 It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
+renumbered on merge rather than kept: two files sharing a number would leave
+nobody able to tell which one to run.
+
+`027_m6_place_reviews.sql` is **deployed through the Dashboard SQL Editor**, the
+same route as `023`: it is not present in the migration history returned by the
+project, so this file remains the repository record of the applied SQL. It adds
+`places.reviews` (jsonb, default `[]`, checked to be an array). The enrichment
+pass already requests review text from Place Details - that request is what
+prices enrichment at the Enterprise + Atmosphere tier - but nothing stored it:
+the first review's text was written into `description` verbatim and
+unattributed, and the rest were discarded. Reviews are now stored with their
+author attribution and shown as reviews, and `description` returns to the
+generated sentence FR-6.8 specifies. The compliance note in `024` extends to
+this column and is restated in the file header.
+
+It was drafted as `025` before Module 3's `025`/`026` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
 nobody able to tell which one to run.
 
@@ -153,6 +170,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
 - `026_m3_add_wav_voice_fallback.sql` - deployed; adds Audio WAV to the voice attachment, send RPC, and private bucket allowlists for reliable Chromium/Electron playback.
+- `027_m6_place_reviews.sql` - deployed through the Dashboard SQL Editor; adds `places.reviews` (jsonb, array-checked) so enrichment's Place Details review text is stored with author attribution instead of being written unattributed into `description`.
 
 ## Rules for New Database Work
 

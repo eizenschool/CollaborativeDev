@@ -23,7 +23,14 @@ import { CATEGORY, PLACE_STATE } from '../business-logic/discovery/constants.js'
 import { liveDiscoveryDb } from './discoverySupabaseRepository.js';
 
 const STORAGE_KEY = 'letstumpang_discovery_v1';
-const USE_LIVE_DISCOVERY = import.meta.env.VITE_DISCOVERY_DATA_SOURCE?.trim() === 'supabase';
+
+// The live adapter is opt-in, and never under test. A developer with a working
+// .env.local would otherwise point the whole suite at Supabase: the tests would
+// make real network calls, depend on RLS and on whatever rows happen to exist,
+// and fail outright on the fixture-only helpers the live adapter refuses to
+// implement. The data source is a deployment choice, not a test fixture.
+const USE_LIVE_DISCOVERY = import.meta.env?.MODE !== 'test'
+  && import.meta.env.VITE_DISCOVERY_DATA_SOURCE?.trim() === 'supabase';
 
 // A simulated round trip, so the screens exercise their loading states instead of
 // resolving instantly and hiding them. Tests skip it: the orchestration calls

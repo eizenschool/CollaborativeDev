@@ -1,6 +1,6 @@
 // ===== PRESENTATION LAYER (RideHub) =====
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
@@ -12,10 +12,16 @@ import '../../styles/ride.css';
 export default function RideHub() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Optional search prefill, so arriving from Module 6's Destination Discovery
+  // (FR-6.35) does not make the traveller retype the destination they just
+  // chose. Absent parameters leave every field empty, which is exactly the
+  // behaviour when opening /ride directly.
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState('find'); // 'find' | 'my'
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [date, setDate] = useState('');
+  const [from, setFrom] = useState(() => searchParams.get('from') || '');
+  const [to, setTo] = useState(() => searchParams.get('to') || '');
+  const [date, setDate] = useState(() => searchParams.get('date') || '');
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [myRides, setMyRides] = useState(null);
@@ -143,22 +149,25 @@ export default function RideHub() {
         )}
 
         {tab === 'my' && (
-          <MyRidesView myRides={myRides} onRideSelect={(ride) => navigate(`/ride/${ride.id}`)} onRequests={() => navigate('/ride/requests')} />
+          <MyRidesView myRides={myRides} onRideSelect={(ride) => navigate(`/ride/${ride.id}`)} onRequests={() => navigate('/ride/requests')} onSeeDemand={() => navigate('/discover/demand')} />
         )}
       </div>
     </div>
   );
 }
 
-function MyRidesView({ myRides, onRideSelect, onRequests }) {
+function MyRidesView({ myRides, onRideSelect, onRequests, onSeeDemand }) {
   if (!myRides) return <div className="ride-page-loading compact" role="status">Loading your rides…</div>;
 
   return (
     <>
-      <div className="ride-hub-header"><div><p className="eyebrow">YOUR RIDES</p><h2>Hosting</h2></div></div>
+      {/* Module 6 - Destination Discovery. A Host looking at their published
+          rides is exactly the person who wants to know where a ride would
+          actually be filled, so the unmet-demand view is linked from here. */}
+      <div className="ride-hub-header"><div><p className="eyebrow">YOUR RIDES</p><h2>Hosting</h2></div><button className="btn-link" onClick={onSeeDemand}>Where people want to go</button></div>
       <div className="ride-grid">
         {myRides.hosting.length === 0 && (
-          <section className="ride-empty-state compact"><h3>No hosted rides yet</h3><p>Publish your first journey when you have seats to share.</p></section>
+          <section className="ride-empty-state compact"><h3>No hosted rides yet</h3><p>Publish your first journey when you have seats to share, or <button className="btn-link inline" onClick={onSeeDemand}>see where people want to go</button>.</p></section>
         )}
         {myRides.hosting.map((ride) => (
           <RideCard key={ride.id} ride={ride} statusChip onClick={() => onRideSelect(ride)} />

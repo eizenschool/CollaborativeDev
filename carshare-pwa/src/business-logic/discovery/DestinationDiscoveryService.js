@@ -20,6 +20,7 @@ import { resolveAffinity } from './AffinityResolver.js';
 import { distanceKm, maxDistanceKm } from './geo.js';
 import { applyWeatherGate, fetchForecasts } from './WeatherGate.js';
 import { resolveSeason } from './SeasonalCalendar.js';
+import { buildReasons } from './RecommendationReasons.js';
 import { DiscoveryContractAdapter } from './DiscoveryContractAdapter.js';
 
 // FR-6.24 now resolves against the declared calendar in SeasonalCalendar.js
@@ -77,12 +78,19 @@ export const DestinationDiscoveryService = {
       [place.id, resolveSeason(place, travelDate)]
     ));
 
-    const scored = rankCandidates(afterWeather.map((place) => ({
-      placeId: place.id,
-      affinity: resolveAffinity(place.category, {
+    // Resolved once and kept, because the reasons need to say *where* a match
+    // came from - "similar to trips you have taken" and "you said you enjoy
+    // this" are different claims and only one of them is true at a time.
+    const affinityByPlace = new Map(afterWeather.map((place) =>
+      [place.id, resolveAffinity(place.category, {
         completedTrips,
         preferredCategories: preferences?.preferredCategories
-      }).value,
+      })]
+    ));
+
+    const scored = rankCandidates(afterWeather.map((place) => ({
+      placeId: place.id,
+      affinity: affinityByPlace.get(place.id).value,
       season: seasonByPlace.get(place.id).value,
       local: localEconomySignal(place, chainIndex),
       rating: place.rating,
@@ -97,14 +105,33 @@ export const DestinationDiscoveryService = {
     // Re-attach the place records the UI needs to render. The engine works on
     // ids and numbers alone so it never has to know about photos or descriptions.
     const byId = new Map(afterWeather.map((p) => [p.id, p]));
-    const decorate = (entry) => ({
-      ...entry,
-      place: byId.get(entry.placeId),
-      rides: ridesByPlace.get(entry.placeId) || [],
-      interestedUsers: demand.get(entry.placeId) || 0,
-      distanceKm: distanceByPlace.get(entry.placeId),
-      season: seasonByPlace.get(entry.placeId)
-    });
+    const decorate = (entry) => {
+      const place = byId.get(entry.placeId);
+      const enriched = {
+        ...entry,
+        place,
+        rides: ridesByPlace.get(entry.placeId) || [],
+        interestedUsers: demand.get(entry.placeId) || 0,
+        distanceKm: distanceByPlace.get(entry.placeId),
+        season: seasonByPlace.get(entry.placeId)
+      };
+
+      // Built here rather than in the component so the sentences are testable
+      // without rendering anything, and so both the list and the detail screen
+      // are guaranteed to explain a destination the same way.
+      const { reasons, caveats } = buildReasons(enriched, {
+        place,
+        rides: enriched.rides,
+        season: enriched.season,
+        affinitySource: affinityByPlace.get(entry.placeId)?.source,
+        distanceKm: enriched.distanceKm,
+        interestedUsers: enriched.interestedUsers,
+        weatherAdvisory: place?.weatherAdvisory,
+        travelDate
+      });
+
+      return { ...enriched, reasons, caveats };
+    };
 
     return {
       primary: scored.primary.map(decorate),
@@ -116,6 +143,17 @@ export const DestinationDiscoveryService = {
       // with none, which would show an empty served list for no good reason.
       departureDates: DiscoveryContractAdapter.departureDates(rides)
     };
+  },
+
+  /**
+   * The dates that actually have departures, cheapest possible question.
+   *
+   * Lets a caller land on a useful date without first running a full scoring
+   * pass to discover the one it guessed has no rides on it.
+   */
+  async getDepartureDates() {
+    const rides = await DiscoveryContractAdapter.getPublishedRides();
+    return DiscoveryContractAdapter.departureDates(rides);
   },
 
   /**
@@ -255,5 +293,31 @@ export const DestinationDiscoveryService = {
       pickup: origin?.label || '',
       destinationPlaceId: place?.sourcePlaceId || null
     };
+  },
+
+  /**
+   * The same payload as a URL, which is how it actually reaches Modules 2 and 4.
+   *
+   * A query string rather than router state on purpose: it survives a reload,
+   * can be shared or bookmarked, and needs no shared in-memory contract between
+   * modules. Both forms treat every parameter as optional, so a link without
+   * them behaves exactly as opening the screen directly does.
+   *
+   * @param target 'search' for Module 4's ride search, 'publish' for Module 2's form
+   */
+  buildPrefillUrl(target, place, { origin, travelDate } = {}) {
+    const payload = this.buildPrefillPayload(place, origin);
+    const params = new URLSearchParams();
+
+    if (target === 'publish') {
+      if (payload.destination) params.set('destination', payload.destination);
+      if (travelDate) params.set('date', travelDate);
+      return `/ride/publish${params.toString() ? `?${params}` : ''}`;
+    }
+
+    if (payload.destination) params.set('to', payload.destination);
+    if (payload.pickup) params.set('from', payload.pickup);
+    if (travelDate) params.set('date', travelDate);
+    return `/ride${params.toString() ? `?${params}` : ''}`;
   }
 };

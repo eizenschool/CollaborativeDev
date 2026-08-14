@@ -4,12 +4,13 @@
 // injected fetch stub, so the suite makes zero real network calls in line with
 // the project rule that automated tests never hit a third-party service.
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyWeatherGate,
   classifyForecast,
   fetchForecasts,
   isOutdoorCategory,
+  __clearForecastCache,
   WEATHER
 } from '../WeatherGate.js';
 import { CATEGORY } from '../constants.js';
@@ -156,6 +157,8 @@ describe('applyWeatherGate - mixed sets', () => {
 });
 
 describe('fetchForecasts', () => {
+  beforeEach(() => __clearForecastCache());
+
   it('requests nothing when no candidate is weather-exposed', async () => {
     const fetchImpl = vi.fn();
     const result = await fetchForecasts([place('p_food', CATEGORY.CULINARY)], '2026-08-20', { fetchImpl });
@@ -178,6 +181,80 @@ describe('fetchForecasts', () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(result.get('p_park').weatherCode).toBe(65);
+  });
+
+  // One request for the whole set, not one per place. Fetching them separately
+  // cost six seconds of network time before the home screen could paint.
+  it('asks for every outdoor candidate in a single request', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ([
+        { daily: { weather_code: [0] } },
+        { daily: { weather_code: [65] } },
+        { daily: { weather_code: [99] } }
+      ])
+    });
+
+    const result = await fetchForecasts([
+      { id: 'p_a', category: CATEGORY.NATURE, lat: 1, lng: 101 },
+      { id: 'p_b', category: CATEGORY.NATURE, lat: 2, lng: 102 },
+      { id: 'p_c', category: CATEGORY.EVENT, lat: 3, lng: 103 }
+    ], '2026-08-20', { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.size).toBe(3);
+    expect(result.get('p_c').weatherCode).toBe(99);
+
+    // Coordinates go in the order the places did, so the response array lines up.
+    const url = fetchImpl.mock.calls[0][0];
+    expect(url).toContain('latitude=1,2,3');
+    expect(url).toContain('longitude=101,102,103');
+  });
+
+  it('serves a repeat request for the same date from cache', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ daily: { weather_code: [65] } })
+    });
+    const places = [place('p_park', CATEGORY.NATURE)];
+
+    await fetchForecasts(places, '2026-08-20', { fetchImpl });
+    const second = await fetchForecasts(places, '2026-08-20', { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(second.get('p_park').weatherCode).toBe(65);
+  });
+
+  it('does not reuse one date\'s forecast for another', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ daily: { weather_code: [0] } })
+    });
+    const places = [place('p_park', CATEGORY.NATURE)];
+
+    await fetchForecasts(places, '2026-08-20', { fetchImpl });
+    await fetchForecasts(places, '2026-08-21', { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks only for the places it does not already hold', async () => {
+    const first = vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ daily: { weather_code: [0] } })
+    });
+    await fetchForecasts([place('p_a', CATEGORY.NATURE)], '2026-08-20', { fetchImpl: first });
+
+    const second = vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ daily: { weather_code: [65] } })
+    });
+    const result = await fetchForecasts([
+      place('p_a', CATEGORY.NATURE),
+      { id: 'p_b', category: CATEGORY.NATURE, lat: 9, lng: 109 }
+    ], '2026-08-20', { fetchImpl: second });
+
+    expect(second.mock.calls[0][0]).toContain('latitude=9');
+    expect(second.mock.calls[0][0]).not.toContain('latitude=3.1,9');
+    expect(result.size).toBe(2);
   });
 
   // Degrading to "no constraint" is the correct failure mode: the gate then does
