@@ -8,6 +8,7 @@ import {
 import { useAuth } from './context/AuthContext.jsx';
 import { resolveAuthReturnPath } from './business-logic/authAccess.js';
 import TopNav from './presentation/components/nav/TopNav.jsx';
+import ComingSoonScreen from './presentation/components/placeholders/ComingSoonScreen.jsx';
 import AuthPage from './presentation/components/AuthPage.jsx';
 import HomeScreen from './presentation/components/HomeScreen.jsx';
 import MyProfile from './presentation/components/MyProfile.jsx';
@@ -20,11 +21,10 @@ import ManageRequests from './presentation/components/ride/ManageRequests.jsx';
 import MyRequests from './presentation/components/ride/MyRequests.jsx';
 import EditRide from './presentation/components/ride/EditRide.jsx';
 import RateReview from './presentation/components/ride/RateReview.jsx';
+import { IconSearch, IconHeart } from './presentation/components/icons.jsx';
 import MessageModule from './presentation/components/messaging/MessageModule.jsx';
 import TripModule from './presentation/components/trip/TripModule.jsx';
 import TripDetail from './presentation/components/trip/TripDetail.jsx';
-import SearchModule from './presentation/components/search/SearchModule.jsx';
-import FavouritePage from './presentation/components/search/FavouritePage.jsx';
 
 function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
   const { user } = useAuth();
@@ -71,12 +71,12 @@ function AppShell() {
         {/* Home, Search, Ride browse, and Ride Detail form the public browsing
             surface. Account-specific destinations are guarded at the route. */}
         <Route path="/home" element={<HomeScreen />} />
-        <Route path="/search" element={<SearchModule />} />
+        <Route path="/search" element={<ComingSoonScreen icon={IconSearch} label="Search" />} />
         {/* Module 3 - Messaging */}
         <Route path="/message" element={<RequireAuth reason="Sign in to open your messages."><MessageModule /></RequireAuth>} />
         <Route path="/message/:conversationId" element={<RequireAuth reason="Sign in to open this conversation."><MessageModule /></RequireAuth>} />
         <Route path="/message/:conversationId/history" element={<RequireAuth reason="Sign in to view message history."><MessageModule /></RequireAuth>} />
-        <Route path="/favourite" element={<RequireAuth reason="Sign in to view your favourite rides."><FavouritePage /></RequireAuth>} />
+        <Route path="/favourite" element={<RequireAuth reason="Sign in to view your favourite rides."><ComingSoonScreen icon={IconHeart} label="Favourite" /></RequireAuth>} />
         {/* Module 5 - Trip Management & Eco Impact */}
         <Route path="/trip" element={<RequireAuth reason="Sign in to view your trips."><TripModule /></RequireAuth>} />
         <Route path="/trip/:tripId" element={<RequireAuth reason="Sign in to view this trip."><TripDetail /></RequireAuth>} />
