@@ -149,7 +149,6 @@ database/sql/
 
 Current database status:
 
-- Supabase is not connected yet.
 - No official database schema has been confirmed yet.
 - Existing database documents such as `docs/SUPABASE-SETUP.md` and `docs/MODULE6-SCHEMA.md` are drafts only unless the team explicitly adopts them.
 
