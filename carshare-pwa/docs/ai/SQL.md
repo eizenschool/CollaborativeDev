@@ -12,8 +12,8 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
- Deployed SQL history: 001-026
-Repository SQL history: 001-027 (027 local / undeployed)
+ Deployed SQL history: 001-027
+Repository SQL history: 001-027
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -35,7 +35,7 @@ payload was approved. It is not present in the migration history returned by the
 project, so this file remains the repository record of the applied SQL. The
 payload excludes Place IDs, precise coordinates, pickup instructions, and
 lifecycle timestamps from guest reads. Deployed history must not be rewritten;
-the next new migration after local `027` starts at `028`.
+the next new migration starts at `028`.
 
 `024_m6_destination_discovery.sql` is **deployed** as the Supabase migration
 `m6_destination_discovery` - it adds the Module 6 place catalogue, recorded
@@ -53,14 +53,20 @@ and the matching private bucket MIME allowlist.
 cannot be decoded, while retaining the same standalone, duration, size, private
 Storage, and signed-URL rules.
 
-`027_m2_route_schedule_and_completion.sql` is **local and undeployed**. It adds
+`027_m2_route_schedule_and_completion.sql` was deployed on 2026-08-14 as the
+Supabase migration `m2_route_schedule_and_completion` (live version
+`20260814114744`). It adds
 server-quoted ETA/schedule fields, private route verification anchors, an
 internal 250-request Malaysia-day Routes guard, serialized Driver overlap
 checks, one-hour publish/request/reopen rules, passenger check-in/No-show,
-verified departure and arrival, and 24-hour Cron completion. Do not apply it
-until live migration history has been rechecked and the user authorizes both
-the migration and matching Edge Functions. The next new migration starts at
-`028`; deployed `001-026` must not be rewritten.
+verified departure and arrival, and 24-hour Cron completion. The matching
+`m2-route-quote` and `m2-route-backfill` Edge Functions are deployed, while the
+Google Routes server key is stored only as an Edge secret. The bounded ETA
+backfill completed successfully for the two eligible future rides on 2026-08-14.
+Google Cloud displays the Routes daily quota as unlimited and non-adjustable;
+the dedicated Routes-only key is held only by the Edge Functions and the
+database's fail-closed 250-request Malaysia-day guard is the enforced cap. The
+next new migration starts at `028`; deployed `001-027` must not be rewritten.
 
 It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave

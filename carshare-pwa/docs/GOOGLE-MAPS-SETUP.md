@@ -76,17 +76,23 @@ restrictions are the actual security boundary. Never commit `.env.local`.
 
 ## Server Routes Deployment Gate
 
-This section describes required deployment configuration; it has not been
-performed by this repository change.
+Migration `027` and the two Module 2 Edge Functions are deployed. The two
+internal signing secrets and a dedicated Routes-only server key are configured,
+and the bounded ETA backfill completed for the two eligible future rides on
+2026-08-14. Google Cloud reports the Routes daily quota as unlimited and
+non-adjustable. The server-only key is held exclusively by the Edge Functions,
+and `consume_m2_route_quota` is the enforced fail-closed limit of 250 attempted
+Routes calls per Malaysia day; Cloud usage alerts remain an operational task.
 
 1. Create a dedicated key named `lets-tumpang-server-routes`. Never put it in a
    `VITE_` variable or browser bundle.
 2. Restrict the key to **Routes API only** and apply the strongest supported
    server/application restriction for the chosen Edge runtime.
-3. Configure a hard Routes limit of **250 requests per Malaysia calendar day**,
-   disable automatic quota increases, and configure 50%, 75%, and 90% alerts.
-   If Google Cloud does not expose an enforceable daily cap for this project,
-   leave route publishing undeployed; alerts alone are insufficient.
+3. Confirm Google Cloud's quota behaviour and configure 50%, 75%, and 90%
+   usage alerts where Cloud exposes a supported signal. This project reports
+   the Routes daily quota as unlimited and non-adjustable; do not enable quota
+   adjuster. The database guard is the enforced 250-request Malaysia-day cap,
+   and it rejects before Google is called.
 4. Set Edge secrets `GOOGLE_ROUTES_SERVER_KEY`, `M2_ROUTE_QUOTE_SECRET` (at
    least 32 random characters), `M2_ROUTE_BACKFILL_SECRET` (at least 32 random
    characters), and `M2_ALLOWED_ORIGIN`.
@@ -118,7 +124,7 @@ but does not replace, the required Google Cloud hard quota.
 - If the location key is absent, offline, or over quota, existing Ride text and
   Embed previews remain readable, but a new unconfirmed location cannot be
   saved. If the Embed key is absent, the local route illustration remains.
-- The local, undeployed Edge Function calls Routes API with traffic-aware
+- The deployed Edge Function calls Routes API with traffic-aware
   routing only during Review/Publish or the bounded backfill. The server key is
   never returned to the browser. Quote tokens expire after five minutes and are
   encrypted plus HMAC-signed so private route anchors are not exposed.

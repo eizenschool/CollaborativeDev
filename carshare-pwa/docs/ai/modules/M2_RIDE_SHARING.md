@@ -31,8 +31,8 @@ automatic departure-time lifecycle processing, and mutual Completed-ride
 reviews. The same interfaces and state rules exist in the offline mock adapter;
 its automatic lifecycle processing is deterministic and lazy.
 
-Local, **undeployed** migration `027_m2_route_schedule_and_completion.sql` and
-the `m2-route-quote` / `m2-route-backfill` Edge Functions upgrade the schedule
+Deployed migration `027_m2_route_schedule_and_completion.sql` and the deployed
+`m2-route-quote` / `m2-route-backfill` Edge Functions upgrade the schedule
 and completion contract. Published rides, request submission, and recruitment
 reopening use one shared one-hour boundary. Existing Pending requests may still
 be accepted or rejected
@@ -109,8 +109,8 @@ steps sequentially. The desktop step rail links only to the current or already
 unlocked steps, and invalidating an earlier required step blocks forward jumps
 until it is complete again. Review exposes an explicit Back action on phone and
 desktop. Edit Ride loads the Host vehicle list, shows the selected vehicle, and
-supports the pre-027 Host-only full-row fallback while migration 027 remains
-undeployed.
+retains the pre-027 Host-only full-row fallback for environments that have not
+yet applied migration 027.
 Responsive verification targets are 375px, 768px, 1024px, and 1440px.
 
 Ride search and Published Ride Detail are public browsing surfaces. Guests are
@@ -133,10 +133,15 @@ location.
 
 ## Deployment Gate / Deferred
 
-Migration `027`, both Edge Functions, the one-time bounded ETA backfill, Edge
-secrets, and Google Cloud configuration remain local and undeployed. Before
-deployment, compare live migration history, configure a server-only Routes key,
-confirm a hard daily Routes limit of 250 plus alerts, and run the backfill with
-at most 25 rows per invocation. Failed/legacy rows must ask the Driver to
-reconfirm; no fixed-duration ETA fallback is allowed. Route-deviation
-automation, map-pin selection, and messaging notifications remain deferred.
+Migration `027` and both Edge Functions were deployed to project
+`pnetstmovctfwqcumodx` on 2026-08-14. `M2_ROUTE_QUOTE_SECRET` and
+`M2_ROUTE_BACKFILL_SECRET`, and the dedicated Routes-only server key are
+configured. The one-time ETA backfill completed for the two eligible future
+rides. Google Cloud reports its Routes daily quota as unlimited and
+non-adjustable, so it cannot provide the requested 250/day platform ceiling;
+the dedicated key is available only to these Edge Functions and the database
+enforces the fail-closed 250-request Malaysia-day cap before Google is called.
+Cloud usage alerts remain an operational follow-up. Failed/legacy rows must ask
+the Driver to reconfirm; no fixed-duration ETA fallback is allowed.
+Route-deviation automation, map-pin selection, and messaging notifications
+remain deferred.
