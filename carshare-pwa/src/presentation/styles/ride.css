@@ -81,8 +81,12 @@
 .step-list { display: flex; flex-direction: column; gap: 2px; }
 .step-item {
   display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px;
-  font-size: 13.5px; font-weight: 700; color: var(--muted);
+  width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left;
+  font: 700 13.5px var(--font); color: var(--muted);
 }
+.step-item:hover:not(:disabled):not(.active) { background: #f4f8f5; color: var(--ink); }
+.step-item:focus-visible { outline: 3px solid rgba(22, 163, 74, .24); outline-offset: 2px; }
+.step-item:disabled { cursor: not-allowed; }
 .step-item.active { background: var(--teal-tint); color: var(--teal-dark); }
 .step-item.done { color: var(--ink); }
 .step-num {
@@ -150,6 +154,10 @@
 .vehicle-select-name { font-weight: 700; font-size: 13.5px; }
 .vehicle-select-meta { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .vehicle-select-check { margin-left: auto; color: var(--teal-dark); display: flex; }
+.edit-vehicle-section { align-content: start; }
+.edit-vehicle-section .vehicle-select-grid { grid-template-columns: 1fr; }
+.edit-vehicle-empty { display: grid; gap: 10px; justify-items: start; }
+.edit-vehicle-empty p, .form-helper { margin: 0; color: var(--muted); font-size: 12px; }
 
 .chip-select-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .chip-select {
@@ -282,6 +290,7 @@
 .publish-ride button:disabled,
 .phone-ride-page button:disabled {
   cursor: not-allowed;
+  opacity: .5;
 }
 
 .ride-hub {
@@ -530,6 +539,27 @@ button.ride-card {
   border-top: 1px solid #f1f5f2;
   border-bottom: 1px solid #f1f5f2;
   font-size: 12px;
+}
+
+.ride-card-eta,
+.ride-eta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: #f0fdf4;
+  color: var(--teal-dark);
+  font-size: 11px;
+}
+
+.ride-card-eta strong,
+.ride-eta strong {
+  color: var(--ink);
+  font-size: 12px;
+  text-align: right;
 }
 
 .chip-row {
@@ -1078,6 +1108,124 @@ button.ride-card {
   min-height: 46px;
 }
 
+.schedule-time-hint {
+  margin: -6px 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.waypoint-builder {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--ride-line);
+  border-radius: 15px;
+  background: #f8fbf9;
+}
+
+.waypoint-stop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.waypoint-stop-row label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.waypoint-stop-row > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.waypoint-stop-row input {
+  width: 76px;
+  min-height: 42px;
+}
+
+.waypoint-confirm-add {
+  min-height: 44px;
+}
+
+.waypoint-lines > div > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.waypoint-lines > div > span small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.route-quote-card {
+  display: grid;
+  gap: 10px;
+  padding: 17px;
+  border: 1px solid #bbf7d0;
+  border-radius: 16px;
+  background: #f0fdf4;
+  color: var(--ink);
+}
+
+.route-quote-card > span,
+.route-quote-card > small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.publish-error,
+.edit-ride-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.publish-error .btn-link,
+.edit-ride-error .btn-link {
+  flex: 0 0 auto;
+}
+
+.route-quote-card .btn-secondary {
+  min-height: 42px;
+}
+
+.route-quote-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.route-quote-grid > span {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.route-quote-grid small,
+.google-route-attribution {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.route-quote-grid strong {
+  font-size: 12px;
+}
+
 .waypoint-lines button {
   width: 44px;
   height: 44px;
@@ -1263,6 +1411,56 @@ button.ride-card {
   background: var(--teal-tint);
 }
 
+.ride-detail-page {
+  padding-bottom: 220px;
+}
+
+.ride-eta {
+  margin-top: 18px;
+}
+
+.ride-verification-card {
+  display: grid;
+  gap: 12px;
+}
+
+.verification-row {
+  display: grid;
+  grid-template-columns: minmax(110px, .6fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5eee8;
+  border-radius: 13px;
+  background: #fbfdfb;
+}
+
+.verification-row > span,
+.verification-row > small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.verification-row strong {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.verification-row button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.verification-row button:disabled {
+  opacity: .55;
+}
+
 .fixed-route-note,
 .eco-review-note,
 .locked-banner {
@@ -1417,6 +1615,29 @@ button.ride-card {
   font-size: 12px;
 }
 
+.boarding-state {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  font-weight: 700;
+}
+
+.boarding-checked-in {
+  background: #dcfce7;
+  color: #166534 !important;
+}
+
+.boarding-no-show {
+  background: #fee2e2;
+  color: #991b1b !important;
+}
+
+.no-show-action button {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
 .rejected-toggle {
   min-height: 44px;
   padding: 0 10px;
@@ -1463,6 +1684,35 @@ button.ride-card {
   padding: 0 12px;
   border-radius: 10px;
   font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .publish-error,
+  .edit-ride-error {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .route-quote-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .verification-row {
+    grid-template-columns: 1fr;
+  }
+
+  .verification-row button {
+    width: 100%;
+  }
+
+  .waypoint-stop-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .passenger-request-card .no-show-action {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Sheets become centred dialogs at wider widths. */
@@ -2049,6 +2299,10 @@ button.ride-card {
   .phone-ride-page {
     min-height: calc(100vh - 64px);
     padding-bottom: calc(154px + env(safe-area-inset-bottom));
+  }
+
+  .ride-detail-page {
+    padding-bottom: calc(210px + env(safe-area-inset-bottom));
   }
 
   .mobile-page-header {

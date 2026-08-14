@@ -2,6 +2,7 @@
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 import { mapRideRow } from './RideService.js';
+import { getCurrentPosition, MAX_GPS_ACCURACY_METRES } from './GooglePlacesService.js';
 
 const REQUEST_SELECT = `
   *,
@@ -10,10 +11,29 @@ const REQUEST_SELECT = `
     host_impact_stats(completed_trips, reputation_score, rating)
   ),
   ride:rides(
-    *,
+    id, host_id, pickup, destination, departure_at, journey_scale,
+    seats_total, seats_available, contribution, restriction_tags,
+    status, estimated_arrival_at,
     host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))
   )
 `;
+const LEGACY_REQUEST_SELECT = `
+  *,
+  requester:profiles!ride_requests_requester_id_fkey(
+    id, full_name, profile_photo_url,
+    host_impact_stats(completed_trips, reputation_score, rating)
+  ),
+  ride:rides(
+    id, host_id, pickup, destination, departure_at, journey_scale,
+    seats_total, seats_available, contribution, restriction_tags, status,
+    host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))
+  )
+`;
+
+function isMissingEstimatedArrival(error) {
+  const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return error?.code === '42703' || /estimated_arrival_at/i.test(detail);
+}
 
 function cleanCompanionNames(names = []) {
   return names.map((name) => name.trim()).filter(Boolean);
@@ -46,6 +66,12 @@ export function mapRideRequestRow(row) {
     updatedAt: row.updated_at ?? row.updatedAt,
     processedAt: row.processed_at ?? row.processedAt ?? null,
     cancelledAt: row.cancelled_at ?? row.cancelledAt ?? null,
+    boardingStatus: row.boarding_status ?? row.boardingStatus ?? 'Pending',
+    checkedInAt: row.checked_in_at ?? row.checkedInAt ?? null,
+    checkInDistanceMeters: row.check_in_distance_meters ?? row.checkInDistanceMeters ?? null,
+    noShowAt: row.no_show_at ?? row.noShowAt ?? null,
+    noShowMarkedBy: row.no_show_marked_by ?? row.noShowMarkedBy ?? null,
+    arrivalConfirmedAt: row.arrival_confirmed_at ?? row.arrivalConfirmedAt ?? null,
     requester: row.requester ? {
       id: row.requester.id,
       fullName: row.requester.full_name ?? row.requester.fullName,
@@ -74,7 +100,10 @@ export const RideRequestService = {
         p_companion_names: request.companionNames
       });
       if (error) throw normalizeError(error);
-      const { data, error: readError } = await supabase.from('ride_requests').select(REQUEST_SELECT).eq('id', requestId).single();
+      let { data, error: readError } = await supabase.from('ride_requests').select(REQUEST_SELECT).eq('id', requestId).single();
+      if (readError && isMissingEstimatedArrival(readError)) {
+        ({ data, error: readError } = await supabase.from('ride_requests').select(LEGACY_REQUEST_SELECT).eq('id', requestId).single());
+      }
       if (readError) throw normalizeError(readError);
       return mapRideRequestRow(data);
     }
@@ -83,11 +112,10 @@ export const RideRequestService = {
 
   async listMyRequests(requesterId) {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('ride_requests')
-        .select(REQUEST_SELECT)
-        .eq('requester_id', requesterId)
-        .order('created_at', { ascending: false });
+      const run = (select) => supabase.from('ride_requests').select(select)
+        .eq('requester_id', requesterId).order('created_at', { ascending: false });
+      let { data, error } = await run(REQUEST_SELECT);
+      if (error && isMissingEstimatedArrival(error)) ({ data, error } = await run(LEGACY_REQUEST_SELECT));
       if (error) throw normalizeError(error);
       return data.map(mapRideRequestRow);
     }
@@ -96,11 +124,10 @@ export const RideRequestService = {
 
   async listRideRequests(rideId) {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('ride_requests')
-        .select(REQUEST_SELECT)
-        .eq('ride_id', rideId)
-        .order('created_at', { ascending: true });
+      const run = (select) => supabase.from('ride_requests').select(select)
+        .eq('ride_id', rideId).order('created_at', { ascending: true });
+      let { data, error } = await run(REQUEST_SELECT);
+      if (error && isMissingEstimatedArrival(error)) ({ data, error } = await run(LEGACY_REQUEST_SELECT));
       if (error) throw normalizeError(error);
       return data.map(mapRideRequestRow);
     }
@@ -144,5 +171,42 @@ export const RideRequestService = {
       return true;
     }
     return mockDb.cancelRideRequest(requestId, reason.trim());
+  },
+
+  async checkIn(requestId) {
+    const position = await getCurrentPosition();
+    const { latitude, longitude, accuracy } = position.coords;
+    if (!Number.isFinite(accuracy) || accuracy > MAX_GPS_ACCURACY_METRES) {
+      throw new Error(`GPS accuracy must be ${MAX_GPS_ACCURACY_METRES} metres or better.`);
+    }
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('check_in_ride_request', {
+        p_request_id: requestId,
+        p_latitude: latitude,
+        p_longitude: longitude,
+        p_accuracy_meters: accuracy
+      });
+      if (error) throw normalizeError(error);
+      return true;
+    }
+    return mockDb.checkInRideRequest(requestId, { latitude, longitude, accuracy });
+  },
+
+  async markNoShow(requestId) {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('mark_ride_request_no_show', { p_request_id: requestId });
+      if (error) throw normalizeError(error);
+      return true;
+    }
+    return mockDb.markRideRequestNoShow(requestId);
+  },
+
+  async confirmArrival(requestId) {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('confirm_passenger_arrival', { p_request_id: requestId });
+      if (error) throw normalizeError(error);
+      return true;
+    }
+    return mockDb.confirmPassengerArrival(requestId);
   }
 };

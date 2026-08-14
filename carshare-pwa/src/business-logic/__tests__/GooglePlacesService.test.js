@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  LOCATION_SEARCH_DEBOUNCE_MS,
+  MIN_LOCATION_QUERY_LENGTH,
   buildAutocompleteRequest,
   getCurrentLocationPreview,
   getCurrentPosition,
@@ -21,15 +23,83 @@ describe('Google Places location boundary', () => {
     expect(isConfirmedLocation(null)).toBe(false);
   });
 
-  it('does not call Google before four characters and restricts searches to Malaysia', async () => {
+  it('starts at one character and restricts searches to Malaysia', async () => {
     const importLibrary = vi.fn();
-    expect(await searchLocations('KUL', { maps: { importLibrary } })).toEqual([]);
+    expect(MIN_LOCATION_QUERY_LENGTH).toBe(1);
+    expect(LOCATION_SEARCH_DEBOUNCE_MS).toBe(1000);
+    expect(await searchLocations('', { maps: { importLibrary } })).toEqual([]);
     expect(importLibrary).not.toHaveBeenCalled();
     expect(buildAutocompleteRequest(' KL Sentral ')).toMatchObject({
       input: 'KL Sentral',
       includedRegionCodes: ['my'],
       region: 'my'
     });
+  });
+
+  it('requests suggestions for a single character', async () => {
+    const fetchAutocompleteSuggestions = vi.fn(async () => ({
+      suggestions: [{ placePrediction: { placeId: 'place-k', text: { toString: () => 'Kuala Lumpur, Malaysia' } } }]
+    }));
+    const maps = { importLibrary: vi.fn(async () => ({ AutocompleteSuggestion: { fetchAutocompleteSuggestions } })) };
+
+    await expect(searchLocations('K', { maps })).resolves.toEqual([
+      { placeId: 'place-k', label: 'Kuala Lumpur, Malaysia' }
+    ]);
+    expect(fetchAutocompleteSuggestions).toHaveBeenCalledWith(expect.objectContaining({ input: 'K' }));
+  });
+
+  it('waits for the Google ready callback and shares the first script load', async () => {
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+    vi.stubEnv('VITE_GOOGLE_MAPS_PLACES_API_KEY', 'test-browser-key');
+    vi.resetModules();
+    const listeners = new Map();
+    let appendedScript = null;
+    const script = {
+      addEventListener: (type, listener) => listeners.set(type, listener),
+      removeEventListener: (type) => listeners.delete(type),
+      remove: vi.fn()
+    };
+    const fetchAutocompleteSuggestions = vi.fn(async ({ input }) => ({
+      suggestions: [{ placePrediction: { placeId: `place-${input}`, text: { toString: () => `${input}, Malaysia` } } }]
+    }));
+
+    try {
+      globalThis.window = { setTimeout, clearTimeout };
+      globalThis.document = {
+        getElementById: () => appendedScript,
+        createElement: () => script,
+        head: {
+          appendChild: (item) => {
+            appendedScript = item;
+            setTimeout(() => {
+              globalThis.window.google = {
+                maps: {
+                  importLibrary: vi.fn(async () => ({ AutocompleteSuggestion: { fetchAutocompleteSuggestions } }))
+                }
+              };
+              const callback = new URL(item.src).searchParams.get('callback');
+              globalThis.window[callback]();
+            }, 0);
+          }
+        }
+      };
+      const { searchLocations: searchWithFreshLoader } = await import('../GooglePlacesService.js');
+      const [first, second] = await Promise.all([
+        searchWithFreshLoader('K', { navigatorObject: { onLine: true } }),
+        searchWithFreshLoader('L', { navigatorObject: { onLine: true } })
+      ]);
+
+      expect(first[0].placeId).toBe('place-K');
+      expect(second[0].placeId).toBe('place-L');
+      expect(appendedScript.src).toContain('callback=__letsTumpangGoogleMapsReady');
+      expect(fetchAutocompleteSuggestions).toHaveBeenCalledTimes(2);
+    } finally {
+      globalThis.window = originalWindow;
+      globalThis.document = originalDocument;
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 
   it('returns at most five confirmed predictions without requesting Place Details', async () => {

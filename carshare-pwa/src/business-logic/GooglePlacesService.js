@@ -5,9 +5,11 @@
 
 const GOOGLE_MAPS_SCRIPT_ID = 'lets-tumpang-google-maps-script';
 const GOOGLE_MAPS_SCRIPT_URL = 'https://maps.googleapis.com/maps/api/js';
+const GOOGLE_MAPS_READY_CALLBACK = '__letsTumpangGoogleMapsReady';
 const configuredApiKey = import.meta.env.VITE_GOOGLE_MAPS_PLACES_API_KEY?.trim() || '';
 
-export const MIN_LOCATION_QUERY_LENGTH = 4;
+export const MIN_LOCATION_QUERY_LENGTH = 1;
+export const LOCATION_SEARCH_DEBOUNCE_MS = 1000;
 export const MAX_GPS_ACCURACY_METRES = 100;
 
 let googleMapsPromise = null;
@@ -42,19 +44,40 @@ function loadGoogleMaps() {
   googleMapsPromise = new Promise((resolve, reject) => {
     const existing = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
     const script = existing || document.createElement('script');
-    const onLoad = () => {
-      if (window.google?.maps?.importLibrary) resolve(window.google.maps);
-      else reject(new LocationServiceError('SERVICE_UNAVAILABLE', 'Google location services did not load correctly.'));
+    let readinessTimer = null;
+    let readinessAttempts = 0;
+    const cleanup = () => {
+      if (readinessTimer) window.clearTimeout(readinessTimer);
+      script.removeEventListener('error', onError);
+      if (window[GOOGLE_MAPS_READY_CALLBACK] === onReady) delete window[GOOGLE_MAPS_READY_CALLBACK];
     };
-    const onError = () => reject(new LocationServiceError('SERVICE_UNAVAILABLE', 'Google location services could not be loaded.'));
+    const onReady = () => {
+      if (window.google?.maps?.importLibrary) {
+        cleanup();
+        resolve(window.google.maps);
+        return;
+      }
+      readinessAttempts += 1;
+      if (readinessAttempts >= 40) {
+        cleanup();
+        reject(new LocationServiceError('SERVICE_UNAVAILABLE', 'Google location services did not load correctly.'));
+        return;
+      }
+      readinessTimer = window.setTimeout(onReady, 50);
+    };
+    const onError = () => {
+      cleanup();
+      reject(new LocationServiceError('SERVICE_UNAVAILABLE', 'Google location services could not be loaded.'));
+    };
 
-    script.addEventListener('load', onLoad, { once: true });
     script.addEventListener('error', onError, { once: true });
+    window[GOOGLE_MAPS_READY_CALLBACK] = onReady;
     if (!existing) {
       const params = new URLSearchParams({
         key: configuredApiKey,
         v: 'weekly',
         loading: 'async',
+        callback: GOOGLE_MAPS_READY_CALLBACK,
         language: 'en',
         region: 'MY'
       });
@@ -63,9 +86,12 @@ function loadGoogleMaps() {
       script.src = `${GOOGLE_MAPS_SCRIPT_URL}?${params.toString()}`;
       script.referrerPolicy = 'strict-origin-when-cross-origin';
       document.head.appendChild(script);
+    } else {
+      onReady();
     }
   }).catch((error) => {
     googleMapsPromise = null;
+    document.getElementById(GOOGLE_MAPS_SCRIPT_ID)?.remove();
     throw error;
   });
 

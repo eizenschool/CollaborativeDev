@@ -5,36 +5,105 @@ import {
   departureParts,
   isAtLeastHoursAway,
   klDayRange,
+  REQUEST_CUTOFF_HOURS,
   toDepartureAt
 } from './rideDateTime.js';
-import { isConfirmedLocation } from './GooglePlacesService.js';
+import {
+  getCurrentPosition,
+  isConfirmedLocation,
+  MAX_GPS_ACCURACY_METRES
+} from './GooglePlacesService.js';
 
 const JOURNEY_SCALES = ['Urban', 'Intercity'];
-const RIDE_SELECT = '*, host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))';
 const PUBLIC_RIDE_SELECT = `
   id, host_id, pickup, destination,
   departure_at, journey_scale,
-  seats_total, seats_available, contribution, restriction_tags, waypoints,
+  seats_total, seats_available, contribution, restriction_tags,
+  status, estimated_arrival_at,
+  host:profiles(id, full_name, profile_photo_url,
+    host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)
+  )
+`;
+const LEGACY_PUBLIC_RIDE_SELECT = `
+  id, host_id, pickup, destination,
+  departure_at, journey_scale,
+  seats_total, seats_available, contribution, restriction_tags,
   status,
   host:profiles(id, full_name, profile_photo_url,
     host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)
   )
 `;
+const LEGACY_HOST_RIDE_SELECT = `
+  *,
+  host:profiles(id, full_name, profile_photo_url,
+    host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)
+  )
+`;
 
-function normalizeWaypoints(waypoints = []) {
+function isUndeployedModule2Upgrade(error) {
+  const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return error?.code === '42703'
+    || error?.code === 'PGRST202'
+    || /estimated_arrival_at|get_participant_ride_detail/i.test(detail);
+}
+
+export function normalizeWaypoints(waypoints = []) {
   return waypoints
-    .map((item) => typeof item === 'string' ? { name: item, description: '' } : item)
+    .map((item) => typeof item === 'string'
+      ? { name: item, description: '', placeId: null, stopMinutes: 0, legacy: true }
+      : item)
     .filter((item) => item?.name?.trim())
-    .map((item) => ({
+    .map((item, index) => ({
       name: item.name.trim(),
-      description: item.description?.trim() || ''
+      description: typeof item.description === 'string' ? item.description.trim() : '',
+      placeId: typeof item.placeId === 'string' ? item.placeId.trim() || null : null,
+      order: index,
+      stopMinutes: Number.isInteger(Number(item.stopMinutes)) ? Number(item.stopMinutes) : 0,
+      ...(!(typeof item.placeId === 'string' && item.placeId.trim()) ? { legacy: true } : {})
     }));
+}
+
+export function validateConfirmedWaypoints(waypoints = []) {
+  const normalized = normalizeWaypoints(waypoints);
+  if (normalized.length > 10) throw new Error('A ride can have at most 10 waypoints.');
+  normalized.forEach((waypoint, index) => {
+    if (!waypoint.placeId) throw new Error(`Choose waypoint ${index + 1} from Google suggestions.`);
+    if (!Number.isInteger(waypoint.stopMinutes) || waypoint.stopMinutes < 0 || waypoint.stopMinutes > 180) {
+      throw new Error(`Waypoint ${index + 1} stop must be between 0 and 180 minutes.`);
+    }
+  });
+  return normalized;
 }
 
 function rpcError(error) {
   if (!error) return null;
   const message = error.message?.replace(/^.*?: /, '') || 'The ride could not be updated.';
   return Object.assign(new Error(message), { code: error.code });
+}
+
+async function functionError(error, data, fallback) {
+  let payload = data;
+  const response = error?.context;
+  if ((!payload || typeof payload !== 'object') && response?.clone) {
+    try { payload = await response.clone().json(); } catch { /* keep fallback */ }
+  }
+  const message = payload?.error || error?.message || fallback;
+  return Object.assign(new Error(message), { code: payload?.code || error?.code });
+}
+
+async function invokeRouteFunction(body) {
+  const { data, error } = await supabase.functions.invoke('m2-route-quote', { body });
+  if (error || data?.error) throw await functionError(error, data, 'The route service is temporarily unavailable.');
+  return data;
+}
+
+async function accuratePosition() {
+  const position = await getCurrentPosition();
+  const { latitude, longitude, accuracy } = position.coords;
+  if (!Number.isFinite(accuracy) || accuracy > MAX_GPS_ACCURACY_METRES) {
+    throw new Error(`GPS accuracy must be ${MAX_GPS_ACCURACY_METRES} metres or better.`);
+  }
+  return { latitude, longitude, accuracy };
 }
 
 function normalizeLocation(location) {
@@ -101,6 +170,14 @@ export function mapRideRow(row) {
     restrictionTags: row.restriction_tags || row.restrictionTags || [],
     waypoints: normalizeWaypoints(row.waypoints),
     status: row.status,
+    estimatedArrivalAt: row.estimated_arrival_at ?? row.estimatedArrivalAt ?? null,
+    routeDistanceMeters: row.route_distance_meters ?? row.routeDistanceMeters ?? null,
+    routeDurationSeconds: row.route_duration_seconds ?? row.routeDurationSeconds ?? null,
+    routeStopoverSeconds: row.route_stopover_seconds ?? row.routeStopoverSeconds ?? null,
+    scheduleBufferUntil: row.schedule_buffer_until ?? row.scheduleBufferUntil ?? null,
+    driverArrivedAt: row.driver_arrived_at ?? row.driverArrivedAt ?? null,
+    passengerConfirmationDueAt: row.passenger_confirmation_due_at ?? row.passengerConfirmationDueAt ?? null,
+    completedAt: row.completed_at ?? row.completedAt ?? null,
     publishedAt: row.published_at ?? row.publishedAt ?? null,
     recruitmentClosedAt: row.recruitment_closed_at ?? row.recruitmentClosedAt ?? null,
     cancelReason: row.cancel_reason ?? row.cancelReason ?? null,
@@ -122,10 +199,16 @@ export function mapRideRow(row) {
   };
 }
 
-export function validateRideDraft(rideData, { publishing = false, requireConfirmedLocations = false, now = new Date() } = {}) {
+export function validateRideDraft(rideData, {
+  publishing = false,
+  requireConfirmedLocations = false,
+  requireConfirmedWaypoints = publishing,
+  now = new Date()
+} = {}) {
   if (!rideData.pickup?.trim()) throw new Error('Pickup point is required.');
   if (!rideData.destination?.trim()) throw new Error('Destination is required.');
   if (requireConfirmedLocations) validateConfirmedRoute(rideData);
+  if (requireConfirmedWaypoints) validateConfirmedWaypoints(rideData.waypoints);
   if ((rideData.pickupInstructions?.length || 0) > 300) throw new Error('Pickup instructions must be 300 characters or fewer.');
   if (!rideData.date && !rideData.departureAt) throw new Error('Departure date is required.');
   if (!rideData.time && !rideData.departureAt) throw new Error('Departure time is required.');
@@ -139,8 +222,8 @@ export function validateRideDraft(rideData, { publishing = false, requireConfirm
     throw new Error('Available seats cannot exceed the selected vehicle capacity.');
   }
   const departureAt = rideData.departureAt || toDepartureAt(rideData.date, rideData.time);
-  if (publishing && !isAtLeastHoursAway(departureAt, 5, now)) {
-    throw new Error('Published rides must depart at least 5 hours from now.');
+  if (publishing && !isAtLeastHoursAway(departureAt, REQUEST_CUTOFF_HOURS, now)) {
+    throw new Error('Published rides must depart at least 1 hour from now.');
   }
   return departureAt;
 }
@@ -223,14 +306,18 @@ export const RideService = {
 
   async searchRides({ from, to, date } = {}) {
     if (isSupabaseConfigured) {
-      let query = supabase.from('rides').select(PUBLIC_RIDE_SELECT).eq('status', 'Published');
-      if (from) query = query.ilike('pickup', `%${from}%`);
-      if (to) query = query.ilike('destination', `%${to}%`);
-      if (date) {
-        const range = klDayRange(date);
-        query = query.gte('departure_at', range.start).lt('departure_at', range.end);
-      }
-      const { data, error } = await query.order('departure_at', { ascending: true });
+      const run = (select) => {
+        let query = supabase.from('rides').select(select).eq('status', 'Published');
+        if (from) query = query.ilike('pickup', `%${from}%`);
+        if (to) query = query.ilike('destination', `%${to}%`);
+        if (date) {
+          const range = klDayRange(date);
+          query = query.gte('departure_at', range.start).lt('departure_at', range.end);
+        }
+        return query.order('departure_at', { ascending: true });
+      };
+      let { data, error } = await run(PUBLIC_RIDE_SELECT);
+      if (error && isUndeployedModule2Upgrade(error)) ({ data, error } = await run(LEGACY_PUBLIC_RIDE_SELECT));
       if (error) throw rpcError(error);
       return data.map(mapRideRow);
     }
@@ -239,11 +326,10 @@ export const RideService = {
 
   async listMyRides(userId) {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('rides')
-        .select(RIDE_SELECT)
-        .eq('host_id', userId)
-        .order('created_at', { ascending: false });
+      const run = (select) => supabase.from('rides').select(select)
+        .eq('host_id', userId).order('departure_at', { ascending: false });
+      let { data, error } = await run(PUBLIC_RIDE_SELECT);
+      if (error && isUndeployedModule2Upgrade(error)) ({ data, error } = await run(LEGACY_PUBLIC_RIDE_SELECT));
       if (error) throw rpcError(error);
       return { hosting: data.map(mapRideRow), joining: [] };
     }
@@ -253,10 +339,22 @@ export const RideService = {
   async getRide(rideId) {
     if (isSupabaseConfigured) {
       const { data: sessionData } = await supabase.auth.getSession();
-      const select = sessionData.session ? RIDE_SELECT : PUBLIC_RIDE_SELECT;
-      const { data, error } = await supabase.from('rides').select(select).eq('id', rideId).maybeSingle();
+      const run = (select) => supabase.from('rides').select(select).eq('id', rideId).maybeSingle();
+      let { data, error } = await run(PUBLIC_RIDE_SELECT);
+      if (error && isUndeployedModule2Upgrade(error)) ({ data, error } = await run(LEGACY_PUBLIC_RIDE_SELECT));
       if (error) throw rpcError(error);
-      return data ? mapRideRow(data) : null;
+      if (!data) return null;
+      if (sessionData.session) {
+        const { data: privateData, error: privateError } = await supabase.rpc('get_participant_ride_detail', { p_ride_id: rideId });
+        if (privateError && !isUndeployedModule2Upgrade(privateError)) throw rpcError(privateError);
+        if (privateData) return mapRideRow({ ...privateData, host: data.host });
+        if (privateError && data.host_id === sessionData.session.user.id) {
+          const { data: legacyHostData, error: legacyHostError } = await run(LEGACY_HOST_RIDE_SELECT);
+          if (legacyHostError) throw rpcError(legacyHostError);
+          if (legacyHostData) return mapRideRow(legacyHostData);
+        }
+      }
+      return mapRideRow(data);
     }
     return mockDb.getRide(rideId);
   },
@@ -267,9 +365,21 @@ export const RideService = {
     const merged = { ...current, ...patch };
     validateRideDraft(merged, {
       publishing: current.status === 'Published',
-      requireConfirmedLocations: routeChangeRequiresConfirmation(current, patch)
+      requireConfirmedLocations: routeChangeRequiresConfirmation(current, patch),
+      requireConfirmedWaypoints: patch.waypoints !== undefined || current.status === 'Published'
     });
     if (isSupabaseConfigured) {
+      if (current.status === 'Published') {
+        if (!patch.routeQuote?.token) throw new Error('Calculate a fresh route before saving a Published ride.');
+        const result = await invokeRouteFunction({
+          action: 'publish',
+          mode: 'update',
+          rideId,
+          ride: buildRoutePayload(merged),
+          quoteToken: patch.routeQuote.token
+        });
+        return this.getRide(result.rideId);
+      }
       const { error } = await supabase.rpc('update_ride', { p_ride_id: rideId, ...buildRideRpcArgs(merged) });
       if (error) throw rpcError(error);
       return this.getRide(rideId);
@@ -279,12 +389,27 @@ export const RideService = {
 
   async publishRide(hostId, rideData, status = 'Published') {
     if (!['Draft', 'Published'].includes(status)) throw new Error('Unsupported ride status.');
-    validateRideDraft(rideData, { publishing: status === 'Published', requireConfirmedLocations: true });
+    validateRideDraft(rideData, {
+      publishing: status === 'Published',
+      requireConfirmedLocations: true,
+      requireConfirmedWaypoints: true
+    });
 
     if (isSupabaseConfigured) {
+      if (status === 'Published') {
+        if (!rideData.routeQuote?.token) throw new Error('Calculate a fresh route before publishing.');
+        const result = await invokeRouteFunction({
+          action: 'publish',
+          mode: 'create',
+          rideId: null,
+          ride: buildRoutePayload(rideData),
+          quoteToken: rideData.routeQuote.token
+        });
+        return this.getRide(result.rideId);
+      }
       const { data: rideId, error } = await supabase.rpc('create_ride', {
         ...buildRideRpcArgs(rideData),
-        p_publish: status === 'Published'
+        p_publish: false
       });
       if (error) throw rpcError(error);
       return this.getRide(rideId);
@@ -293,13 +418,31 @@ export const RideService = {
     return mockDb.createRide(hostId, { ...rideData, waypoints: normalizeWaypoints(rideData.waypoints) }, status);
   },
 
-  async publishDraft(rideId) {
+  async quoteRide(rideData, { rideId = null } = {}) {
+    validateRideDraft(rideData, {
+      publishing: true,
+      requireConfirmedLocations: true,
+      requireConfirmedWaypoints: true
+    });
     if (isSupabaseConfigured) {
-      const { error } = await supabase.rpc('publish_ride', { p_ride_id: rideId });
-      if (error) throw rpcError(error);
-      return this.getRide(rideId);
+      const result = await invokeRouteFunction({ action: 'quote', rideId, ride: buildRoutePayload(rideData) });
+      return result.quote;
     }
-    return mockDb.publishDraft(rideId);
+    return mockDb.quoteRide(rideData, { rideId });
+  },
+
+  async publishDraft(rideId, routeQuote = null) {
+    if (isSupabaseConfigured) {
+      const ride = await this.getRide(rideId);
+      if (!ride || ride.status !== 'Draft') throw new Error('Only a Draft ride can be published.');
+      if (!routeQuote?.token) throw new Error('Calculate a fresh route before publishing.');
+      const result = await invokeRouteFunction({
+        action: 'publish', mode: 'publish_draft', rideId,
+        ride: buildRoutePayload(ride), quoteToken: routeQuote.token
+      });
+      return this.getRide(result.rideId);
+    }
+    return mockDb.publishDraft(rideId, routeQuote);
   },
 
   async deleteDraft(rideId) {
@@ -336,5 +479,64 @@ export const RideService = {
       return this.getRide(rideId);
     }
     return mockDb.reopenRideRecruitment(rideId);
+  },
+
+  async getLifecycleContext(rideId) {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase.rpc('get_ride_lifecycle_context', { p_ride_id: rideId });
+      if (error) throw rpcError(error);
+      const row = Array.isArray(data) ? data[0] : data;
+      return row ? {
+        driverArrivedAt: row.driver_arrived_at ?? null,
+        passengerConfirmationDueAt: row.passenger_confirmation_due_at ?? null,
+        completedAt: row.completed_at ?? null
+      } : null;
+    }
+    return mockDb.getRideLifecycleContext(rideId);
+  },
+
+  async startRide(rideId) {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('start_ride', { p_ride_id: rideId });
+      if (error) throw rpcError(error);
+      return this.getRide(rideId);
+    }
+    return mockDb.startRide(rideId);
+  },
+
+  async confirmDriverArrival(rideId) {
+    const position = await accuratePosition();
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('confirm_driver_arrival', {
+        p_ride_id: rideId,
+        p_latitude: position.latitude,
+        p_longitude: position.longitude,
+        p_accuracy_meters: position.accuracy
+      });
+      if (error) throw rpcError(error);
+      return this.getRide(rideId);
+    }
+    return mockDb.confirmDriverArrival(rideId, position);
   }
 };
+
+export function buildRoutePayload(rideData) {
+  return {
+    vehicleId: rideData.vehicleId,
+    pickup: rideData.pickup?.trim(),
+    destination: rideData.destination?.trim(),
+    pickupLocation: normalizeLocation(rideData.pickupLocation),
+    destinationLocation: normalizeLocation(rideData.destinationLocation),
+    pickupInstructions: rideData.pickupInstructions?.trim() || '',
+    departureAt: rideData.departureAt || toDepartureAt(rideData.date, rideData.time),
+    journeyScale: rideData.journeyScale,
+    seatsTotal: Number(rideData.seatsTotal),
+    contribution: rideData.contribution?.trim() || '',
+    restrictionTags: rideData.restrictionTags || [],
+    waypoints: validateConfirmedWaypoints(rideData.waypoints)
+  };
+}
+
+export function isRouteQuoteFresh(quote, now = new Date()) {
+  return Boolean(quote?.token && quote?.expiresAt && new Date(quote.expiresAt).getTime() > now.getTime());
+}

@@ -9,6 +9,8 @@
 // out for supabaseClient calls in Business Logic Layer services is a like-for-like
 // change, not a rewrite.
 
+import { rideIntervalsOverlap } from '../business-logic/rideDateTime.js';
+
 const STORAGE_KEY = 'letstumpang_mock_db_v1';
 
 const seedData = {
@@ -158,6 +160,7 @@ const seedData = {
       date: '2026-08-20',
       time: '08:00',
       journeyScale: 'Urban',
+      vehicleId: 'v_1',
       seatsTotal: 3,
       seatsAvailable: 2,
       contribution: 'Toll contribution',
@@ -211,6 +214,9 @@ function normalizeModule2State(db) {
   db.rideRequests ||= {};
   db.rideReviews ||= {};
   for (const ride of Object.values(db.rides || {})) {
+    // Repair the pre-vehicle demo Host ride already persisted in older offline
+    // browser sessions so Edit Ride can hydrate the same contract as Supabase.
+    if (ride.id === 'r_5' && !ride.vehicleId) ride.vehicleId = 'v_1';
     ride.departureAt ||= toMockDepartureAt(ride.date, ride.time);
     ride.date ||= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur', dateStyle: 'short' }).format(new Date(ride.departureAt));
     ride.publishedAt ??= ride.status === 'Draft' ? null : ride.createdAt;
@@ -219,8 +225,66 @@ function normalizeModule2State(db) {
     ride.expiredAt ??= null;
     ride.updatedAt ??= ride.createdAt;
     ride.waypoints ||= [];
+    ride.estimatedArrivalAt ??= null;
+    ride.scheduleBufferUntil ??= ride.estimatedArrivalAt
+      ? new Date(new Date(ride.estimatedArrivalAt).getTime() + 30 * 60 * 1000).toISOString()
+      : null;
+    ride.routeDistanceMeters ??= null;
+    ride.routeDurationSeconds ??= null;
+    ride.routeStopoverSeconds ??= null;
+    ride.driverArrivedAt ??= null;
+    ride.passengerConfirmationDueAt ??= null;
+    ride.completedAt ??= null;
+  }
+  for (const request of Object.values(db.rideRequests)) {
+    request.boardingStatus ??= 'Pending';
+    request.checkedInAt ??= null;
+    request.checkInDistanceMeters ??= null;
+    request.noShowAt ??= null;
+    request.noShowMarkedBy ??= null;
+    request.arrivalConfirmedAt ??= null;
   }
   return db;
+}
+
+function distanceMetres(latitudeA, longitudeA, latitudeB, longitudeB) {
+  const radians = (value) => value * Math.PI / 180;
+  const latitudeDelta = radians(latitudeB - latitudeA);
+  const longitudeDelta = radians(longitudeB - longitudeA);
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(radians(latitudeA)) * Math.cos(radians(latitudeB))
+    * Math.sin(longitudeDelta / 2) ** 2;
+  return Math.round(6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, a))));
+}
+
+function applyMockRouteQuote(ride, quote) {
+  if (!quote?.estimatedArrivalAt || !quote?.expiresAt || new Date(quote.expiresAt) <= new Date()) {
+    throw new Error('Calculate a fresh route before publishing.');
+  }
+  ride.routeDistanceMeters = Number(quote.distanceMeters);
+  ride.routeDurationSeconds = Number(quote.routeDurationSeconds);
+  ride.routeStopoverSeconds = Number(quote.stopoverSeconds || 0);
+  ride.estimatedArrivalAt = quote.estimatedArrivalAt;
+  ride.scheduleBufferUntil = new Date(new Date(quote.estimatedArrivalAt).getTime() + 30 * 60 * 1000).toISOString();
+  ride.pickupAnchor = quote.pickupAnchor || null;
+  ride.destinationAnchor = quote.destinationAnchor || null;
+}
+
+function assertMockScheduleAvailable(db, hostId, candidate, excludeRideId = null) {
+  if (Object.values(db.rides).some((ride) => ride.hostId === hostId && ride.id !== excludeRideId && ride.status === 'In Transit')) {
+    throw new Error('Complete your current In Transit ride before publishing another ride.');
+  }
+  if (Object.values(db.rides).some((ride) => ride.hostId === hostId && ride.id !== excludeRideId
+    && ['Published', 'Matched', 'In Transit'].includes(ride.status) && !ride.scheduleBufferUntil)) {
+    throw new Error('Reconfirm the route for your existing active Ride before publishing another Ride.');
+  }
+  const start = new Date(candidate.departureAt).getTime();
+  const end = new Date(candidate.scheduleBufferUntil).getTime();
+  const conflict = Object.values(db.rides).some((ride) => {
+    if (ride.hostId !== hostId || ride.id === excludeRideId || !['Published', 'Matched', 'In Transit'].includes(ride.status) || !ride.scheduleBufferUntil) return false;
+    return rideIntervalsOverlap(start, end, ride.departureAt, ride.scheduleBufferUntil);
+  });
+  if (conflict) throw new Error('This ride overlaps another active ride, including its 30-minute arrival buffer.');
 }
 
 function processDueRides(db, now = new Date()) {
@@ -240,6 +304,13 @@ function processDueRides(db, now = new Date()) {
     ride.recruitmentClosedAt = hasAccepted ? (ride.recruitmentClosedAt || instant.toISOString()) : ride.recruitmentClosedAt;
     ride.expiredAt = hasAccepted ? null : instant.toISOString();
     ride.updatedAt = instant.toISOString();
+  }
+  for (const ride of Object.values(db.rides || {})) {
+    if (ride.status === 'In Transit' && ride.passengerConfirmationDueAt && new Date(ride.passengerConfirmationDueAt) <= instant) {
+      ride.status = 'Completed';
+      ride.completedAt ||= instant.toISOString();
+      ride.updatedAt = instant.toISOString();
+    }
   }
 }
 
@@ -505,6 +576,16 @@ export const mockDb = {
     if (!vehicle) throw new Error('Select a vehicle you own.');
     if (Number(next.seatsTotal) > vehicle.seats) throw new Error('Available seats exceed vehicle capacity.');
     if (patch.date || patch.time) next.departureAt = toMockDepartureAt(next.date, next.time);
+    if (ride.status === 'Published') {
+      if (new Date(next.departureAt).getTime() - Date.now() < 60 * 60 * 1000) {
+        throw new Error('Published rides must depart at least 1 hour from now.');
+      }
+      applyMockRouteQuote(next, patch.routeQuote);
+      assertMockScheduleAvailable(db, ride.hostId, next, rideId);
+    } else {
+      next.estimatedArrivalAt = null;
+      next.scheduleBufferUntil = null;
+    }
     next.seatsAvailable = Number(next.seatsTotal);
     next.updatedAt = new Date().toISOString();
     db.rides[rideId] = next;
@@ -522,10 +603,10 @@ export const mockDb = {
     const seats = Number(rideData.seatsTotal) || 1;
     if (seats > vehicle.seats) throw new Error('Available seats exceed vehicle capacity.');
     const departureAt = rideData.departureAt || toMockDepartureAt(rideData.date, rideData.time);
-    if (status === 'Published' && new Date(departureAt).getTime() - Date.now() < 5 * 60 * 60 * 1000) {
-      throw new Error('Published rides must depart at least 5 hours from now.');
+    if (status === 'Published' && new Date(departureAt).getTime() - Date.now() < 60 * 60 * 1000) {
+      throw new Error('Published rides must depart at least 1 hour from now.');
     }
-    db.rides[id] = {
+    const ride = {
       id,
       hostId,
       pickup: rideData.pickup,
@@ -551,16 +632,27 @@ export const mockDb = {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+    if (status === 'Published') {
+      applyMockRouteQuote(ride, rideData.routeQuote);
+      assertMockScheduleAvailable(db, hostId, ride);
+    }
+    db.rides[id] = ride;
     save(db);
     return enrichRide(db, db.rides[id]);
   },
 
-  async publishDraft(rideId) {
+  async quoteRide() {
+    throw new Error('Live route calculation requires Supabase and Google Routes. Save as Draft while offline.');
+  },
+
+  async publishDraft(rideId, routeQuote) {
     await delay();
     const db = load();
     const ride = db.rides[rideId];
     if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'Draft') throw new Error('Only your Draft rides can be published.');
-    if (new Date(ride.departureAt).getTime() - Date.now() < 5 * 60 * 60 * 1000) throw new Error('Published rides must depart at least 5 hours from now.');
+    if (new Date(ride.departureAt).getTime() - Date.now() < 60 * 60 * 1000) throw new Error('Published rides must depart at least 1 hour from now.');
+    applyMockRouteQuote(ride, routeQuote);
+    assertMockScheduleAvailable(db, ride.hostId, ride, rideId);
     ride.status = 'Published';
     ride.publishedAt = new Date().toISOString();
     ride.updatedAt = ride.publishedAt;
@@ -629,7 +721,7 @@ export const mockDb = {
     const db = load();
     const ride = db.rides[rideId];
     if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'Matched') throw new Error('Only Matched rides can reopen recruitment.');
-    if (new Date(ride.departureAt).getTime() - Date.now() < 5 * 60 * 60 * 1000) throw new Error('Recruitment can no longer be reopened.');
+    if (new Date(ride.departureAt).getTime() - Date.now() < 60 * 60 * 1000) throw new Error('Recruitment can no longer be reopened.');
     ride.status = 'Published';
     ride.recruitmentClosedAt = null;
     ride.updatedAt = new Date().toISOString();
@@ -645,7 +737,7 @@ export const mockDb = {
     if (!ride) throw new Error('Ride not found.');
     if (ride.hostId === requesterId) throw new Error('Hosts cannot request their own ride.');
     if (ride.status !== 'Published') throw new Error('This ride is not accepting requests.');
-    if (new Date(ride.departureAt).getTime() - Date.now() <= 5 * 60 * 60 * 1000) throw new Error('The request deadline has passed.');
+    if (new Date(ride.departureAt).getTime() - Date.now() < 60 * 60 * 1000) throw new Error('The request deadline has passed.');
     if (seatsRequested > ride.seatsAvailable) throw new Error('Not enough seats are currently available.');
     const previous = Object.values(db.rideRequests).filter((item) => item.rideId === rideId && item.requesterId === requesterId);
     if (previous.some((item) => item.status === 'Rejected')) throw new Error('A rejected request cannot be submitted again.');
@@ -716,6 +808,109 @@ export const mockDb = {
     ride.updatedAt = now;
     save(db);
     return enrichRequest(db, request);
+  },
+
+  async checkInRideRequest(requestId, position) {
+    await delay();
+    const db = load();
+    const request = db.rideRequests[requestId];
+    const ride = request && db.rides[request.rideId];
+    if (!request || request.requesterId !== db.currentUserId) throw new Error('Ride request not found or permission denied.');
+    if (!ride || request.status !== 'Accepted' || request.boardingStatus !== 'Pending') throw new Error('Only an unresolved accepted passenger can check in.');
+    if (!['Published', 'Matched'].includes(ride.status)) throw new Error('This Ride is not accepting check-ins.');
+    if (new Date(ride.departureAt).getTime() - Date.now() > 60 * 60 * 1000) throw new Error('Check-in opens 1 hour before departure.');
+    if (position.accuracy > 100) throw new Error('GPS accuracy must be 100 metres or better.');
+    if (!ride.pickupAnchor) throw new Error('This Ride needs a confirmed route before check-in.');
+    const distance = distanceMetres(position.latitude, position.longitude, ride.pickupAnchor.latitude, ride.pickupAnchor.longitude);
+    if (distance > 200) throw new Error('You must be within 200 metres of the pickup point.');
+    request.boardingStatus = 'Checked In';
+    request.checkedInAt = new Date().toISOString();
+    request.checkInDistanceMeters = distance;
+    save(db);
+    return enrichRequest(db, request);
+  },
+
+  async markRideRequestNoShow(requestId) {
+    await delay();
+    const db = load();
+    const request = db.rideRequests[requestId];
+    const ride = request && db.rides[request.rideId];
+    if (!ride || ride.hostId !== db.currentUserId) throw new Error('Only the Driver can mark a no-show.');
+    if (request.status !== 'Accepted' || request.boardingStatus !== 'Pending') throw new Error('Only an unresolved accepted passenger can be marked No-show.');
+    if (new Date(ride.departureAt) > new Date()) throw new Error('No-show can only be marked at or after departure.');
+    request.boardingStatus = 'No-show';
+    request.noShowAt = new Date().toISOString();
+    request.noShowMarkedBy = db.currentUserId;
+    save(db);
+    return enrichRequest(db, request);
+  },
+
+  async startRide(rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId) throw new Error('Ride not found or permission denied.');
+    if (!['Published', 'Matched'].includes(ride.status) || new Date(ride.departureAt) > new Date()) throw new Error('Only a ready Ride can start at departure.');
+    const accepted = Object.values(db.rideRequests).filter((request) => request.rideId === rideId && request.status === 'Accepted');
+    if (!accepted.length) throw new Error('At least one accepted passenger is required before departure.');
+    if (accepted.some((request) => request.boardingStatus === 'Pending')) throw new Error('Check in or mark No-show for every accepted passenger before starting.');
+    ride.status = 'In Transit';
+    ride.updatedAt = new Date().toISOString();
+    save(db);
+    return enrichRide(db, ride);
+  },
+
+  async confirmDriverArrival(rideId, position) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'In Transit') throw new Error('Only the Driver of an In Transit Ride can confirm arrival.');
+    if (position.accuracy > 100) throw new Error('GPS accuracy must be 100 metres or better.');
+    if (!ride.destinationAnchor) throw new Error('This Ride has no verified destination.');
+    const distance = distanceMetres(position.latitude, position.longitude, ride.destinationAnchor.latitude, ride.destinationAnchor.longitude);
+    if (distance > 200) throw new Error('You must be within 200 metres of the destination.');
+    ride.driverArrivedAt ||= new Date().toISOString();
+    ride.passengerConfirmationDueAt ||= new Date(new Date(ride.driverArrivedAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const checkedIn = Object.values(db.rideRequests).filter((request) => request.rideId === rideId && request.status === 'Accepted' && request.boardingStatus === 'Checked In');
+    if (!checkedIn.length) {
+      ride.status = 'Completed';
+      ride.completedAt ||= new Date().toISOString();
+    }
+    ride.updatedAt = new Date().toISOString();
+    save(db);
+    return enrichRide(db, ride);
+  },
+
+  async confirmPassengerArrival(requestId) {
+    await delay();
+    const db = load();
+    const request = db.rideRequests[requestId];
+    const ride = request && db.rides[request.rideId];
+    if (!request || request.requesterId !== db.currentUserId || request.status !== 'Accepted' || request.boardingStatus !== 'Checked In') throw new Error('Only a checked-in passenger can confirm arrival.');
+    if (!ride || ride.status !== 'In Transit' || !ride.driverArrivedAt) throw new Error('The Driver has not confirmed destination arrival.');
+    request.arrivalConfirmedAt ||= new Date().toISOString();
+    const checkedIn = Object.values(db.rideRequests).filter((item) => item.rideId === ride.id && item.status === 'Accepted' && item.boardingStatus === 'Checked In');
+    if (checkedIn.every((item) => item.arrivalConfirmedAt)) {
+      ride.status = 'Completed';
+      ride.completedAt = new Date().toISOString();
+      ride.updatedAt = ride.completedAt;
+    }
+    save(db);
+    return enrichRequest(db, request);
+  },
+
+  async getRideLifecycleContext(rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride) return null;
+    const participant = ride.hostId === db.currentUserId || Object.values(db.rideRequests).some((request) => request.rideId === rideId && request.requesterId === db.currentUserId && request.status === 'Accepted');
+    if (!participant) throw new Error('Ride lifecycle details are private to participants.');
+    return {
+      driverArrivedAt: ride.driverArrivedAt,
+      passengerConfirmationDueAt: ride.passengerConfirmationDueAt,
+      completedAt: ride.completedAt
+    };
   },
 
   async submitRideReview(reviewerId, { rideId, revieweeId, rating, comment }) {

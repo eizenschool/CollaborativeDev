@@ -73,37 +73,25 @@ fail with a provider-not-enabled error - that is expected, not a code bug.
 
 ## Database history and deployment
 
-The authoritative SQL lives in `database/sql/`. Files `001-010` were deployed
-as one atomic initial migration, `011-012` as hardening follow-ups, `013-015`
-as the completed Module 2 lifecycle, `016-018` as Module 3 messaging, and
-`019-020` as the vehicle driver-licence and Ride route-location additions. The
-live migration records are:
+The authoritative SQL lives in `database/sql/`. Files `001-026` are deployed
+and must not be rerun or edited. `023_m1_m2_public_ride_browsing.sql` was applied
+through the Dashboard SQL Editor and is the repository record even though its
+name is absent from migration-history output. See `docs/ai/SQL.md` for the
+complete deployment-name map and current live state.
 
-```text
-initial_m1_m2_schema
-project_advisor_followup
-require_host_vehicle_for_rides
-m2_ride_requests_and_departure
-m2_lifecycle_cron
-m2_ride_reviews
-m3_supabase_messaging
-m3_advisor_followup
-m3_versioned_media_paths
-m1_add_vehicle_driver_license
-m2_add_route_locations
-```
-
-`001-020` are deployed and must not be run again or edited. The live database
-includes the driver-licence column, canonical route-location columns, their
-constraints, and the replacement Ride RPC signatures. Future changes start at
-`021`, are applied through migration tooling, and must be recorded in
-`docs/ai/SQL.md`. Do not make Dashboard-only schema changes.
+`028_m2_route_schedule_and_completion.sql` and the matching Module 2 Edge
+Functions are local and **not deployed**. They require a fresh live migration
+history check, explicit deployment authorization, server-only Routes secrets,
+and the hard-quota gate in `docs/GOOGLE-MAPS-SETUP.md`. New schema work after
+this local migration starts at `028`. Do not make Dashboard-only schema changes.
 
 ## Security model
 
 RLS and Postgres privileges are separate layers and both are configured:
 
-- `anon` receives no business-table privileges.
+- `anon` receives only the approved active-profile/Host-impact and Published
+  Ride columns; after local `027`, ETA is added while waypoint JSON is removed
+  because its upgraded contract contains private Place IDs.
 - `authenticated` receives explicit table/column grants only for supported actions.
 - Owner policies use both `USING` and `WITH CHECK` for updates.
 - The Auth trigger uses an empty `search_path`, schema-qualified objects, and no client execute permission.

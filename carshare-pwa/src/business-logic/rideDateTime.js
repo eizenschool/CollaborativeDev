@@ -1,5 +1,5 @@
 export const APP_TIME_ZONE = 'Asia/Kuala_Lumpur';
-export const REQUEST_CUTOFF_HOURS = 5;
+export const REQUEST_CUTOFF_HOURS = 1;
 
 export function toDepartureAt(date, time) {
   if (!date || !time) return null;
@@ -40,6 +40,22 @@ export function isAtLeastHoursAway(departureAt, hours = REQUEST_CUTOFF_HOURS, no
   return new Date(departureAt).getTime() - now.getTime() >= hours * 60 * 60 * 1000;
 }
 
+export function formatMalaysiaDeparture(date, time) {
+  const departureAt = toDepartureAt(date, time);
+  if (!departureAt) return '—';
+  return `${new Intl.DateTimeFormat('en-MY', {
+    timeZone: APP_TIME_ZONE,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    hour12: true
+  }).format(new Date(departureAt))} (Malaysia time)`;
+}
+
 export function isBeforeDeparture(departureAt, now = new Date()) {
   return now.getTime() < new Date(departureAt).getTime();
+}
+
+export function rideIntervalsOverlap(startA, endA, startB, endB) {
+  return new Date(startA).getTime() < new Date(endB).getTime()
+    && new Date(startB).getTime() < new Date(endA).getTime();
 }

@@ -49,11 +49,22 @@ export default function ManageRequests() {
     finally { setBusyId(null); }
   }
 
+  async function markNoShow(request) {
+    setBusyId(request.id);
+    setError('');
+    try {
+      await RideRequestService.markNoShow(request.id);
+      await load();
+    } catch (err) { setError(err.message); }
+    finally { setBusyId(null); }
+  }
+
   if (loading) return <div className="ride-page-loading">Loading requests…</div>;
 
   const pending = requests.filter((request) => request.status === 'Pending');
   const accepted = requests.filter((request) => request.status === 'Accepted');
   const history = requests.filter((request) => !['Pending', 'Accepted'].includes(request.status));
+  const departureReached = ride && new Date(ride.departureAt) <= new Date();
 
   function RequestCard({ request, actions = false, muted = false }) {
     const person = request.requester || { fullName: 'Member', reputationScore: 0, rating: null };
@@ -65,8 +76,10 @@ export default function ManageRequests() {
           <span><IconStar size={11} /> {person.rating == null ? 'New' : Number(person.rating).toFixed(1)} <b className="tier-badge">{tier(person.reputationScore)}</b> <small>{request.status}</small></span>
           {request.companionNames.length > 0 && <small>Companions: {request.companionNames.join(', ')}</small>}
           {request.decisionReason && <small>Reason: {request.decisionReason}</small>}
+          {request.status === 'Accepted' && <small className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>Boarding: {request.boardingStatus}{request.checkInDistanceMeters != null ? ` · ${request.checkInDistanceMeters} m from pickup` : ''}</small>}
         </div>
         {actions && <div className="request-actions"><button type="button" disabled={busyId === request.id} onClick={() => decide(request, 'Rejected')}>{busyId === request.id ? 'Working…' : 'Reject'}</button><button type="button" disabled={busyId === request.id || request.seatsRequested > (ride?.seatsAvailable ?? 0)} onClick={() => decide(request, 'Accepted')}>{busyId === request.id ? 'Working…' : 'Accept'}</button></div>}
+        {request.status === 'Accepted' && request.boardingStatus === 'Pending' && <div className="request-actions no-show-action"><button type="button" disabled={!departureReached || busyId === request.id} onClick={() => markNoShow(request)}>{busyId === request.id ? 'Working…' : departureReached ? 'Mark No-show' : 'No-show at departure'}</button></div>}
       </article>
     );
   }

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   GooglePlacesService,
+  LOCATION_SEARCH_DEBOUNCE_MS,
   MIN_LOCATION_QUERY_LENGTH
 } from '../../../business-logic/GooglePlacesService.js';
 import { IconCheck, IconMapPin } from '../icons.jsx';
@@ -12,6 +13,7 @@ export default function ConfirmedLocationInput({
   value,
   location,
   onChange,
+  disabled = false,
   allowCurrentLocation = false,
   currentLocationPreview = null
 }) {
@@ -36,6 +38,13 @@ export default function ConfirmedLocationInput({
   useEffect(() => {
     const trimmed = query.trim();
     const selectedLabel = (value || '').trim();
+    if (disabled) {
+      requestSequence.current += 1;
+      setSuggestions([]);
+      setStatus('idle');
+      setMessage('');
+      return undefined;
+    }
     if (confirmed && trimmed === selectedLabel) {
       requestSequence.current += 1;
       setSuggestions([]);
@@ -70,10 +79,10 @@ export default function ConfirmedLocationInput({
         setStatus('error');
         setMessage(error.message);
       }
-    }, 400);
+    }, LOCATION_SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [confirmed, currentCandidate, query, value]);
+  }, [confirmed, currentCandidate, disabled, query, value]);
 
   function changeText(nextValue) {
     requestSequence.current += 1;
@@ -168,6 +177,7 @@ export default function ConfirmedLocationInput({
             autoComplete="off"
             placeholder={placeholder}
             value={query}
+            disabled={disabled}
             onChange={(event) => changeText(event.target.value)}
             onKeyDown={handleKeyDown}
           />
@@ -175,7 +185,7 @@ export default function ConfirmedLocationInput({
         </div>
       </label>
 
-      {allowCurrentLocation && (
+      {allowCurrentLocation && !disabled && (
         <button
           type="button"
           className="current-location-button"
