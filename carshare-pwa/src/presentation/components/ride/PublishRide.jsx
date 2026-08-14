@@ -2,16 +2,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
-import { RideService } from '../../../business-logic/RideService.js';
+import { isRouteQuoteFresh, RideService } from '../../../business-logic/RideService.js';
+import { departureParts, formatMalaysiaDeparture } from '../../../business-logic/rideDateTime.js';
 import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
 import {
   GooglePlacesService,
-  isConfirmedLocation,
   MAX_GPS_ACCURACY_METRES
 } from '../../../business-logic/GooglePlacesService.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import ConfirmedLocationInput from '../maps/ConfirmedLocationInput.jsx';
 import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck, IconPlus, IconX } from '../icons.jsx';
+import RideVehicleSelector from './RideVehicleSelector.jsx';
+import { canNavigateToPublishStep, getPublishStepError } from './publishRideSteps.js';
 import '../../styles/ride.css';
 
 const STEPS = ['Route', 'Schedule', 'Vehicle', 'Trip Details', 'Review & Publish'];
@@ -38,6 +40,7 @@ export default function PublishRide() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
+  const [furthestStep, setFurthestStep] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -46,6 +49,8 @@ export default function PublishRide() {
   const [vehicleGateAttempt, setVehicleGateAttempt] = useState(0);
   const [previewLocation, setPreviewLocation] = useState(null);
   const [previewStatus, setPreviewStatus] = useState({ state: 'idle', message: '' });
+  const [routeQuote, setRouteQuote] = useState(null);
+  const [quoteStatus, setQuoteStatus] = useState({ state: 'idle', message: '' });
   const locationRequested = useRef(false);
 
   useEffect(() => {
@@ -85,28 +90,53 @@ export default function PublishRide() {
 
   function patch(fields) {
     setForm((f) => ({ ...f, ...fields }));
+    setRouteQuote(null);
+    setQuoteStatus({ state: 'idle', message: '' });
   }
+
+  async function calculateRouteQuote() {
+    setQuoteStatus({ state: 'loading', message: 'Calculating traffic-aware route and ETA…' });
+    try {
+      const quote = await RideService.quoteRide(form);
+      setRouteQuote(quote);
+      setQuoteStatus({ state: 'ready', message: 'Route verified. Your Driver schedule is locked and rechecked when you publish.' });
+      return quote;
+    } catch (err) {
+      setRouteQuote(null);
+      setQuoteStatus({ state: 'error', message: err.message });
+      throw err;
+    }
+  }
+
+  useEffect(() => {
+    if (step !== STEPS.length - 1 || routeQuote || quoteStatus.state === 'loading') return;
+    calculateRouteQuote().catch(() => {});
+  // The form is intentionally excluded: patch() invalidates the quote before
+  // the review step can request a new one.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   function next() {
     setError('');
-    if (step === 0 && (!isConfirmedLocation(form.pickupLocation) || !form.destinationLocation?.placeId)) {
-      setError('Choose a confirmed Google location for both the pickup point and destination.');
+    const validationError = getPublishStepError(form, step);
+    if (validationError) {
+      setError(validationError);
       return;
     }
-    if (step === 1 && (!form.date || !form.time)) {
-      setError('Pick a departure date and time to continue.');
-      return;
-    }
-    if (step === 2 && !form.vehicleId) {
-      setError('Choose one of your vehicles to continue.');
-      return;
-    }
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    const nextStep = Math.min(step + 1, STEPS.length - 1);
+    setFurthestStep((current) => Math.max(current, nextStep));
+    setStep(nextStep);
   }
 
   function back() {
     setError('');
     setStep((s) => Math.max(s - 1, 0));
+  }
+
+  function goToStep(targetStep) {
+    if (!canNavigateToPublishStep({ targetStep, currentStep: step, furthestStep, form })) return;
+    setError('');
+    setStep(targetStep);
   }
 
   async function saveAsDraft() {
@@ -123,10 +153,17 @@ export default function PublishRide() {
   }
 
   async function publish() {
+    const scheduleError = getPublishStepError(form, 1);
+    if (scheduleError) {
+      setError(scheduleError);
+      setStep(1);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      await RideService.publishRide(user.id, form, 'Published');
+      const quote = isRouteQuoteFresh(routeQuote) ? routeQuote : await calculateRouteQuote();
+      await RideService.publishRide(user.id, { ...form, routeQuote: quote }, 'Published');
       navigate('/ride');
     } catch (err) {
       setError(err.message);
@@ -183,10 +220,17 @@ export default function PublishRide() {
         <button className="back-link" onClick={() => navigate('/ride')}><IconArrowLeft size={15} /> Back</button>
         <div className="step-list" aria-label="Publish ride steps">
           {STEPS.map((label, i) => (
-            <div key={label} className={'step-item' + (i === step ? ' active' : '') + (i < step ? ' done' : '')}>
-              <span className="step-num">{i < step ? <IconCheck size={12} /> : i + 1}</span>
+            <button
+              type="button"
+              key={label}
+              className={'step-item' + (i === step ? ' active' : '') + (i < furthestStep ? ' done' : '')}
+              aria-current={i === step ? 'step' : undefined}
+              disabled={!canNavigateToPublishStep({ targetStep: i, currentStep: step, furthestStep, form })}
+              onClick={() => goToStep(i)}
+            >
+              <span className="step-num">{i < furthestStep ? <IconCheck size={12} /> : i + 1}</span>
               {label}
-            </div>
+            </button>
           ))}
         </div>
         <div className="rail-divider" />
@@ -198,13 +242,13 @@ export default function PublishRide() {
         <h2 className="step-title">{STEPS[step]}</h2>
         <p className="step-description">{STEP_DESCRIPTIONS[step]}</p>
 
-        {error && <div className="alert alert-error publish-error" role="alert">{error}</div>}
+        {error && <div className="alert alert-error publish-error" role="alert"><span>{error}</span>{/In Transit/i.test(error) && <button type="button" className="btn-link" onClick={() => navigate('/ride')}>Open My rides to complete it</button>}</div>}
 
         {step === 0 && <RouteStep form={form} patch={patch} previewLocation={previewLocation} previewStatus={previewStatus} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}
-        {step === 2 && <VehicleStep form={form} patch={patch} vehicles={vehicles} />}
+        {step === 2 && <RideVehicleSelector vehicles={vehicles} vehicleId={form.vehicleId} onSelect={(vehicle) => patch({ vehicleId: vehicle.id, vehicleCapacity: vehicle.seats, seatsTotal: Math.min(form.seatsTotal, vehicle.seats) })} />}
         {step === 3 && <TripDetailsStep form={form} patch={patch} />}
-        {step === 4 && <ReviewStep form={form} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
+        {step === 4 && <ReviewStep form={form} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
 
         {step < STEPS.length - 1 && (
           <div className="step-actions">
@@ -215,7 +259,7 @@ export default function PublishRide() {
           </div>
         )}
         <div className="publish-mobile-actions">
-          {step < STEPS.length - 1 ? <button className="btn-primary" onClick={next}>Continue <IconArrowRight size={15} /></button> : <div><button className="btn-secondary" onClick={saveAsDraft} disabled={saving}>Save draft</button><button className="btn-primary" onClick={publish} disabled={saving}>Publish ride</button></div>}
+          {step < STEPS.length - 1 ? <button className="btn-primary" onClick={next}>Continue <IconArrowRight size={15} /></button> : <div><button className="btn-secondary" onClick={back} disabled={saving}>Back</button><button className="btn-primary" onClick={publish} disabled={saving || quoteStatus.state === 'loading'}>Publish ride</button></div>}
         </div>
       </div>
     </main>
@@ -284,18 +328,23 @@ function RouteStep({ form, patch, previewLocation, previewStatus }) {
 
 // ---------- STEP 2: SCHEDULE ----------
 function ScheduleStep({ form, patch }) {
+  const today = departureParts(new Date().toISOString()).date;
+  const selectedDeparture = form.date && form.time ? formatMalaysiaDeparture(form.date, form.time) : '';
   return (
     <>
       <div className="schedule-grid">
         <div className="field">
           <label htmlFor="ride-date">Departure date</label>
-          <div className="input-wrap"><input id="ride-date" type="date" value={form.date} onChange={(e) => patch({ date: e.target.value })} /></div>
+          <div className="input-wrap"><input id="ride-date" type="date" min={today} value={form.date} onChange={(e) => patch({ date: e.target.value })} /></div>
         </div>
         <div className="field">
           <label htmlFor="ride-time">Departure time</label>
           <div className="input-wrap"><input id="ride-time" type="time" value={form.time} onChange={(e) => patch({ time: e.target.value })} /></div>
         </div>
       </div>
+      <p className="schedule-time-hint" aria-live="polite">
+        {selectedDeparture || 'Times use Malaysia time.'} Enter afternoon times as 13:00–23:59 when your device uses a 24-hour clock.
+      </p>
       <div className="field">
         <label>Available seats</label>
         <div className="seat-stepper" aria-label="Available seats">
@@ -308,33 +357,12 @@ function ScheduleStep({ form, patch }) {
   );
 }
 
-// ---------- STEP 3: VEHICLE ----------
-function VehicleStep({ form, patch, vehicles }) {
-  return (
-    <div className="vehicle-select-grid">
-      {vehicles.map((v) => (
-        <button
-          type="button"
-          key={v.id}
-          className={'vehicle-select-card' + (form.vehicleId === v.id ? ' active' : '')}
-          aria-pressed={form.vehicleId === v.id}
-          onClick={() => patch({ vehicleId: v.id, vehicleCapacity: v.seats, seatsTotal: Math.min(form.seatsTotal, v.seats) })}
-        >
-          <span className="vehicle-select-icon"><IconCar size={16} /></span>
-          <div>
-            <div className="vehicle-select-name">{v.make} {v.model}</div>
-            <div className="vehicle-select-meta">{v.plate} · {v.seats} seats</div>
-          </div>
-          {form.vehicleId === v.id && <span className="vehicle-select-check"><IconCheck size={14} /></span>}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ---------- STEP 4: TRIP DETAILS ----------
 function TripDetailsStep({ form, patch }) {
   const [waypoint, setWaypoint] = useState('');
+  const [waypointLocation, setWaypointLocation] = useState(null);
+  const [stopMinutes, setStopMinutes] = useState(10);
+  const [waypointError, setWaypointError] = useState('');
   function toggleTag(tag) {
     const has = form.restrictionTags.includes(tag);
     patch({ restrictionTags: has ? form.restrictionTags.filter((t) => t !== tag) : [...form.restrictionTags, tag] });
@@ -342,9 +370,19 @@ function TripDetailsStep({ form, patch }) {
 
   function addWaypoint() {
     const name = waypoint.trim();
-    if (!name) return;
-    patch({ waypoints: [...form.waypoints, { name, description: '' }] });
+    if (!name || !waypointLocation?.placeId) {
+      setWaypointError('Choose a confirmed Google suggestion before adding this waypoint.');
+      return;
+    }
+    if (form.waypoints.length >= 10) {
+      setWaypointError('A ride can have at most 10 waypoints.');
+      return;
+    }
+    patch({ waypoints: [...form.waypoints, { name, description: '', placeId: waypointLocation.placeId, stopMinutes }] });
     setWaypoint('');
+    setWaypointLocation(null);
+    setStopMinutes(10);
+    setWaypointError('');
   }
 
   return (
@@ -390,18 +428,31 @@ function TripDetailsStep({ form, patch }) {
 
       <div className="field" style={{ marginTop: 18 }}>
         <label>Culinary &amp; cultural waypoints</label>
-        <div className="waypoint-add">
-          <input value={waypoint} onChange={(event) => setWaypoint(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addWaypoint(); } }} placeholder="Add an optional waypoint" />
-          <button type="button" onClick={addWaypoint} aria-label="Add waypoint"><IconPlus size={16} /></button>
+        <div className="waypoint-builder">
+          <ConfirmedLocationInput
+            id="ride-waypoint"
+            label="Confirmed stop"
+            placeholder="Search for a stop in Malaysia"
+            value={waypoint}
+            location={waypointLocation}
+            onChange={(name, location) => { setWaypoint(name); setWaypointLocation(location); setWaypointError(''); }}
+          />
+          <div className="waypoint-stop-row">
+            <label htmlFor="waypoint-stop-minutes">Stop duration</label>
+            <div><input id="waypoint-stop-minutes" type="number" min="0" max="180" step="5" value={stopMinutes} onChange={(event) => setStopMinutes(Math.max(0, Math.min(180, Number(event.target.value) || 0)))} /><span>minutes</span></div>
+          </div>
+          <button type="button" className="btn-secondary waypoint-confirm-add" onClick={addWaypoint}><IconPlus size={16} /> Add confirmed stop</button>
         </div>
-        {form.waypoints.length > 0 && <div className="waypoint-lines">{form.waypoints.map((item, index) => <div key={`${item.name}-${index}`}><span><IconMapPin size={14} />{item.name}</span><button type="button" onClick={() => patch({ waypoints: form.waypoints.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remove ${item.name}`}><IconX size={15} /></button></div>)}</div>}
+        {waypointError && <p className="location-field-message error" role="alert">{waypointError}</p>}
+        {form.waypoints.length > 0 && <div className="waypoint-lines">{form.waypoints.map((item, index) => <div key={`${item.placeId || item.name}-${index}`}><span><IconMapPin size={14} />{item.name}<small>{item.stopMinutes} min stop</small></span><button type="button" onClick={() => patch({ waypoints: form.waypoints.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remove ${item.name}`}><IconX size={15} /></button></div>)}</div>}
       </div>
     </>
   );
 }
 
 // ---------- STEP 5: REVIEW & PUBLISH ----------
-function ReviewStep({ form, onPublish, onDraft, saving }) {
+function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onPublish, onDraft, saving }) {
+  const fresh = isRouteQuoteFresh(routeQuote);
   return (
     <>
       <div className="card">
@@ -409,18 +460,46 @@ function ReviewStep({ form, onPublish, onDraft, saving }) {
         <div className="review-row"><span>Route</span><strong>{form.pickup || '—'} → {form.destination || '—'}</strong></div>
         <div className="review-row"><span>Pickup instructions</span><strong>{form.pickupInstructions || 'None'}</strong></div>
         <div className="review-row"><span>Journey scale</span><strong>{form.journeyScale}</strong></div>
-        <div className="review-row"><span>Departure</span><strong>{form.date || '—'} {form.time}</strong></div>
+        <div className="review-row"><span>Departure</span><strong>{formatMalaysiaDeparture(form.date, form.time)}</strong></div>
         <div className="review-row"><span>Seats available</span><strong>{form.seatsTotal}</strong></div>
         <div className="review-row"><span>Contribution</span><strong>{form.contribution || 'No contribution needed'}</strong></div>
         <div className="review-row"><span>Restriction tags</span><strong>{form.restrictionTags.length ? form.restrictionTags.join(', ') : 'None'}</strong></div>
-        <div className="review-row"><span>Waypoints</span><strong>{form.waypoints.length ? form.waypoints.map((item) => item.name).join(', ') : 'None'}</strong></div>
+        <div className="review-row"><span>Waypoints</span><strong>{form.waypoints.length ? form.waypoints.map((item) => `${item.name} (${item.stopMinutes} min)`).join(', ') : 'None'}</strong></div>
       </div>
+      <section className={`route-quote-card ${quoteStatus.state === 'error' ? 'error' : ''}`} aria-live="polite">
+        <div><p className="card-title">Traffic-aware route</p><span>{quoteStatus.message || 'A server route quote is required before publishing.'}</span></div>
+        {routeQuote && <div className="route-quote-grid">
+          <span><small>Distance</small><strong>{formatDistance(routeQuote.distanceMeters)}</strong></span>
+          <span><small>Travel + stops</small><strong>{formatDuration(routeQuote.totalDurationSeconds)}</strong></span>
+          <span><small>Estimated arrival</small><strong>{formatArrival(routeQuote.estimatedArrivalAt)}</strong></span>
+        </div>}
+        {routeQuote?.attribution && <small className="google-route-attribution">{routeQuote.attribution}</small>}
+        {!fresh && quoteStatus.state !== 'loading' && <button type="button" className="btn-secondary" onClick={onRefreshQuote}>Calculate route again</button>}
+      </section>
       <div className="step-actions review-actions">
+        <button className="btn-secondary" onClick={onBack} disabled={saving}>Back</button>
         <button className="btn-secondary" onClick={onDraft} disabled={saving}>Save as Draft</button>
-        <button className="btn-primary publish-confirm-button" onClick={onPublish} disabled={saving}>
+        <button className="btn-primary publish-confirm-button" onClick={onPublish} disabled={saving || quoteStatus.state === 'loading'}>
           {saving ? 'Publishing…' : 'Publish Ride'}
         </button>
       </div>
     </>
   );
+}
+
+function formatDistance(metres) {
+  if (!Number.isFinite(Number(metres))) return '—';
+  return Number(metres) >= 1000 ? `${(Number(metres) / 1000).toFixed(1)} km` : `${Number(metres)} m`;
+}
+
+function formatDuration(seconds) {
+  const minutes = Math.max(0, Math.round(Number(seconds || 0) / 60));
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours ? `${hours} hr ${remainder} min` : `${remainder} min`;
+}
+
+function formatArrival(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' });
 }

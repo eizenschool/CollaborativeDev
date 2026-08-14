@@ -55,7 +55,9 @@ export default function MyRequests() {
             <button className="my-request-main" disabled={!ride} onClick={() => ride && navigate(`/ride/${ride.id}`)}>
               <span className="route-row"><IconMapPin size={13} /> <strong>{ride ? `${ride.pickup.split(',')[0]} → ${ride.destination.split(',')[0]}` : 'Ride details unavailable'}</strong></span>
               <span className="request-date"><IconCalendar size={12} /> {ride ? `${ride.date} · ${ride.time}` : request.createdAt}</span>
+              {ride?.estimatedArrivalAt && <span className="request-date">ETA {new Date(ride.estimatedArrivalAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' })}</span>}
               <span className="request-date">{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}{request.companionNames.length ? ` · ${request.companionNames.join(', ')}` : ''}</span>
+              {request.status === 'Accepted' && <span className="request-date">Boarding: {request.boardingStatus}</span>}
               {request.decisionReason && <span className="request-date">Reason: {request.decisionReason}</span>}
             </button>
             <div className="request-row-footer"><span>Host: <strong>{ride?.host?.fullName || 'Let’s Tumpang Host'}</strong></span><RequestStatus status={request.status} />{['Pending', 'Accepted'].includes(request.status) && <button onClick={() => setCancelling(request)}>Cancel</button>}</div>

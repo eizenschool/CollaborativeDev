@@ -21,6 +21,14 @@ function initialsOf(name) {
   return (name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
+function formatEta(value) {
+  if (!value) return null;
+  return new Date(value).toLocaleString(undefined, {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    timeZone: 'Asia/Kuala_Lumpur'
+  });
+}
+
 export default function RideCard({ ride, statusChip, onClick }) {
   const badge = ride.host ? getBadgeForStats(ride.host) : null;
   const tier = badge ? badge.name.replace(' Host', '') : null;
@@ -50,6 +58,8 @@ export default function RideCard({ ride, statusChip, onClick }) {
         <span className="ride-meta"><IconCalendar size={13} /> {formatDate(ride.date)} · {ride.time}</span>
         <span className="ride-seats"><IconUsers size={13} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} left</span>
       </div>
+
+      {ride.estimatedArrivalAt && <p className="ride-card-eta"><span>Estimated arrival</span><strong>{formatEta(ride.estimatedArrivalAt)}</strong></p>}
 
       {ride.restrictionTags?.length > 0 && (
         <div className="chip-row">

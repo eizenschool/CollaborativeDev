@@ -5,7 +5,7 @@ import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
-import { isAtLeastHoursAway } from '../../../business-logic/rideDateTime.js';
+import { isAtLeastHoursAway, REQUEST_CUTOFF_HOURS } from '../../../business-logic/rideDateTime.js';
 import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedService.js';
 import { MessagingService } from '../../../business-logic/MessagingService.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
@@ -140,6 +140,8 @@ export default function RideDetail() {
   const [cancelling, setCancelling] = useState(false);
   const [reviews, setReviews] = useState([]);
   const [isOpeningChat, setIsOpeningChat] = useState(false);
+  const [lifecycleContext, setLifecycleContext] = useState(null);
+  const [lifecycleBusy, setLifecycleBusy] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -149,7 +151,13 @@ export default function RideDetail() {
       if (found?.hostId) RideReviewService.listProfileReviews(found.hostId).then((items) => alive && setReviews(items)).catch(() => {});
       if (user && found?.hostId !== user.id) {
         const requests = await RideRequestService.listMyRequests(user.id);
-        if (alive) setActiveRequest(requests.find((request) => request.rideId === rideId && ['Pending', 'Accepted'].includes(request.status)) || null);
+        const request = requests.find((item) => item.rideId === rideId && ['Pending', 'Accepted'].includes(item.status)) || null;
+        if (alive) setActiveRequest(request);
+        if (request?.status === 'Accepted') {
+          RideService.getLifecycleContext(rideId).then((context) => alive && setLifecycleContext(context)).catch(() => {});
+        }
+      } else if (user && found?.hostId === user.id) {
+        RideService.getLifecycleContext(rideId).then((context) => alive && setLifecycleContext(context)).catch(() => {});
       }
     }).finally(() => {
       if (alive) setLoading(false);
@@ -165,10 +173,10 @@ export default function RideDetail() {
   const canCancel = isHost && ['Published', 'Matched'].includes(ride.status);
   const canRequest = !isHost && ride.status === 'Published' && ride.seatsAvailable > 0 && isAtLeastHoursAway(ride.departureAt);
   const canMessageHost = !isHost && ride.status === 'Published';
-  const requestDeadline = new Date(new Date(ride.departureAt).getTime() - 5 * 60 * 60 * 1000);
-  const waypoints = ride.waypoints?.length ? ride.waypoints : ride.journeyScale === 'Intercity'
-    ? [{ name: 'Ipoh Old Town', description: 'A food stop along the way.' }, { name: 'Taiping Lake Gardens', description: 'A cultural stop by the route.' }]
-    : [];
+  const requestDeadline = new Date(new Date(ride.departureAt).getTime() - REQUEST_CUTOFF_HOURS * 60 * 60 * 1000);
+  const waypoints = ride.waypoints?.length ? ride.waypoints : [];
+  const departureReached = new Date(ride.departureAt) <= new Date();
+  const checkInOpen = new Date(ride.departureAt).getTime() - Date.now() <= REQUEST_CUTOFF_HOURS * 60 * 60 * 1000;
 
   async function cancelRide(reason) {
     setError('');
@@ -223,6 +231,25 @@ export default function RideDetail() {
     setShowRequest(true);
   }
 
+  async function runLifecycle(action, work) {
+    setLifecycleBusy(action);
+    setError('');
+    try {
+      await work();
+      const nextRide = await RideService.getRide(ride.id);
+      setRide(nextRide);
+      if (user && nextRide?.hostId !== user.id) {
+        const requests = await RideRequestService.listMyRequests(user.id);
+        setActiveRequest(requests.find((request) => request.rideId === ride.id && ['Pending', 'Accepted'].includes(request.status)) || null);
+      }
+      setLifecycleContext(await RideService.getLifecycleContext(ride.id).catch(() => null));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLifecycleBusy('');
+    }
+  }
+
   return (
     <main className="phone-ride-page ride-detail-page">
       <div className="ride-detail-map-wrap">
@@ -243,6 +270,7 @@ export default function RideDetail() {
             <div><span><IconCalendar size={13} /> Date</span><strong>{formatDate(ride.date)}</strong></div>
             <div><span>◷ Time</span><strong>{formatTime(ride.time)}</strong></div>
           </div>
+          <p className="ride-eta"><span>Estimated arrival</span><strong>{ride.estimatedArrivalAt ? formatDateTime(ride.estimatedArrivalAt) : 'Driver confirmation required'}</strong></p>
           <p className="seats-left"><IconUsers size={15} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} available</p>
           <p className="request-date">Request deadline: {requestDeadline.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' })}</p>
         </section>
@@ -251,12 +279,22 @@ export default function RideDetail() {
 
         <section className="fixed-route-note"><IconAlertTriangle size={16} /><span>This ride follows a <strong>fixed route</strong>. Route-deviation automation is not enabled yet.</span></section>
 
+        {(isHost || activeRequest?.status === 'Accepted') && <section className="ride-info-card ride-verification-card">
+          <p className="eyebrow">TRIP VERIFICATION</p>
+          {activeRequest?.status === 'Accepted' && <div className="verification-row"><span>Passenger check-in</span><strong>{activeRequest.boardingStatus}</strong>{activeRequest.boardingStatus === 'Pending' && <button type="button" disabled={!checkInOpen || Boolean(lifecycleBusy)} onClick={() => runLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : checkInOpen ? 'Check in near pickup' : 'Opens 1 hour before'}</button>}</div>}
+          {isHost && ['Published', 'Matched'].includes(ride.status) && <div className="verification-row"><span>Departure</span><strong>Resolve every accepted passenger before starting.</strong><button type="button" disabled={!departureReached || Boolean(lifecycleBusy)} onClick={() => runLifecycle('start', () => RideService.startRide(ride.id))}>{lifecycleBusy === 'start' ? 'Starting…' : departureReached ? 'Start ride' : 'Available at departure'}</button></div>}
+          {isHost && ride.status === 'In Transit' && !lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Destination</span><strong>GPS must be within 200 m with accuracy ≤100 m.</strong><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => runLifecycle('driver-arrival', () => RideService.confirmDriverArrival(ride.id))}>{lifecycleBusy === 'driver-arrival' ? 'Checking GPS…' : 'Confirm destination arrival'}</button></div>}
+          {lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Driver arrived</span><strong>{formatDateTime(lifecycleContext.driverArrivedAt)}</strong>{lifecycleContext.passengerConfirmationDueAt && <small>Auto-completes by {formatDateTime(lifecycleContext.passengerConfirmationDueAt)} if confirmations remain.</small>}</div>}
+          {activeRequest?.boardingStatus === 'Checked In' && ride.status === 'In Transit' && lifecycleContext?.driverArrivedAt && !activeRequest.arrivalConfirmedAt && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => runLifecycle('passenger-arrival', () => RideRequestService.confirmArrival(activeRequest.id))}>{lifecycleBusy === 'passenger-arrival' ? 'Confirming…' : 'Confirm I arrived'}</button>}
+          {activeRequest?.arrivalConfirmedAt && <div className="request-sent"><IconCheck size={15} /> Arrival confirmed</div>}
+        </section>}
+
         <section className="ride-info-card ride-preferences">
           <div><p className="eyebrow">RESTRICTIONS</p><div className="ride-tag-list">{ride.restrictionTags?.length ? ride.restrictionTags.map((tag) => <span key={tag}>{tag}</span>) : <small>No restrictions added</small>}</div></div>
           <div className="contribution"><p className="eyebrow">NON-MONETARY CONTRIBUTION</p><strong>🤝 {ride.contribution || 'No contribution needed'}</strong></div>
         </section>
 
-        {waypoints.length > 0 && <section className="waypoints-section"><h2>🗺️ Culinary & cultural waypoints</h2><div className="waypoint-scroller">{waypoints.map((waypoint) => <article key={waypoint.name}><div className="waypoint-art">✦</div><strong>{waypoint.name}</strong><p>{waypoint.description}</p></article>)}</div></section>}
+        {waypoints.length > 0 && <section className="waypoints-section"><h2>🗺️ Culinary & cultural waypoints</h2><div className="waypoint-scroller">{waypoints.map((waypoint) => <article key={waypoint.placeId || waypoint.name}><div className="waypoint-art">✦</div><strong>{waypoint.name}</strong><p>{waypoint.description || `${waypoint.stopMinutes || 0} minute stop`}</p></article>)}</div></section>}
         <HostIdentity ride={ride} />
         <section className="ride-info-card"><p className="eyebrow">HOST REVIEWS</p>{reviews.length ? reviews.slice(0, 3).map((review) => <div className="review-row" key={review.id}><span>{review.reviewer?.fullName || 'Member'} · {review.rating}/5</span><strong>{review.comment || 'No written comment'}</strong></div>) : <p className="empty-waypoints">No reviews yet</p>}</section>
       </div>
@@ -293,4 +331,9 @@ function formatTime(value) {
   if (!value) return 'Time to be confirmed';
   const [hours, minutes] = value.split(':').map(Number);
   return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatDateTime(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' });
 }

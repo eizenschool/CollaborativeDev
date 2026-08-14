@@ -13,7 +13,7 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
  Deployed SQL history: 001-026
-Repository SQL history: 001-026
+Repository SQL history: 001-027 (027 local / undeployed)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -28,14 +28,14 @@ replacement Ride RPC signatures. `021_m3_stabilize_realtime_reads.sql` was
 deployed on 2026-08-13 to make read-cursor advancement idempotent and stop
 Realtime refresh loops. `022_m3_allow_member_media_signing.sql` was deployed
 on 2026-08-13 to allow current conversation members to generate short-lived
-URLs for private chat media. Deployed history must not be rewritten; the next
-new migration after this work starts at `027`.
+URLs for private chat media.
 `023_m1_m2_public_ride_browsing.sql` is live through the Dashboard SQL Editor;
 its anonymous column-level policies and grants were deployed after the public
 payload was approved. It is not present in the migration history returned by the
 project, so this file remains the repository record of the applied SQL. The
 payload excludes Place IDs, precise coordinates, pickup instructions, and
-lifecycle timestamps from guest reads.
+lifecycle timestamps from guest reads. Deployed history must not be rewritten;
+the next new migration after local `027` starts at `028`.
 
 `024_m6_destination_discovery.sql` is **deployed** as the Supabase migration
 `m6_destination_discovery` - it adds the Module 6 place catalogue, recorded
@@ -52,6 +52,15 @@ and the matching private bucket MIME allowlist.
 16 kHz mono PCM WAV fallback used when Chromium/Electron MediaRecorder output
 cannot be decoded, while retaining the same standalone, duration, size, private
 Storage, and signed-URL rules.
+
+`027_m2_route_schedule_and_completion.sql` is **local and undeployed**. It adds
+server-quoted ETA/schedule fields, private route verification anchors, an
+internal 250-request Malaysia-day Routes guard, serialized Driver overlap
+checks, one-hour publish/request/reopen rules, passenger check-in/No-show,
+verified departure and arrival, and 24-hour Cron completion. Do not apply it
+until live migration history has been rechecked and the user authorizes both
+the migration and matching Edge Functions. The next new migration starts at
+`028`; deployed `001-026` must not be rewritten.
 
 It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
@@ -94,7 +103,11 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 - The private `message-media` bucket accepts the approved image/video/audio MIME types up to 50 MB per object. Message RPCs further limit audio to 10 MB. Listing is blocked; only current conversation members can create a short-lived URL for committed media, and the signed download does not need a public bucket.
 - Rides require a vehicle owned by the host, persist `waypoints` as a JSON array, and enforce `0 <= seats_available <= seats_total`.
 - Pickup coordinates must be stored as a valid latitude/longitude pair, and pickup instructions are limited to 300 characters.
-- Authenticated clients have SELECT but no direct INSERT/UPDATE/DELETE on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce ownership and cross-row invariants with an empty `search_path`.
+- Authenticated clients have only the safe public Ride columns directly; Hosts
+  and accepted passengers obtain private Ride detail through
+  `get_participant_ride_detail()`. Clients have no direct INSERT/UPDATE/DELETE
+  on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce
+  ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
 - Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
 - Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
@@ -153,6 +166,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
 - `026_m3_add_wav_voice_fallback.sql` - deployed; adds Audio WAV to the voice attachment, send RPC, and private bucket allowlists for reliable Chromium/Electron playback.
+- `027_m2_route_schedule_and_completion.sql` - local/undeployed; server route quotes and ETA, private route anchors, serialized Driver schedule conflicts, one-hour boundaries, GPS check-in/arrival, No-show, dual confirmation, and 24-hour auto-completion.
 
 ## Rules for New Database Work
 

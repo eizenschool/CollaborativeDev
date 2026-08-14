@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  isRouteQuoteFresh,
   routeChangeRequiresConfirmation,
   validateConfirmedRoute,
+  validateConfirmedWaypoints,
   validateRideDraft
 } from '../RideService.js';
 import { validateRideRequest } from '../RideRequestService.js';
 import { validateRideReview } from '../RideReviewService.js';
 import {
   departureParts,
+  formatMalaysiaDeparture,
   isAtLeastHoursAway,
   klDayRange,
+  rideIntervalsOverlap,
   toDepartureAt
 } from '../rideDateTime.js';
 import { mockDb } from '../../data-access/mockDataStore.js';
@@ -20,6 +24,7 @@ import {
   buildViewEmbedUrl
 } from '../GoogleMapsEmbedService.js';
 import { hasRegisteredVehicle } from '../VehicleService.js';
+import { canNavigateToPublishStep, getPublishStepError } from '../../presentation/components/ride/publishRideSteps.js';
 
 const memory = new Map();
 globalThis.localStorage = {
@@ -42,14 +47,71 @@ describe('Module 2 ride workflow contracts', () => {
     });
   });
 
-  it('enforces the exact five-hour publication boundary', () => {
+  it('enforces the exact one-hour publication boundary', () => {
     const now = new Date('2026-08-20T00:00:00.000Z');
-    expect(isAtLeastHoursAway('2026-08-20T05:00:00.000Z', 5, now)).toBe(true);
-    expect(isAtLeastHoursAway('2026-08-20T04:59:59.999Z', 5, now)).toBe(false);
+    expect(isAtLeastHoursAway('2026-08-20T01:00:00.000Z', 1, now)).toBe(true);
+    expect(isAtLeastHoursAway('2026-08-20T00:59:59.999Z', 1, now)).toBe(false);
     expect(() => validateRideDraft({
-      pickup: 'KL Sentral', destination: 'Ipoh', date: '2026-08-20', time: '12:59',
+      pickup: 'KL Sentral', destination: 'Ipoh', departureAt: '2026-08-20T00:59:59.999Z',
       journeyScale: 'Intercity', vehicleId: 'v_1', seatsTotal: 2
-    }, { publishing: true, now })).toThrow('at least 5 hours');
+    }, { publishing: true, now })).toThrow('at least 1 hour');
+  });
+
+  it('explains an invalid schedule with an unambiguous Malaysia AM/PM time', () => {
+    const form = { date: '2026-08-14', time: '02:33' };
+    const now = new Date('2026-08-14T01:37:00.000Z');
+    expect(formatMalaysiaDeparture(form.date, form.time)).toContain('2:33 am');
+    expect(getPublishStepError(form, 1, { now })).toMatch(/2:33 am.*Malaysia time.*at least 1 hour/i);
+  });
+
+  it('requires ordered confirmed waypoints with bounded stop time', () => {
+    expect(validateConfirmedWaypoints([
+      { name: 'Tapah', placeId: 'tapah-place', stopMinutes: 10 },
+      { name: 'Gopeng', placeId: 'gopeng-place', stopMinutes: 25 }
+    ])).toMatchObject([
+      { name: 'Tapah', placeId: 'tapah-place', order: 0, stopMinutes: 10 },
+      { name: 'Gopeng', placeId: 'gopeng-place', order: 1, stopMinutes: 25 }
+    ]);
+    expect(() => validateConfirmedWaypoints([{ name: 'Legacy stop', stopMinutes: 5 }])).toThrow('Google suggestions');
+    expect(() => validateConfirmedWaypoints([{ name: 'Long stop', placeId: 'long-stop', stopMinutes: 181 }])).toThrow('0 and 180');
+  });
+
+  it('unlocks publish steps sequentially and relocks them when prior data becomes invalid', () => {
+    const complete = {
+      pickupLocation: { placeId: 'pickup-place' },
+      destinationLocation: { placeId: 'destination-place' },
+      date: '2026-08-20',
+      time: '09:30',
+      vehicleId: 'vehicle-1'
+    };
+    const now = new Date('2026-08-14T00:00:00.000Z');
+    expect(canNavigateToPublishStep({ targetStep: 1, currentStep: 0, furthestStep: 0, form: complete, now })).toBe(false);
+    expect(canNavigateToPublishStep({ targetStep: 1, currentStep: 0, furthestStep: 1, form: complete, now })).toBe(true);
+    expect(canNavigateToPublishStep({ targetStep: 4, currentStep: 0, furthestStep: 4, form: complete, now })).toBe(true);
+
+    const invalidRoute = { ...complete, destinationLocation: null };
+    expect(getPublishStepError(invalidRoute, 0)).toContain('confirmed Google location');
+    expect(canNavigateToPublishStep({ targetStep: 1, currentStep: 0, furthestStep: 4, form: invalidRoute, now })).toBe(false);
+    expect(canNavigateToPublishStep({ targetStep: 4, currentStep: 0, furthestStep: 4, form: invalidRoute, now })).toBe(false);
+  });
+
+  it('keeps the demo Host ride linked to a selectable vehicle', async () => {
+    expect((await mockDb.getRide('r_5')).vehicleId).toBe('v_1');
+    expect((await mockDb.listVehicles('u_demo_1')).some((vehicle) => vehicle.id === 'v_1')).toBe(true);
+  });
+
+  it('treats a route quote as stale at its exact expiry', () => {
+    const quote = { token: 'opaque', expiresAt: '2026-08-20T00:05:00.000Z' };
+    expect(isRouteQuoteFresh(quote, new Date('2026-08-20T00:04:59.999Z'))).toBe(true);
+    expect(isRouteQuoteFresh(quote, new Date('2026-08-20T00:05:00.000Z'))).toBe(false);
+  });
+
+  it('uses half-open occupied intervals for equal times, overlaps, and the buffer boundary', () => {
+    const firstStart = '2026-08-20T01:00:00.000Z';
+    const firstEnd = '2026-08-20T03:30:00.000Z';
+    expect(rideIntervalsOverlap(firstStart, firstEnd, firstStart, '2026-08-20T02:00:00.000Z')).toBe(true);
+    expect(rideIntervalsOverlap(firstStart, firstEnd, '2026-08-20T03:29:59.999Z', '2026-08-20T04:00:00.000Z')).toBe(true);
+    expect(rideIntervalsOverlap(firstStart, firstEnd, firstEnd, '2026-08-20T04:00:00.000Z')).toBe(false);
   });
 
   it('rejects seat counts above the selected vehicle capacity', () => {

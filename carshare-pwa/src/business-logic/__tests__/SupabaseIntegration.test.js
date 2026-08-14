@@ -94,12 +94,15 @@ describe('Supabase integration contracts', () => {
       seatsTotal: 3,
       contribution: 'Toll',
       restrictionTags: ['No smoking'],
-      waypoints: ['Tapah', { name: 'Gopeng', description: 'Coffee stop' }]
+      waypoints: [
+        { name: 'Tapah', description: '', placeId: 'tapah-place', stopMinutes: 10 },
+        { name: 'Gopeng', description: 'Coffee stop', placeId: 'gopeng-place', stopMinutes: 20 }
+      ]
     }, 'Draft');
 
     expect(insert.waypoints).toEqual([
-      { name: 'Tapah', description: '' },
-      { name: 'Gopeng', description: 'Coffee stop' }
+      { name: 'Tapah', description: '', placeId: 'tapah-place', order: 0, stopMinutes: 10 },
+      { name: 'Gopeng', description: 'Coffee stop', placeId: 'gopeng-place', order: 1, stopMinutes: 20 }
     ]);
     expect(insert).toMatchObject({
       pickup_place_id: 'pickup-place',
@@ -136,7 +139,7 @@ describe('Supabase integration contracts', () => {
       p_pickup_instructions: 'Meet beside Entrance A.'
     });
     expect(buildRidePatch({ waypoints: ['Kampar'] })).toEqual({
-      waypoints: [{ name: 'Kampar', description: '' }]
+      waypoints: [{ name: 'Kampar', description: '', placeId: null, order: 0, stopMinutes: 0, legacy: true }]
     });
   });
 
