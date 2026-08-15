@@ -3,7 +3,9 @@
 Everything needed to pick this module up cold: what it is, what is built, why it
 is built that way, what must not be touched, and what is still outstanding.
 
-Written 2026-08-14 against `Module6_Trust_And_Safety` @ `53d9a61`.
+Written 2026-08-14 against `Module6_Trust_And_Safety` @ `53d9a61`. Updated
+2026-08-15 after live ingestion, anonymous browsing, and description/review
+work landed.
 
 Owner: **Brayden Toh Zhi Kang** (QA Lead).
 
@@ -26,15 +28,18 @@ Run the tests: `npm test`.
 
 | | |
 |---|---|
-| Branch | `Module6_Trust_And_Safety` @ `53d9a61`, clean, pushed |
-| vs `Development` | 0 behind, 3 ahead — fully merged in, nothing to catch up on |
-| Whole suite | **431 tests / 24 files**, all passing |
-| Module 6's own | **297 tests / 13 files** |
+| Branch | `Module6_Trust_And_Safety`, synced with `Development` |
+| Whole suite | **514 tests / 33 files** — **512 passing.** The 2 failures are a pre-existing regression from Module 2's ride-lifecycle merge (mock ride data no longer has a departure on the date Module 6's tests expect), not caused by this module's own work. Tracked separately, not fixed here — `mockDataStore.js`/`RideService.js` are Module 2's files. |
+| Module 6's own | **327 tests / 17 files** (includes the 2 above) |
 | Build | passes |
-| Backend | no `.env` exists, so `isSupabaseConfigured` is false and everything runs on local fixtures. This is deliberate and the module works fully offline. |
+| Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of 20 Kuala Lumpur places with real photos and reviews — see §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
-`Development` already contains Module 6 up to `21d2c1c`; the three commits ahead
-are the prefill fix, the performance fix, and the reasons/demo work.
+This file was last brought current after: live ingestion (`docs/MODULE6-API-SETUP.md`
+§6), the `categoryFor`/`primaryType` classification fix, live photo rendering
+(`PlaceImage.jsx`), review storage and display (`027_m6_place_reviews.sql`,
+`reviewHighlight.js`), and anonymous browsing (`029_m6_anon_place_browsing.sql`,
+run through the Dashboard SQL Editor — confirm it has actually been applied
+before trusting the "anon can browse" claims in §7 and §8).
 
 ---
 
@@ -116,6 +121,9 @@ site in Penang and scores 0 on visitation headroom.
 | `DiscoveryContractAdapter.js` | **The only file importing another module.** Read-only. |
 | `DestinationDiscoveryService.js` | Orchestration. No arithmetic lives here. |
 | `DiscoveryDemoControls.js` | Weather override and month shortcuts for demonstrations. |
+| `localDate.js` | Today's date read from local `Date` getters, not `toISOString()`'s UTC one — see §10. |
+| `placePhotos.js` | Builds the live Places Photo URL from a stored reference; returns `null` for a fixture placeholder or unconfigured key. |
+| `reviewHighlight.js` | Picks the longest stored review as an attributed quote to show alongside `description`. |
 | `geo.js` | Haversine distance. |
 
 ### Presentation — `src/presentation/components/discover/`
@@ -123,7 +131,8 @@ site in Penang and scores 0 on visitation headroom.
 `DiscoverRoutes` (sub-router) · `DiscoverHub` (UC6.1) · `DestinationDetail` (UC6.2)
 · `DestinationCard` · `UnmetDemandView` (UC6.7) · `DiscoverRail` (home screen)
 · `ScoreBreakdown` · `PreferencePrompt` (UC6.4) · `AudienceSwitch` · `DemoControls`
-· `PlacePoster` (FR-6.17 illustration tier)
+· `PlacePoster` (FR-6.17 illustration tier, fallback) · `PlaceImage` (live photo,
+falling back to `PlacePoster` when nothing is fetchable)
 
 Styles: `src/presentation/styles/discover.css`, every rule namespaced `.dsc-*`.
 
@@ -131,8 +140,16 @@ Styles: `src/presentation/styles/discover.css`, every rule namespaced `.dsc-*`.
 
 - `src/data-access/discoveryStore.js` — fixture catalogue, own localStorage key
   `letstumpang_discovery_v1`. 22 real Malaysian places, built so every rule fires
-  visibly (see §7).
-- `database/sql/024_m6_destination_discovery.sql` — **written, not deployed.**
+  visibly (see §7). Still the default, and the only source the test suite ever
+  reads regardless of `.env.local`.
+- `src/data-access/discoverySupabaseRepository.js` — the live adapter. Opt-in via
+  `VITE_DISCOVERY_DATA_SOURCE=supabase`.
+- `database/sql/024_m6_destination_discovery.sql` — **deployed** as the Supabase
+  migration `m6_destination_discovery`.
+- `database/sql/027_m6_place_reviews.sql` — **deployed** (Dashboard SQL Editor);
+  adds `places.reviews`.
+- `database/sql/029_m6_anon_place_browsing.sql` — written; needs a run in the
+  Dashboard SQL Editor to actually take effect. See §7 and §8.
 
 ### Docs
 
@@ -185,13 +202,20 @@ FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.16
 (interest, latent demand) · 6.32 (group trip initiation) · 6.34 (unmet demand) ·
 6.35 (prefill) · 6.36, 6.37 (queries for M4 and M2) · 6.38 (weather service)
 
+**Implemented, with a real caveat**
+
+| FRs | What works | What is still missing |
+|---|---|---|
+| 6.1, 6.2, 6.6 — catalogue sweep and ingestion | `m6-ingest` runs against Google Places and has populated 20 real places (`docs/MODULE6-API-SETUP.md` §6) | **Not scheduled.** Every run so far has been triggered manually; there is no cron and no automatic recurring sweep |
+| 6.7 — classification | `categoryFor` uses Google's `primaryType` first, falling back to a scan of `types` — see the trap this replaced in §10 | — |
+| 6.8, 6.9, 6.10 — description generation | `description` is a generated single sentence (FR-6.8's "generated" is a template, not free text) | Not derived from review content — an earlier attempt to do that wrote a review's text into `description` verbatim and unattributed, which was reverted (`027`'s header). Real review content is shown separately, attributed, via `reviewHighlight.js` and the full review list |
+| 6.11 — enrichment-not-at-request-time | Holds: ingestion runs offline, scoring never calls Google | — |
+
 **Not implemented, and why**
 
 | FRs | Blocked on |
 |---|---|
-| 6.1, 6.2, 6.6, 6.11 — scheduled ingestion | Google API key + Edge Function (§8) |
-| 6.7, 6.8, 6.9, 6.10 — classification, description generation | needs source review text |
-| 6.15 — Street View | Google API |
+| 6.15 — Street View | Google API; not exercised even though the server key could support it |
 | 6.33 — notification dispatch | Module 3's notification pipeline; the registration and matching side is built |
 
 UC6.7 (unmet demand) and UC6.14 (serve place data) are complete. UC6.8, UC6.9,
@@ -223,11 +247,21 @@ record it means Safety Report review.
 
 ```bash
 npm run dev     # then /discover
-npm test        # 431 tests, zero external calls
+npm test        # 514 tests, zero external calls regardless of .env.local
 ```
 
 Entry points: home screen rail → `/discover`; audience switch → `/discover/demand`;
 `Ride → My rides → Hosting` → `/discover/demand`.
+
+**Fixture vs live.** With no `.env.local`, the app runs entirely offline on the
+fixture catalogue described below — this is what `npm test` always exercises,
+and what a fresh checkout demos out of the box. With `.env.local` set
+(`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and
+`VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads the live Supabase
+catalogue instead: 20 real Kuala Lumpur places with real photos and reviews. A
+signed-out visitor can browse the live catalogue only after
+`029_m6_anon_place_browsing.sql` has actually been run in the Dashboard SQL
+Editor — check §8 before demonstrating that path.
 
 ### Demonstration controls
 
@@ -253,6 +287,10 @@ demand.
 | Retired withholding | Closed Tin Mining Museum appears in no list |
 | Reasons, not maths | Any detail page → sentences first, "See how this was scored" collapsed |
 | Prefill | Detail → "Find a ride" carries from/to/date into the search form |
+| Real photos (live mode) | Any card → a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
+| Review highlight | Any card → an attributed quote below the description; on the detail page it replaces what used to be a static "category template" note |
+| Below-threshold places, category or all | `/discover` → any category button, or `All` → the toggle under the two main sections → cards below the recommendation thresholds |
+| Anonymous browsing (live mode, once `029` is run) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |
 
 The fixture catalogue is built to make each of these fire — the chain outlets, the
 two-review stall, the Stale and Retired places all exist for that reason.
@@ -261,17 +299,22 @@ two-review stall, the Stale and Retired places all exist for that reason.
 
 ## 8. Outstanding — human actions, not code
 
-1. **Google Cloud** (Brayden). A **server-side** key is required; the two existing
-   keys are website-restricted and unusable from an Edge Function. Authorise
-   Nearby/Text Search, Place Details, Place Photos, optionally Street View Static,
-   and set daily hard quotas. Full spec in `docs/MODULE6-API-SETUP.md`.
-   **Nothing in the module needs this to run, test or demo today.**
-2. **Deploy `024_m6_destination_discovery.sql`** via Dashboard SQL Editor — the
-   publishable key cannot create tables.
-3. **Tell Yee** about the two files in §4.
-4. **Agree the anon read policy** for `places` if `/discover` is to work signed-out
-   against Supabase. It is public under D017 but `024` grants SELECT to
-   `authenticated` only. Deliberately not widened unilaterally.
+1. ~~**Google Cloud** (Brayden). A **server-side** key is required...~~ **Done.**
+   The key exists, is stored as `GOOGLE_PLACES_SERVER_KEY`, and has ingested real
+   data (`docs/MODULE6-API-SETUP.md` §6). Street View is authorised but not
+   exercised. Whether true daily hard quotas are set in the console is
+   unconfirmed either way — no database-enforced ledger exists yet, so treat the
+   budget as manually tracked, not automatically capped.
+2. ~~**Deploy `024_m6_destination_discovery.sql`**~~ **Done**, plus `027`
+   (reviews column) and `029` (anon browsing — confirm this one has actually
+   been run; see item 4).
+3. **Tell Yee** about the two files in §4. Still open.
+4. **Run `029_m6_anon_place_browsing.sql`** in the Dashboard SQL Editor. The file
+   is written and committed but needs to actually be executed against the live
+   database before a signed-out visitor can see anything — until then, `/discover`
+   and the Home rail correctly show a sign-in prompt rather than an empty
+   catalogue for a guest, which is the pre-`029` behaviour working as designed,
+   not a bug.
 
 ---
 
@@ -281,14 +324,18 @@ Google Maps Platform terms permit indefinite storage of **place IDs only**. Name
 ratings, review counts, review text and photographs are to be requested live and
 displayed with attribution rather than stored.
 
-This module caches rating, review count, description and photo references, because
-FR-6.11 forbids enrichment at request time and the Desirability formula consumes
-rating and review count on every scoring pass.
+This module caches rating, review count, description, photo references, and
+(since `027_m6_place_reviews.sql`) up to five reviews per place, because
+FR-6.11 forbids enrichment at request time and the Desirability formula
+consumes rating and review count on every scoring pass.
 
 The team accepted this for an academic prototype. It is recorded in D018, in the
-module context file, and in the header of `024_m6_destination_discovery.sql`, and
-**must appear in the report's limitations section**. Image bytes are never copied
-into project storage; only references are held.
+module context file, in the header of `024_m6_destination_discovery.sql`, and in
+`027`'s own header, and **must appear in the report's limitations section**.
+Image bytes are never copied into project storage; only references are held.
+Every stored review carries its author, and the detail screen and card
+highlight both display that author, so the attribution requirement is met even
+though the caching one is not.
 
 A second cost note: Places API (New) charges at the **highest tier present in a
 request**, so `rating` (Enterprise) or `reviews` (Enterprise + Atmosphere) reprice
@@ -342,6 +389,41 @@ for a place that cannot be withheld on weather, so indoor candidates always carr
 UNKNOWN. The branch is correct if data is supplied; the comment now says when that
 is.
 
+**`env.local` is not `.env.local`.** Vite loads `.env`, `.env.local`,
+`.env.[mode]`, `.env.[mode].local` — never a file missing its leading dot. A
+copy that lost the dot along the way silently ran the app on fixtures while
+looking, from the filename, like it should have been live. If `/discover`
+shows fixture places when live data is expected, check the filename first.
+
+**The live adapter is a deployment choice, not a test fixture.** `discoveryStore.js`
+picks `liveDiscoveryDb` purely from `VITE_DISCOVERY_DATA_SOURCE`, which Vitest
+reads exactly like any other Vite consumer. A working `.env.local` therefore
+pointed the whole discovery test suite at Supabase: 30 of 36 service tests
+failed against the fixture-only helpers the live adapter refuses to implement,
+and the rest would have made real network calls. Excluded with `import.meta.env?.MODE
+!== 'test'`, the same way this file already excludes the simulated latency —
+see `discoveryStore.js`'s `USE_LIVE_DISCOVERY`.
+
+**A fixed classification order lets one generic type swallow everything.**
+`categoryFor` scanned culinary → heritage → nature → event and returned the
+first category holding any of a place's Google types.
+`tourist_attraction` sat in the `heritage` list, and nearly every landmark,
+park, and theme park Google returns carries it — so live ingestion put KLCC
+Park, the botanical gardens, the bird park, and a theme park all in `heritage`,
+leaving `nature` and `event` at zero. Fixed by checking Google's own
+`primaryType` first and treating generic types (`tourist_attraction`,
+`point_of_interest`, `establishment`) as the fallback of last resort, never the
+first match.
+
+**A review is not a description, even when it's the only text available.**
+`descriptionFor` used to write the first Google review straight into
+`places.description`, unattributed, presented as though the application had
+written it — and the "sentence" extraction only collapsed whitespace, so the
+whole review became the description. Live descriptions read "Awesome and
+amazing and better than expectation!!!" for Central Market before this was
+caught. Reviews are now stored separately (`027`) with their authors and
+shown as reviews; `description` went back to a neutral generated sentence.
+
 ---
 
 ## 11. Starter prompt for a new session
@@ -354,7 +436,10 @@ is.
 > `src/presentation/components/safety/`, or `src/data-access/module6Store.js` —
 > they belong to Module 2 now. Never commit directly to `Development`. Commit
 > messages use `[Module6] …` and must not credit any AI as author or co-author.
-> Tests must make zero real API calls.
+> Tests must make zero real API calls, regardless of what `.env.local` contains.
 >
-> Verify with `npm test` (431 passing) and by actually opening the screens, not
-> only by the build succeeding.
+> Verify with `npm test` (514 passing — 2 pre-existing failures are Module 2's,
+> tracked separately, not mine to fix) and by actually opening the screens, not
+> only by the build succeeding. Confirm whether `.env.local` is present and
+> correctly named (`.env.local`, not `env.local`) before assuming fixture vs
+> live behaviour either way.

@@ -83,16 +83,26 @@ Three behaviours follow from the weighting itself and need no separate rule:
 Do not change these constants casually.
 
 ## What Works Today
-`/discover` runs end to end with no Google key, no deployed schema, and no
-network: recommendations, the two-section presentation, destination detail with
-reviews and the score breakdown, first-use preferences, interest recording,
-notification registration, the host-facing unmet demand view, and the weather
-gate. 380 tests pass and make zero external calls.
+`/discover` runs end to end two ways. With no Google key and no `.env.local`,
+it runs entirely offline on a 22-place fixture catalogue: recommendations, the
+two-section presentation, destination detail with reviews and the score
+breakdown, first-use preferences, interest recording, notification
+registration, the host-facing unmet demand view, and the weather gate. This is
+still the default and what the automated suite always exercises - 490+ tests
+pass and make zero external calls, regardless of what `.env.local` contains.
 
-Not built yet: scheduled ingestion and enrichment (UC6.8, UC6.9 — needs the API),
-Street View (FR-6.15 — needs the API), notification dispatch (UC6.12 — needs
-Module 3), and the implementation of the prefill handoff into Modules 2 and 4
-(FR-6.35 — its shared contract is accepted, but the form wiring remains).
+With `VITE_DISCOVERY_DATA_SOURCE=supabase` set, the same screens run against a
+live Supabase catalogue populated by real Google Places ingestion: 20 real
+Kuala Lumpur destinations, each with real photos, up to five stored attributed
+reviews, and a category assigned from Google's own `primaryType` rather than
+scanning an unordered type bag. `docs/MODULE6-API-SETUP.md` §6 has the
+ingestion log.
+
+Not built yet: a *scheduled* ingestion cycle (ingestion today is triggered
+manually, not on a cron - UC6.8/UC6.9's automation), Street View (FR-6.15 —
+needs the API), notification dispatch (UC6.12 — needs Module 3), and the
+implementation of the prefill handoff into Modules 2 and 4 (FR-6.35 — its
+shared contract is accepted, but the form wiring remains).
 
 The accepted FR-6.35 handoff shape is defined in
 `docs/ai/FR-6.35_PREFILL_CONTRACT.md` (D019). The contract is shared by Modules
@@ -110,15 +120,24 @@ Business logic: `src/business-logic/discovery/`
 - `PlaceQueryService.js` — **the interface Modules 2 and 4 consume**
 - `DiscoveryContractAdapter.js` — the only file importing another module
 - `DestinationDiscoveryService.js` — orchestration
+- `localDate.js` — today's date from the local calendar, not `toISOString()`'s UTC one
+- `placePhotos.js` — builds the live Places Photo URL; null for a fixture reference
+- `reviewHighlight.js` — the attributed review quote shown alongside `description`
 - `geo.js`, `__tests__/`
 
 Presentation: `src/presentation/components/discover/` — hub, detail, card, rail,
-preference prompt, score breakdown, unmet demand view, and `PlacePoster.jsx`
-(the FR-6.17 illustration tier).
+preference prompt, score breakdown, unmet demand view, `PlaceImage.jsx` (renders
+a live photo, falling back to `PlacePoster.jsx`'s FR-6.17 illustration tier when
+none is fetchable).
 
-Data: `src/data-access/discoveryStore.js` (fixture catalogue, own localStorage key).
+Data: `src/data-access/discoveryStore.js` (fixture catalogue, own localStorage
+key; still the default) and `src/data-access/discoverySupabaseRepository.js`
+(live adapter, opt-in via `VITE_DISCOVERY_DATA_SOURCE=supabase`, never used
+under test).
 Schema: `database/sql/024_m6_destination_discovery.sql` (deployed as
-`m6_destination_discovery`; live catalogue population remains pending).
+`m6_destination_discovery`), `027_m6_place_reviews.sql` (reviews column),
+`029_m6_anon_place_browsing.sql` (anon read). Live catalogue is populated —
+see `docs/MODULE6-API-SETUP.md` §6 for what has actually been ingested.
 API: `docs/MODULE6-API-SETUP.md`.
 
 ## Depends On
@@ -146,9 +165,10 @@ Neither module maintains its own place data; one catalogue serves all three.
 Google's terms permit indefinite storage of **place IDs only**. Names, ratings,
 review counts, review text, and photographs are to be requested live and shown
 with attribution rather than stored. This module caches rating, review_count,
-description, and photo references because FR-6.11 forbids enrichment at request
-time and the Desirability formula consumes rating and review_count on every
-scoring pass.
+description, photo references, and (since `027_m6_place_reviews.sql`) up to
+five reviews per place with their author attribution, because FR-6.11 forbids
+enrichment at request time and the Desirability formula consumes rating and
+review_count on every scoring pass.
 
 The team has accepted this for an academic prototype. **It must be stated in the
 report's limitations section rather than left unrecorded.** Image bytes are never

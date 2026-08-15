@@ -12,9 +12,9 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-026, plus 023 and 027 applied through the Dashboard
-  SQL Editor and 028 applied as a Supabase migration (see below)
-Repository SQL history: 001-028
+Deployed SQL history: 001-026 and 028 as tracked Supabase migrations, plus 023,
+  027, and 029 applied through the Dashboard SQL Editor (see below)
+Repository SQL history: 001-029
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -36,7 +36,7 @@ payload was approved. It is not present in the migration history returned by the
 project, so this file remains the repository record of the applied SQL. The
 payload excludes Place IDs, precise coordinates, pickup instructions, and
 lifecycle timestamps from guest reads. Deployed history must not be rewritten;
-the next new migration starts at `028`.
+the next new migration starts at `030`.
 
 `024_m6_destination_discovery.sql` is **deployed** as the Supabase migration
 `m6_destination_discovery` - it adds the Module 6 place catalogue, recorded
@@ -66,12 +66,28 @@ Google Routes server key is stored only as an Edge secret. The bounded ETA
 backfill completed successfully for the two eligible future rides on 2026-08-14.
 Google Cloud displays the Routes daily quota as unlimited and non-adjustable;
 the dedicated Routes-only key is held only by the Edge Functions and the
-database's fail-closed 250-request Malaysia-day guard is the enforced cap. The
-next new migration starts at `029`; deployed `001-028` must not be rewritten.
+database's fail-closed 250-request Malaysia-day guard is the enforced cap.
+Deployed `001-028` must not be rewritten.
 
 It was drafted as `021` before Module 3's `021`/`022` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
 nobody able to tell which one to run.
+
+`029_m6_anon_place_browsing.sql` is deployed through the Dashboard SQL Editor,
+the same route as `023` and `027`. It grants `anon` read access on `places`
+(column-restricted, excluding `source_place_id`, `state_before_demotion`, and
+`absence_counter`) and execute on `place_latent_demand(date)`, deploying D017's
+"public-first browsing" decision to Destination Discovery - the one piece of
+D017 the module's handover document had flagged as deliberately undeployed.
+Unlike the existing `authenticated` policy (`using (true)`), this one filters
+rows to `lifecycle_state in ('Active', 'Provisional', 'Stale')`: anonymous
+traffic gets no equivalent to the JS-layer trust the authenticated policy
+relies on to keep Retired and Pending-Enrichment rows out of view, so the
+filter lives in the policy instead.
+
+It was drafted as `028` before Module 2's `028_m2_route_schedule_and_completion.sql`
+was deployed as a tracked migration, and was renumbered on merge rather than
+kept, for the same reason as `024` above. The next new migration starts at `030`.
 
 `027_m6_place_reviews.sql` is **deployed through the Dashboard SQL Editor**, the
 same route as `023`: it is not present in the migration history returned by the
@@ -111,7 +127,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 
-- `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only.
+- `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only. `anon` reads a column-restricted, lifecycle-filtered subset (`029`); `authenticated` reads every column and every lifecycle state, trusting the JS layer to hide Retired/Pending-Enrichment rows.
 - `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
 - `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
@@ -119,7 +135,7 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 ### Security and Storage
 
 - RLS is enabled on all eleven public tables.
-- `anon` has no business-table privileges.
+- `anon` has narrow, explicit, column-restricted read grants only: Published rides and active-Host safe profile/impact data (`023`), and the recommendable subset of `places` plus `place_latent_demand()` (`029`). No other business table grants anything to `anon`.
 - `authenticated` has explicit least-privilege table/column grants plus owner policies with `USING` and `WITH CHECK`.
 - `public.handle_new_user()` is `SECURITY DEFINER`, has an empty `search_path`, uses schema-qualified names, and is not executable by `anon` or `authenticated`.
 - The public `avatars` bucket allows JPEG, PNG, and WebP up to 5 MB. Authenticated users can write only below their own UUID folder.
@@ -191,6 +207,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `026_m3_add_wav_voice_fallback.sql` - deployed; adds Audio WAV to the voice attachment, send RPC, and private bucket allowlists for reliable Chromium/Electron playback.
 - `027_m6_place_reviews.sql` - deployed through the Dashboard SQL Editor; adds `places.reviews` (jsonb, array-checked) so enrichment's Place Details review text is stored with author attribution instead of being written unattributed into `description`.
 - `028_m2_route_schedule_and_completion.sql` - deployed as `m2_route_schedule_and_completion`; server route quotes and ETA, private route anchors, serialized Driver schedule conflicts, one-hour boundaries, GPS check-in/arrival, No-show, dual confirmation, and 24-hour auto-completion.
+- `029_m6_anon_place_browsing.sql` - deployed through the Dashboard SQL Editor; grants `anon` a filtered, column-restricted read on `places` plus execute on `place_latent_demand`, deploying D017's public-first browsing to Destination Discovery.
 
 ## Rules for New Database Work
 
