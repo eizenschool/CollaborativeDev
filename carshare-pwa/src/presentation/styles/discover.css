@@ -367,6 +367,20 @@
   line-height: 1.5;
 }
 
+/* An attributed reviewer quote, styled as a quote - italic, quieter than the
+   neutral description above it - not as a second description. */
+.dsc-card-highlight {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.dsc-card-highlight .dsc-highlight-author {
+  font-style: normal;
+}
+
 .dsc-card-meta {
   display: flex;
   flex-wrap: wrap;
@@ -588,11 +602,18 @@
   margin: 16px 0 8px;
 }
 
-.dsc-template-note {
-  font-size: 12px;
+/* An attributed reviewer quote, styled as a quote rather than as more
+   description - italic and quieter than the neutral sentence above it. */
+.dsc-detail-highlight {
+  font-size: 13px;
   color: var(--muted);
   font-style: italic;
   margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.dsc-highlight-author {
+  font-style: normal;
 }
 
 .dsc-panel {

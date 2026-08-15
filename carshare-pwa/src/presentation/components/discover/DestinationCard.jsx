@@ -8,6 +8,7 @@
 // with no fetchable photograph falls to the category illustration (FR-6.17).
 import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin } from '../icons.jsx';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
+import { selectReviewHighlight } from '../../../business-logic/discovery/reviewHighlight.js';
 import PlaceImage from './PlaceImage.jsx';
 
 export function Rating({ rating, reviewCount }) {
@@ -28,6 +29,7 @@ export default function DestinationCard({ candidate, onOpen }) {
 
   const seatsLeft = candidate.rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
   const credit = place.photoReferences?.[0]?.attribution;
+  const highlight = selectReviewHighlight(place, { variant: 'card' });
 
   return (
     <button
@@ -47,6 +49,13 @@ export default function DestinationCard({ candidate, onOpen }) {
         </span>
 
         <p className="dsc-card-desc">{place.description}</p>
+        {/* An attributed quote, never a substitute description - see the
+            compliance lesson in 027_m6_place_reviews.sql's header. */}
+        {highlight && (
+          <p className="dsc-card-highlight">
+            &ldquo;{highlight.text}&rdquo; <span className="dsc-highlight-author">— {highlight.author}</span>
+          </p>
+        )}
 
         <span className="dsc-card-meta">
           <Rating rating={place.rating} reviewCount={place.reviewCount} />
