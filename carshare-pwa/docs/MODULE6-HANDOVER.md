@@ -29,8 +29,8 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **533 tests / 33 files** — **531 passing.** The 2 failures are a pre-existing regression from Module 2's ride-lifecycle merge (mock ride data no longer has a departure on the date Module 6's tests expect), not caused by this module's own work. Tracked separately, not fixed here — `mockDataStore.js`/`RideService.js` are Module 2's files. |
-| Module 6's own | **346 tests / 17 files** (includes the 2 above) |
+| Whole suite | **533 tests / 33 files, all passing** |
+| Module 6's own | **346 tests / 17 files** |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of 20 Kuala Lumpur places with real photos and reviews — see §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
@@ -427,6 +427,23 @@ amazing and better than expectation!!!" for Central Market before this was
 caught. Reviews are now stored separately (`027`) with their authors and
 shown as reviews; `description` went back to a neutral generated sentence.
 
+**A fixture date that was in the future when it was written stops being in the
+future.** `DestinationDiscoveryService.test.js` pins `RIDE_DATE = '2026-08-15'`,
+chosen on 2026-08-06 because the shared mock ride data has a departure that
+day. Module 2's `mockDataStore.js` runs `processDueRides()` against the **real
+wall clock** on every read, flipping a Published ride out of Published once its
+departure passes - and the only ride matching that date, `r_1` to Georgetown,
+leaves at 07:00. So at 07:00 on 2026-08-15 the file began failing, with no
+commit having changed anything: the suite passed all morning and broke in the
+evening. It was misdiagnosed twice as a regression from Module 2's
+ride-lifecycle merge; the merge did touch `departureAt` in that file, but only
+the business rules around it (the publish window went from 5 hours to 1), never
+a seeded date. The fix is `vi.useFakeTimers` + `vi.setSystemTime` pinned to a
+moment on `RIDE_DATE` before that departure, so the fixture holds whenever the
+suite runs. Moving `RIDE_DATE` forward would only reset the timer on the same
+bug, and cannot work anyway: one test needs `r_1` specifically, as the only
+Georgetown-bound ride. The guard test described below is what caught it.
+
 **Keyword matching without word boundaries.** `PlaceDescription.js` recognises
 what kind of place something is by looking for nouns like `park`, `fort` and
 `hill`. Matched with `String.includes`, "comfortable" contains `fort`, and two
@@ -472,8 +489,7 @@ the wider role's access, not just the narrower one's.
 > messages use `[Module6] …` and must not credit any AI as author or co-author.
 > Tests must make zero real API calls, regardless of what `.env.local` contains.
 >
-> Verify with `npm test` (514 passing — 2 pre-existing failures are Module 2's,
-> tracked separately, not mine to fix) and by actually opening the screens, not
+> Verify with `npm test` (533 passing) and by actually opening the screens, not
 > only by the build succeeding. Confirm whether `.env.local` is present and
 > correctly named (`.env.local`, not `env.local`) before assuming fixture vs
 > live behaviour either way.
