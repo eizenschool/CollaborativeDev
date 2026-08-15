@@ -34,6 +34,16 @@ Run the tests: `npm test`.
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of 20 Kuala Lumpur places with real photos and reviews — see §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
+### Environment on Brayden's machine — read before running anything
+
+| | |
+|---|---|
+| `carshare-pwa/.env.local` | **Exists and is correctly named.** It carries `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, two Google browser keys, and `VITE_DISCOVERY_DATA_SOURCE=supabase`, so `npm run dev` runs against the **live** catalogue. Park it (`mv .env.local .env.local.parked`) to demo or debug the fixture path. It was once named `env.local` without the leading dot, which Vite silently ignores — see §10. |
+| `npm test` | Unaffected by `.env.local` either way: `discoveryStore.js` forces the fixture store under `MODE === 'test'`. Tests never reach Supabase or Google. |
+| `SUPABASE_SECRET_KEY` | Set as a **Windows user environment variable** so ingestion could be invoked without the key passing through a file or a chat message. It bypasses every RLS policy. **Clear it when ingestion work is done:** `setx SUPABASE_SECRET_KEY ""` |
+| Dev server port | `npm run dev` walks up from 5173 when ports are busy. Read the actual port from its output rather than assuming 5173. |
+| Worktrees | Only the main checkout matters. Two empty `.claude/worktrees/` folders may linger from finished sessions; git no longer tracks them and they can be deleted whenever the shells holding them close. |
+
 This file was last brought current after: live ingestion (`docs/MODULE6-API-SETUP.md`
 §6), the `categoryFor`/`primaryType` classification fix, live photo rendering
 (`PlaceImage.jsx`), review storage and display (`027_m6_place_reviews.sql`,
@@ -489,7 +499,30 @@ the wider role's access, not just the narrower one's.
 > messages use `[Module6] …` and must not credit any AI as author or co-author.
 > Tests must make zero real API calls, regardless of what `.env.local` contains.
 >
-> Verify with `npm test` (533 passing) and by actually opening the screens, not
-> only by the build succeeding. Confirm whether `.env.local` is present and
-> correctly named (`.env.local`, not `env.local`) before assuming fixture vs
-> live behaviour either way.
+> Verify with `npm test` (533 passing, all green) and by actually opening the
+> screens, not only by the build succeeding. `.env.local` exists and points the
+> app at live Supabase; park it to see the fixture path. Read §1's environment
+> table before running anything.
+>
+> Work in the main checkout at `CollaborativeDev`, not in a `.claude/worktrees`
+> copy — an earlier session verified against a stale worktree for a full round
+> and saw none of its own changes.
+
+### What a new session most likely picks up next
+
+Nothing is half-finished; the module is in a coherent, pushed, all-green state.
+The open work, in rough order of value:
+
+1. **Ingest beyond Kuala Lumpur.** One region is loaded (20 places).
+   `docs/MODULE6-API-SETUP.md` §8 has the procedure and the cost discipline;
+   §6 has the log of what the two Kuala Lumpur runs actually cost.
+2. **Publish live rides.** The Home rail and the primary list stay thin because
+   accessibility is 55% seat headroom and the live `rides` table has nothing
+   going to these places. This is the single biggest visible gap, and it is
+   Module 2 data rather than Module 6 code.
+3. **Tell Yee** about the two Module 2 files this module touches (§4, item 3 of
+   §8) — still genuinely open.
+4. **FR-6.15 Street View** and **FR-6.33 notification dispatch** remain
+   unimplemented; the latter waits on Module 3.
+5. **Scheduled ingestion.** Every run so far has been triggered by hand. FR-6.1
+   describes a recurring sweep and there is no cron.
