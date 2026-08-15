@@ -5,7 +5,7 @@
 // Still zero API calls: the weather gate's fetcher finds no global fetch response
 // it can use and degrades to "no constraint", which is the documented A1 path.
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DestinationDiscoveryService } from '../DestinationDiscoveryService.js';
 import { discoveryDb } from '../../../data-access/discoveryStore.js';
 import { PLACE_STATE, CATEGORY, LOCAL_VALUES } from '../constants.js';
@@ -24,6 +24,22 @@ globalThis.localStorage = {
 
 const KL = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
 const RIDE_DATE = '2026-08-15'; // a date the shared mock ride data actually has
+
+// Module 2's mock store auto-expires a Published ride once real wall-clock time
+// passes its departure (see processDueRides in mockDataStore.js). RIDE_DATE only
+// has a matching departure (r_1, to Georgetown) at 07:00 Asia/Kuala_Lumpur, so
+// once the real clock crosses that instant this whole file starts asserting
+// against a ride the mock store has quietly expired. Pinning the clock to a
+// moment on RIDE_DATE before that departure keeps the fixture the tests were
+// written against stable regardless of when the suite actually runs.
+beforeAll(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(`${RIDE_DATE}T00:30:00+08:00`));
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const allOf = (result) => [...result.primary, ...result.unserved, ...result.withheld];
 const find = (result, placeId) => allOf(result).find((c) => c.placeId === placeId);
