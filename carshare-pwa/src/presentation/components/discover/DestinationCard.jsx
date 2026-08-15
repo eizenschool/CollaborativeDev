@@ -8,7 +8,7 @@
 // with no fetchable photograph falls to the category illustration (FR-6.17).
 import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin } from '../icons.jsx';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
-import { selectReviewHighlight } from '../../../business-logic/discovery/reviewHighlight.js';
+import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import PlaceImage from './PlaceImage.jsx';
 
 export function Rating({ rating, reviewCount }) {
@@ -29,7 +29,9 @@ export default function DestinationCard({ candidate, onOpen }) {
 
   const seatsLeft = candidate.rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
   const credit = place.photoReferences?.[0]?.attribution;
-  const highlight = selectReviewHighlight(place, { variant: 'card' });
+  // Falls back to the stored description when there are too few reviews to
+  // describe the place from them (FR-6.10).
+  const described = buildPlaceDescription(place, { distanceKm: candidate.distanceKm });
 
   return (
     <button
@@ -48,14 +50,10 @@ export default function DestinationCard({ candidate, onOpen }) {
           <span className="dsc-chip">{place.category}</span>
         </span>
 
-        <p className="dsc-card-desc">{place.description}</p>
-        {/* An attributed quote, never a substitute description - see the
-            compliance lesson in 027_m6_place_reviews.sql's header. */}
-        {highlight && (
-          <p className="dsc-card-highlight">
-            &ldquo;{highlight.text}&rdquo; <span className="dsc-highlight-author">— {highlight.author}</span>
-          </p>
-        )}
+        {/* Clamped in CSS rather than cut in JS: the whole description stays in
+            the document for anyone reading it with assistive technology, and
+            the card keeps a predictable height in the grid. */}
+        <p className="dsc-card-desc">{described?.text || place.description}</p>
 
         <span className="dsc-card-meta">
           <Rating rating={place.rating} reviewCount={place.reviewCount} />

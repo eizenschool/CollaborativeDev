@@ -360,25 +360,19 @@
   font-weight: 600;
 }
 
+/* The full description is in the document; the card shows the first three
+   lines of it. Clamping in CSS rather than cutting the string keeps the whole
+   text available to assistive technology and to the detail screen, and stops a
+   long description from setting the height of every card in its grid row. */
 .dsc-card-desc {
   margin: 0;
   font-size: 14px;
   color: var(--muted);
   line-height: 1.5;
-}
-
-/* An attributed reviewer quote, styled as a quote - italic, quieter than the
-   neutral description above it - not as a second description. */
-.dsc-card-highlight {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-  font-style: italic;
-  line-height: 1.4;
-}
-
-.dsc-card-highlight .dsc-highlight-author {
-  font-style: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .dsc-card-meta {
@@ -600,20 +594,6 @@
   line-height: 1.6;
   color: var(--ink);
   margin: 16px 0 8px;
-}
-
-/* An attributed reviewer quote, styled as a quote rather than as more
-   description - italic and quieter than the neutral sentence above it. */
-.dsc-detail-highlight {
-  font-size: 13px;
-  color: var(--muted);
-  font-style: italic;
-  margin: 0 0 16px;
-  line-height: 1.5;
-}
-
-.dsc-highlight-author {
-  font-style: normal;
 }
 
 .dsc-panel {

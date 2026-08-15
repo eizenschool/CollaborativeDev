@@ -3,11 +3,10 @@
 // explained. The list card deliberately carries no expandable "why" panel: a
 // place has one page, and this is it.
 //
-// Depth comes from reviews and structured facts rather than from long editorial
-// copy. FR-6.8 specifies a single generated sentence for `description`; the
-// texture beyond that sentence comes from an attributed review quote
-// (reviewHighlight.js) and the full review list below, not from writing
-// paragraphs into the description itself.
+// Depth comes from reviews and structured facts rather than from editorial copy
+// nobody wrote. The description is composed from what several reviewers
+// independently mention (PlaceDescription.js); the individual reviews follow
+// below, attributed, as reviews.
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
@@ -20,7 +19,7 @@ import {
 } from '../icons.jsx';
 import PlaceImage from './PlaceImage.jsx';
 import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
-import { selectReviewHighlight } from '../../../business-logic/discovery/reviewHighlight.js';
+import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
@@ -137,7 +136,7 @@ export default function DestinationDetail() {
   const { place, candidate, rides, interestedUsers, distanceKm } = data;
   const seatsLeft = rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
   const showRating = place.rating && place.reviewCount >= REVIEW_CONFIDENCE_SATURATION;
-  const detailHighlight = selectReviewHighlight(place, { variant: 'detail' });
+  const described = buildPlaceDescription(place, { distanceKm });
 
   const notifyMe = async () => {
     const { alreadyExisted } = await DestinationDiscoveryService
@@ -174,18 +173,9 @@ export default function DestinationDetail() {
             )}
           </div>
 
-          <p className="dsc-detail-desc">{place.description}</p>
-          {/* Replaces the old "category template" note, which read the same
-              regardless of review count and so said "too few reviews to
-              summarise" under a place with tens of thousands of them. An
-              attributed quote, when one exists, does the job that note was
-              meant to - explaining the place beyond its category - honestly. */}
-          {detailHighlight && (
-            <p className="dsc-detail-highlight">
-              &ldquo;{detailHighlight.text}&rdquo;{' '}
-              <span className="dsc-highlight-author">— {detailHighlight.author}</span>
-            </p>
-          )}
+          {/* Shown in full here - the card clamps it, this screen is where a
+              reader came to know more. */}
+          <p className="dsc-detail-desc">{described?.text || place.description}</p>
 
           {data.weatherWithheld && (
             <p className="dsc-weather">
