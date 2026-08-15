@@ -37,9 +37,10 @@ Run the tests: `npm test`.
 This file was last brought current after: live ingestion (`docs/MODULE6-API-SETUP.md`
 §6), the `categoryFor`/`primaryType` classification fix, live photo rendering
 (`PlaceImage.jsx`), review storage and display (`027_m6_place_reviews.sql`,
-`reviewHighlight.js`), and anonymous browsing (`029_m6_anon_place_browsing.sql`,
-run through the Dashboard SQL Editor — confirm it has actually been applied
-before trusting the "anon can browse" claims in §7 and §8).
+`reviewHighlight.js`), and anonymous browsing (`029_m6_anon_place_browsing.sql`
++ `030_m6_anon_source_place_id.sql`, both run and **confirmed working live** —
+signed-out `/home` and `/discover` show real recommendations, verified against
+the actual REST responses and in the browser, not just by reading the SQL).
 
 ---
 
@@ -148,8 +149,11 @@ Styles: `src/presentation/styles/discover.css`, every rule namespaced `.dsc-*`.
   migration `m6_destination_discovery`.
 - `database/sql/027_m6_place_reviews.sql` — **deployed** (Dashboard SQL Editor);
   adds `places.reviews`.
-- `database/sql/029_m6_anon_place_browsing.sql` — written; needs a run in the
-  Dashboard SQL Editor to actually take effect. See §7 and §8.
+- `database/sql/029_m6_anon_place_browsing.sql` and
+  `030_m6_anon_source_place_id.sql` — **deployed** (Dashboard SQL Editor) and
+  confirmed working: signed-out `/home` and `/discover` show real
+  recommendations. `030` fixed a genuine live break `029` caused on its own —
+  see the new trap in §10 before writing another anon grant.
 
 ### Docs
 
@@ -258,10 +262,9 @@ fixture catalogue described below — this is what `npm test` always exercises,
 and what a fresh checkout demos out of the box. With `.env.local` set
 (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and
 `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads the live Supabase
-catalogue instead: 20 real Kuala Lumpur places with real photos and reviews. A
-signed-out visitor can browse the live catalogue only after
-`029_m6_anon_place_browsing.sql` has actually been run in the Dashboard SQL
-Editor — check §8 before demonstrating that path.
+catalogue instead: 20 real Kuala Lumpur places with real photos and reviews.
+A signed-out visitor can browse the live catalogue too - confirmed live in
+the browser and against the raw REST responses, not just by reading the SQL.
 
 ### Demonstration controls
 
@@ -290,7 +293,7 @@ demand.
 | Real photos (live mode) | Any card → a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
 | Review highlight | Any card → an attributed quote below the description; on the detail page it replaces what used to be a static "category template" note |
 | Below-threshold places, category or all | `/discover` → any category button, or `All` → the toggle under the two main sections → cards below the recommendation thresholds |
-| Anonymous browsing (live mode, once `029` is run) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |
+| Anonymous browsing (live mode) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |
 
 The fixture catalogue is built to make each of these fire — the chain outlets, the
 two-review stall, the Stale and Retired places all exist for that reason.
@@ -306,15 +309,15 @@ two-review stall, the Stale and Retired places all exist for that reason.
    unconfirmed either way — no database-enforced ledger exists yet, so treat the
    budget as manually tracked, not automatically capped.
 2. ~~**Deploy `024_m6_destination_discovery.sql`**~~ **Done**, plus `027`
-   (reviews column) and `029` (anon browsing — confirm this one has actually
-   been run; see item 4).
+   (reviews column), `029`, and `030` (anon browsing - both run and confirmed
+   working live).
 3. **Tell Yee** about the two files in §4. Still open.
-4. **Run `029_m6_anon_place_browsing.sql`** in the Dashboard SQL Editor. The file
-   is written and committed but needs to actually be executed against the live
-   database before a signed-out visitor can see anything — until then, `/discover`
-   and the Home rail correctly show a sign-in prompt rather than an empty
-   catalogue for a guest, which is the pre-`029` behaviour working as designed,
-   not a bug.
+4. ~~**Run `029_m6_anon_place_browsing.sql`**~~ **Done.** `029` alone was not
+   enough - it excluded `source_place_id` from the anon grant, and because
+   `discoverySupabaseRepository.js` selects one fixed column list for every
+   caller, that took down anonymous browsing entirely (`permission denied for
+   table places`) rather than just omitting one field. `030` fixed it. See the
+   trap in §10 before writing another anon column grant for this table.
 
 ---
 
@@ -423,6 +426,19 @@ whole review became the description. Live descriptions read "Awesome and
 amazing and better than expectation!!!" for Central Market before this was
 caught. Reviews are now stored separately (`027`) with their authors and
 shown as reviews; `description` went back to a neutral generated sentence.
+
+**One ungranted column blocks the whole query for every caller sharing that
+select list.** `029` granted `anon` a column-restricted read on `places` that
+deliberately excluded `source_place_id`. `discoverySupabaseRepository.js`
+uses one fixed `PLACE_SELECT` list regardless of who is asking — it has no
+branch for auth state — so the moment that list included one column `anon`
+lacked, Postgres denied the *entire* query (`permission denied for table
+places`), not just that field. Confirmed live: every anonymous `/discover`
+and Home-rail read failed until `030` added the missing grant. A
+column-restricted grant is only safe for a shared adapter if the select list
+either matches the narrowest role reading it, or is deliberately different
+per role — mixing "narrow grant" with "one select list for everyone" breaks
+the wider role's access, not just the narrower one's.
 
 ---
 

@@ -11,7 +11,9 @@ Accepted scope is D018 in `docs/ai/DECISIONS.md`.
 `GOOGLE_PLACES_SERVER_KEY` is set and working; `m6-ingest` has run twice against
 Kuala Lumpur and populated `places` with 20 real destinations, each carrying
 real photos and up to five stored, attributed reviews (`027_m6_place_reviews.sql`).
-`anon` read access follows in `029_m6_anon_place_browsing.sql`.
+`anon` read access is deployed and confirmed working
+(`029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql`), so a
+signed-out visitor sees real recommendations too.
 
 None of this is required for the offline build, tests, or demo - the fixture
 catalogue (`src/data-access/discoveryStore.js`) is still the default, selected
@@ -35,7 +37,7 @@ suite always uses the fixture regardless of `.env.local` - see the guard in
 | Per-service daily hard quotas (§5) | **Unconfirmed** - console state not verified against the four application budget targets; no database-enforced ledger exists yet either | Brayden |
 | `024_m6_destination_discovery.sql` deployed | **Deployed** as `m6_destination_discovery` | done |
 | `027_m6_place_reviews.sql` deployed | **Deployed** through the Dashboard SQL Editor; adds `places.reviews` | done |
-| `029_m6_anon_place_browsing.sql` deployed | Written; needs to be run in the Dashboard SQL Editor | Brayden |
+| `029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql` deployed | **Deployed and confirmed working** - `029` alone broke anonymous browsing entirely (excluded `source_place_id`, and one ungranted column denies the whole shared query, not just that field); `030` fixed it | done |
 | `supabase/functions/m6-ingest/index.ts` deployed | **Deployed and active** as `m6-ingest`; has ingested real data twice | done |
 | `GOOGLE_PLACES_SERVER_KEY` set as a Supabase secret | **Done** | done |
 

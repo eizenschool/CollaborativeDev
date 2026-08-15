@@ -136,7 +136,8 @@ key; still the default) and `src/data-access/discoverySupabaseRepository.js`
 under test).
 Schema: `database/sql/024_m6_destination_discovery.sql` (deployed as
 `m6_destination_discovery`), `027_m6_place_reviews.sql` (reviews column),
-`029_m6_anon_place_browsing.sql` (anon read). Live catalogue is populated —
+`029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql` (anon
+read, confirmed working). Live catalogue is populated —
 see `docs/MODULE6-API-SETUP.md` §6 for what has actually been ingested.
 API: `docs/MODULE6-API-SETUP.md`.
 
