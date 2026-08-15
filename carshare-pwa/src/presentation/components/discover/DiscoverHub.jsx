@@ -12,7 +12,7 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
-import { IconSearch, IconAlertTriangle, IconStar, IconArrowRight } from '../icons.jsx';
+import { IconAlertTriangle, IconStar, IconArrowRight } from '../icons.jsx';
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
 import PlaceImage from './PlaceImage.jsx';
@@ -74,6 +74,7 @@ export default function DiscoverHub() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateAdjusted, setDateAdjusted] = useState(false);
+  const [showAllWithheld, setShowAllWithheld] = useState(false);
 
   const load = useCallback(async (date) => {
     setLoading(true);
@@ -165,6 +166,14 @@ export default function DiscoverHub() {
     () => selectWithheldForCategory(result?.withheld, categoryFilter),
     [result, categoryFilter]
   );
+  // Unlike moreInCategory, this is every withheld candidate regardless of
+  // category - the disclosure a reader on "All" opens explicitly, rather than
+  // the per-category list the filter buttons produce.
+  const allWithheld = useMemo(() => result?.withheld || [], [result]);
+
+  // Leaving "All" and coming back should not carry over an expanded state from
+  // a previous visit - the reader chose to look, once, at a specific moment.
+  useEffect(() => { setShowAllWithheld(false); }, [categoryFilter]);
 
   // The hero is the strongest served candidate; the grid below then starts from
   // the second, so the same place is never shown twice on one screen.
@@ -338,13 +347,32 @@ export default function DiscoverHub() {
             </p>
           )}
 
-          {categoryFilter === 'all' && result?.withheld?.length > 0 && (
-            <p className="dsc-withheld">
-              <IconSearch size={14} />
-              {result.withheld.length} further destination
-              {result.withheld.length > 1 ? 's are' : ' is'} below the recommendation thresholds
-              for this date — pick a category above to browse them.
-            </p>
+          {/* "All" keeps selectWithheldForCategory's tested "always []" contract
+              intact - this reads straight from result.withheld instead, so a
+              reader who has not narrowed to one category can still ask to see
+              everything below the threshold in one place. */}
+          {categoryFilter === 'all' && allWithheld.length > 0 && (
+            <section className="dsc-section">
+              <button
+                type="button"
+                className="dsc-working-toggle"
+                onClick={() => setShowAllWithheld((open) => !open)}
+                aria-expanded={showAllWithheld}
+              >
+                <IconArrowRight size={14} className={showAllWithheld ? 'dsc-caret-open' : ''} />
+                {showAllWithheld
+                  ? 'Hide the rest'
+                  : `${allWithheld.length} further destination${allWithheld.length > 1 ? 's are' : ' is'} below the recommendation thresholds for this date — see them`}
+              </button>
+
+              {showAllWithheld && (
+                <div className="dsc-list">
+                  {allWithheld.map((candidate) => (
+                    <DestinationCard key={candidate.placeId} candidate={candidate} onOpen={openDestination} />
+                  ))}
+                </div>
+              )}
+            </section>
           )}
         </>
       )}
