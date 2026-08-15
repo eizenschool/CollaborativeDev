@@ -308,6 +308,42 @@ rows were corrected with a direct `PATCH` rather than a third ingestion run.
 Live category distribution after both fixes: culinary 8, heritage 6, nature 5,
 event 1.
 
+**Ingestion log, Penang / Melaka / Selangor (2026-08-16):**
+
+| Run | region | `maxDetails` | discovered | enriched | refreshed | skipped | upserted |
+|---|---|---|---|---|---|---|---|
+| Recon (`dryRun`) | each of three | 0 | 20 each | 0 | 0 | — | 0 |
+| Main | Penang | 20 | 20 | 20 | 0 | — | 20 |
+| Main | Melaka | 20 | 20 | 20 | 0 | — | 20 |
+| Main | Selangor | 20 | 20 | 20 | 0 | — | 20 |
+| Nature top-up (canary) | Penang | 2 | 20 | 2 | 1 | 0 | 2 |
+| Nature top-up | Penang | 20 | 20 | 16 | 3 | **1** | 16 |
+
+Cost: **6 Nearby Search + 79 Place Details**. `failures` was empty on every run.
+
+Two things this log records that the Kuala Lumpur one could not. First, the
+three main runs were issued **separately, one region each**, because
+`maxDetails` is a per-*run* budget shared across regions (`index.ts`), so three
+regions in one call with `maxDetails: 50` would have silently dropped ten
+places from whichever region the loop reached last. Second, the nature top-up
+used a nature-only `includedTypes` list, because the default four types let
+restaurants take 8-11 of every 20 slots and Penang came back with **zero**
+nature places on the main run — Penang Hill, the national park and the botanical
+gardens were never discovered at all, let alone misclassified.
+
+Ten of the sixty main-run rows were classified wrongly and were corrected by
+`032_m6_reclassify_ingested_places.sql` — four hotels, a shopping mall and a
+columbarium retired, four real destinations recategorised. The classification
+rules themselves are fixed in `classification.ts`; the nature top-up ran against
+the fixed function and correctly refused `MBI Desaku Homestay`, which the old
+rules would have filed as a destination. Live distribution after all of it:
+92 recommendable rows — Kuala Lumpur 20, Penang 37, Melaka 20, Selangor 15.
+
+**Known and not yet fixed:** `state` is copied from the region config rather
+than read from the place's own address, so Kedah places found by the Penang
+sweep are stored as Penang; and `The TOP Penang` (a theme park) is classified
+`nature` because nature is checked before event in the fallback order.
+
 ## 7. Terms of service — accepted risk
 
 Google permits indefinite storage of **place IDs only**. Names, ratings, review

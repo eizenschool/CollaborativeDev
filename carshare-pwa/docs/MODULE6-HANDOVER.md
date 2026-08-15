@@ -29,17 +29,17 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **533 tests / 33 files, all passing** |
-| Module 6's own | **346 tests / 17 files** |
+| Whole suite | **552 tests / 34 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **365 tests / 18 files** |
 | Build | passes |
-| Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of 20 Kuala Lumpur places with real photos and reviews — see §7 and `docs/MODULE6-API-SETUP.md` §6. |
+| Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **92 places across Kuala Lumpur, Penang, Melaka and Selangor** with real photos and reviews — see §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
 ### Environment on Brayden's machine — read before running anything
 
 | | |
 |---|---|
 | `carshare-pwa/.env.local` | **Exists and is correctly named.** It carries `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, two Google browser keys, and `VITE_DISCOVERY_DATA_SOURCE=supabase`, so `npm run dev` runs against the **live** catalogue. Park it (`mv .env.local .env.local.parked`) to demo or debug the fixture path. It was once named `env.local` without the leading dot, which Vite silently ignores — see §10. |
-| `npm test` | Unaffected by `.env.local` either way: `discoveryStore.js` forces the fixture store under `MODE === 'test'`. Tests never reach Supabase or Google. |
+| `npm test` | **Park `.env.local` before running it.** This row used to claim the suite was unaffected either way. That is false and was measured false on 2026-08-16: with `.env.local` present, 19 tests fail — 16 in Module 5's `TripHistoryEngine.test.js` and 3 ride-related ones in this module's `DestinationDiscoveryService.test.js`. `discoveryStore.js`'s `MODE === 'test'` guard only protects this module's own catalogue; the **ride lookup has no such guard**, so `isSupabaseConfigured` sends it at the live backend. `mv .env.local .env.local.parked`, run, move it back — 552/552 pass. The real fix belongs in Module 5's file and is **Tang's**, not this module's; it is the one live hole in the "tests make zero real API calls" rule. |
 | `SUPABASE_SECRET_KEY` | Set as a **Windows user environment variable** so ingestion could be invoked without the key passing through a file or a chat message. It bypasses every RLS policy. **Clear it when ingestion work is done:** `setx SUPABASE_SECRET_KEY ""` |
 | Dev server port | `npm run dev` walks up from 5173 when ports are busy. Read the actual port from its output rather than assuming 5173. |
 | Worktrees | Only the main checkout matters. Two empty `.claude/worktrees/` folders may linger from finished sessions; git no longer tracks them and they can be deleted whenever the shells holding them close. |
@@ -471,6 +471,39 @@ what no amount of blocklisting would have: "Art Deco", "fountain show",
 phrase is always at least as frequent as the longer phrase containing it, so
 ranking by frequency alone kept "Art" over "Art Deco" - the longer phrase has
 to win by rule, not by score.
+
+**A classification fix applied to one branch is not applied to the other.**
+The `primaryType`-first fix above was written for the Kuala Lumpur failure and
+applied to the `primaryType` branch only. The `types` fallback underneath it
+kept the original fixed order with culinary ahead of heritage, so when Penang
+was ingested, Cheong Fatt Tze - The Blue Mansion — a UNESCO heritage house with
+a restaurant in it — came back culinary, and the detail screen rendered the
+badge "Culinary" directly above the place's own generated description, "A museum
+in Penang." The same function's final line returned `event` for anything it
+could not recognise, which made that category a dumping ground: four hotels and
+a shopping mall were offered as answers to "where should I go?". Both are fixed
+in `classification.ts`, and the rule is now that what a place *is* outranks what
+it merely contains — culinary is last in every fallback order.
+
+**Logic that cannot be imported cannot be tested.** The classification above
+lived inside `supabase/functions/m6-ingest/index.ts`, whose first lines import
+`jsr:` and `npm:` specifiers that no Vitest run can resolve. So the one piece of
+this module that had already caused a catalogue-wide failure was also the only
+piece with no test able to reach it — and it regressed. It is now
+`classification.ts`, which imports nothing, so Deno bundles it and Node runs it;
+`vitest.config.js` has a fourth `include` entry for its tests. Anything else
+that moves into an Edge Function needs the same treatment before it is trusted.
+
+**`state` is copied from the region config, not read from the place.**
+Ingestion writes `item.region.state` onto every row it creates, so a place is
+labelled with whichever region's sweep happened to find it. A 50 km radius from
+George Town reaches well into Kedah, so `Dataran Kulim`, `Kulim Bird Park` and
+`Tupah Recreational Forest` are all stored as Penang. This is not only a display
+error: ChainDetection (FR-6.26) scopes name recurrence **by state**, so a wrong
+state silently changes which places are compared against each other. Fixing it
+means reading `addressComponents` from the enrichment response — a Pro-tier
+field, and therefore free to add to a mask already at Enterprise + Atmosphere.
+Not yet done.
 
 **One ungranted column blocks the whole query for every caller sharing that
 select list.** `029` granted `anon` a column-restricted read on `places` that
