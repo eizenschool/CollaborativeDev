@@ -3,10 +3,10 @@
 // explained. The list card deliberately carries no expandable "why" panel: a
 // place has one page, and this is it.
 //
-// Depth comes from reviews and structured facts rather than from long editorial
-// copy. FR-6.8 specifies a single generated sentence, so writing paragraphs here
-// would look richer now and then visibly regress the moment the live catalogue
-// starts returning what the specification actually describes.
+// Depth comes from reviews and structured facts rather than from editorial copy
+// nobody wrote. The description is composed from what several reviewers
+// independently mention (PlaceDescription.js); the individual reviews follow
+// below, attributed, as reviews.
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
@@ -19,6 +19,7 @@ import {
 } from '../icons.jsx';
 import PlaceImage from './PlaceImage.jsx';
 import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
+import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
@@ -135,6 +136,7 @@ export default function DestinationDetail() {
   const { place, candidate, rides, interestedUsers, distanceKm } = data;
   const seatsLeft = rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
   const showRating = place.rating && place.reviewCount >= REVIEW_CONFIDENCE_SATURATION;
+  const described = buildPlaceDescription(place, { distanceKm });
 
   const notifyMe = async () => {
     const { alreadyExisted } = await DestinationDiscoveryService
@@ -171,13 +173,9 @@ export default function DestinationDetail() {
             )}
           </div>
 
-          <p className="dsc-detail-desc">{place.description}</p>
-          {place.descriptionIsTemplate && (
-            <p className="dsc-template-note">
-              This description is a category template — the source holds too few
-              reviews to summarise.
-            </p>
-          )}
+          {/* Shown in full here - the card clamps it, this screen is where a
+              reader came to know more. */}
+          <p className="dsc-detail-desc">{described?.text || place.description}</p>
 
           {data.weatherWithheld && (
             <p className="dsc-weather">

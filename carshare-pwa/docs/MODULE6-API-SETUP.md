@@ -7,12 +7,20 @@ this file.
 
 Accepted scope is D018 in `docs/ai/DECISIONS.md`.
 
-**Status: the database schema is live, but external ingestion is not live yet.**
-`024_m6_destination_discovery.sql` is deployed as the Supabase migration
-`m6_destination_discovery`; the module still runs on the local fixture catalogue
-(`src/data-access/discoveryStore.js`) until the server key, Edge Function, and
-controlled smoke test below are complete. Nothing below is required for the
-current offline build, tests, or demo.
+**Status: ingestion is live.** `024_m6_destination_discovery.sql` is deployed;
+`GOOGLE_PLACES_SERVER_KEY` is set and working; `m6-ingest` has run twice against
+Kuala Lumpur and populated `places` with 20 real destinations, each carrying
+real photos and up to five stored, attributed reviews (`027_m6_place_reviews.sql`).
+`anon` read access is deployed and confirmed working
+(`029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql`), so a
+signed-out visitor sees real recommendations too.
+
+None of this is required for the offline build, tests, or demo - the fixture
+catalogue (`src/data-access/discoveryStore.js`) is still the default, selected
+by leaving `VITE_DISCOVERY_DATA_SOURCE` unset. The live adapter
+(`src/data-access/discoverySupabaseRepository.js`) is opt-in, and the test
+suite always uses the fixture regardless of `.env.local` - see the guard in
+`discoveryStore.js`.
 
 ---
 
@@ -21,15 +29,17 @@ current offline build, tests, or demo.
 | Item | State | Who |
 |---|---|---|
 | Places API (New) enabled in `my-project-cd-505310` | Already enabled for Module 2 | done |
-| **Server-side API key** (see §2) | **Not created** | Brayden |
-| Nearby Search authorised on that key | Not done | Brayden |
-| Place Details authorised on that key | Not done | Brayden |
-| Place Photos authorised on that key | Not done | Brayden |
-| Street View Static authorised on that key | Not done, optional | Brayden |
-| Per-service daily hard quotas (§5) | Not done | Brayden |
+| **Server-side API key** (see §2) | **Created and working** | done |
+| Nearby Search authorised on that key | **Confirmed working** (used every ingestion run) | done |
+| Place Details authorised on that key | **Confirmed working** (35 calls across two runs) | done |
+| Place Photos authorised on that key | **Confirmed working** - the browser key, not the server one, serves photos live; see §3.3 | done |
+| Street View Static authorised on that key | Not exercised; FR-6.15 remains unimplemented | Brayden |
+| Per-service daily hard quotas (§5) | **Unconfirmed** - console state not verified against the four application budget targets; no database-enforced ledger exists yet either | Brayden |
 | `024_m6_destination_discovery.sql` deployed | **Deployed** as `m6_destination_discovery` | done |
-| `supabase/functions/m6-ingest/index.ts` deployed | **Deployed and active** as `m6-ingest`; validates a Supabase secret on `apikey` | done |
-| `GOOGLE_PLACES_SERVER_KEY` set as a Supabase secret | Not done | Brayden |
+| `027_m6_place_reviews.sql` deployed | **Deployed** through the Dashboard SQL Editor; adds `places.reviews` | done |
+| `029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql` deployed | **Deployed and confirmed working** - `029` alone broke anonymous browsing entirely (excluded `source_place_id`, and one ungranted column denies the whole shared query, not just that field); `030` fixed it | done |
+| `supabase/functions/m6-ingest/index.ts` deployed | **Deployed and active** as `m6-ingest`; has ingested real data twice | done |
+| `GOOGLE_PLACES_SERVER_KEY` set as a Supabase secret | **Done** | done |
 
 ## 2. The key: why the two existing ones cannot be reused
 
@@ -82,19 +92,22 @@ Field mask is deliberately Essentials-only — see §4.
 ```http
 GET https://places.googleapis.com/v1/places/{PLACE_ID}
 X-Goog-Api-Key: {GOOGLE_PLACES_SERVER_KEY}
-X-Goog-FieldMask: displayName,rating,userRatingCount,reviews,photos,types,location
+X-Goog-FieldMask: displayName,rating,userRatingCount,reviews,photos,types,primaryType,location
 ```
 
 One request per place, on first ingestion or detected source change only.
 FR-6.11 forbids running this at request time, which is also what keeps it
-affordable: it is a per-place one-off, not a per-page-view cost.
+affordable: it is a per-place one-off, not a per-page-view cost. `primaryType`
+is free to add: `reviews` already puts this request at Enterprise + Atmosphere,
+the field mask's highest tier, and `primaryType` sits at or below that.
 
 Maps to the module as follows:
 
 | Response field | Used by |
 |---|---|
-| `types` | FR-6.7 classification into culinary/heritage/nature/event |
-| `reviews[].text` | FR-6.8 single-sentence description; FR-6.10 withholds generation below three |
+| `primaryType` | FR-6.7 classification, checked first - Google's own single classification, more reliable than scanning the unordered `types` bag (see the traps note on `tourist_attraction`) |
+| `types` | FR-6.7 classification fallback when `primaryType` does not match a known type |
+| `reviews[].text` | Stored with author attribution as `places.reviews` (`027`) and shown on the detail page as attributed reviews. Also the source `PlaceDescription.js` describes a place from - but only through phrases two or more reviewers used independently, never by quoting one; see `027`'s header for what happened when a single review was written into `description` verbatim |
 | `rating`, `userRatingCount` | Desirability quality and headroom signals; FR-6.16 rating suppression |
 | `photos[].name` | FR-6.13 carousel references; FR-6.12 Provisional when absent |
 | `location` | Journey-cost signal, FR-6.36/6.37 spatial queries |
@@ -260,32 +273,80 @@ or place it in a Vite `VITE_` variable. The response should report one
 `upserted` place. Confirm the row in the Dashboard Table Editor before turning
 on `VITE_DISCOVERY_DATA_SOURCE=supabase` locally.
 
+**`refreshDetails: true`** re-enriches places the catalogue already knows,
+instead of the default behaviour of only touching (`markSeen`, free) a known
+place and spending Place Details only on genuinely new ones. It costs one
+Details call per place in the batch, same as first enrichment, so use it only
+when something about how existing places are enriched has changed - it was
+added specifically to backfill `places.reviews` (`027`) onto rows ingested
+before that column existed, without deleting and re-ingesting them, which
+would have cascaded away their recorded `place_interest` rows.
+
+```powershell
+$body = @{
+  regions = @(@{ id = 'kl'; state = 'Kuala Lumpur'; latitude = 3.139; longitude = 101.6869; radiusMeters = 50000 })
+  maxResultCount = 20
+  maxDetails = 20
+  refreshDetails = $true   # omit for normal ingestion of new places only
+} | ConvertTo-Json -Depth 5
+```
+
+**Ingestion log, Kuala Lumpur:**
+
+| Run | `maxDetails` | `refreshDetails` | discovered | enriched | refreshed | upserted |
+|---|---|---|---|---|---|---|
+| First pass | 20 | — | 20 | 15 | 5 | 15 |
+| Refresh pass (to backfill `reviews`) | 20 | true | 20 | 20 | 0 | 20 |
+
+`failures` was empty on both runs. Total real cost: 2 Nearby Search calls (one
+free `maxDetails: 0` reconnaissance call before the first pass, one live) plus
+35 Place Details calls across both passes. Category classification was wrong
+on the first pass (`nature` and `event` both came back empty - `categoryFor`
+checked a fixed order and `tourist_attraction`, sitting in the `heritage`
+bucket, matched almost everything); this was fixed in code and the 6 affected
+rows were corrected with a direct `PATCH` rather than a third ingestion run.
+Live category distribution after both fixes: culinary 8, heritage 6, nature 5,
+event 1.
+
 ## 7. Terms of service — accepted risk
 
 Google permits indefinite storage of **place IDs only**. Names, ratings, review
 counts, review text and photographs are to be requested live and displayed with
 attribution rather than warehoused.
 
-This module caches rating, review count, the generated description and photo
-references, because FR-6.11 forbids enrichment at request time and the
-Desirability formula consumes rating and review count on every scoring pass.
+This module caches rating, review count, the generated description, photo
+references, and (since `027_m6_place_reviews.sql`) up to five reviews per
+place, because FR-6.11 forbids enrichment at request time and the Desirability
+formula consumes rating and review count on every scoring pass.
 
 The team accepted this for an academic prototype. It is recorded here, in
-D018, in `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`, and in the header of
-`database/sql/024_m6_destination_discovery.sql`, and **must appear in the
-report's limitations section**. Image bytes are never copied into project
-storage; only references are held.
+D018, in `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`, in the header of
+`database/sql/024_m6_destination_discovery.sql`, and in `027`'s own header, and
+**must appear in the report's limitations section**. Image bytes are never
+copied into project storage; only references are held. Every stored review
+carries its author, and the detail screen displays that author, so the
+attribution requirement is met even though the caching one is not - see `027`'s
+header for the mistake this replaced (a review written into `description`
+itself, unattributed).
 
-## 8. Controlled smoke test
+## 8. Expanding beyond Kuala Lumpur
 
-Run only once the hard quotas are visible in the console, following the same
-discipline `GOOGLE-MAPS-SETUP.md` sets for Module 2:
+The Kuala Lumpur region is ingested (§6's log). Before adding another region -
+Penang, Melaka, or any other - repeat the same discipline `GOOGLE-MAPS-SETUP.md`
+sets for Module 2, this time against a real batch rather than a throwaway
+smoke test:
 
 1. Record Nearby Search, Place Details and Photos usage before starting.
-2. Run one ingestion cycle against a single small region.
-3. Confirm the counters moved only for the expected SKUs, and that Place Details
+2. Run a free reconnaissance call first (`maxDetails: 0, dryRun: true`) to see
+   how many candidates the region holds before spending anything on Details.
+3. Run the ingestion cycle for that region.
+4. Confirm the counters moved only for the expected SKUs, and that Place Details
    was billed at the tier the field mask implies.
-4. Confirm no request was made from the browser bundle — all Places traffic must
+5. Confirm no request was made from the browser bundle — all Places traffic must
    originate from the Edge Function.
-5. Do not repeat the smoke test to exercise UI states. Automated tests mock every
+6. Check `categoryFor`'s output against the real result the way §6 records for
+   Kuala Lumpur - `primaryType` fixed the systematic heritage-swallows-everything
+   failure, but a region with an unfamiliar mix of place types is still worth a
+   manual spot check before trusting the distribution.
+7. Do not repeat ingestion to exercise UI states. Automated tests mock every
    external call and must continue to make zero real requests.
