@@ -122,7 +122,7 @@ Business logic: `src/business-logic/discovery/`
 - `DestinationDiscoveryService.js` — orchestration
 - `localDate.js` — today's date from the local calendar, not `toISOString()`'s UTC one
 - `placePhotos.js` — builds the live Places Photo URL; null for a fixture reference
-- `reviewHighlight.js` — the attributed review quote shown alongside `description`
+- `PlaceDescription.js` — FR-6.8/6.9/6.10, the place described from phrases two or more of its own reviewers used independently
 - `geo.js`, `__tests__/`
 
 Presentation: `src/presentation/components/discover/` — hub, detail, card, rail,

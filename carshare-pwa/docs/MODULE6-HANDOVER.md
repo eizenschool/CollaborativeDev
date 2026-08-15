@@ -29,15 +29,15 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **514 tests / 33 files** — **512 passing.** The 2 failures are a pre-existing regression from Module 2's ride-lifecycle merge (mock ride data no longer has a departure on the date Module 6's tests expect), not caused by this module's own work. Tracked separately, not fixed here — `mockDataStore.js`/`RideService.js` are Module 2's files. |
-| Module 6's own | **327 tests / 17 files** (includes the 2 above) |
+| Whole suite | **533 tests / 33 files** — **531 passing.** The 2 failures are a pre-existing regression from Module 2's ride-lifecycle merge (mock ride data no longer has a departure on the date Module 6's tests expect), not caused by this module's own work. Tracked separately, not fixed here — `mockDataStore.js`/`RideService.js` are Module 2's files. |
+| Module 6's own | **346 tests / 17 files** (includes the 2 above) |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of 20 Kuala Lumpur places with real photos and reviews — see §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
 This file was last brought current after: live ingestion (`docs/MODULE6-API-SETUP.md`
 §6), the `categoryFor`/`primaryType` classification fix, live photo rendering
 (`PlaceImage.jsx`), review storage and display (`027_m6_place_reviews.sql`,
-`reviewHighlight.js`), and anonymous browsing (`029_m6_anon_place_browsing.sql`
+`PlaceDescription.js`), and anonymous browsing (`029_m6_anon_place_browsing.sql`
 + `030_m6_anon_source_place_id.sql`, both run and **confirmed working live** —
 signed-out `/home` and `/discover` show real recommendations, verified against
 the actual REST responses and in the browser, not just by reading the SQL).
@@ -124,7 +124,7 @@ site in Penang and scores 0 on visitation headroom.
 | `DiscoveryDemoControls.js` | Weather override and month shortcuts for demonstrations. |
 | `localDate.js` | Today's date read from local `Date` getters, not `toISOString()`'s UTC one — see §10. |
 | `placePhotos.js` | Builds the live Places Photo URL from a stored reference; returns `null` for a fixture placeholder or unconfigured key. |
-| `reviewHighlight.js` | Picks the longest stored review as an attributed quote to show alongside `description`. |
+| `PlaceDescription.js` | FR-6.8/6.9/6.10. Describes a place from phrases two or more of its reviewers used independently. Quotes nobody. |
 | `geo.js` | Haversine distance. |
 
 ### Presentation — `src/presentation/components/discover/`
@@ -212,7 +212,7 @@ FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.16
 |---|---|---|
 | 6.1, 6.2, 6.6 — catalogue sweep and ingestion | `m6-ingest` runs against Google Places and has populated 20 real places (`docs/MODULE6-API-SETUP.md` §6) | **Not scheduled.** Every run so far has been triggered manually; there is no cron and no automatic recurring sweep |
 | 6.7 — classification | `categoryFor` uses Google's `primaryType` first, falling back to a scan of `types` — see the trap this replaced in §10 | — |
-| 6.8, 6.9, 6.10 — description generation | `description` is a generated single sentence (FR-6.8's "generated" is a template, not free text) | Not derived from review content — an earlier attempt to do that wrote a review's text into `description` verbatim and unattributed, which was reverted (`027`'s header). Real review content is shown separately, attributed, via `reviewHighlight.js` and the full review list |
+| 6.8, 6.9, 6.10 — description generation | `PlaceDescription.js` composes four sentences per place from data already stored: what kind of place it is, what several reviewers independently single out, its rating, and its distance. `DESCRIPTION_MIN_REVIEWS` withholds generation below three reviews (FR-6.10) and `description_is_template` (FR-6.9) keeps a hand-authored sentence rather than overwriting it | Composed at read time rather than written into `places.description`, so the stored column is still the category template. Regenerating wording therefore needs no re-ingestion, but anything reading the database directly still sees the template |
 | 6.11 — enrichment-not-at-request-time | Holds: ingestion runs offline, scoring never calls Google | — |
 
 **Not implemented, and why**
@@ -251,7 +251,7 @@ record it means Safety Report review.
 
 ```bash
 npm run dev     # then /discover
-npm test        # 514 tests, zero external calls regardless of .env.local
+npm test        # 533 tests, zero external calls regardless of .env.local
 ```
 
 Entry points: home screen rail → `/discover`; audience switch → `/discover/demand`;
@@ -291,7 +291,7 @@ demand.
 | Reasons, not maths | Any detail page → sentences first, "See how this was scored" collapsed |
 | Prefill | Detail → "Find a ride" carries from/to/date into the search form |
 | Real photos (live mode) | Any card → a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
-| Review highlight | Any card → an attributed quote below the description; on the detail page it replaces what used to be a static "category template" note |
+| Description from reviews | Any card → four sentences naming what this place actually is, e.g. KL Tower's "Observation Deck, Sky Box and views from the top". Each phrase was used by two or more reviewers independently; none is a quote |
 | Below-threshold places, category or all | `/discover` → any category button, or `All` → the toggle under the two main sections → cards below the recommendation thresholds |
 | Anonymous browsing (live mode) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |
 
@@ -426,6 +426,24 @@ whole review became the description. Live descriptions read "Awesome and
 amazing and better than expectation!!!" for Central Market before this was
 caught. Reviews are now stored separately (`027`) with their authors and
 shown as reviews; `description` went back to a neutral generated sentence.
+
+**Keyword matching without word boundaries.** `PlaceDescription.js` recognises
+what kind of place something is by looking for nouns like `park`, `fort` and
+`hill`. Matched with `String.includes`, "comfortable" contains `fort`, and two
+Kuala Lumpur restaurants were described as forts on the live catalogue;
+`parking` would likewise make anywhere a park, and `chill` a hill. It matches
+on `\bnoun s?\b` now, and the tests pin the comfortable/fort case specifically.
+
+**Single words are not themes.** The first version of the review-theme
+extraction allowed one-word phrases and produced "around", "area", "back",
+"helpful" - words that pass every stoplist because they are neither praise nor
+stopwords, and which beat good phrases on frequency because a common word
+appears in more reviews than a specific one does. Requiring two words fixed
+what no amount of blocklisting would have: "Art Deco", "fountain show",
+"Petronas Twin Towers" survive it and the noise does not. Related: a shorter
+phrase is always at least as frequent as the longer phrase containing it, so
+ranking by frequency alone kept "Art" over "Art Deco" - the longer phrase has
+to win by rule, not by score.
 
 **One ungranted column blocks the whole query for every caller sharing that
 select list.** `029` granted `anon` a column-restricted read on `places` that

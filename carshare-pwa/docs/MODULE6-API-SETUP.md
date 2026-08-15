@@ -107,7 +107,7 @@ Maps to the module as follows:
 |---|---|
 | `primaryType` | FR-6.7 classification, checked first - Google's own single classification, more reliable than scanning the unordered `types` bag (see the traps note on `tourist_attraction`) |
 | `types` | FR-6.7 classification fallback when `primaryType` does not match a known type |
-| `reviews[].text` | Stored with author attribution as `places.reviews` (`027`), shown on the detail page and as a card highlight quote (`reviewHighlight.js`) - **not** used to generate `description`; see the compliance note in `027`'s header for why that was tried and reverted |
+| `reviews[].text` | Stored with author attribution as `places.reviews` (`027`) and shown on the detail page as attributed reviews. Also the source `PlaceDescription.js` describes a place from - but only through phrases two or more reviewers used independently, never by quoting one; see `027`'s header for what happened when a single review was written into `description` verbatim |
 | `rating`, `userRatingCount` | Desirability quality and headroom signals; FR-6.16 rating suppression |
 | `photos[].name` | FR-6.13 carousel references; FR-6.12 Provisional when absent |
 | `location` | Journey-cost signal, FR-6.36/6.37 spatial queries |
