@@ -14,7 +14,8 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-026 and 028 as tracked Supabase migrations, plus 023,
   027, 029, and 030 applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-030
+Repository SQL history: 001-032
+Written but NOT yet deployed: 031, 032 (Module 6 - see below)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -106,6 +107,19 @@ needs it captured before the auth redirect. `state_before_demotion` and
 frontend caller - and were removed from `PLACE_SELECT` instead of granted, so
 the query only asks for what is actually read. The next new migration starts
 at `031`.
+
+`031_m6_place_types.sql` and `032_m6_reclassify_ingested_places.sql` are
+**written but not yet deployed**, and both belong to the same problem. The
+Penang / Melaka / Selangor ingestion on 2026-08-16 grew the catalogue from 20
+rows to 80 and misclassified ten of them, including four hotels and a shopping
+mall filed as `event` destinations. `031` adds `types` and `primary_type` so the
+inputs classification is derived from survive ingestion - without them a
+classification bug can only be repaired by re-running the Enterprise +
+Atmosphere enrichment request, which is what made the equivalent Kuala Lumpur
+repair a manual REST PATCH with no record in this directory. `032` is that
+record for this round: it retires the six rows that are not destinations and
+recategorises four that are. Neither file changes any grant, and `032` is
+idempotent. Deploy `031` before `032`.
 
 `027_m6_place_reviews.sql` is **deployed through the Dashboard SQL Editor**, the
 same route as `023`: it is not present in the migration history returned by the
@@ -227,6 +241,8 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `028_m2_route_schedule_and_completion.sql` - deployed as `m2_route_schedule_and_completion`; server route quotes and ETA, private route anchors, serialized Driver schedule conflicts, one-hour boundaries, GPS check-in/arrival, No-show, dual confirmation, and 24-hour auto-completion.
 - `029_m6_anon_place_browsing.sql` - deployed through the Dashboard SQL Editor; grants `anon` a filtered, column-restricted read on `places` plus execute on `place_latent_demand`, deploying D017's public-first browsing to Destination Discovery.
 - `030_m6_anon_source_place_id.sql` - deployed through the Dashboard SQL Editor; grants `anon` read on `source_place_id`, which `029` had wrongly excluded and which broke every anonymous discovery read until fixed.
+- `031_m6_place_types.sql` - **written, not yet deployed**; adds `places.types` and `places.primary_type` so a classification fix can be re-applied without buying enrichment again. No grants: `authenticated` inherits them from `024`'s table-level grant, and `anon` is deliberately left without them because `PLACE_SELECT` does not name them.
+- `032_m6_reclassify_ingested_places.sql` - **written, not yet deployed**; retires four hotels, a shopping mall and a columbarium that the Penang/Melaka/Selangor sweep filed as destinations, and corrects the category of four real destinations. Idempotent.
 
 ## Rules for New Database Work
 

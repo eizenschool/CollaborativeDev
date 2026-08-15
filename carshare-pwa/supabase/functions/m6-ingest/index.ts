@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "npm:@supabase/server";
+import { classifyPlace } from "./classification.ts";
 
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1";
 const GOOGLE_FIELD_MASK = "places.id,places.types,places.location,places.photos";
@@ -16,29 +17,6 @@ const DEFAULT_REGION = {
   latitude: 3.139,
   longitude: 101.6869,
   radiusMeters: 50_000,
-};
-
-// Carried by almost every landmark, park and theme park Google returns, so
-// these say "this is somewhere worth visiting" and nothing about which of the
-// four categories it belongs to. They are matched last, never first.
-const GENERIC_TYPES = ["tourist_attraction", "point_of_interest", "establishment"];
-
-const CATEGORY_TYPES: Record<string, string[]> = {
-  culinary: [
-    "restaurant", "cafe", "bakery", "bar", "meal_takeaway", "meal_delivery",
-    "food", "ice_cream_shop", "coffee_shop",
-  ],
-  nature: [
-    "park", "natural_feature", "national_park", "state_park", "beach",
-    "campground", "hiking_area", "zoo", "aquarium",
-  ],
-  heritage: [
-    "museum", "tourist_attraction", "historical_landmark", "castle",
-    "church", "mosque", "hindu_temple", "buddhist_temple", "place_of_worship",
-  ],
-  event: [
-    "event_venue", "amusement_park", "performing_arts_theater", "stadium",
-  ],
 };
 
 type Region = {
@@ -140,41 +118,6 @@ function normalizeRegion(input: unknown, index: number): Region | null {
     longitude,
     radiusMeters: Math.min(radiusMeters, 50_000),
   };
-}
-
-// Classification used to scan a fixed order - culinary, heritage, nature, event -
-// and return the first category holding any of the place's types. Because
-// `tourist_attraction` sat in the heritage list and nearly everything carries
-// it, heritage swallowed the catalogue: KLCC Park, the botanical gardens, the
-// bird park and a theme park all came back heritage, and nature and event were
-// permanently empty. Menara KL went the other way and came back culinary,
-// because it has a restaurant and culinary was checked first of all.
-//
-// So: trust Google's own primary classification first, consider only the
-// specific types second, and let the generic ones decide nothing but the
-// fallback.
-function specificTypes(category: string): string[] {
-  return CATEGORY_TYPES[category].filter((type) => !GENERIC_TYPES.includes(type));
-}
-
-function categoryFor(types: string[] = [], primaryType = ""): string {
-  const categories = ["nature", "event", "culinary", "heritage"];
-
-  if (primaryType) {
-    for (const category of categories) {
-      if (specificTypes(category).includes(primaryType)) return category;
-    }
-    // A place whose own primary type is merely "tourist attraction" is a
-    // destination rather than a business, whatever else sits in its type bag.
-    // This is what keeps a landmark with a restaurant in it out of culinary.
-    if (GENERIC_TYPES.includes(primaryType)) return "heritage";
-  }
-
-  for (const category of categories) {
-    if (types.some((type) => specificTypes(category).includes(type))) return category;
-  }
-
-  return types.some((type) => GENERIC_TYPES.includes(type)) ? "heritage" : "event";
 }
 
 function sentence(text: string): string {
@@ -414,8 +357,19 @@ async function runIngestion(request: Request) {
   const existing = dryRun ? new Map<string, ExistingPlace>() : await knownPlaces(baseUrl, databaseKey, sourceIds);
   const upserts: Record<string, unknown>[] = [];
   const failures: Array<{ placeId: string; error: string }> = [];
+  // Places the sweep found and enrichment paid for, but which classification
+  // rejected as not being destinations - hotels and shopping malls, mostly. The
+  // Details request is already spent by the time that is known, so this is
+  // reported rather than hidden: a region that skips most of what it discovers
+  // is a sign the sweep's `includedTypes` are wrong for it.
+  const skipped: Array<{ placeId: string; name: string }> = [];
   let enriched = 0;
   let refreshed = 0;
+  // The `maxDetails` budget counts requests made, not rows written. A place
+  // rejected by classification has still cost a Place Details call, so spending
+  // has to be tracked separately from `enriched` or a region full of hotels
+  // would keep buying Details until it found twenty it liked.
+  let detailsSpent = 0;
 
   for (const [placeId, item] of discovered) {
     const alreadyKnown = existing.get(placeId);
@@ -429,12 +383,22 @@ async function runIngestion(request: Request) {
       refreshed += 1;
       continue;
     }
-    if (enriched >= maxDetails) break;
+    if (detailsSpent >= maxDetails) break;
     try {
       const detail = await details(placeId, googleKey);
+      detailsSpent += 1;
       const types = detail.types?.length ? detail.types : item.nearby.types || [];
-      const category = categoryFor(types, detail.primaryType || "");
+      const primaryType = detail.primaryType || "";
       const name = detail.displayName?.text?.trim() || placeId;
+      const category = classifyPlace(types, primaryType);
+      // Not a destination - somewhere to sleep or shop that the sweep's
+      // `includedTypes` could not help returning. Enrichment has already been
+      // paid for, but writing it to the catalogue would put a hotel in front of
+      // someone asking where to go.
+      if (!category) {
+        skipped.push({ placeId, name });
+        continue;
+      }
       const location = detail.location || item.nearby.location || {};
       const state = item.region.state;
       const description = descriptionFor(name, category, state);
@@ -444,6 +408,11 @@ async function runIngestion(request: Request) {
         source_place_id: placeId,
         name,
         category,
+        // Stored so a future classification fix can be re-applied without
+        // buying enrichment again - see 031_m6_place_types.sql. Both are
+        // Essentials-tier fields already present in this response.
+        types,
+        primary_type: primaryType || null,
         ...description,
         rating: typeof detail.rating === "number" ? detail.rating : null,
         review_count: reviewCount,
@@ -472,6 +441,8 @@ async function runIngestion(request: Request) {
     discovered: sourceIds.length,
     enriched,
     refreshed,
+    detailsSpent,
+    skipped,
     upserted: dryRun ? 0 : upserts.length,
     failures,
   });

@@ -13,7 +13,13 @@ export default defineConfig({
     include: [
       'src/business-logic/verification/__tests__/**/*.test.js',
       'src/business-logic/discovery/__tests__/**/*.test.js',
-      'src/business-logic/__tests__/**/*.test.js'
+      'src/business-logic/__tests__/**/*.test.js',
+      // Module 6's ingestion function is Deno, not Vite, so its logic sits
+      // outside src/ and would otherwise be untestable - which is exactly how
+      // FR-6.7 classification shipped two catalogue-wide bugs. Only the pure
+      // classification module is reachable from here; index.ts imports `jsr:`
+      // and `npm:` specifiers that Vitest cannot resolve, and is not included.
+      'supabase/functions/m6-ingest/__tests__/**/*.test.js'
     ]
   }
 });
