@@ -5,11 +5,20 @@
 
 import { supabase } from './supabaseClient.js';
 
+// This is the same column list for every caller, authenticated or anon - the
+// adapter has no branch for who is asking. Postgres denies a query for the
+// *whole* table the moment any one requested column lacks a grant for the
+// current role, not just that column, so this list must stay within what the
+// narrowest role (anon, see 029/030) can read. state_before_demotion and
+// absence_counter are deliberately absent: no frontend caller reads either
+// one (only PlaceLifecycle.js's own write-path functions do, and nothing in
+// src/ calls them - lifecycle mutation is the ingestion cycle's job), so
+// there is nothing to gain by granting or requesting them here.
 const PLACE_SELECT = [
   'id', 'source_place_id', 'name', 'category', 'description',
   'description_is_template', 'rating', 'review_count', 'lat', 'lng', 'state',
-  'photo_references', 'reviews', 'lifecycle_state', 'state_before_demotion',
-  'absence_counter', 'last_seen_at', 'created_at', 'updated_at'
+  'photo_references', 'reviews', 'lifecycle_state',
+  'last_seen_at', 'created_at', 'updated_at'
 ].join(',');
 
 function requireClient() {
@@ -39,7 +48,7 @@ function mapPlace(row) {
     updatedAt: row.updated_at,
     // Enrichment stores up to five reviews, each with the author attribution
     // under which the text may be shown at all. Guarded because the column was
-    // added in 025: a row written before that migration has no reviews key.
+    // added in 027: a row written before that migration has no reviews key.
     reviews: Array.isArray(row.reviews)
       ? row.reviews.map((review) => ({
         author: review?.author || '',
