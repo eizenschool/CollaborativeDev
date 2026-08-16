@@ -339,10 +339,41 @@ the fixed function and correctly refused `MBI Desaku Homestay`, which the old
 rules would have filed as a destination. Live distribution after all of it:
 92 recommendable rows — Kuala Lumpur 20, Penang 37, Melaka 20, Selangor 15.
 
-**Known and not yet fixed:** `state` is copied from the region config rather
-than read from the place's own address, so Kedah places found by the Penang
-sweep are stored as Penang; and `The TOP Penang` (a theme park) is classified
-`nature` because nature is checked before event in the fallback order.
+**Backfill (same day, after both were fixed).** `refreshDetails: true` across
+all five sweeps, to re-read every row against the corrected rules and to
+populate `types`, `primary_type` and the real `state` on rows ingested before
+those existed. Cost: **9 further Nearby Search and roughly 145 Place Details**,
+including two small 150-metre probe sweeps used to read the live type bags of
+two places the rules had turned away.
+
+Three things the backfill established that no amount of local testing had:
+
+- `Cheong Fatt Tze - The Blue Mansion` returns `hotel, lodging, restaurant,
+  food, point_of_interest, establishment` — **no heritage signal at all**, a
+  type bag structurally identical to the De Palma Hotel's. The rule written to
+  keep it could never have worked; its test had been written against an invented
+  bag. `resolveCategory` now lets the rules decide new places only, and a known
+  place the rules cannot classify keeps the category the catalogue holds.
+- Retained places keep their **lifecycle state** as well as their category.
+  Without that, the refresh would have restored all four retired hotels and the
+  columbarium, because the upsert picks Active or Provisional from review and
+  photo counts and every one of them has plenty of both. Verified after the run:
+  all six still withheld.
+- `The TOP Penang`'s primaryType is `amusement_center`, a value the event list
+  did not hold, so even after the ordering fix it was resolving by the weaker
+  signal. Added.
+
+Repeating the sweeps also grew the catalogue from 92 to **109** recommendable
+rows, because Google's Nearby ranking is not identical between calls. The state
+fix showed itself here: the new arrivals resolved to **Kedah** (4) and
+**Negeri Sembilan** (2) rather than being absorbed into the sweeping region's
+state. Live distribution: Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19,
+Kedah 4, Negeri Sembilan 2.
+
+**Known and not fixed:** `Tropical Spice Garden | Events Venue | Cooking
+Classes | Spice Store` classifies as `event` rather than `nature` — its Google
+listing name advertises an events venue and it carries `event_venue` to match.
+Arguable either way and left alone.
 
 ## 7. Terms of service — accepted risk
 

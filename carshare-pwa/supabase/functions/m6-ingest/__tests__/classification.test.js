@@ -6,7 +6,7 @@
 // If a weight or an ordering is changed and one of these flips, the change has
 // reintroduced a bug that reached the live catalogue once already.
 import { describe, it, expect } from 'vitest';
-import { classifyPlace, EXCLUDED_PRIMARY_TYPES } from '../classification.ts';
+import { classifyPlace, resolveCategory, EXCLUDED_PRIMARY_TYPES } from '../classification.ts';
 
 describe('classifyPlace - Google\'s own primary classification wins', () => {
   it('takes primaryType over anything in the type bag', () => {
@@ -28,12 +28,27 @@ describe('regression: heritage must not be swallowed by an incidental restaurant
   // also operates as a boutique hotel and has a restaurant in it came back
   // culinary, and the detail screen showed "Culinary" above its own
   // description, "A museum in Penang."
-  it('files Cheong Fatt Tze - The Blue Mansion as heritage, not culinary', () => {
-    const types = [
-      'historical_landmark', 'hotel', 'restaurant',
-      'tourist_attraction', 'point_of_interest', 'establishment',
-    ];
-    expect(classifyPlace(types, 'hotel')).toBe('heritage');
+  // The first version of this test asserted heritage against a type bag that
+  // was invented rather than observed - `historical_landmark` alongside the
+  // hotel - and passed, which is why the rule it was guarding shipped broken.
+  // The bag below is the live response, taken from the function's own skip
+  // report. Google supplies no heritage signal for this place at all.
+  const BLUE_MANSION = ['hotel', 'lodging', 'restaurant', 'food', 'point_of_interest', 'establishment'];
+
+  it('cannot classify the Blue Mansion from Google\'s data, and says so', () => {
+    expect(classifyPlace(BLUE_MANSION, 'hotel')).toBeNull();
+  });
+
+  it('keeps the Blue Mansion once the catalogue already holds a judgement', () => {
+    // 032 set this by hand. A gap in the rules must not discard it.
+    expect(resolveCategory(classifyPlace(BLUE_MANSION, 'hotel'), 'heritage'))
+      .toEqual({ category: 'heritage', retained: true });
+  });
+
+  it('still turns the Blue Mansion away if it is genuinely new', () => {
+    // The same bag with nothing in the catalogue is indistinguishable from an
+    // ordinary hotel, and is treated as one.
+    expect(resolveCategory(classifyPlace(BLUE_MANSION, 'hotel'), null)).toBeNull();
   });
 
   // Failure (1), found on the Kuala Lumpur ingestion. An observation tower
@@ -148,7 +163,11 @@ describe('a built attraction with grounds is an event, not nature', () => {
 });
 
 describe('excluded primary types are rescued only by heritage', () => {
-  it('keeps a historic building that also takes guests', () => {
+  it('keeps a historic building that also takes guests, when Google says so', () => {
+    // This clause only fires when the bag actually carries a heritage type.
+    // The Blue Mansion's does not - see above - so this is the narrower case
+    // of a hotel Google has additionally labelled a museum, not the general
+    // answer to "heritage building operating as a hotel".
     expect(classifyPlace(['hotel', 'historical_landmark'], 'hotel')).toBe('heritage');
     expect(classifyPlace(['hotel', 'museum'], 'hotel')).toBe('heritage');
   });
@@ -169,6 +188,32 @@ describe('excluded primary types are rescued only by heritage', () => {
   it('does not exclude a campground, which carries lodging but is a destination', () => {
     // This is why exclusion is matched on primaryType and never on the bag.
     expect(classifyPlace(['campground', 'lodging'], 'campground')).toBe('nature');
+  });
+});
+
+describe('resolveCategory - the rules decide new places, not existing ones', () => {
+  it('uses the classified category when there is one', () => {
+    expect(resolveCategory('nature', 'culinary')).toEqual({ category: 'nature', retained: false });
+    // A rule change is still allowed to *re*classify a known place. This is
+    // what moved The TOP Penang from nature to event on the backfill.
+    expect(resolveCategory('event', 'nature')).toEqual({ category: 'event', retained: false });
+  });
+
+  it('falls back to the catalogue only when the rules found nothing', () => {
+    expect(resolveCategory(null, 'heritage')).toEqual({ category: 'heritage', retained: true });
+  });
+
+  it('rejects an unclassifiable place that is genuinely new', () => {
+    expect(resolveCategory(null, null)).toBeNull();
+    expect(resolveCategory(null, undefined)).toBeNull();
+    expect(resolveCategory(null, '')).toBeNull();
+    expect(resolveCategory(null, '   ')).toBeNull();
+  });
+
+  it('never returns a blank category, because the column is not null', () => {
+    const result = resolveCategory(null, 'culinary');
+    expect(result.category).toBe('culinary');
+    expect(result.category.length).toBeGreaterThan(0);
   });
 });
 

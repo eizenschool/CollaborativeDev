@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "npm:@supabase/server";
-import { classifyPlace } from "./classification.ts";
+import { classifyPlace, resolveCategory } from "./classification.ts";
 import { stateFromAddress } from "./address.ts";
 
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1";
@@ -68,6 +68,9 @@ type ExistingPlace = {
   source_place_id: string;
   lifecycle_state: string;
   state_before_demotion: string | null;
+  // Read so an unclassifiable known place can keep the answer the catalogue
+  // already holds instead of being discarded - see resolveCategory.
+  category: string;
 };
 
 function json(data: unknown, status = 200): Response {
@@ -282,7 +285,7 @@ function inFilter(values: string[]): string {
 
 async function knownPlaces(baseUrl: string, key: string, sourceIds: string[]) {
   if (!sourceIds.length) return new Map<string, ExistingPlace>();
-  const query = `places?select=source_place_id,lifecycle_state,state_before_demotion&source_place_id=${encodeURIComponent(inFilter(sourceIds))}`;
+  const query = `places?select=source_place_id,lifecycle_state,state_before_demotion,category&source_place_id=${encodeURIComponent(inFilter(sourceIds))}`;
   const rows = await supabaseRequest<ExistingPlace[]>(baseUrl, key, query);
   return new Map((rows || []).map((row) => [row.source_place_id, row]));
 }
@@ -374,7 +377,27 @@ async function runIngestion(request: Request) {
   // Details request is already spent by the time that is known, so this is
   // reported rather than hidden: a region that skips most of what it discovers
   // is a sign the sweep's `includedTypes` are wrong for it.
-  const skipped: Array<{ placeId: string; name: string }> = [];
+  // Carries the classification inputs, not just the name. A skip is a judgement
+  // about a real place made from data the caller cannot otherwise see - and the
+  // first version of this list, which reported only names, hid the fact that
+  // Cheong Fatt Tze - The Blue Mansion was being turned away by the very rule
+  // written to keep it. A rejection has to be arguable from its own output.
+  const skipped: Array<{
+    placeId: string;
+    name: string;
+    primaryType: string;
+    types: string[];
+  }> = [];
+  // Known places the rules could not classify, which kept the category the
+  // catalogue already held. A growing list here means the rules are drifting
+  // away from what the catalogue actually contains, so it is reported rather
+  // than handled silently.
+  const retained: Array<{
+    placeId: string;
+    name: string;
+    primaryType: string;
+    category: string;
+  }> = [];
   let enriched = 0;
   let refreshed = 0;
   // The `maxDetails` budget counts requests made, not rows written. A place
@@ -402,15 +425,28 @@ async function runIngestion(request: Request) {
       const types = detail.types?.length ? detail.types : item.nearby.types || [];
       const primaryType = detail.primaryType || "";
       const name = detail.displayName?.text?.trim() || placeId;
-      const category = classifyPlace(types, primaryType);
-      // Not a destination - somewhere to sleep or shop that the sweep's
-      // `includedTypes` could not help returning. Enrichment has already been
-      // paid for, but writing it to the catalogue would put a hotel in front of
-      // someone asking where to go.
-      if (!category) {
-        skipped.push({ placeId, name });
+      const resolved = resolveCategory(
+        classifyPlace(types, primaryType),
+        alreadyKnown?.category,
+      );
+      // Not a destination, and not something the catalogue has already judged -
+      // somewhere to sleep or shop that the sweep's `includedTypes` could not
+      // help returning. Enrichment has already been paid for, but writing it in
+      // would put a hotel in front of someone asking where to go.
+      if (!resolved) {
+        skipped.push({ placeId, name, primaryType, types });
         continue;
       }
+      const category = resolved.category;
+      if (resolved.retained) retained.push({ placeId, name, primaryType, category });
+      // A retained place keeps its lifecycle state as well as its category.
+      // Without this, refreshing the catalogue would quietly restore the four
+      // hotels and the columbarium that 032 retired: the upsert below decides
+      // Active or Provisional from review and photo counts alone, and every one
+      // of them has plenty of both.
+      const lifecycle = resolved.retained
+        ? alreadyKnown!.lifecycle_state
+        : null;
       const location = detail.location || item.nearby.location || {};
       // Where the place actually is, not which sweep happened to find it. The
       // region's own state is the fallback for a response that omits the
@@ -436,7 +472,7 @@ async function runIngestion(request: Request) {
         lng: location.longitude,
         state,
         photo_references: photos,
-        lifecycle_state: reviewCount >= 3 && photos.length ? "Active" : "Provisional",
+        lifecycle_state: lifecycle || (reviewCount >= 3 && photos.length ? "Active" : "Provisional"),
         state_before_demotion: null,
         absence_counter: 0,
         last_seen_at: new Date().toISOString(),
@@ -458,6 +494,7 @@ async function runIngestion(request: Request) {
     refreshed,
     detailsSpent,
     skipped,
+    retained,
     upserted: dryRun ? 0 : upserts.length,
     failures,
   });

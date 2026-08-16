@@ -167,3 +167,40 @@ export function classifyPlace(types: string[] = [], primaryType = ""): PlaceCate
   //    filed as events.
   return null;
 }
+
+/**
+ * What to store for a place, given what the rules made of it and what the
+ * catalogue already holds. `null` means the place does not belong in the
+ * catalogue at all.
+ *
+ * The `retained` case exists because Google's own data cannot always tell a
+ * destination from a business. Cheong Fatt Tze - The Blue Mansion is a UNESCO
+ * heritage house in George Town; Google returns
+ * `hotel, lodging, restaurant, food, point_of_interest, establishment` for it,
+ * with no heritage signal of any kind - a type bag structurally identical to
+ * the De Palma Hotel's. No rule over these fields can separate the two, and
+ * pretending otherwise is what produced the first version of this file, whose
+ * "a heritage type rescues an excluded place" clause was written against a type
+ * bag that does not exist.
+ *
+ * So the rules decide *new* places only. A place already in the catalogue that
+ * the rules cannot classify keeps the category it has - which may well have
+ * been set by hand, as the Blue Mansion's was in
+ * `032_m6_reclassify_ingested_places.sql`. A gap in the rules is not evidence
+ * that a place should be discarded, and silently dropping something a human
+ * already judged is the more expensive mistake.
+ *
+ * Note this only withholds the *category*. Everything else about the place -
+ * rating, reviews, photos, state - is still refreshed.
+ */
+export function resolveCategory(
+  classified: PlaceCategory | null,
+  existingCategory?: string | null,
+): { category: string; retained: boolean } | null {
+  if (classified) return { category: classified, retained: false };
+
+  const existing = typeof existingCategory === "string" ? existingCategory.trim() : "";
+  if (existing) return { category: existing, retained: true };
+
+  return null;
+}

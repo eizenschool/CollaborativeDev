@@ -29,10 +29,10 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **552 tests / 34 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
-| Module 6's own | **365 tests / 18 files** |
+| Whole suite | **571 tests / 35 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **384 tests / 19 files** |
 | Build | passes |
-| Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **92 places across Kuala Lumpur, Penang, Melaka and Selangor** with real photos and reviews — see §7 and `docs/MODULE6-API-SETUP.md` §6. |
+| Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **109 recommendable places across six states** — Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19, Kedah 4, Negeri Sembilan 2 — with real photos and reviews, plus 6 rows retired and withheld. See §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
 ### Environment on Brayden's machine — read before running anything
 
@@ -494,16 +494,45 @@ piece with no test able to reach it — and it regressed. It is now
 `vitest.config.js` has a fourth `include` entry for its tests. Anything else
 that moves into an Edge Function needs the same treatment before it is trusted.
 
-**`state` is copied from the region config, not read from the place.**
-Ingestion writes `item.region.state` onto every row it creates, so a place is
+**A test written against invented data proves nothing, and hides that it
+proves nothing.** The rule that was supposed to keep Cheong Fatt Tze - The Blue
+Mansion in the catalogue said "an excluded primary type is rescued by a heritage
+type in its bag", and its test passed against a bag containing
+`historical_landmark` — a bag nobody had ever looked at. Google's real response
+for that place is `hotel, lodging, restaurant, food, point_of_interest,
+establishment`: no heritage signal of any kind, structurally identical to the
+De Palma Hotel's. The rule could never have worked, the test could never have
+failed, and the mistake only surfaced because a live backfill reported the
+Blue Mansion as skipped. Type bags in tests are now copied from the function's
+own skip report, and the function reports `primaryType` and `types` on every
+rejection specifically so that a judgement about a real place is arguable from
+its own output.
+
+**Google's data cannot always tell a destination from a business, and no rule
+over it can.** Following from the above: the honest fix was not a cleverer rule
+but a narrower claim. `resolveCategory` lets the rules decide **new** places
+only; a place already in the catalogue that the rules cannot classify keeps the
+category it has, which may have been set by hand. A gap in the rules is not
+evidence that a place should be discarded. The ingestion response reports these
+as `retained`, so a growing list is a visible signal that the rules are drifting
+from what the catalogue holds. Retained places keep their **lifecycle state**
+too — without that, a refresh would have restored all four hotels and the
+columbarium `032` retired, because the upsert picks Active or Provisional from
+review and photo counts alone and every one of them has plenty of both.
+
+**`state` was copied from the region config, not read from the place.**
+Ingestion wrote `item.region.state` onto every row it created, so a place was
 labelled with whichever region's sweep happened to find it. A 50 km radius from
 George Town reaches well into Kedah, so `Dataran Kulim`, `Kulim Bird Park` and
-`Tupah Recreational Forest` are all stored as Penang. This is not only a display
-error: ChainDetection (FR-6.26) scopes name recurrence **by state**, so a wrong
-state silently changes which places are compared against each other. Fixing it
-means reading `addressComponents` from the enrichment response — a Pro-tier
-field, and therefore free to add to a mask already at Enterprise + Atmosphere.
-Not yet done.
+`Tupah Recreational Forest` were all stored as Penang. This is not only a
+display error: ChainDetection (FR-6.26) scopes name recurrence **by state**, so
+a wrong state silently changes which places are compared against each other.
+Fixed in `address.ts`, which reads `addressComponents` — a Pro-tier field, free
+on a mask already at Enterprise + Atmosphere. The alias table in that file is
+the part to preserve: Google spells Kuala Lumpur "Federal Territory of Kuala
+Lumpur" and Penang "Pulau Pinang", and writing those through unchanged would
+split the existing twenty Kuala Lumpur rows from every new one, leaving
+ChainDetection comparing each half only against itself.
 
 **One ungranted column blocks the whole query for every caller sharing that
 select list.** `029` granted `anon` a column-restricted read on `places` that
