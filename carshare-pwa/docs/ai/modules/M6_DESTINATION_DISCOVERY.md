@@ -104,10 +104,11 @@ manually, not on a cron - UC6.8/UC6.9's automation), notification dispatch
 Modules 2 and 4 (FR-6.35 — its shared contract is accepted, but the form
 wiring remains).
 
-FR-6.15 Street View is code-complete (`StreetView.js`, wired into
-`PlaceImage.jsx` as the tier between a real photo and the illustration) but
-blocked on a dedicated browser key Module 2's key deliberately excludes it -
-see `docs/MODULE6-API-SETUP.md` §3.4.
+FR-6.15 Street View is done and deployed. `supabase/functions/m6-streetview`
+proxies imagery using the already-authorised `GOOGLE_PLACES_SERVER_KEY` -
+`StreetView.js` builds the proxy's URL and `PlaceImage.jsx` renders it as an
+ordinary `<img>`, no browser key involved at all. See
+`docs/MODULE6-API-SETUP.md` §3.4.
 
 The accepted FR-6.35 handoff shape is defined in
 `docs/ai/FR-6.35_PREFILL_CONTRACT.md` (D019). The contract is shared by Modules
@@ -127,7 +128,7 @@ Business logic: `src/business-logic/discovery/`
 - `DestinationDiscoveryService.js` — orchestration
 - `localDate.js` — today's date from the local calendar, not `toISOString()`'s UTC one
 - `placePhotos.js` — builds the live Places Photo URL; null for a fixture reference
-- `StreetView.js` — FR-6.15, metadata-first Street View; null/false with no key configured (today's state)
+- `StreetView.js` — FR-6.15, builds the URL for the `m6-streetview` Edge Function proxy; no Google key in this file
 - `PlaceDescription.js` — FR-6.8/6.9/6.10, the place described from phrases two or more of its own reviewers used independently
 - `geo.js`, `__tests__/`
 

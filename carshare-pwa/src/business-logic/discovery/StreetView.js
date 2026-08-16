@@ -1,29 +1,23 @@
 // ===== BUSINESS LOGIC LAYER (StreetView) =====
 // FR-6.15. Street View for a place that has no Google photograph of its own.
 //
-// Split the way WeatherGate.js is: metadata coverage is a thin network
-// boundary, URL building is pure, and the caller decides what to render.
-// Metadata is free and unmetered; the image is billed at the Street View
-// Static tier. That price difference is the entire reason FR-6.15 specifies a
-// metadata call before ever requesting a photograph - so this module makes
-// requesting the image without checking metadata first impossible to reach
-// through hasStreetViewCoverage, rather than a rule a caller has to remember.
+// This does not build a URL straight to Google, unlike placePhotos.js. The
+// credential that authorises Street View is GOOGLE_PLACES_SERVER_KEY, the same
+// Supabase secret m6-ingest already holds - it must never reach the browser,
+// which is why it carries no VITE_ prefix (docs/MODULE6-API-SETUP.md §2). So
+// the browser calls a Supabase Edge Function
+// (supabase/functions/m6-streetview) instead, which holds the key server-side,
+// runs FR-6.15's metadata-first check, and proxies the image through.
 //
-// Held under its own browser-restricted key, VITE_GOOGLE_STREETVIEW_API_KEY,
-// deliberately separate from Module 2's VITE_GOOGLE_MAPS_PLACES_API_KEY.
-// GOOGLE-MAPS-SETUP.md records that key's boundary as excluding Street View by
-// name; reusing it here would widen a cost decision Module 2 already accepted
-// without Module 2's sign-off. See docs/MODULE6-API-SETUP.md §3.4.
-//
-// With no key configured - true today - every function here returns null or
-// false immediately and no request is ever attempted. The illustration tier
-// (PlacePoster.jsx) is what a caller falls back to, exactly as it already does
-// when a place carries no fetchable photo reference.
+// This is why no browser-side Street View key exists at all: a place with no
+// coverage gets a plain 404 from the function, which the caller's
+// `<img onError>` already treats as "fall back to the illustration" - the same
+// contract placePhotos.js's null return keeps for a fixture reference or a
+// missing key. One image slot, one fallback contract, regardless of tier.
 
-const configuredApiKey = import.meta.env.VITE_GOOGLE_STREETVIEW_API_KEY?.trim() || '';
+const configuredBaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || '';
 
-const METADATA_URL = 'https://maps.googleapis.com/maps/api/streetview/metadata';
-const IMAGE_URL = 'https://maps.googleapis.com/maps/api/streetview';
+const FUNCTION_PATH = 'functions/v1/m6-streetview';
 
 // Google's documented ceiling for the Street View Static free tier.
 const MAX_DIMENSION = 640;
@@ -32,51 +26,27 @@ function validCoordinate(lat, lng) {
   return Number.isFinite(lat) && Number.isFinite(lng);
 }
 
-/** Whether a Street View key is configured at all - the cheap check a caller
- * makes before doing anything else, so an unconfigured deployment never even
- * builds a metadata URL. */
-export function hasStreetViewKey(apiKey = configuredApiKey) {
-  return Boolean(apiKey);
-}
-
-/** The free, unmetered metadata request. `null` when it cannot be built at all. */
-export function buildStreetViewMetadataUrl(lat, lng, { apiKey = configuredApiKey } = {}) {
-  if (!apiKey || !validCoordinate(lat, lng)) return null;
-  return `${METADATA_URL}?location=${lat},${lng}&key=${encodeURIComponent(apiKey)}`;
-}
-
-/** The billed image request. Same guards as the metadata URL, plus a clamp to
- * what Google's free tier actually serves. */
-export function buildStreetViewImageUrl(
-  lat, lng, { apiKey = configuredApiKey, width = 600, height = 400 } = {},
-) {
-  if (!apiKey || !validCoordinate(lat, lng)) return null;
-  const w = Math.max(1, Math.min(MAX_DIMENSION, Math.round(width) || 1));
-  const h = Math.max(1, Math.min(MAX_DIMENSION, Math.round(height) || 1));
-  return `${IMAGE_URL}?location=${lat},${lng}&size=${w}x${h}&key=${encodeURIComponent(apiKey)}`;
+/**
+ * Whether the proxy can even be reached - the browser needs to know where
+ * Supabase is. `false` in fixture mode or any environment with no Supabase
+ * project configured, mirroring `isSupabaseConfigured` elsewhere in this
+ * codebase.
+ */
+export function hasStreetViewProxy(baseUrl = configuredBaseUrl) {
+  return Boolean(baseUrl);
 }
 
 /**
- * FR-6.15. Whether Street View imagery actually exists for this coordinate.
- *
- * Fails closed to "no coverage" on a missing key, bad coordinates, a network
- * error, or any response that is not an explicit `"status": "OK"` - Google's
- * metadata response uses `ZERO_RESULTS` for genuinely uncovered locations, but
- * an ambiguous or unrecognised status is not evidence of coverage either, so it
- * is treated the same as none. The caller's next fallback (the illustration
- * tier) is always available regardless of why this returned false.
+ * The proxy image URL for a coordinate. `null` when Supabase is not
+ * configured or the coordinate is not a real one - never a URL that would
+ * 400 or 404 for a reason the caller could have avoided building it at all.
  */
-export async function hasStreetViewCoverage(
-  lat, lng, { apiKey = configuredApiKey, fetchImpl = globalThis.fetch } = {},
+export function buildStreetViewProxyUrl(
+  lat, lng, { baseUrl = configuredBaseUrl, width = 600, height = 400 } = {},
 ) {
-  const url = buildStreetViewMetadataUrl(lat, lng, { apiKey });
-  if (!url || typeof fetchImpl !== 'function') return false;
-  try {
-    const response = await fetchImpl(url);
-    if (!response?.ok) return false;
-    const body = await response.json();
-    return body?.status === 'OK';
-  } catch {
-    return false;
-  }
+  if (!baseUrl || !validCoordinate(lat, lng)) return null;
+  const w = Math.max(1, Math.min(MAX_DIMENSION, Math.round(width) || 1));
+  const h = Math.max(1, Math.min(MAX_DIMENSION, Math.round(height) || 1));
+  const base = baseUrl.replace(/\/$/, '');
+  return `${base}/${FUNCTION_PATH}?lat=${lat}&lng=${lng}&w=${w}&h=${h}`;
 }

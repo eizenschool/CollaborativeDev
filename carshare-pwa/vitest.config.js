@@ -14,12 +14,13 @@ export default defineConfig({
       'src/business-logic/verification/__tests__/**/*.test.js',
       'src/business-logic/discovery/__tests__/**/*.test.js',
       'src/business-logic/__tests__/**/*.test.js',
-      // Module 6's ingestion function is Deno, not Vite, so its logic sits
+      // Module 6's Edge Functions are Deno, not Vite, so their logic sits
       // outside src/ and would otherwise be untestable - which is exactly how
-      // FR-6.7 classification shipped two catalogue-wide bugs. Only the pure
-      // classification module is reachable from here; index.ts imports `jsr:`
-      // and `npm:` specifiers that Vitest cannot resolve, and is not included.
-      'supabase/functions/m6-ingest/__tests__/**/*.test.js'
+      // FR-6.7 classification shipped two catalogue-wide bugs. Only each
+      // function's pure logic module is reachable from here; every index.ts
+      // imports `jsr:`/`npm:` specifiers Vitest cannot resolve, and is not
+      // included by this glob.
+      'supabase/functions/*/__tests__/**/*.test.js'
     ]
   }
 });

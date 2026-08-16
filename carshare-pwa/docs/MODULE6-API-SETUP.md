@@ -33,12 +33,13 @@ suite always uses the fixture regardless of `.env.local` - see the guard in
 | Nearby Search authorised on that key | **Confirmed working** (used every ingestion run) | done |
 | Place Details authorised on that key | **Confirmed working** (35 calls across two runs) | done |
 | Place Photos authorised on that key | **Confirmed working** - the browser key, not the server one, serves photos live; see §3.3 | done |
-| Street View Static authorised on that key | Unused by the implementation that shipped - see §3.4. The image renders from the browser (same pattern as Place Photos), so it needs a browser-restricted key, not the server one this row refers to; the server key's Street View authorisation can stay or be removed, it does nothing either way. **Reuses `lets-tumpang-web-locations` (M2's key)** rather than a new one - agreed with Yee. Console step: add Street View Static API to that key's restriction list, then set `VITE_GOOGLE_STREETVIEW_API_KEY` to the same value | Brayden |
+| Street View Static authorised on that key | **Confirmed working, in use** - see §3.4. `m6-streetview` calls it server-side; verified live against real coordinates (200 with a real image, 404 with no coverage) and confirmed rendering in the running app | done |
 | Per-service daily hard quotas (§5) | **Unconfirmed** - console state not verified against the four application budget targets; no database-enforced ledger exists yet either | Brayden |
 | `024_m6_destination_discovery.sql` deployed | **Deployed** as `m6_destination_discovery` | done |
 | `027_m6_place_reviews.sql` deployed | **Deployed** through the Dashboard SQL Editor; adds `places.reviews` | done |
 | `029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql` deployed | **Deployed and confirmed working** - `029` alone broke anonymous browsing entirely (excluded `source_place_id`, and one ungranted column denies the whole shared query, not just that field); `030` fixed it | done |
 | `supabase/functions/m6-ingest/index.ts` deployed | **Deployed and active** as `m6-ingest`; has ingested real data twice | done |
+| `supabase/functions/m6-streetview/index.ts` deployed | **Deployed and active**, `--no-verify-jwt`; proxies Street View imagery using the same `GOOGLE_PLACES_SERVER_KEY` secret | done |
 | `GOOGLE_PLACES_SERVER_KEY` set as a Supabase secret | **Done** | done |
 
 ## 2. The key: why the two existing ones cannot be reused
@@ -149,48 +150,53 @@ FR-6.15's metadata-first rule exists precisely because the check costs nothing
 while the image does. Where coverage is absent the module falls to the category
 illustration (FR-6.17), which is already implemented in `PlacePoster.jsx`.
 
-**Code status (2026-08-17): implemented, blocked only on a key.** The client
-side is done: `src/business-logic/discovery/StreetView.js` builds both URLs and
-runs the metadata-first check, mirroring `WeatherGate.js`'s fetch-boundary split
-so the decision logic is unit-testable with zero network access
-(`StreetView.test.js`, 17 tests). `PlaceImage.jsx` wires it in as the middle
-tier between a real Google Photo and the illustration - deferred behind an
-`IntersectionObserver` so a scrolled-past card never fires the metadata check,
-the same cost discipline `loading="lazy"` already gives photos. With no key
-configured, `hasStreetViewKey()` is false and nothing else in the module ever
-runs; confirmed live in the browser, zero requests to any `streetview` endpoint.
+**Status (2026-08-17): done and deployed.** Two earlier approaches were
+considered and superseded before landing here - both recorded for anyone who
+finds the git history confusing:
 
-**Update (2026-08-17): reuses Module 2's browser key, agreed with Yee.**
-`docs/GOOGLE-MAPS-SETUP.md` originally excluded Street View from
-`VITE_GOOGLE_MAPS_PLACES_API_KEY` by name, as an accepted cost boundary.
-Brayden and Yee agreed to widen that key instead of provisioning a third one:
-add **Street View Static API** to its API restriction list in Google Cloud
-Console. `docs/GOOGLE-MAPS-SETUP.md` is being updated to record this - if it
-still shows the old exclusion, treat this paragraph as the current state.
+1. *Client-direct with a new key.* A browser key restricted to Street View
+   Static, called straight from `<img src>`, same shape as Place Photos. Ruled
+   out because `GOOGLE_PLACES_SERVER_KEY` already carried Street View Static
+   authorisation (§2) and duplicating a credential nobody needed was pure
+   waste.
+2. *Client-direct reusing Module 2's browser key.* Agreed with Yee to widen
+   `VITE_GOOGLE_MAPS_PLACES_API_KEY` rather than mint a new one. Superseded in
+   turn once it was clear the already-authorised server key made *any* browser
+   key unnecessary.
 
-Module 6's code does not reference `VITE_GOOGLE_MAPS_PLACES_API_KEY` for this.
-`StreetView.js` reads its own env var, `VITE_GOOGLE_STREETVIEW_API_KEY`, kept
-deliberately separate in code from the physical key it happens to point at -
-so this remains one `.env.local` line, not a code change, if the two keys are
-ever split apart again.
+**What is actually deployed:** a Supabase Edge Function,
+`supabase/functions/m6-streetview`, holding `GOOGLE_PLACES_SERVER_KEY`
+server-side - the same secret `m6-ingest` already uses, so no new credential
+was provisioned anywhere. The function runs the metadata-first check itself,
+then streams the image straight through with a 7-day `Cache-Control`. A place
+with no coverage gets a plain `404`.
 
-**What is left, in order:**
+`src/business-logic/discovery/StreetView.js` builds the proxy's URL -
+`{VITE_SUPABASE_URL}/functions/v1/m6-streetview?lat=&lng=&w=&h=` - and nothing
+else; there is no Google key anywhere in the browser bundle for this feature.
+`PlaceImage.jsx` renders it as a plain `<img loading="lazy" onError=...>`,
+identical in shape to the Place Photos tier above it - no client-side
+metadata pre-check and no `IntersectionObserver` needed, because the Edge
+Function does its own coverage check inside the one request the `<img>` tag
+already makes.
 
-```text
-1. Console: add "Street View Static API" to the API restriction list on
-   lets-tumpang-web-locations (the key behind VITE_GOOGLE_MAPS_PLACES_API_KEY).
-   No new key, no new website/referrer restriction.
-2. .env.local: add
-     VITE_GOOGLE_STREETVIEW_API_KEY=<same value as VITE_GOOGLE_MAPS_PLACES_API_KEY>
-3. Restart `npm run dev`.
-```
+Deployed with `--no-verify-jwt`: this only ever returns a coordinate's public
+Street View imagery or a 404, information `/discover` already shows an
+anonymous visitor (D017/D018), so no Supabase auth header needs to travel with
+every image request.
 
-No further code changes are needed once those three steps are done. Cost note:
-Street View Static's free cap (10,000/month) and Places Photo's (1,000/month)
-are separate SKUs even on a shared key, so this does not change either
-feature's existing budget; the application target from §5 is 50 image
-requests/day, which the metadata-first check protects regardless of which key
-backs it.
+**Verified live, 2026-08-17:** a known-covered KLCC coordinate returned `200`,
+`image/jpeg`, a real ~17KB photograph, with the cache header present; an
+interior-forest coordinate returned `404`; an out-of-range coordinate returned
+`400`. In the running app with a set of places forced to lack a stored photo,
+all four rendered cards resolved to real, decoded Street View images (600×360)
+through the proxy - confirmed by directly probing `Image.onload`, not just by
+the request succeeding.
+
+Superseded and no longer relevant to this module: any mention elsewhere of a
+`VITE_GOOGLE_STREETVIEW_API_KEY` browser variable, or of widening Module 2's
+key. Neither is used. If `docs/GOOGLE-MAPS-SETUP.md` still records that
+exception, it can be reverted - Module 6 does not depend on it.
 
 ### 3.5 Weather — FR-6.22, FR-6.23, FR-6.38
 

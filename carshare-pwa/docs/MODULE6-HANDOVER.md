@@ -29,8 +29,8 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **588 tests / 36 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
-| Module 6's own | **401 tests / 20 files** |
+| Whole suite | **594 tests / 37 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **407 tests / 21 files** |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **109 recommendable places across six states** — Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19, Kedah 4, Negeri Sembilan 2 — with real photos and reviews, plus 6 rows retired and withheld. See §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
@@ -134,7 +134,7 @@ site in Penang and scores 0 on visitation headroom.
 | `DiscoveryDemoControls.js` | Weather override and month shortcuts for demonstrations. |
 | `localDate.js` | Today's date read from local `Date` getters, not `toISOString()`'s UTC one — see §10. |
 | `placePhotos.js` | Builds the live Places Photo URL from a stored reference; returns `null` for a fixture placeholder or unconfigured key. |
-| `StreetView.js` | FR-6.15, metadata-first Street View for a place with no photo of its own. Same fetch-boundary split as `WeatherGate.js`. Returns `null`/`false` everywhere with no key configured, which is today's state. |
+| `StreetView.js` | FR-6.15. Builds the URL for `supabase/functions/m6-streetview` - the proxy that holds `GOOGLE_PLACES_SERVER_KEY` server-side and does the metadata-first check itself. No Google key anywhere in this file or the bundle. |
 | `PlaceDescription.js` | FR-6.8/6.9/6.10. Describes a place from phrases two or more of its reviewers used independently. Quotes nobody. |
 | `geo.js` | Haversine distance. |
 
@@ -211,7 +211,7 @@ without them: a prefill needs a receiver.
 **Implemented and tested**
 
 FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.15
-(Street View — code-complete, blocked only on a console key; see below) · 6.16
+(Street View — done and deployed via an Edge Function proxy; see below) · 6.16
 (rating suppression) · 6.17 (illustration) · 6.18, 6.19 (scoring, presentation) ·
 6.20, 6.21 (affinity, preferences) · 6.22, 6.23 (weather gate) · 6.24 (seasonal) ·
 6.25, 6.26 (chain detection) · 6.27, 6.28, 6.29 (seats from Module 2) · 6.30, 6.31
@@ -233,15 +233,20 @@ FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.15
 |---|---|
 | 6.33 — notification dispatch | Module 3's notification pipeline; the registration and matching side is built |
 
-**6.15 — Street View moved out of this table on 2026-08-17.** It is
-code-complete: `StreetView.js` (metadata-first, 17 tests) wired into
-`PlaceImage.jsx` as the tier between a real Google photo and the illustration,
-deferred behind an `IntersectionObserver` so it costs nothing for a card
-scrolled past. Confirmed live: with no key configured, zero requests reach any
-`streetview` endpoint. What remains is one piece of Google Cloud console work,
-not code. Update, same day: this now reuses Module 2's browser key
-(`VITE_GOOGLE_MAPS_PLACES_API_KEY`) rather than a new one - see
-`docs/MODULE6-API-SETUP.md` §3.4 for the exact steps.
+**6.15 — Street View moved out of this table on 2026-08-17, and finished the
+same day.** `supabase/functions/m6-streetview` is deployed with
+`--no-verify-jwt` and holds `GOOGLE_PLACES_SERVER_KEY` server-side - the same
+secret `m6-ingest` already uses, so nothing new was provisioned. The function
+does FR-6.15's metadata-first check itself and streams the image through with
+a 7-day cache header; a place with no coverage gets a plain 404, which
+`PlaceImage.jsx`'s existing `<img onError>` already treats as "fall to the
+next tier". No Google key of any kind sits in the browser bundle for this
+feature - a plainer outcome than either of the two approaches considered
+before it (a new browser key, then reusing Module 2's). See
+`docs/MODULE6-API-SETUP.md` §3.4 for what was verified live: a real image at a
+covered coordinate, 404 at an uncovered one, 400 on bad input, and four
+manufactured no-photo cards in the running app all resolving to real, decoded
+Street View images.
 
 UC6.7 (unmet demand) and UC6.14 (serve place data) are complete. UC6.8, UC6.9,
 UC6.12, UC6.13 are not.
@@ -312,7 +317,7 @@ demand.
 | Reasons, not maths | Any detail page → sentences first, "See how this was scored" collapsed |
 | Prefill | Detail → "Find a ride" carries from/to/date into the search form |
 | Real photos (live mode) | Any card → a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
-| Street View fallback (FR-6.15, two console steps left) | Not demonstrable yet — see §8 item 4. Once `VITE_GOOGLE_STREETVIEW_API_KEY` is set (reusing M2's key), any card for a place with no photo of its own falls to a Street View frame instead of straight to the illustration |
+| Street View fallback (FR-6.15) | Any card whose place has no stored photo → a real Street View frame via the `m6-streetview` proxy, instead of straight to the illustration. Every place in the current live catalogue has a photo, so this needs a place with `photoReferences` temporarily cleared to see live - verified this way on 2026-08-17, not yet naturally occurring in the demo data |
 | Description from reviews | Any card → four sentences naming what this place actually is, e.g. KL Tower's "Observation Deck, Sky Box and views from the top". Each phrase was used by two or more reviewers independently; none is a quote |
 | Below-threshold places, category or all | `/discover` → any category button, or `All` → the toggle under the two main sections → cards below the recommendation thresholds |
 | Anonymous browsing (live mode) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |
@@ -598,10 +603,11 @@ The open work, in rough order of value:
    Module 2 data rather than Module 6 code.
 3. **Tell Yee** about the two Module 2 files this module touches (§4, item 3 of
    §8) — still genuinely open.
-4. **Two console steps** (Brayden): add Street View Static API to M2's
-   `lets-tumpang-web-locations` key, then set `VITE_GOOGLE_STREETVIEW_API_KEY`
-   in `.env.local` to that same key's value. FR-6.15 is code-complete and
-   waiting only on this — see `docs/MODULE6-API-SETUP.md` §3.4.
-   **FR-6.33 notification dispatch** remains unimplemented and waits on Module 3.
+4. ~~FR-6.15 Street View~~ **Done, 2026-08-17.** Proxied through
+   `supabase/functions/m6-streetview` using the already-authorised
+   `GOOGLE_PLACES_SERVER_KEY`; no browser key needed at all, superseding two
+   earlier plans that would have needed one. See
+   `docs/MODULE6-API-SETUP.md` §3.4. **FR-6.33 notification dispatch** remains
+   unimplemented and waits on Module 3.
 5. **Scheduled ingestion.** Every run so far has been triggered by hand. FR-6.1
    describes a recurring sweep and there is no cron.

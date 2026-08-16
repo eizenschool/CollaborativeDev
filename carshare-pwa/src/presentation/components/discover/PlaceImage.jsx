@@ -7,8 +7,15 @@
 // the fallback it was always specified to be.
 //
 // Three tiers, in order: a real Google Photos reference; failing that, FR-6.15
-// Street View for a place that has coordinates but no photograph of its own;
-// failing that, the illustration. A slot is never empty.
+// Street View for a place that has coordinates but no photograph of its own,
+// served through supabase/functions/m6-streetview so no Google key ever
+// reaches this bundle; failing that, the illustration. A slot is never empty.
+//
+// All three tiers are plain <img> elements with native `loading="lazy"`, so a
+// card scrolled past never fires any of them - Street View needs no bespoke
+// deferral logic because the Edge Function does its own metadata-first check
+// server-side, collapsing what would otherwise be a client-side pre-check into
+// the one request the <img> tag already makes.
 //
 // The Street View tier only ever fires for `variant === 0`. Google Photos
 // references can hold up to five frames (MAX_PHOTOS_PER_PLACE) and the carousel
@@ -17,11 +24,9 @@
 // same request or draw nothing. One establishing image beats a five-frame
 // carousel that cannot exist.
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
-import {
-  buildStreetViewImageUrl, hasStreetViewCoverage, hasStreetViewKey
-} from '../../../business-logic/discovery/StreetView.js';
+import { buildStreetViewProxyUrl } from '../../../business-logic/discovery/StreetView.js';
 import PlacePoster from './PlacePoster.jsx';
 
 /**
@@ -31,55 +36,22 @@ import PlacePoster from './PlacePoster.jsx';
  *                 bills per request and a card does not need a 4800px image
  */
 export default function PlaceImage({ place, variant = 0, widthPx = 800 }) {
-  const [failed, setFailed] = useState(false);
-  const [streetViewOk, setStreetViewOk] = useState(false);
-  const containerRef = useRef(null);
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const [streetViewFailed, setStreetViewFailed] = useState(false);
 
   const reference = place?.photoReferences?.[variant]?.reference;
-  const photoUrl = failed ? null : buildPlacePhotoUrl(reference, { maxWidthPx: widthPx });
+  const photoUrl = photoFailed ? null : buildPlacePhotoUrl(reference, { maxWidthPx: widthPx });
 
-  const eligibleForStreetView = !photoUrl && variant === 0
-    && hasStreetViewKey() && Number.isFinite(place?.lat) && Number.isFinite(place?.lng);
-
-  // The metadata check is a real network request, so it is deferred behind the
-  // same "only when scrolled into view" discipline the <img loading="lazy">
-  // below gets natively - a list of twenty cards must not fire twenty metadata
-  // checks the moment the page mounts. IntersectionObserver is the manual
-  // equivalent for a check that happens in JS rather than as an <img> load.
-  useEffect(() => {
-    if (!eligibleForStreetView || !containerRef.current) return undefined;
-
-    let cancelled = false;
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      observer.disconnect();
-      hasStreetViewCoverage(place.lat, place.lng).then((covered) => {
-        if (!cancelled && covered) setStreetViewOk(true);
-      });
-    });
-    observer.observe(containerRef.current);
-
-    return () => { cancelled = true; observer.disconnect(); };
-  }, [eligibleForStreetView, place?.id, place?.lat, place?.lng]);
-
-  const streetViewUrl = eligibleForStreetView && streetViewOk
-    ? buildStreetViewImageUrl(place.lat, place.lng, { width: widthPx, height: Math.round(widthPx * 0.6) })
+  const streetViewEligible = !photoUrl && !streetViewFailed && variant === 0
+    && Number.isFinite(place?.lat) && Number.isFinite(place?.lng);
+  const streetViewUrl = streetViewEligible
+    ? buildStreetViewProxyUrl(place.lat, place.lng, { width: widthPx, height: Math.round(widthPx * 0.6) })
     : null;
 
   const url = photoUrl || streetViewUrl;
 
   if (!url) {
-    // A ref anchor for the IntersectionObserver above. It must carry its own
-    // box - `display: contents` would leave it with none, and this codebase
-    // has already hit that exact failure once with a plain <span> silently
-    // taking no height (see MODULE6-HANDOVER.md §10). block + 100%/100%
-    // fills the same space PlacePoster's own `.dsc-poster` class already
-    // claims, so nothing about the rendered size changes.
-    return (
-      <span ref={containerRef} style={{ display: 'block', width: '100%', height: '100%' }}>
-        <PlacePoster seed={place?.id} category={place?.category} variant={variant} />
-      </span>
-    );
+    return <PlacePoster seed={place?.id} category={place?.category} variant={variant} />;
   }
 
   return (
@@ -87,10 +59,15 @@ export default function PlaceImage({ place, variant = 0, widthPx = 800 }) {
       className="dsc-photo"
       src={url}
       alt={place?.name || ''}
-      // Every load is a billable request, so a card scrolled past is not paid for.
+      // Every load is a billable request (Street View) or a proxied one that
+      // still costs a round trip (photos), so a card scrolled past is not
+      // paid for.
       loading="lazy"
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={() => {
+        if (photoUrl) setPhotoFailed(true);
+        else setStreetViewFailed(true);
+      }}
     />
   );
 }
