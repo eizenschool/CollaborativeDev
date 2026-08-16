@@ -6,49 +6,33 @@
 // the photograph renders here instead, with the illustration dropping back to
 // the fallback it was always specified to be.
 //
-// Three tiers, in order: a real Google Photos reference; failing that, FR-6.15
-// Street View for a place that has coordinates but no photograph of its own,
-// served through supabase/functions/m6-streetview so no Google key ever
-// reaches this bundle; failing that, the illustration. A slot is never empty.
+// It falls back to the illustration in three cases, so a slot is never empty:
+// no reference, no configured API key, or the image failing to load (an expired
+// reference, a key without Places Photo authorised, or simply being offline).
 //
-// All three tiers are plain <img> elements with native `loading="lazy"`, so a
-// card scrolled past never fires any of them - Street View needs no bespoke
-// deferral logic because the Edge Function does its own metadata-first check
-// server-side, collapsing what would otherwise be a client-side pre-check into
-// the one request the <img> tag already makes.
-//
-// The Street View tier only ever fires for `variant === 0`. Google Photos
-// references can hold up to five frames (MAX_PHOTOS_PER_PLACE) and the carousel
-// pages through them; there is exactly one Street View image per coordinate, so
-// asking for it as "frame 2 of a place with no photos" would either repeat the
-// same request or draw nothing. One establishing image beats a five-frame
-// carousel that cannot exist.
+// Street View (FR-6.15) is not a tier of this component. It used to be - a
+// place with no photo of its own fell here to a Street View frame before the
+// illustration - but that made it indistinguishable from a real photo on the
+// cards that render this component directly, with no tag to say what it
+// actually was. It is now StreetViewFrame.jsx, an explicit, labelled scene the
+// carousel offers alongside a place's real photographs rather than only in
+// their absence - see DestinationDetail.jsx's Carousel.
 
 import { useState } from 'react';
 import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
-import { buildStreetViewProxyUrl } from '../../../business-logic/discovery/StreetView.js';
 import PlacePoster from './PlacePoster.jsx';
 
 /**
- * @param place    the place record, carrying photoReferences and lat/lng
+ * @param place    the place record, carrying photoReferences
  * @param variant  which stored photo to show; also picks the poster variant
  * @param widthPx  requested width - keep near the rendered size, since Google
  *                 bills per request and a card does not need a 4800px image
  */
 export default function PlaceImage({ place, variant = 0, widthPx = 800 }) {
-  const [photoFailed, setPhotoFailed] = useState(false);
-  const [streetViewFailed, setStreetViewFailed] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const reference = place?.photoReferences?.[variant]?.reference;
-  const photoUrl = photoFailed ? null : buildPlacePhotoUrl(reference, { maxWidthPx: widthPx });
-
-  const streetViewEligible = !photoUrl && !streetViewFailed && variant === 0
-    && Number.isFinite(place?.lat) && Number.isFinite(place?.lng);
-  const streetViewUrl = streetViewEligible
-    ? buildStreetViewProxyUrl(place.lat, place.lng, { width: widthPx, height: Math.round(widthPx * 0.6) })
-    : null;
-
-  const url = photoUrl || streetViewUrl;
+  const url = failed ? null : buildPlacePhotoUrl(reference, { maxWidthPx: widthPx });
 
   if (!url) {
     return <PlacePoster seed={place?.id} category={place?.category} variant={variant} />;
@@ -59,15 +43,10 @@ export default function PlaceImage({ place, variant = 0, widthPx = 800 }) {
       className="dsc-photo"
       src={url}
       alt={place?.name || ''}
-      // Every load is a billable request (Street View) or a proxied one that
-      // still costs a round trip (photos), so a card scrolled past is not
-      // paid for.
+      // Every load is a billable request, so a card scrolled past is not paid for.
       loading="lazy"
       decoding="async"
-      onError={() => {
-        if (photoUrl) setPhotoFailed(true);
-        else setStreetViewFailed(true);
-      }}
+      onError={() => setFailed(true)}
     />
   );
 }

@@ -18,9 +18,15 @@ import {
   IconUsers, IconAlertTriangle, IconBell, IconRoute
 } from '../icons.jsx';
 import PlaceImage from './PlaceImage.jsx';
+import StreetViewFrame from './StreetViewFrame.jsx';
 import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
+import { hasStreetViewProxy } from '../../../business-logic/discovery/StreetView.js';
 import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
+
+// A sentinel, not a photoReferences record - Carousel below tells it apart
+// from a real frame by identity, not by shape.
+const STREET_VIEW_FRAME = { streetView: true };
 
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
 const today = todayIso;
@@ -40,26 +46,43 @@ function Stars({ rating }) {
 }
 
 /**
- * Renders `photoReferences`. Each reference is a real record from the catalogue
- * carrying its photographer credit (FR-6.14). A live reference is fetched from
- * Google at display time; a fixture reference is not fetchable, so that frame
- * falls to the category illustration tier (FR-6.17) and labels itself rather
- * than passing artwork off as a photograph.
+ * Renders `photoReferences`, plus - FR-6.15 - an explicit Street View scene
+ * appended after them for any place carrying a real coordinate. This is not a
+ * scarcity fallback: it appears whether or not the place already has photos,
+ * because it shows something a photo cannot - the approach on foot, not just
+ * the place itself. A place with no photos and no coordinate falls to the
+ * illustration tier (FR-6.17), which labels itself rather than passing
+ * artwork off as a photograph.
+ *
+ * Only the current frame's <img> ever exists in the DOM, so stepping through
+ * to the Street View frame is what spends that request - opening the page
+ * does not, and never did for the photo frames either.
  */
 function Carousel({ place }) {
   const [index, setIndex] = useState(0);
-  const frames = place.photoReferences?.length ? place.photoReferences : [null];
+  const photoFrames = place.photoReferences?.length ? place.photoReferences : [];
+  const hasCoordinate = Number.isFinite(place?.lat) && Number.isFinite(place?.lng);
+  const frames = hasCoordinate && hasStreetViewProxy()
+    ? [...photoFrames, STREET_VIEW_FRAME]
+    : (photoFrames.length ? photoFrames : [null]);
   const current = frames[index];
+  const isStreetViewFrame = current === STREET_VIEW_FRAME;
   const move = (step) => setIndex((i) => (i + step + frames.length) % frames.length);
   // The tag would otherwise call a real photograph an illustration.
-  const isIllustration = buildPlacePhotoUrl(current?.reference) === null;
+  const isIllustration = !isStreetViewFrame && buildPlacePhotoUrl(current?.reference) === null;
 
   return (
     <div className="dsc-carousel">
       <div className="dsc-carousel-frame">
-        <PlaceImage place={place} variant={index} widthPx={1000} />
+        {isStreetViewFrame
+          ? <StreetViewFrame place={place} widthPx={1000} />
+          : <PlaceImage place={place} variant={index} widthPx={1000} />}
+        {isStreetViewFrame && <span className="dsc-illustration-tag">Street View</span>}
         {isIllustration && <span className="dsc-illustration-tag">Illustration</span>}
-        {current?.attribution && (
+        {isStreetViewFrame && (
+          <span className="dsc-photo-credit">Imagery: Google Street View</span>
+        )}
+        {!isStreetViewFrame && current?.attribution && (
           <span className="dsc-photo-credit">Photo: {current.attribution}</span>
         )}
 
@@ -80,11 +103,11 @@ function Carousel({ place }) {
             <div className="dsc-carousel-dots">
               {frames.map((frame, i) => (
                 <button
-                  key={frame?.reference || i}
+                  key={frame === STREET_VIEW_FRAME ? 'streetview' : (frame?.reference || i)}
                   type="button"
                   className={'dsc-dot' + (i === index ? ' active' : '')}
                   onClick={() => setIndex(i)}
-                  aria-label={`Image ${i + 1} of ${frames.length}`}
+                  aria-label={frame === STREET_VIEW_FRAME ? 'Street View' : `Image ${i + 1} of ${frames.length}`}
                 />
               ))}
             </div>
