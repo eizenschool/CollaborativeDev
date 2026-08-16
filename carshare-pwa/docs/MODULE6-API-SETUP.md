@@ -33,7 +33,7 @@ suite always uses the fixture regardless of `.env.local` - see the guard in
 | Nearby Search authorised on that key | **Confirmed working** (used every ingestion run) | done |
 | Place Details authorised on that key | **Confirmed working** (35 calls across two runs) | done |
 | Place Photos authorised on that key | **Confirmed working** - the browser key, not the server one, serves photos live; see §3.3 | done |
-| Street View Static authorised on that key | Not exercised; FR-6.15 remains unimplemented | Brayden |
+| Street View Static authorised on that key | Unused by the implementation that shipped - see §3.4. The image renders from the browser (same pattern as Place Photos), so it needs a browser-restricted key, not the server one this row refers to; the server key's Street View authorisation can stay or be removed, it does nothing either way. Code is done and waiting on a **new browser-restricted key**, `lets-tumpang-web-streetview` | Brayden |
 | Per-service daily hard quotas (§5) | **Unconfirmed** - console state not verified against the four application budget targets; no database-enforced ledger exists yet either | Brayden |
 | `024_m6_destination_discovery.sql` deployed | **Deployed** as `m6_destination_discovery` | done |
 | `027_m6_place_reviews.sql` deployed | **Deployed** through the Dashboard SQL Editor; adds `places.reviews` | done |
@@ -148,6 +148,43 @@ GET https://maps.googleapis.com/maps/api/streetview?location={LAT},{LNG}&size=60
 FR-6.15's metadata-first rule exists precisely because the check costs nothing
 while the image does. Where coverage is absent the module falls to the category
 illustration (FR-6.17), which is already implemented in `PlacePoster.jsx`.
+
+**Code status (2026-08-17): implemented, blocked only on a key.** The client
+side is done: `src/business-logic/discovery/StreetView.js` builds both URLs and
+runs the metadata-first check, mirroring `WeatherGate.js`'s fetch-boundary split
+so the decision logic is unit-testable with zero network access
+(`StreetView.test.js`, 17 tests). `PlaceImage.jsx` wires it in as the middle
+tier between a real Google Photo and the illustration - deferred behind an
+`IntersectionObserver` so a scrolled-past card never fires the metadata check,
+the same cost discipline `loading="lazy"` already gives photos. With no key
+configured, `hasStreetViewKey()` is false and nothing else in the module ever
+runs; confirmed live in the browser, zero requests to any `streetview` endpoint.
+
+**This cannot reuse Module 2's browser key.** `docs/GOOGLE-MAPS-SETUP.md`
+explicitly disables Street View on `VITE_GOOGLE_MAPS_PLACES_API_KEY`: "Static
+Maps, Dynamic Maps, Street View, and other unused APIs remain disabled." That
+is Module 2's accepted cost boundary, not an oversight, and widening it without
+Yee's sign-off is exactly the kind of unilateral cross-module change AGENTS.md
+rules out. Module 6's photo pipeline already reuses that key for Places Photos
+(a Places API (New) endpoint the key does authorise); Street View is a separate
+legacy Maps Platform API and needs its own key.
+
+**What is still needed, and it is entirely console work:**
+
+```text
+Name:        lets-tumpang-web-streetview
+Application restriction: Websites
+  http://localhost:5173/*
+  the final HTTPS deployment domain, once known
+API restriction: Street View Static API only
+Env var:     VITE_GOOGLE_STREETVIEW_API_KEY (new - not the server key, not M2's key)
+```
+
+Once the key exists and is set, no further code changes are needed. Same
+budget discipline as the rest of this module: free monthly cap is 10,000
+Street View Static requests and unlimited metadata (§5); the application
+budget target from that table is 50 image requests/day, which the
+metadata-first check protects.
 
 ### 3.5 Weather — FR-6.22, FR-6.23, FR-6.38
 

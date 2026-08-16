@@ -29,8 +29,8 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **571 tests / 35 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
-| Module 6's own | **384 tests / 19 files** |
+| Whole suite | **588 tests / 36 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **401 tests / 20 files** |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **109 recommendable places across six states** — Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19, Kedah 4, Negeri Sembilan 2 — with real photos and reviews, plus 6 rows retired and withheld. See §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
@@ -134,6 +134,7 @@ site in Penang and scores 0 on visitation headroom.
 | `DiscoveryDemoControls.js` | Weather override and month shortcuts for demonstrations. |
 | `localDate.js` | Today's date read from local `Date` getters, not `toISOString()`'s UTC one — see §10. |
 | `placePhotos.js` | Builds the live Places Photo URL from a stored reference; returns `null` for a fixture placeholder or unconfigured key. |
+| `StreetView.js` | FR-6.15, metadata-first Street View for a place with no photo of its own. Same fetch-boundary split as `WeatherGate.js`. Returns `null`/`false` everywhere with no key configured, which is today's state. |
 | `PlaceDescription.js` | FR-6.8/6.9/6.10. Describes a place from phrases two or more of its reviewers used independently. Quotes nobody. |
 | `geo.js` | Haversine distance. |
 
@@ -209,7 +210,8 @@ without them: a prefill needs a receiver.
 
 **Implemented and tested**
 
-FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.16
+FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.15
+(Street View — code-complete, blocked only on a console key; see below) · 6.16
 (rating suppression) · 6.17 (illustration) · 6.18, 6.19 (scoring, presentation) ·
 6.20, 6.21 (affinity, preferences) · 6.22, 6.23 (weather gate) · 6.24 (seasonal) ·
 6.25, 6.26 (chain detection) · 6.27, 6.28, 6.29 (seats from Module 2) · 6.30, 6.31
@@ -229,8 +231,19 @@ FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.16
 
 | FRs | Blocked on |
 |---|---|
-| 6.15 — Street View | Google API; not exercised even though the server key could support it |
 | 6.33 — notification dispatch | Module 3's notification pipeline; the registration and matching side is built |
+
+**6.15 — Street View moved out of this table on 2026-08-17.** It is
+code-complete: `StreetView.js` (metadata-first, 17 tests) wired into
+`PlaceImage.jsx` as the tier between a real Google photo and the illustration,
+deferred behind an `IntersectionObserver` so it costs nothing for a card
+scrolled past. Confirmed live: with no key configured, zero requests reach any
+`streetview` endpoint. What remains is one piece of Google Cloud console work,
+not code - a **new** browser-restricted key. It cannot reuse Module 2's
+`VITE_GOOGLE_MAPS_PLACES_API_KEY`: `docs/GOOGLE-MAPS-SETUP.md` explicitly
+disables Street View on that key as an accepted cost boundary, and widening it
+without Yee's sign-off is the unilateral cross-module change AGENTS.md rules
+out. See `docs/MODULE6-API-SETUP.md` §3.4 for the exact key to create.
 
 UC6.7 (unmet demand) and UC6.14 (serve place data) are complete. UC6.8, UC6.9,
 UC6.12, UC6.13 are not.
@@ -301,6 +314,7 @@ demand.
 | Reasons, not maths | Any detail page → sentences first, "See how this was scored" collapsed |
 | Prefill | Detail → "Find a ride" carries from/to/date into the search form |
 | Real photos (live mode) | Any card → a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
+| Street View fallback (FR-6.15, needs a key not yet created) | Not demonstrable yet — see §8 item 5. Once `VITE_GOOGLE_STREETVIEW_API_KEY` exists, any card for a place with no photo of its own falls to a Street View frame instead of straight to the illustration |
 | Description from reviews | Any card → four sentences naming what this place actually is, e.g. KL Tower's "Observation Deck, Sky Box and views from the top". Each phrase was used by two or more reviewers independently; none is a quote |
 | Below-threshold places, category or all | `/discover` → any category button, or `All` → the toggle under the two main sections → cards below the recommendation thresholds |
 | Anonymous browsing (live mode) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |
@@ -314,10 +328,9 @@ two-review stall, the Stale and Retired places all exist for that reason.
 
 1. ~~**Google Cloud** (Brayden). A **server-side** key is required...~~ **Done.**
    The key exists, is stored as `GOOGLE_PLACES_SERVER_KEY`, and has ingested real
-   data (`docs/MODULE6-API-SETUP.md` §6). Street View is authorised but not
-   exercised. Whether true daily hard quotas are set in the console is
-   unconfirmed either way — no database-enforced ledger exists yet, so treat the
-   budget as manually tracked, not automatically capped.
+   data (`docs/MODULE6-API-SETUP.md` §6). Whether true daily hard quotas are set
+   in the console is unconfirmed either way — no database-enforced ledger exists
+   yet, so treat the budget as manually tracked, not automatically capped.
 2. ~~**Deploy `024_m6_destination_discovery.sql`**~~ **Done**, plus `027`
    (reviews column), `029`, and `030` (anon browsing - both run and confirmed
    working live).
@@ -575,16 +588,21 @@ the wider role's access, not just the narrower one's.
 Nothing is half-finished; the module is in a coherent, pushed, all-green state.
 The open work, in rough order of value:
 
-1. **Ingest beyond Kuala Lumpur.** One region is loaded (20 places).
-   `docs/MODULE6-API-SETUP.md` §8 has the procedure and the cost discipline;
-   §6 has the log of what the two Kuala Lumpur runs actually cost.
+1. ~~**Ingest beyond Kuala Lumpur.**~~ **Done, 2026-08-16/17.** Penang, Melaka
+   and Selangor are ingested; the catalogue is 109 recommendable places across
+   six states (Kedah and Negeri Sembilan arrived incidentally from region
+   circles crossing a border, correctly attributed by `address.ts`). Ingesting
+   a *seventh* state is still open and the procedure in
+   `docs/MODULE6-API-SETUP.md` §8 still applies.
 2. **Publish live rides.** The Home rail and the primary list stay thin because
    accessibility is 55% seat headroom and the live `rides` table has nothing
    going to these places. This is the single biggest visible gap, and it is
    Module 2 data rather than Module 6 code.
 3. **Tell Yee** about the two Module 2 files this module touches (§4, item 3 of
    §8) — still genuinely open.
-4. **FR-6.15 Street View** and **FR-6.33 notification dispatch** remain
-   unimplemented; the latter waits on Module 3.
+4. **Create `lets-tumpang-web-streetview`** (Brayden, Google Cloud console).
+   FR-6.15 is code-complete and waiting on this one key — see §5's FR-6.15 entry
+   and `docs/MODULE6-API-SETUP.md` §3.4 for the exact key to create.
+   **FR-6.33 notification dispatch** remains unimplemented and waits on Module 3.
 5. **Scheduled ingestion.** Every run so far has been triggered by hand. FR-6.1
    describes a recurring sweep and there is no cron.
