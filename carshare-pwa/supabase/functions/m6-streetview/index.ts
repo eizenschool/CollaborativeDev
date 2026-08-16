@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
-  buildImageUrl, buildMetadataUrl, clampDimension, hasCoverage, parseCoordinate,
+  buildImageUrl, buildMetadataUrl, clampDimension, computeHeading, extractPanoramaLocation,
+  hasCoverage, parseCoordinate,
 } from "./coverage.ts";
 
 // FR-6.15 Street View proxy. Serves imagery for a coordinate using
@@ -71,7 +72,17 @@ async function handle(request: Request): Promise<Response> {
     return new Response(null, { status: 404 });
   }
 
-  const imageResponse = await fetch(buildImageUrl(lat, lng, width, height, apiKey));
+  // Point the camera at the place rather than wherever the panorama's default
+  // orientation happens to face. The bearing is computed from the panorama's
+  // own location - not the requested coordinate - because Street View snaps
+  // to the nearest point it has imagery for, which is rarely on top of the
+  // building itself.
+  const panoramaLocation = extractPanoramaLocation(metadataBody);
+  const heading = panoramaLocation
+    ? computeHeading(panoramaLocation.lat, panoramaLocation.lng, lat, lng)
+    : undefined;
+
+  const imageResponse = await fetch(buildImageUrl(lat, lng, width, height, apiKey, heading));
   if (!imageResponse.ok || !imageResponse.body) {
     return new Response(null, { status: 502 });
   }
@@ -81,6 +92,14 @@ async function handle(request: Request): Promise<Response> {
     headers: {
       "Content-Type": imageResponse.headers.get("Content-Type") || "image/jpeg",
       "Cache-Control": IMAGE_CACHE_CONTROL,
+      // Diagnostic only, not read by any client code. A mismatch report can be
+      // checked from the browser's network tab - where the panorama actually
+      // was and which way the camera was told to look - without redeploying
+      // anything to add temporary logging.
+      ...(panoramaLocation ? {
+        "X-Streetview-Panorama": `${panoramaLocation.lat},${panoramaLocation.lng}`,
+        "X-Streetview-Heading": String(heading),
+      } : {}),
     },
   });
 }

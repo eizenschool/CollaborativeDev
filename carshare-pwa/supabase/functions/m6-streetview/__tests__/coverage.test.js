@@ -3,7 +3,8 @@
 // version this replaced.
 import { describe, expect, it } from 'vitest';
 import {
-  buildImageUrl, buildMetadataUrl, clampDimension, hasCoverage, parseCoordinate, MAX_DIMENSION
+  buildImageUrl, buildMetadataUrl, clampDimension, computeHeading, extractPanoramaLocation,
+  hasCoverage, parseCoordinate, MAX_DIMENSION, RADIUS_METERS
 } from '../coverage.ts';
 
 describe('parseCoordinate', () => {
@@ -51,20 +52,85 @@ describe('clampDimension', () => {
 });
 
 describe('buildMetadataUrl / buildImageUrl', () => {
-  it('builds the free metadata request', () => {
+  it('builds the free metadata request, radius-limited and outdoor-only', () => {
     expect(buildMetadataUrl(3.139, 101.6869, 'server-key')).toBe(
-      'https://maps.googleapis.com/maps/api/streetview/metadata?location=3.139,101.6869&key=server-key'
+      `https://maps.googleapis.com/maps/api/streetview/metadata?location=3.139,101.6869&radius=${RADIUS_METERS}&source=outdoor&key=server-key`
     );
   });
 
-  it('builds the billed image request at the requested size', () => {
+  it('builds the billed image request at the requested size, with the same radius/source guards', () => {
     expect(buildImageUrl(3.139, 101.6869, 600, 400, 'server-key')).toBe(
-      'https://maps.googleapis.com/maps/api/streetview?location=3.139,101.6869&size=600x400&key=server-key'
+      `https://maps.googleapis.com/maps/api/streetview?location=3.139,101.6869&size=600x400&radius=${RADIUS_METERS}&source=outdoor&key=server-key`
     );
+  });
+
+  it('carries a heading when one is given', () => {
+    expect(buildImageUrl(3.139, 101.6869, 600, 400, 'server-key', 271)).toContain('&heading=271');
+  });
+
+  it('omits heading entirely rather than defaulting to 0, which is a real direction', () => {
+    const url = buildImageUrl(3.139, 101.6869, 600, 400, 'server-key');
+    expect(url).not.toContain('heading');
   });
 
   it('escapes the key rather than pasting it into the query raw', () => {
     expect(buildMetadataUrl(3.139, 101.6869, 'a b&c')).toContain('key=a%20b%26c');
+  });
+});
+
+describe('extractPanoramaLocation', () => {
+  it('reads the panorama location from a real metadata response shape', () => {
+    expect(extractPanoramaLocation({ status: 'OK', location: { lat: 3.14, lng: 101.69 } }))
+      .toEqual({ lat: 3.14, lng: 101.69 });
+  });
+
+  it('returns null when the response carries no location', () => {
+    expect(extractPanoramaLocation({ status: 'OK' })).toBeNull();
+    expect(extractPanoramaLocation({ status: 'ZERO_RESULTS' })).toBeNull();
+  });
+
+  it('returns null for a malformed or non-object location', () => {
+    expect(extractPanoramaLocation({ location: null })).toBeNull();
+    expect(extractPanoramaLocation({ location: 'nowhere' })).toBeNull();
+    expect(extractPanoramaLocation({ location: { lat: 'nope', lng: 101.69 } })).toBeNull();
+  });
+
+  it('returns null for a missing or non-object body', () => {
+    expect(extractPanoramaLocation(null)).toBeNull();
+    expect(extractPanoramaLocation(undefined)).toBeNull();
+    expect(extractPanoramaLocation('OK')).toBeNull();
+  });
+});
+
+describe('computeHeading', () => {
+  // Small deltas near the equator so the great-circle formula resolves to
+  // clean cardinal bearings, which is the property under test - not floating
+  // point precision at extreme latitudes.
+  it('points north when the target is due north', () => {
+    expect(computeHeading(0, 0, 1, 0)).toBe(0);
+  });
+
+  it('points east when the target is due east', () => {
+    expect(computeHeading(0, 0, 0, 1)).toBe(90);
+  });
+
+  it('points south when the target is due south', () => {
+    expect(computeHeading(0, 0, -1, 0)).toBe(180);
+  });
+
+  it('points west when the target is due west', () => {
+    expect(computeHeading(0, 0, 0, -1)).toBe(270);
+  });
+
+  it('always returns a value in [0, 360)', () => {
+    expect(computeHeading(5.42, 100.34, 5.41, 100.33)).toBeGreaterThanOrEqual(0);
+    expect(computeHeading(5.42, 100.34, 5.41, 100.33)).toBeLessThan(360);
+  });
+
+  it('defaults to north rather than throwing for identical coordinates', () => {
+    // A panorama that landed exactly on the requested point has no meaningful
+    // direction to turn toward it.
+    expect(computeHeading(3.139, 101.6869, 3.139, 101.6869)).toBe(0);
   });
 });
 

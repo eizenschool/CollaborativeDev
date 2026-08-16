@@ -193,6 +193,47 @@ all four rendered cards resolved to real, decoded Street View images (600×360)
 through the proxy - confirmed by directly probing `Image.onload`, not just by
 the request succeeding.
 
+**Fixed the same day: unheaded requests pointed the camera at whatever the
+capture vehicle was facing, not at the place.** Reported directly - some
+frames showed an empty road with the destination out of shot, and a few
+returned imagery whose storefront signage named a different, nearby business
+entirely. Two changes:
+
+- `radius=50` on both the metadata and image request. Left unbounded, Google
+  can snap to a panorama on a neighbouring address in a dense shoplot strip -
+  close enough to answer "covered", far enough that the wrong building is in
+  frame. This is the more likely cause of a name mismatch than an outdated
+  photo: the panorama is probably current, just of somewhere else.
+- `heading`, computed server-side from the panorama's own returned location
+  toward the requested coordinate (`computeHeading` in `coverage.ts`, a
+  standard great-circle bearing). The panorama's location is read from the
+  metadata response, not assumed to be the requested coordinate - Street View
+  snaps to the nearest point it actually has imagery for, rarely the building
+  itself, and that gap is exactly why an unheaded request pointed wherever the
+  capture vehicle happened to be facing.
+
+`source=outdoor` added to both requests too, excluding indoor 360
+photospheres (mall interiors, museum floors) that are real coverage but not
+"what this place looks like from the street."
+
+Verified against real data, not just synthetic test coordinates: for a Penang
+coordinate, the panorama snapped to a point ~15m away and the computed heading
+(345°) correctly pointed back north-by-northwest toward the requested point -
+confirmed via `X-Streetview-Panorama` / `X-Streetview-Heading` diagnostic
+response headers the function now sets (not read by any client code; there
+for exactly this kind of live troubleshooting without redeploying).
+
+If a mismatch is still reported after this, `computeHeading`'s assumption -
+that the direction from the panorama toward the coordinate is also the
+direction that frames the place - can fail for a place set back from the road
+or up a driveway. The next lever is a smaller `radius`, not a different
+approach; dynamic/interactive Street View (an embedded panorama the visitor
+can look around in) was considered and deliberately deferred - it would need a
+different component (an iframe, not `<img>`) and gives up this module's
+"never show nothing, always our own designed fallback" guarantee, since an
+uncovered coordinate shows Google's own placeholder inside the embed rather
+than a 404 our code can catch.
+
 Superseded and no longer relevant to this module: any mention elsewhere of a
 `VITE_GOOGLE_STREETVIEW_API_KEY` browser variable, or of widening Module 2's
 key. Neither is used. If `docs/GOOGLE-MAPS-SETUP.md` still records that
