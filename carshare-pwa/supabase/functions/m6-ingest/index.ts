@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "npm:@supabase/server";
 import { classifyPlace } from "./classification.ts";
+import { stateFromAddress } from "./address.ts";
 
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1";
 const GOOGLE_FIELD_MASK = "places.id,places.types,places.location,places.photos";
@@ -8,8 +9,14 @@ const GOOGLE_FIELD_MASK = "places.id,places.types,places.location,places.photos"
 // unordered bag in `types`. It costs nothing extra: Places API (New) prices a
 // request at the highest tier present, and `reviews` already puts this one at
 // Enterprise + Atmosphere.
+//
+// `addressComponents` is free for the same reason - it is a Pro-tier field and
+// this request is already priced above that. It replaces the sweep region's
+// configured state, which was wrong for every place a region's circle reached
+// outside its own state; see address.ts.
 const DETAILS_FIELD_MASK =
-  "displayName,rating,userRatingCount,reviews,photos,types,primaryType,location";
+  "displayName,rating,userRatingCount,reviews,photos,types,primaryType,location," +
+  "addressComponents";
 const DEFAULT_INCLUDED_TYPES = ["restaurant", "tourist_attraction", "museum", "park"];
 const DEFAULT_REGION = {
   id: "kuala-lumpur",
@@ -50,6 +57,11 @@ type PlaceDetails = {
   types?: string[];
   primaryType?: string;
   location?: { latitude?: number; longitude?: number };
+  addressComponents?: Array<{
+    longText?: string;
+    shortText?: string;
+    types?: string[];
+  }>;
 };
 
 type ExistingPlace = {
@@ -400,7 +412,10 @@ async function runIngestion(request: Request) {
         continue;
       }
       const location = detail.location || item.nearby.location || {};
-      const state = item.region.state;
+      // Where the place actually is, not which sweep happened to find it. The
+      // region's own state is the fallback for a response that omits the
+      // component entirely.
+      const state = stateFromAddress(detail.addressComponents, item.region.state);
       const description = descriptionFor(name, category, state);
       const reviewCount = Number.isFinite(detail.userRatingCount) ? Number(detail.userRatingCount) : 0;
       const photos = photoReferences(detail);

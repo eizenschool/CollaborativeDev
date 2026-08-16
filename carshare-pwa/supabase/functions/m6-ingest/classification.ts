@@ -52,8 +52,12 @@ export const CATEGORY_TYPES: Record<PlaceCategory, string[]> = {
     // parks - Sunway Lagoon and Wet World Shah Alam - came back as nature on
     // the Selangor ingestion. A water park is a built attraction; the word
     // "park" in its type is not the same word as the one in `national_park`.
-    "event_venue", "amusement_park", "water_park", "performing_arts_theater",
-    "stadium",
+    // `amusement_center` is Google's own primaryType for The TOP Penang. Without
+    // it here, that place was classified only by its type bag - which worked,
+    // but by the weaker of the two signals. A primaryType this module does not
+    // recognise silently demotes every place carrying it to the fallback scan.
+    "event_venue", "amusement_park", "amusement_center", "water_park",
+    "performing_arts_theater", "stadium",
   ],
 };
 
@@ -72,19 +76,29 @@ export const EXCLUDED_PRIMARY_TYPES = [
   "cemetery", "funeral_home",
 ];
 
-// Culinary is last on purpose. A restaurant inside a heritage house, a cafe in
-// a museum and a food court in a theme park are facilities, not the reason to
-// travel there - so any other category naming the place wins over culinary.
-// This ordering is the whole fix for failure (2) above and the reason
-// `blue mansion` has a test of its own.
-const FALLBACK_ORDER: PlaceCategory[] = ["nature", "event", "heritage", "culinary"];
+// Two orderings are load-bearing here.
+//
+// Culinary is last. A restaurant inside a heritage house, a cafe in a museum
+// and a food court in a theme park are facilities, not the reason to travel
+// there - so any other category naming the place wins over culinary. This is
+// the whole fix for failure (2) above and why `blue mansion` has its own test.
+//
+// Event is first, ahead of nature. Every type in the event list - `event_venue`,
+// `amusement_park`, `water_park`, `performing_arts_theater`, `stadium` - names
+// something purpose-built, and none of them is ever incidental. `park` is: a
+// built attraction can sit inside one, carry one in its type bag, or simply
+// have the word in its name. So a place carrying both an event type and a
+// nature type is a built attraction with grounds, not a nature destination.
+// Found on the Penang nature top-up, where "The TOP Penang, Theme Park Penang"
+// came back as nature.
+const FALLBACK_ORDER: PlaceCategory[] = ["event", "nature", "heritage", "culinary"];
 
 // The same order with culinary removed, used whenever the place is already known
 // to be a destination and only its category is in question. Menara KL is why
 // this exists: its primary type is the generic `tourist_attraction` and the only
 // specific type in its bag is `restaurant`, so scanning the full order would
 // file the observation tower under culinary - the original failure (1).
-const DESTINATION_ORDER: PlaceCategory[] = ["nature", "event", "heritage"];
+const DESTINATION_ORDER: PlaceCategory[] = ["event", "nature", "heritage"];
 
 function specificTypes(category: PlaceCategory): string[] {
   return CATEGORY_TYPES[category].filter((type) => !GENERIC_TYPES.includes(type));

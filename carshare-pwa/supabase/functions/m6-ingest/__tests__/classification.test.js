@@ -105,6 +105,48 @@ describe('regression: event is not a dumping ground', () => {
   });
 });
 
+describe('a built attraction with grounds is an event, not nature', () => {
+  // Found on the Penang nature top-up: "The TOP Penang, Theme Park Penang" was
+  // discovered by a nature-only sweep - so it does carry a nature type - and
+  // the old order checked nature before event, so it was filed as nature.
+  it('prefers an event type over a nature type in the same bag', () => {
+    expect(classifyPlace(['park', 'amusement_park', 'tourist_attraction'], 'tourist_attraction'))
+      .toBe('event');
+    expect(classifyPlace(['aquarium', 'amusement_park'], 'tourist_attraction')).toBe('event');
+  });
+
+  it('classifies The TOP Penang from its real Google response', () => {
+    // Copied from the live row. `aquarium` and `museum` in the bag are what
+    // pulled it into nature, and `amusement_center` is its primaryType - a
+    // value the event list did not originally hold, so it resolved by the
+    // weaker fallback even once the ordering was fixed.
+    const types = [
+      'aquarium', 'bridge', 'tourist_attraction', 'lounge_bar', 'amusement_park',
+      'amusement_center', 'spa', 'night_club', 'museum', 'transportation_service',
+      'bar', 'event_venue', 'association_or_organization', 'restaurant', 'food',
+      'point_of_interest', 'establishment',
+    ];
+    expect(classifyPlace(types, 'amusement_center')).toBe('event');
+    // And still event if Google ever stops naming a primary type for it.
+    expect(classifyPlace(types, '')).toBe('event');
+  });
+
+  it('leaves a nature place with no event type alone', () => {
+    // The ordering must only bite when an event type is genuinely present.
+    expect(classifyPlace(['park', 'tourist_attraction'], 'tourist_attraction')).toBe('nature');
+    expect(classifyPlace(['national_park', 'hiking_area'], 'national_park')).toBe('nature');
+    expect(classifyPlace(['zoo', 'tourist_attraction'], 'zoo')).toBe('nature');
+    expect(classifyPlace(['aquarium'], 'aquarium')).toBe('nature');
+    expect(classifyPlace(['beach', 'natural_feature'], 'beach')).toBe('nature');
+  });
+
+  it('still lets Google\'s primaryType override the ordering entirely', () => {
+    // A national park that hosts an annual event venue is still a national park
+    // if that is what Google calls it.
+    expect(classifyPlace(['national_park', 'event_venue'], 'national_park')).toBe('nature');
+  });
+});
+
 describe('excluded primary types are rescued only by heritage', () => {
   it('keeps a historic building that also takes guests', () => {
     expect(classifyPlace(['hotel', 'historical_landmark'], 'hotel')).toBe('heritage');
