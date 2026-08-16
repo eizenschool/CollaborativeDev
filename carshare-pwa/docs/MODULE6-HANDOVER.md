@@ -239,11 +239,9 @@ code-complete: `StreetView.js` (metadata-first, 17 tests) wired into
 deferred behind an `IntersectionObserver` so it costs nothing for a card
 scrolled past. Confirmed live: with no key configured, zero requests reach any
 `streetview` endpoint. What remains is one piece of Google Cloud console work,
-not code - a **new** browser-restricted key. It cannot reuse Module 2's
-`VITE_GOOGLE_MAPS_PLACES_API_KEY`: `docs/GOOGLE-MAPS-SETUP.md` explicitly
-disables Street View on that key as an accepted cost boundary, and widening it
-without Yee's sign-off is the unilateral cross-module change AGENTS.md rules
-out. See `docs/MODULE6-API-SETUP.md` §3.4 for the exact key to create.
+not code. Update, same day: this now reuses Module 2's browser key
+(`VITE_GOOGLE_MAPS_PLACES_API_KEY`) rather than a new one - see
+`docs/MODULE6-API-SETUP.md` §3.4 for the exact steps.
 
 UC6.7 (unmet demand) and UC6.14 (serve place data) are complete. UC6.8, UC6.9,
 UC6.12, UC6.13 are not.
@@ -314,7 +312,7 @@ demand.
 | Reasons, not maths | Any detail page → sentences first, "See how this was scored" collapsed |
 | Prefill | Detail → "Find a ride" carries from/to/date into the search form |
 | Real photos (live mode) | Any card → a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
-| Street View fallback (FR-6.15, needs a key not yet created) | Not demonstrable yet — see §8 item 5. Once `VITE_GOOGLE_STREETVIEW_API_KEY` exists, any card for a place with no photo of its own falls to a Street View frame instead of straight to the illustration |
+| Street View fallback (FR-6.15, two console steps left) | Not demonstrable yet — see §8 item 4. Once `VITE_GOOGLE_STREETVIEW_API_KEY` is set (reusing M2's key), any card for a place with no photo of its own falls to a Street View frame instead of straight to the illustration |
 | Description from reviews | Any card → four sentences naming what this place actually is, e.g. KL Tower's "Observation Deck, Sky Box and views from the top". Each phrase was used by two or more reviewers independently; none is a quote |
 | Below-threshold places, category or all | `/discover` → any category button, or `All` → the toggle under the two main sections → cards below the recommendation thresholds |
 | Anonymous browsing (live mode) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |
@@ -600,9 +598,10 @@ The open work, in rough order of value:
    Module 2 data rather than Module 6 code.
 3. **Tell Yee** about the two Module 2 files this module touches (§4, item 3 of
    §8) — still genuinely open.
-4. **Create `lets-tumpang-web-streetview`** (Brayden, Google Cloud console).
-   FR-6.15 is code-complete and waiting on this one key — see §5's FR-6.15 entry
-   and `docs/MODULE6-API-SETUP.md` §3.4 for the exact key to create.
+4. **Two console steps** (Brayden): add Street View Static API to M2's
+   `lets-tumpang-web-locations` key, then set `VITE_GOOGLE_STREETVIEW_API_KEY`
+   in `.env.local` to that same key's value. FR-6.15 is code-complete and
+   waiting only on this — see `docs/MODULE6-API-SETUP.md` §3.4.
    **FR-6.33 notification dispatch** remains unimplemented and waits on Module 3.
 5. **Scheduled ingestion.** Every run so far has been triggered by hand. FR-6.1
    describes a recurring sweep and there is no cron.

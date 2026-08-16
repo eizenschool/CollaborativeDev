@@ -33,7 +33,7 @@ suite always uses the fixture regardless of `.env.local` - see the guard in
 | Nearby Search authorised on that key | **Confirmed working** (used every ingestion run) | done |
 | Place Details authorised on that key | **Confirmed working** (35 calls across two runs) | done |
 | Place Photos authorised on that key | **Confirmed working** - the browser key, not the server one, serves photos live; see §3.3 | done |
-| Street View Static authorised on that key | Unused by the implementation that shipped - see §3.4. The image renders from the browser (same pattern as Place Photos), so it needs a browser-restricted key, not the server one this row refers to; the server key's Street View authorisation can stay or be removed, it does nothing either way. Code is done and waiting on a **new browser-restricted key**, `lets-tumpang-web-streetview` | Brayden |
+| Street View Static authorised on that key | Unused by the implementation that shipped - see §3.4. The image renders from the browser (same pattern as Place Photos), so it needs a browser-restricted key, not the server one this row refers to; the server key's Street View authorisation can stay or be removed, it does nothing either way. **Reuses `lets-tumpang-web-locations` (M2's key)** rather than a new one - agreed with Yee. Console step: add Street View Static API to that key's restriction list, then set `VITE_GOOGLE_STREETVIEW_API_KEY` to the same value | Brayden |
 | Per-service daily hard quotas (§5) | **Unconfirmed** - console state not verified against the four application budget targets; no database-enforced ledger exists yet either | Brayden |
 | `024_m6_destination_discovery.sql` deployed | **Deployed** as `m6_destination_discovery` | done |
 | `027_m6_place_reviews.sql` deployed | **Deployed** through the Dashboard SQL Editor; adds `places.reviews` | done |
@@ -160,31 +160,37 @@ the same cost discipline `loading="lazy"` already gives photos. With no key
 configured, `hasStreetViewKey()` is false and nothing else in the module ever
 runs; confirmed live in the browser, zero requests to any `streetview` endpoint.
 
-**This cannot reuse Module 2's browser key.** `docs/GOOGLE-MAPS-SETUP.md`
-explicitly disables Street View on `VITE_GOOGLE_MAPS_PLACES_API_KEY`: "Static
-Maps, Dynamic Maps, Street View, and other unused APIs remain disabled." That
-is Module 2's accepted cost boundary, not an oversight, and widening it without
-Yee's sign-off is exactly the kind of unilateral cross-module change AGENTS.md
-rules out. Module 6's photo pipeline already reuses that key for Places Photos
-(a Places API (New) endpoint the key does authorise); Street View is a separate
-legacy Maps Platform API and needs its own key.
+**Update (2026-08-17): reuses Module 2's browser key, agreed with Yee.**
+`docs/GOOGLE-MAPS-SETUP.md` originally excluded Street View from
+`VITE_GOOGLE_MAPS_PLACES_API_KEY` by name, as an accepted cost boundary.
+Brayden and Yee agreed to widen that key instead of provisioning a third one:
+add **Street View Static API** to its API restriction list in Google Cloud
+Console. `docs/GOOGLE-MAPS-SETUP.md` is being updated to record this - if it
+still shows the old exclusion, treat this paragraph as the current state.
 
-**What is still needed, and it is entirely console work:**
+Module 6's code does not reference `VITE_GOOGLE_MAPS_PLACES_API_KEY` for this.
+`StreetView.js` reads its own env var, `VITE_GOOGLE_STREETVIEW_API_KEY`, kept
+deliberately separate in code from the physical key it happens to point at -
+so this remains one `.env.local` line, not a code change, if the two keys are
+ever split apart again.
+
+**What is left, in order:**
 
 ```text
-Name:        lets-tumpang-web-streetview
-Application restriction: Websites
-  http://localhost:5173/*
-  the final HTTPS deployment domain, once known
-API restriction: Street View Static API only
-Env var:     VITE_GOOGLE_STREETVIEW_API_KEY (new - not the server key, not M2's key)
+1. Console: add "Street View Static API" to the API restriction list on
+   lets-tumpang-web-locations (the key behind VITE_GOOGLE_MAPS_PLACES_API_KEY).
+   No new key, no new website/referrer restriction.
+2. .env.local: add
+     VITE_GOOGLE_STREETVIEW_API_KEY=<same value as VITE_GOOGLE_MAPS_PLACES_API_KEY>
+3. Restart `npm run dev`.
 ```
 
-Once the key exists and is set, no further code changes are needed. Same
-budget discipline as the rest of this module: free monthly cap is 10,000
-Street View Static requests and unlimited metadata (§5); the application
-budget target from that table is 50 image requests/day, which the
-metadata-first check protects.
+No further code changes are needed once those three steps are done. Cost note:
+Street View Static's free cap (10,000/month) and Places Photo's (1,000/month)
+are separate SKUs even on a shared key, so this does not change either
+feature's existing budget; the application target from §5 is 50 image
+requests/day, which the metadata-first check protects regardless of which key
+backs it.
 
 ### 3.5 Weather — FR-6.22, FR-6.23, FR-6.38
 
