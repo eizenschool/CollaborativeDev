@@ -632,3 +632,8 @@ The open work, in rough order of value:
    unimplemented and waits on Module 3.
 5. **Scheduled ingestion.** Every run so far has been triggered by hand. FR-6.1
    describes a recurring sweep and there is no cron.
+6. **Responsive layout.** Flagged 2026-08-17, not investigated or fixed:
+   the discover screens do not adapt across screen sizes. Scope (phone vs.
+   tablet breakpoints, which components are affected - cards, the carousel,
+   the Street View embed) has not been assessed yet. Read `docs/ai/UI.md`
+   before starting, per AGENTS.md's rule for any responsive/layout work.
