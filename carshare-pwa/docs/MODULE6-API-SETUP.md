@@ -127,9 +127,15 @@ into project storage, so each viewing spends a request. Three mitigations, all
 already reflected in the UI:
 
 - the list renders one photograph per card, not the whole carousel;
-- the carousel loads a frame only when it is shown;
-- responses are proxied with a long `Cache-Control`, so a repeat view is served
-  by the browser rather than by Google.
+- the carousel loads a frame only when it is shown (`loading="lazy"`);
+- Google's own response carries `Cache-Control: private, max-age=86400` -
+  verified live 2026-08-17, not just documented. There is no proxy: the
+  browser calls `places.googleapis.com` directly (`placePhotos.js`), and this
+  header is Google's, not ours. A repeat view of the exact same URL within 24
+  hours is served from the browser's own cache rather than spending another
+  request - but the cache key is the full URL including `maxWidthPx`, so the
+  same photo requested at a different width (a card vs. the detail carousel)
+  is a separate cache entry and a separate first-time cost, not shared.
 
 `authorAttributions` from §3.2 must be displayed wherever a photograph is shown
 (FR-6.14), along with the "Google Maps" attribution the policy requires.
@@ -224,6 +230,36 @@ request this module used to make does not happen anywhere, and Maps Embed
 API's own pricing is documented as no-charge
 (`docs/GOOGLE-MAPS-SETUP.md`) - so this switch removed a real cost line
 instead of adding one.
+
+**Fixed the same day: switching in and out of the carousel's Street View
+frame re-checked coverage from scratch every time.** Reported directly as
+sluggish navigation. `StreetViewFrame.jsx` unmounts whenever the carousel
+moves to a different frame - the same "only the current frame exists in the
+DOM" discipline that already governs photos - so re-entering the frame always
+re-ran the mount effect and re-fetched. Two changes, deliberately both:
+
+- The Edge Function's JSON responses moved from `Cache-Control: no-store` to
+  `public, max-age=86400` (a day) for both `covered: true` and
+  `covered: false` results - matching the cache lifetime Google's own Place
+  Photos response already carries (§3.3). A confident "no coverage" is cached
+  too, since it is exactly as stable a fact as "covered", and is the common
+  case for a catalogue's less-visited places.
+- `StreetView.js` also holds its own session-scoped in-memory cache
+  (`coverageCache`, keyed by coordinate), the same pattern
+  `WeatherGate.js`'s `forecastCache` already established in this module. A
+  network failure is deliberately **not** cached, so a transient error gets a
+  fresh attempt next time rather than being frozen into "no coverage" for the
+  rest of the session.
+
+Both exist together on purpose: the HTTP cache alone would still leave a
+repeat visit re-parsing a response and briefly showing "Checking Street
+View…" before resolving; the in-memory cache alone would not survive a page
+reload. Verified live: a first check took ~208ms; a second check for the same
+coordinate, from the real client function in the running app, took 0ms and
+skipped the network entirely. In the actual carousel, switching away from and
+back to the Street View frame no longer shows the "Checking Street View…"
+placeholder at all on the second visit - confirmed the iframe is present
+within 50ms of the click, with no observable flash.
 
 <details>
 <summary>Superseded: the static-image proxy this replaced (kept for history)</summary>

@@ -36,12 +36,22 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "*",
 };
 
-function json(data: unknown, status = 200): Response {
+// A coordinate's coverage, heading, and capture date do not change between two
+// screens opening seconds apart, and rarely change at all - Street View
+// panoramas are recaptured on the order of years, not days. Cached for a day
+// so switching in and out of the carousel's Street View frame - which
+// previously refetched on every single mount - is served from the browser's
+// own HTTP cache instead of a fresh round trip through this function and
+// Google's metadata endpoint. Matches the cache lifetime Google's own Place
+// Photos response already uses (MODULE6-API-SETUP.md §3.3).
+const RESULT_CACHE_CONTROL = "public, max-age=86400";
+
+function json(data: unknown, status = 200, cacheControl = "no-store"): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
+      "Cache-Control": cacheControl,
       ...CORS_HEADERS,
     },
   });
@@ -74,7 +84,10 @@ async function handle(request: Request): Promise<Response> {
 
   const metadataBody = await fetchMetadata(buildMetadataUrl(lat, lng, apiKey));
   if (!hasCoverage(metadataBody)) {
-    return json({ covered: false });
+    // Cached too: "this coordinate has no Street View" is exactly as stable a
+    // fact as "it does", and is the common case for a catalogue's less-visited
+    // places - worth not re-asking Google every time as well.
+    return json({ covered: false }, 200, RESULT_CACHE_CONTROL);
   }
 
   const panoramaLocation = extractPanoramaLocation(metadataBody);
@@ -86,7 +99,7 @@ async function handle(request: Request): Promise<Response> {
     covered: true,
     heading,
     capturedAt: extractCaptureDate(metadataBody),
-  });
+  }, 200, RESULT_CACHE_CONTROL);
 }
 
 export default {

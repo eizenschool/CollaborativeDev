@@ -29,8 +29,8 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **610 tests / 37 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
-| Module 6's own | **423 tests / 21 files** |
+| Whole suite | **614 tests / 37 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **427 tests / 21 files** |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **109 recommendable places across six states** — Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19, Kedah 4, Negeri Sembilan 2 — with real photos and reviews, plus 6 rows retired and withheld. See §7 and `docs/MODULE6-API-SETUP.md` §6. |
 

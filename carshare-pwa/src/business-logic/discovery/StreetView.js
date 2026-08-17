@@ -31,6 +31,20 @@ function validCoordinate(lat, lng) {
 
 const NOT_COVERED = { covered: false, heading: null, capturedAt: null };
 
+// A coordinate's coverage, heading, and capture date do not change between two
+// screens opening seconds apart - the same reasoning WeatherGate.js's
+// forecastCache is built on. Held for the session, not the ranking cache
+// FR-6.11 forbids: this is display metadata, not a scoring input. Without it,
+// switching away from the carousel's Street View frame and back re-ran the
+// check and re-fetched from Supabase on every single mount - which is also
+// why the JSON response itself now sets a day-long Cache-Control
+// (m6-streetview/index.ts): this cache and that header both exist because one
+// alone would still leave a repeat visit either re-parsing a fresh network
+// round trip in JS or a flash of "Checking Street View…" before an
+// instant cache hit resolves.
+const coverageCache = new Map();
+const cacheKey = (lat, lng) => `${lat},${lng}`;
+
 /** Whether the embed key is configured - needed to render anything at all,
  * independent of whether a given coordinate has coverage. */
 export function hasStreetViewEmbedKey(apiKey = configuredEmbedKey) {
@@ -48,6 +62,11 @@ export function hasStreetViewEmbedKey(apiKey = configuredEmbedKey) {
  * more for an embed than it did for a plain `<img>`: an iframe has no clean
  * "this failed" signal the way `onError` does, so the decision to render one
  * at all has to be made correctly *before* it exists, not corrected after.
+ *
+ * A failure is deliberately not cached - only a confident answer, covered or
+ * not, is worth remembering. A transient network error should get a fresh
+ * chance next time, not be frozen into "no coverage" for the rest of the
+ * session.
  */
 export async function checkStreetViewCoverage(
   lat, lng, { baseUrl = configuredBaseUrl, fetchImpl = globalThis.fetch } = {},
@@ -55,21 +74,34 @@ export async function checkStreetViewCoverage(
   if (!baseUrl || !validCoordinate(lat, lng) || typeof fetchImpl !== 'function') {
     return NOT_COVERED;
   }
+
+  const key = cacheKey(lat, lng);
+  const cached = coverageCache.get(key);
+  if (cached) return cached;
+
   const base = baseUrl.replace(/\/$/, '');
   const url = `${base}/${CHECK_PATH}?lat=${lat}&lng=${lng}`;
   try {
     const response = await fetchImpl(url);
     if (!response.ok) return NOT_COVERED;
     const body = await response.json();
-    if (!body?.covered) return NOT_COVERED;
-    return {
-      covered: true,
-      heading: Number.isFinite(body.heading) ? body.heading : null,
-      capturedAt: typeof body.capturedAt === 'string' ? body.capturedAt : null
-    };
+    const result = !body?.covered
+      ? NOT_COVERED
+      : {
+          covered: true,
+          heading: Number.isFinite(body.heading) ? body.heading : null,
+          capturedAt: typeof body.capturedAt === 'string' ? body.capturedAt : null
+        };
+    coverageCache.set(key, result);
+    return result;
   } catch {
     return NOT_COVERED;
   }
+}
+
+/** Test hook, so one case's cached coverage cannot leak into the next. */
+export function __clearCoverageCache() {
+  coverageCache.clear();
 }
 
 /**

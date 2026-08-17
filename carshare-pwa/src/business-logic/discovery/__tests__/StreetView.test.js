@@ -4,9 +4,10 @@
 // key is configured under test, so every function is off by default - the same
 // guarantee placePhotos.test.js pins for Place Photos.
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  buildStreetViewEmbedUrl, checkStreetViewCoverage, hasStreetViewEmbedKey
+  buildStreetViewEmbedUrl, checkStreetViewCoverage, hasStreetViewEmbedKey,
+  __clearCoverageCache
 } from '../StreetView.js';
 
 const SUPABASE = { baseUrl: 'https://pnetstmovctfwqcumodx.supabase.co' };
@@ -55,6 +56,10 @@ describe('buildStreetViewEmbedUrl', () => {
 });
 
 describe('checkStreetViewCoverage', () => {
+  // Every case below shares one coordinate, so a result cached by an earlier
+  // test would otherwise silently answer a later one instead of its own mock.
+  beforeEach(() => __clearCoverageCache());
+
   it('is not covered with no Supabase project configured, and never calls fetch', async () => {
     const fetchImpl = vi.fn();
     const result = await checkStreetViewCoverage(KL.lat, KL.lng, { baseUrl: '', fetchImpl });
@@ -111,5 +116,46 @@ describe('checkStreetViewCoverage', () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ covered: false }) });
     await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
     expect(fetchImpl.mock.calls[0][0]).toContain(`lat=${KL.lat}&lng=${KL.lng}`);
+  });
+
+  describe('caching', () => {
+    it('answers a repeat check for the same coordinate without calling fetch again', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ covered: true, heading: 90, capturedAt: '2024-01' })
+      });
+      const first = await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+      const second = await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+
+      expect(first).toEqual(second);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('caches a confident "not covered" too, not only a covered result', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ covered: false }) });
+      await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+      await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache a network failure, so a transient error gets a fresh chance', async () => {
+      const fetchImpl = vi.fn().mockRejectedValue(new Error('offline'));
+      await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+      await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps two different coordinates in separate cache entries', async () => {
+      const fetchImpl = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ covered: true, heading: 0, capturedAt: null }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ covered: false }) });
+
+      const first = await checkStreetViewCoverage(3.1, 101.6, { ...SUPABASE, fetchImpl });
+      const second = await checkStreetViewCoverage(3.2, 101.7, { ...SUPABASE, fetchImpl });
+
+      expect(first.covered).toBe(true);
+      expect(second.covered).toBe(false);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
   });
 });
