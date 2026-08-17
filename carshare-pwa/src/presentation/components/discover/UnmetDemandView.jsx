@@ -11,6 +11,7 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconArrowLeft, IconUsers, IconRoute, IconMapPin } from '../icons.jsx';
+import { PHOTO_WIDTH_CARD } from '../../../business-logic/discovery/placePhotos.js';
 import PlaceImage from './PlaceImage.jsx';
 import AudienceSwitch from './AudienceSwitch.jsx';
 import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
@@ -136,7 +137,7 @@ export default function UnmetDemandView() {
           {rows.map((row) => (
             <article className="dsc-card dsc-card-unserved" key={row.placeId}>
               <span className="dsc-card-media">
-                <PlaceImage place={row.place} widthPx={600} />
+                <PlaceImage place={row.place} widthPx={PHOTO_WIDTH_CARD} />
               </span>
 
               <span className="dsc-card-body">

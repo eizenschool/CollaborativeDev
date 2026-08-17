@@ -9,6 +9,7 @@
 import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin } from '../icons.jsx';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
 import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
+import { PHOTO_WIDTH_CARD } from '../../../business-logic/discovery/placePhotos.js';
 import PlaceImage from './PlaceImage.jsx';
 
 export function Rating({ rating, reviewCount }) {
@@ -40,7 +41,7 @@ export default function DestinationCard({ candidate, onOpen }) {
       onClick={() => onOpen(place.id)}
     >
       <span className="dsc-card-media">
-        <PlaceImage place={place} widthPx={600} />
+        <PlaceImage place={place} widthPx={PHOTO_WIDTH_CARD} />
         {credit && <span className="dsc-photo-credit">{credit}</span>}
       </span>
 

@@ -16,6 +16,7 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import { IconArrowRight, IconCar, IconUsers } from '../icons.jsx';
+import { PHOTO_WIDTH_RAIL } from '../../../business-logic/discovery/placePhotos.js';
 import PlaceImage from './PlaceImage.jsx';
 import '../../styles/discover.css';
 
@@ -98,7 +99,7 @@ export default function DiscoverRail() {
               onClick={() => open(place.id)}
             >
               <span className="dsc-rail-media">
-                <PlaceImage place={place} widthPx={400} />
+                <PlaceImage place={place} widthPx={PHOTO_WIDTH_RAIL} />
               </span>
               <span className="dsc-rail-body">
                 <span className="dsc-rail-title">{place.name}</span>

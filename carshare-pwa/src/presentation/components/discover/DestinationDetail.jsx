@@ -19,7 +19,7 @@ import {
 } from '../icons.jsx';
 import PlaceImage from './PlaceImage.jsx';
 import StreetViewFrame from './StreetViewFrame.jsx';
-import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
+import { buildPlacePhotoUrl, PHOTO_WIDTH_LARGE } from '../../../business-logic/discovery/placePhotos.js';
 import { hasStreetViewEmbedKey } from '../../../business-logic/discovery/StreetView.js';
 import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
@@ -88,7 +88,7 @@ function Carousel({ place }) {
       <div className="dsc-carousel-frame">
         {isStreetViewFrame
           ? <StreetViewFrame place={place} onResult={setStreetViewResult} />
-          : <PlaceImage place={place} variant={index} widthPx={1000} />}
+          : <PlaceImage place={place} variant={index} widthPx={PHOTO_WIDTH_LARGE} />}
         {streetViewCovered && <span className="dsc-illustration-tag">Street View</span>}
         {isIllustration && <span className="dsc-illustration-tag">Illustration</span>}
         {streetViewCovered && (

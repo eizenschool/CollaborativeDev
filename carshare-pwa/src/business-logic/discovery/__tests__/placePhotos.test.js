@@ -6,7 +6,10 @@
 // illustration tier, never an empty slot.
 
 import { describe, expect, it } from 'vitest';
-import { buildPlacePhotoUrl, hasFetchablePhoto } from '../placePhotos.js';
+import {
+  buildPlacePhotoUrl, hasFetchablePhoto,
+  PHOTO_WIDTH_RAIL, PHOTO_WIDTH_CARD, PHOTO_WIDTH_LARGE
+} from '../placePhotos.js';
 
 const LIVE = 'places/ChIJBWbm2tM3zDERTno0px940s4/photos/AWCwydiZN7EYn-ogY9wZ4S227VDDSQ';
 const KEY = { apiKey: 'test-key' };
@@ -48,6 +51,24 @@ describe('buildPlacePhotoUrl', () => {
 
   it('escapes the key rather than pasting it into the query raw', () => {
     expect(buildPlacePhotoUrl(LIVE, { apiKey: 'a b&c' })).toContain('key=a%20b%26c');
+  });
+});
+
+describe('width tiers', () => {
+  // The point of naming these is that the same photo requested at two
+  // slightly different widths is two separate cache entries, not one - see
+  // docs/MODULE6-API-SETUP.md §3.3. Pinning the actual numbers and their
+  // ordering catches an accidental edit in one caller silently drifting it
+  // away from the tier every other caller of the same size still shares.
+  it('are ordered rail < card < large', () => {
+    expect(PHOTO_WIDTH_RAIL).toBeLessThan(PHOTO_WIDTH_CARD);
+    expect(PHOTO_WIDTH_CARD).toBeLessThan(PHOTO_WIDTH_LARGE);
+  });
+
+  it('hold the specific values every caller currently shares', () => {
+    expect(PHOTO_WIDTH_RAIL).toBe(400);
+    expect(PHOTO_WIDTH_CARD).toBe(600);
+    expect(PHOTO_WIDTH_LARGE).toBe(1200);
   });
 });
 
