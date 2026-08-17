@@ -1,52 +1,86 @@
 // ===== BUSINESS LOGIC LAYER (StreetView) =====
-// FR-6.15. Street View for a place that has no Google photograph of its own.
+// FR-6.15. Interactive Street View for a place, shown as its own carousel
+// scene alongside real photographs (see StreetViewFrame.jsx).
 //
-// This does not build a URL straight to Google, unlike placePhotos.js. The
-// credential that authorises Street View is GOOGLE_PLACES_SERVER_KEY, the same
-// Supabase secret m6-ingest already holds - it must never reach the browser,
-// which is why it carries no VITE_ prefix (docs/MODULE6-API-SETUP.md §2). So
-// the browser calls a Supabase Edge Function
-// (supabase/functions/m6-streetview) instead, which holds the key server-side,
-// runs FR-6.15's metadata-first check, and proxies the image through.
+// Two credentials, two purposes, deliberately not shared:
+//   - GOOGLE_PLACES_SERVER_KEY (a Supabase secret) checks coverage. The check
+//     needs Street View Static API authorisation, which stays server-side and
+//     never reaches the browser - the whole reason it carries no VITE_
+//     prefix. supabase/functions/m6-streetview holds it and answers with
+//     { covered, heading, capturedAt }, never image bytes.
+//   - VITE_GOOGLE_MAPS_EMBED_API_KEY (Module 2's existing browser key,
+//     website-restricted) renders the actual interactive panorama, through
+//     Maps Embed API's streetview mode - a mode of an API this key already
+//     had enabled, not a separate product that needed new console work.
 //
-// This is why no browser-side Street View key exists at all: a place with no
-// coverage gets a plain 404 from the function, which the caller's
-// `<img onError>` already treats as "fall back to the illustration" - the same
-// contract placePhotos.js's null return keeps for a fixture reference or a
-// missing key. One image slot, one fallback contract, regardless of tier.
+// The split is deliberate, not incidental: Maps Embed API's own pricing is
+// documented as no-charge (docs/GOOGLE-MAPS-SETUP.md), and the coverage check
+// is free and unmetered regardless of which key makes it, so there is no cost
+// reason to merge the two credentials - only a reason to keep the narrower
+// one narrow.
 
 const configuredBaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || '';
+const configuredEmbedKey = import.meta.env.VITE_GOOGLE_MAPS_EMBED_API_KEY?.trim() || '';
 
-const FUNCTION_PATH = 'functions/v1/m6-streetview';
-
-// Google's documented ceiling for the Street View Static free tier.
-const MAX_DIMENSION = 640;
+const CHECK_PATH = 'functions/v1/m6-streetview';
+const EMBED_URL = 'https://www.google.com/maps/embed/v1/streetview';
 
 function validCoordinate(lat, lng) {
   return Number.isFinite(lat) && Number.isFinite(lng);
 }
 
-/**
- * Whether the proxy can even be reached - the browser needs to know where
- * Supabase is. `false` in fixture mode or any environment with no Supabase
- * project configured, mirroring `isSupabaseConfigured` elsewhere in this
- * codebase.
- */
-export function hasStreetViewProxy(baseUrl = configuredBaseUrl) {
-  return Boolean(baseUrl);
+const NOT_COVERED = { covered: false, heading: null, capturedAt: null };
+
+/** Whether the embed key is configured - needed to render anything at all,
+ * independent of whether a given coordinate has coverage. */
+export function hasStreetViewEmbedKey(apiKey = configuredEmbedKey) {
+  return Boolean(apiKey);
 }
 
 /**
- * The proxy image URL for a coordinate. `null` when Supabase is not
- * configured or the coordinate is not a real one - never a URL that would
- * 400 or 404 for a reason the caller could have avoided building it at all.
+ * Whether a coordinate has Street View coverage, and if so, which way to
+ * point the camera and how old the imagery is.
+ *
+ * Never throws and never reports coverage on a failure of any kind - a
+ * network error, a malformed response, or no Supabase project configured all
+ * collapse to `NOT_COVERED`, so the caller's fallback (the illustration) is
+ * always the safe choice when this cannot answer confidently. This matters
+ * more for an embed than it did for a plain `<img>`: an iframe has no clean
+ * "this failed" signal the way `onError` does, so the decision to render one
+ * at all has to be made correctly *before* it exists, not corrected after.
  */
-export function buildStreetViewProxyUrl(
-  lat, lng, { baseUrl = configuredBaseUrl, width = 600, height = 400 } = {},
+export async function checkStreetViewCoverage(
+  lat, lng, { baseUrl = configuredBaseUrl, fetchImpl = globalThis.fetch } = {},
 ) {
-  if (!baseUrl || !validCoordinate(lat, lng)) return null;
-  const w = Math.max(1, Math.min(MAX_DIMENSION, Math.round(width) || 1));
-  const h = Math.max(1, Math.min(MAX_DIMENSION, Math.round(height) || 1));
+  if (!baseUrl || !validCoordinate(lat, lng) || typeof fetchImpl !== 'function') {
+    return NOT_COVERED;
+  }
   const base = baseUrl.replace(/\/$/, '');
-  return `${base}/${FUNCTION_PATH}?lat=${lat}&lng=${lng}&w=${w}&h=${h}`;
+  const url = `${base}/${CHECK_PATH}?lat=${lat}&lng=${lng}`;
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) return NOT_COVERED;
+    const body = await response.json();
+    if (!body?.covered) return NOT_COVERED;
+    return {
+      covered: true,
+      heading: Number.isFinite(body.heading) ? body.heading : null,
+      capturedAt: typeof body.capturedAt === 'string' ? body.capturedAt : null
+    };
+  } catch {
+    return NOT_COVERED;
+  }
+}
+
+/**
+ * The interactive embed URL. `null` when the embed key is not configured or
+ * the coordinate is not real - never a URL that would render Google's own
+ * error state for a reason the caller could have avoided building it at all.
+ */
+export function buildStreetViewEmbedUrl(
+  lat, lng, { apiKey = configuredEmbedKey, heading } = {},
+) {
+  if (!apiKey || !validCoordinate(lat, lng)) return null;
+  const headingParam = Number.isFinite(heading) ? `&heading=${heading}` : '';
+  return `${EMBED_URL}?key=${encodeURIComponent(apiKey)}&location=${lat},${lng}${headingParam}`;
 }

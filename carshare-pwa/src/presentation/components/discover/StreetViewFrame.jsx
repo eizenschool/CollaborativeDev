@@ -1,26 +1,59 @@
 // ===== PRESENTATION LAYER (StreetViewFrame) =====
-// FR-6.15. An explicit Street View scene, offered alongside a place's real
+// FR-6.15. An interactive Street View scene, offered alongside a place's real
 // photographs rather than only in their absence - see Carousel in
-// DestinationDetail.jsx, which appends this as the carousel's last frame for
-// every place carrying a real coordinate.
+// DestinationDetail.jsx.
 //
-// Falls to the category illustration (FR-6.17) when the coordinate has no
-// Street View coverage (the proxy answers 404), when the place carries no
-// usable coordinate at all, or when the request otherwise fails - the same
-// "never render nothing" contract every image slot in this module keeps.
+// Coverage is checked once, on mount, through the free metadata check
+// (checkStreetViewCoverage) rather than assumed from having a coordinate
+// alone. An embedded iframe has no clean "this failed" signal the way an
+// `<img onError>` does: an uncovered coordinate still loads as a normal
+// response, showing Google's own "no imagery here" UI inside the frame rather
+// than anything this component could intercept afterward. Checking first, and
+// falling to the illustration before the iframe is ever created, is what
+// keeps this module's "never show a third party's own broken state"
+// guarantee intact for a component type that cannot self-report failure.
 
-import { useState } from 'react';
-import { buildStreetViewProxyUrl } from '../../../business-logic/discovery/StreetView.js';
+import { useEffect, useState } from 'react';
+import {
+  buildStreetViewEmbedUrl, checkStreetViewCoverage, hasStreetViewEmbedKey
+} from '../../../business-logic/discovery/StreetView.js';
 import PlacePoster from './PlacePoster.jsx';
 
-export default function StreetViewFrame({ place, widthPx = 1000 }) {
-  const [failed, setFailed] = useState(false);
+export default function StreetViewFrame({ place, onResult }) {
+  const [coverage, setCoverage] = useState(null); // null while the check is in flight
 
   const hasCoordinate = Number.isFinite(place?.lat) && Number.isFinite(place?.lng);
-  const url = !failed && hasCoordinate
-    ? buildStreetViewProxyUrl(place.lat, place.lng, {
-        width: widthPx, height: Math.round(widthPx * 0.6)
-      })
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!hasCoordinate || !hasStreetViewEmbedKey()) {
+      setCoverage({ covered: false, heading: null, capturedAt: null });
+      return undefined;
+    }
+    setCoverage(null);
+    checkStreetViewCoverage(place.lat, place.lng).then((result) => {
+      if (!cancelled) setCoverage(result);
+    });
+    return () => { cancelled = true; };
+  }, [hasCoordinate, place?.lat, place?.lng]);
+
+  // The parent renders the "Street View" tag and credit, or the
+  // "Illustration" one, based on this - it must not assume from being asked
+  // to render this frame at all that real imagery is what came back.
+  useEffect(() => {
+    onResult?.(coverage);
+  }, [coverage, onResult]);
+
+  if (coverage === null) {
+    return (
+      <div className="dsc-streetview-checking" role="status">
+        Checking Street View…
+      </div>
+    );
+  }
+
+  const url = coverage.covered
+    ? buildStreetViewEmbedUrl(place.lat, place.lng, { heading: coverage.heading })
     : null;
 
   if (!url) {
@@ -28,13 +61,13 @@ export default function StreetViewFrame({ place, widthPx = 1000 }) {
   }
 
   return (
-    <img
-      className="dsc-photo"
+    <iframe
+      className="dsc-streetview-embed"
       src={url}
-      alt={`Street View near ${place?.name || 'this place'}`}
+      title={`Street View near ${place?.name || 'this place'}`}
       loading="lazy"
-      decoding="async"
-      onError={() => setFailed(true)}
+      allowFullScreen
+      referrerPolicy="no-referrer-when-downgrade"
     />
   );
 }

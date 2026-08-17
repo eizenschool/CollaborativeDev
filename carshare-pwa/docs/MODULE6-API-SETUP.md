@@ -33,7 +33,7 @@ suite always uses the fixture regardless of `.env.local` - see the guard in
 | Nearby Search authorised on that key | **Confirmed working** (used every ingestion run) | done |
 | Place Details authorised on that key | **Confirmed working** (35 calls across two runs) | done |
 | Place Photos authorised on that key | **Confirmed working** - the browser key, not the server one, serves photos live; see §3.3 | done |
-| Street View Static authorised on that key | **Confirmed working, in use** - see §3.4. `m6-streetview` calls it server-side; verified live against real coordinates (200 with a real image, 404 with no coverage) and confirmed rendering in the running app | done |
+| Street View Static authorised on that key | **Confirmed working, in use for the coverage check only** - see §3.4. `m6-streetview` calls the free metadata endpoint server-side; the imagery itself now renders through Maps Embed API (Module 2's existing browser key), so this key never makes a billed image request for this feature | done |
 | Per-service daily hard quotas (§5) | **Unconfirmed** - console state not verified against the four application budget targets; no database-enforced ledger exists yet either | Brayden |
 | `024_m6_destination_discovery.sql` deployed | **Deployed** as `m6_destination_discovery` | done |
 | `027_m6_place_reviews.sql` deployed | **Deployed** through the Dashboard SQL Editor; adds `places.reviews` | done |
@@ -136,103 +136,123 @@ already reflected in the UI:
 
 ### 3.4 Street View — FR-6.15
 
-```http
-GET https://maps.googleapis.com/maps/api/streetview/metadata?location={LAT},{LNG}&key={KEY}
-```
+**Status (2026-08-17): done and deployed, as an interactive embed - not a
+static image.** The static-image approach (below, kept for the history) was
+tried first, fixed once for a real framing/mismatch bug, and then replaced
+outright once a direct comparison of the two architectures was asked for.
 
-Free and unmetered. Only when it returns `"status": "OK"`:
+**What is deployed.** Two credentials, two purposes:
 
-```http
-GET https://maps.googleapis.com/maps/api/streetview?location={LAT},{LNG}&size=600x400&key={KEY}
-```
+- `GOOGLE_PLACES_SERVER_KEY` (a Supabase secret, same one `m6-ingest` uses)
+  checks coverage only. `supabase/functions/m6-streetview` calls
+  ```http
+  GET https://maps.googleapis.com/maps/api/streetview/metadata?location={LAT},{LNG}&radius=50&source=outdoor&key={KEY}
+  ```
+  (free, unmetered) and answers the browser with JSON -
+  `{ covered, heading, capturedAt }` - never image bytes. `radius=50` keeps
+  the search to this building's immediate frontage rather than snapping to a
+  neighbouring address in a dense shoplot strip; `source=outdoor` excludes
+  indoor 360 photospheres; `heading` is computed server-side
+  (`computeHeading` in `coverage.ts`, a standard great-circle bearing) from
+  the panorama's own returned location toward the requested coordinate, not
+  assumed to be the same point - Street View snaps to the nearest point it
+  actually has imagery for, rarely the building itself. `capturedAt` is
+  Google's own capture date for the panorama (e.g. `"2018-08"`), read
+  straight from the metadata response and shown to the viewer rather than
+  judged by this code - there is no principled cutoff for "too old", so the
+  date is surfaced and the viewer decides.
+- `VITE_GOOGLE_MAPS_EMBED_API_KEY` (Module 2's **existing** browser key,
+  already restricted to Maps Embed API for directions previews) renders the
+  actual interactive panorama:
+  ```http
+  https://www.google.com/maps/embed/v1/streetview?key={KEY}&location={LAT},{LNG}&heading={HEADING}
+  ```
+  in an `<iframe>`. **No new Google Cloud console work of any kind was
+  needed.** "Street View" is not a separate product to enable - it is a mode
+  of Maps Embed API, which does not have "street view" in its own name (only
+  Street View Static API and Street View Publish API do, and neither is the
+  right product), which is what made this genuinely hard to find in the
+  Console. Confirmed live by fetching the embed URL directly from the running
+  app's own origin: `200`, a real embed bootstrap payload carrying the
+  requested coordinate, no error markers.
 
-FR-6.15's metadata-first rule exists precisely because the check costs nothing
-while the image does. Where coverage is absent the module falls to the category
-illustration (FR-6.17), which is already implemented in `PlacePoster.jsx`.
+`src/business-logic/discovery/StreetView.js` holds `checkStreetViewCoverage`
+(calls the Edge Function) and `buildStreetViewEmbedUrl` (pure). Coverage is
+checked *before* the iframe is ever created, not left to be discovered after:
+an iframe has no `onError` the way `<img>` does, so an uncovered coordinate
+would otherwise load as a normal response showing **Google's own** "no
+imagery here" UI inside the frame - breaking this module's "never show a
+third party's own broken state, always our own designed fallback" guarantee.
+`StreetViewFrame.jsx` runs the check on mount and reports the *actual* result
+up to `DestinationDetail.jsx`'s `Carousel`, which is what decides whether to
+show the "Street View" tag and credit or the "Illustration" one - the frame
+being on the Street View slot and the coverage check having actually
+succeeded are different facts, and captioning our own illustration "Imagery:
+Google Street View" would be exactly the kind of mislabelling this module has
+repeatedly had to catch elsewhere (`docs/MODULE6-HANDOVER.md` §10).
 
-**Status (2026-08-17): done and deployed.** Two earlier approaches were
-considered and superseded before landing here - both recorded for anyone who
-finds the git history confusing:
+Deployed with `--no-verify-jwt`, and with `Access-Control-Allow-Origin: *` on
+every response - this is called with `fetch()` directly from the browser,
+unlike the image proxy it replaced (a plain `<img src>` is never subject to
+CORS; a JSON response read by client JS is, and the first deploy of this
+version shipped without the header and failed silently behind a CORS error
+until caught live). Wildcarded rather than origin-restricted: the response
+carries nothing but a coordinate's public coverage/heading/date, the same
+class of information `/discover` already shows an anonymous visitor
+(D017/D018), and no cookies or credentials travel with the request for an
+origin restriction to protect.
 
-1. *Client-direct with a new key.* A browser key restricted to Street View
-   Static, called straight from `<img src>`, same shape as Place Photos. Ruled
-   out because `GOOGLE_PLACES_SERVER_KEY` already carried Street View Static
-   authorisation (§2) and duplicating a credential nobody needed was pure
-   waste.
-2. *Client-direct reusing Module 2's browser key.* Agreed with Yee to widen
-   `VITE_GOOGLE_MAPS_PLACES_API_KEY` rather than mint a new one. Superseded in
-   turn once it was clear the already-authorised server key made *any* browser
-   key unnecessary.
+**Verified live, 2026-08-17.** For the real Penang coordinate reported as
+mismatched: the coverage check returned `capturedAt: "2018-08"` - genuinely
+eight years old, confirming the report rather than a false alarm - and
+`heading: 345`, matching the panorama snapping ~15m from the request and
+pointing back correctly toward it. In the running app, clicking to the Street
+View frame renders a real `<iframe>` whose `src` carries that heading, with
+the credit line reading `Imagery: Google Street View · Captured 2018-08`; a
+genuinely uncovered coordinate (checked directly via the same client
+function against an interior-forest point) correctly returns
+`covered: false` and the carousel falls to the illustration with the
+"Illustration" tag, not "Street View".
 
-**What is actually deployed:** a Supabase Edge Function,
+**Retired:** `buildImageUrl`/`clampDimension`/`MAX_DIMENSION` and the whole
+image-streaming path in `m6-streetview/index.ts`, `PlaceImage.jsx`'s former
+Street View tier, and the `X-Streetview-Panorama`/`X-Streetview-Heading`
+diagnostic headers from the static version - none of it is reachable from any
+caller after this change. `GOOGLE_PLACES_SERVER_KEY` now only ever makes the
+free metadata call for this feature; the billed Street View Static image
+request this module used to make does not happen anywhere, and Maps Embed
+API's own pricing is documented as no-charge
+(`docs/GOOGLE-MAPS-SETUP.md`) - so this switch removed a real cost line
+instead of adding one.
+
+<details>
+<summary>Superseded: the static-image proxy this replaced (kept for history)</summary>
+
+The first working version proxied the image itself through
 `supabase/functions/m6-streetview`, holding `GOOGLE_PLACES_SERVER_KEY`
-server-side - the same secret `m6-ingest` already uses, so no new credential
-was provisioned anywhere. The function runs the metadata-first check itself,
-then streams the image straight through with a 7-day `Cache-Control`. A place
-with no coverage gets a plain `404`.
-
-`src/business-logic/discovery/StreetView.js` builds the proxy's URL -
-`{VITE_SUPABASE_URL}/functions/v1/m6-streetview?lat=&lng=&w=&h=` - and nothing
-else; there is no Google key anywhere in the browser bundle for this feature.
-`PlaceImage.jsx` renders it as a plain `<img loading="lazy" onError=...>`,
-identical in shape to the Place Photos tier above it - no client-side
-metadata pre-check and no `IntersectionObserver` needed, because the Edge
-Function does its own coverage check inside the one request the `<img>` tag
-already makes.
-
-Deployed with `--no-verify-jwt`: this only ever returns a coordinate's public
-Street View imagery or a 404, information `/discover` already shows an
-anonymous visitor (D017/D018), so no Supabase auth header needs to travel with
-every image request.
-
-**Verified live, 2026-08-17:** a known-covered KLCC coordinate returned `200`,
-`image/jpeg`, a real ~17KB photograph, with the cache header present; an
+server-side and streaming JPEG bytes back with a 7-day `Cache-Control`, so the
+browser rendered a plain `<img loading="lazy" onError=...>` with no Google key
+anywhere in the bundle. Verified live: a known-covered KLCC coordinate
+returned `200`/`image/jpeg`/~17KB with the cache header present; an
 interior-forest coordinate returned `404`; an out-of-range coordinate returned
-`400`. In the running app with a set of places forced to lack a stored photo,
-all four rendered cards resolved to real, decoded Street View images (600×360)
-through the proxy - confirmed by directly probing `Image.onload`, not just by
-the request succeeding.
+`400`.
 
-**Fixed the same day: unheaded requests pointed the camera at whatever the
-capture vehicle was facing, not at the place.** Reported directly - some
-frames showed an empty road with the destination out of shot, and a few
-returned imagery whose storefront signage named a different, nearby business
-entirely. Two changes:
+Two prior key strategies were considered and superseded before that version
+even shipped: a brand-new browser key restricted to Street View Static
+(dropped once it was noticed `GOOGLE_PLACES_SERVER_KEY` already carried that
+authorisation), and reusing Module 2's `VITE_GOOGLE_MAPS_PLACES_API_KEY` by
+agreement with Yee (dropped once the server-key proxy made any browser key
+for this purpose unnecessary).
 
-- `radius=50` on both the metadata and image request. Left unbounded, Google
-  can snap to a panorama on a neighbouring address in a dense shoplot strip -
-  close enough to answer "covered", far enough that the wrong building is in
-  frame. This is the more likely cause of a name mismatch than an outdated
-  photo: the panorama is probably current, just of somewhere else.
-- `heading`, computed server-side from the panorama's own returned location
-  toward the requested coordinate (`computeHeading` in `coverage.ts`, a
-  standard great-circle bearing). The panorama's location is read from the
-  metadata response, not assumed to be the requested coordinate - Street View
-  snaps to the nearest point it actually has imagery for, rarely the building
-  itself, and that gap is exactly why an unheaded request pointed wherever the
-  capture vehicle happened to be facing.
-
-`source=outdoor` added to both requests too, excluding indoor 360
-photospheres (mall interiors, museum floors) that are real coverage but not
-"what this place looks like from the street."
-
-Verified against real data, not just synthetic test coordinates: for a Penang
-coordinate, the panorama snapped to a point ~15m away and the computed heading
-(345°) correctly pointed back north-by-northwest toward the requested point -
-confirmed via `X-Streetview-Panorama` / `X-Streetview-Heading` diagnostic
-response headers the function now sets (not read by any client code; there
-for exactly this kind of live troubleshooting without redeploying).
-
-If a mismatch is still reported after this, `computeHeading`'s assumption -
-that the direction from the panorama toward the coordinate is also the
-direction that frames the place - can fail for a place set back from the road
-or up a driveway. The next lever is a smaller `radius`, not a different
-approach; dynamic/interactive Street View (an embedded panorama the visitor
-can look around in) was considered and deliberately deferred - it would need a
-different component (an iframe, not `<img>`) and gives up this module's
-"never show nothing, always our own designed fallback" guarantee, since an
-uncovered coordinate shows Google's own placeholder inside the embed rather
-than a 404 our code can catch.
+The static version was then fixed once for exactly the framing/mismatch
+complaint that later motivated the switch above: `radius=50`, `source=outdoor`,
+and a server-computed `heading` (via `computeHeading`, still in use today).
+That fix measurably worked - verified against real data, a heading computed
+from a live panorama location correctly pointed back at the request - but the
+static image remained a single frozen frame a viewer could not correct for
+themselves, which the interactive embed solves completely and the static
+image structurally cannot.
+</details>
 
 Superseded and no longer relevant to this module: any mention elsewhere of a
 `VITE_GOOGLE_STREETVIEW_API_KEY` browser variable, or of widening Module 2's

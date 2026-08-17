@@ -1,10 +1,9 @@
-// FR-6.15 Street View proxy inputs. Pure request parsing and URL building -
-// no network, so this needs no fetch mocking at all, unlike the client-side
-// version this replaced.
+// FR-6.15 Street View coverage check. Pure request parsing, URL building and
+// response interpretation - no network, so this needs no fetch mocking.
 import { describe, expect, it } from 'vitest';
 import {
-  buildImageUrl, buildMetadataUrl, clampDimension, computeHeading, extractPanoramaLocation,
-  hasCoverage, parseCoordinate, MAX_DIMENSION, RADIUS_METERS
+  buildMetadataUrl, computeHeading, extractCaptureDate, extractPanoramaLocation,
+  hasCoverage, parseCoordinate, RADIUS_METERS
 } from '../coverage.ts';
 
 describe('parseCoordinate', () => {
@@ -34,47 +33,33 @@ describe('parseCoordinate', () => {
   });
 });
 
-describe('clampDimension', () => {
-  it('uses the requested size when it is reasonable', () => {
-    expect(clampDimension('500', 600)).toBe(500);
-  });
-
-  it('falls back to the default rather than refusing the request', () => {
-    expect(clampDimension(null, 600)).toBe(600);
-    expect(clampDimension('not-a-number', 600)).toBe(600);
-    expect(clampDimension('-50', 600)).toBe(600);
-    expect(clampDimension('0', 600)).toBe(600);
-  });
-
-  it('clamps to the free-tier ceiling rather than requesting a size Google would reject', () => {
-    expect(clampDimension('4000', 600)).toBe(MAX_DIMENSION);
-  });
-});
-
-describe('buildMetadataUrl / buildImageUrl', () => {
+describe('buildMetadataUrl', () => {
   it('builds the free metadata request, radius-limited and outdoor-only', () => {
     expect(buildMetadataUrl(3.139, 101.6869, 'server-key')).toBe(
       `https://maps.googleapis.com/maps/api/streetview/metadata?location=3.139,101.6869&radius=${RADIUS_METERS}&source=outdoor&key=server-key`
     );
   });
 
-  it('builds the billed image request at the requested size, with the same radius/source guards', () => {
-    expect(buildImageUrl(3.139, 101.6869, 600, 400, 'server-key')).toBe(
-      `https://maps.googleapis.com/maps/api/streetview?location=3.139,101.6869&size=600x400&radius=${RADIUS_METERS}&source=outdoor&key=server-key`
-    );
-  });
-
-  it('carries a heading when one is given', () => {
-    expect(buildImageUrl(3.139, 101.6869, 600, 400, 'server-key', 271)).toContain('&heading=271');
-  });
-
-  it('omits heading entirely rather than defaulting to 0, which is a real direction', () => {
-    const url = buildImageUrl(3.139, 101.6869, 600, 400, 'server-key');
-    expect(url).not.toContain('heading');
-  });
-
   it('escapes the key rather than pasting it into the query raw', () => {
     expect(buildMetadataUrl(3.139, 101.6869, 'a b&c')).toContain('key=a%20b%26c');
+  });
+});
+
+describe('hasCoverage', () => {
+  it('is true only for an explicit "OK" status', () => {
+    expect(hasCoverage({ status: 'OK' })).toBe(true);
+  });
+
+  it("is false for Google's documented \"no coverage here\" status", () => {
+    expect(hasCoverage({ status: 'ZERO_RESULTS' })).toBe(false);
+  });
+
+  it('is false for a missing, malformed, or non-object body', () => {
+    expect(hasCoverage(null)).toBe(false);
+    expect(hasCoverage(undefined)).toBe(false);
+    expect(hasCoverage('OK')).toBe(false);
+    expect(hasCoverage({})).toBe(false);
+    expect(hasCoverage({ status: null })).toBe(false);
   });
 });
 
@@ -99,6 +84,23 @@ describe('extractPanoramaLocation', () => {
     expect(extractPanoramaLocation(null)).toBeNull();
     expect(extractPanoramaLocation(undefined)).toBeNull();
     expect(extractPanoramaLocation('OK')).toBeNull();
+  });
+});
+
+describe('extractCaptureDate', () => {
+  it('reads the capture date when present', () => {
+    expect(extractCaptureDate({ status: 'OK', date: '2019-08' })).toBe('2019-08');
+  });
+
+  it('returns null rather than an empty string when absent', () => {
+    expect(extractCaptureDate({ status: 'OK' })).toBeNull();
+    expect(extractCaptureDate({ status: 'OK', date: '' })).toBeNull();
+    expect(extractCaptureDate({ status: 'OK', date: '   ' })).toBeNull();
+  });
+
+  it('returns null for a missing or malformed body', () => {
+    expect(extractCaptureDate(null)).toBeNull();
+    expect(extractCaptureDate({ date: 42 })).toBeNull();
   });
 });
 
@@ -128,26 +130,6 @@ describe('computeHeading', () => {
   });
 
   it('defaults to north rather than throwing for identical coordinates', () => {
-    // A panorama that landed exactly on the requested point has no meaningful
-    // direction to turn toward it.
     expect(computeHeading(3.139, 101.6869, 3.139, 101.6869)).toBe(0);
-  });
-});
-
-describe('hasCoverage', () => {
-  it('is true only for an explicit "OK" status', () => {
-    expect(hasCoverage({ status: 'OK' })).toBe(true);
-  });
-
-  it("is false for Google's documented \"no coverage here\" status", () => {
-    expect(hasCoverage({ status: 'ZERO_RESULTS' })).toBe(false);
-  });
-
-  it('is false for a missing, malformed, or non-object body', () => {
-    expect(hasCoverage(null)).toBe(false);
-    expect(hasCoverage(undefined)).toBe(false);
-    expect(hasCoverage('OK')).toBe(false);
-    expect(hasCoverage({})).toBe(false);
-    expect(hasCoverage({ status: null })).toBe(false);
   });
 });

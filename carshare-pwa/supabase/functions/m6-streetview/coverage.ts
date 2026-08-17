@@ -1,25 +1,25 @@
-// ===== BUSINESS LOGIC (Street View proxy inputs) =====
+// ===== BUSINESS LOGIC (Street View coverage check) =====
 //
 // Extracted for the same reason classification.ts was: this Edge Function's
-// entry point imports `jsr:` specifiers Vitest cannot resolve, so anything with
-// a decision to get wrong needs to live somewhere importable. There is not much
-// decision logic here - mostly request parsing - but "not much" is exactly what
-// made classification.ts's original bug easy to skip testing, and it shipped
-// broken twice. Nothing here imports anything, so Deno bundles it unchanged.
-
-// Google's documented ceiling for the Street View Static free tier.
-export const MAX_DIMENSION = 640;
+// entry point imports `jsr:` specifiers Vitest cannot resolve, so anything
+// with a decision to get wrong needs to live somewhere importable. Nothing
+// here imports anything, so Deno bundles it unchanged.
+//
+// This function used to also serve the Street View image itself, proxying
+// bytes from Google's Static API. That is retired: the interactive embed
+// (Maps Embed API, rendered client-side with Module 2's existing
+// VITE_GOOGLE_MAPS_EMBED_API_KEY) needs no server-side proxying at all, so
+// the only job left here is the one thing that still genuinely needs
+// GOOGLE_PLACES_SERVER_KEY - the coverage check, which requires Street View
+// Static API authorisation the embed key does not and should not carry.
 
 // How far from the requested coordinate Google may snap to find a panorama.
 // Left unbounded, a dense shoplot strip can return imagery from a neighbouring
 // address - close enough to report coverage, far enough that the place in
-// frame is not the one asked for. Found live: several places returned imagery
-// whose storefront signage named a different business. 50m keeps the search to
-// "this building or its immediate frontage", not "somewhere on this street".
+// frame is not the one asked for.
 export const RADIUS_METERS = 50;
 
 const METADATA_URL = "https://maps.googleapis.com/maps/api/streetview/metadata";
-const IMAGE_URL = "https://maps.googleapis.com/maps/api/streetview";
 
 /**
  * A request coordinate, or `null` if it is missing, not a number, or outside
@@ -33,45 +33,12 @@ export function parseCoordinate(value: string | null, min: number, max: number):
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 }
 
-/**
- * A requested image dimension, clamped to what Google's free tier actually
- * serves. Never `null` - unlike coordinates, a bad or absent size is not a
- * reason to refuse the request, just a reason to fall back to a sane default.
- */
-export function clampDimension(value: string | null, fallback: number): number {
-  const n = Number(value);
-  const usable = Number.isFinite(n) && n > 0 ? n : fallback;
-  return Math.max(1, Math.min(MAX_DIMENSION, Math.round(usable)));
-}
-
-/** The free, unmetered metadata request. Always built and always called first
- * - the entire reason FR-6.15 specifies a metadata call before an image one.
- * `source=outdoor` excludes indoor 360 photospheres (shopping malls, museum
- * interiors), which are real Street View coverage but not "what this place
- * looks like from the street" - the thing this frame promises to show. */
+/** The free, unmetered metadata request. `source=outdoor` excludes indoor 360
+ * photospheres (shopping malls, museum interiors) - real Street View coverage,
+ * but not "what this place looks like from the street". */
 export function buildMetadataUrl(lat: number, lng: number, apiKey: string): string {
   return `${METADATA_URL}?location=${lat},${lng}&radius=${RADIUS_METERS}`
     + `&source=outdoor&key=${encodeURIComponent(apiKey)}`;
-}
-
-/**
- * The billed image request, only ever built after metadata confirms coverage.
- *
- * `heading` points the camera, in compass degrees, at whatever it is passed -
- * normally the bearing from the panorama's own location toward the requested
- * coordinate (see `computeHeading`), so the frame shows the place rather than
- * whichever direction the capture vehicle happened to be facing. Omitted
- * entirely rather than defaulted to 0: an unheaded request lets Google pick,
- * which is still better than a wrong guess when the panorama's own location
- * could not be determined.
- */
-export function buildImageUrl(
-  lat: number, lng: number, width: number, height: number, apiKey: string,
-  heading?: number,
-): string {
-  const headingParam = Number.isFinite(heading) ? `&heading=${heading}` : "";
-  return `${IMAGE_URL}?location=${lat},${lng}&size=${width}x${height}`
-    + `&radius=${RADIUS_METERS}&source=outdoor${headingParam}&key=${encodeURIComponent(apiKey)}`;
 }
 
 /** Google's metadata response uses `"status": "OK"` for genuine coverage and
@@ -92,8 +59,7 @@ export function hasCoverage(metadataBody: unknown): boolean {
  * has imagery for, which is usually a few metres into the road rather than on
  * top of the building itself, and that gap is exactly what makes an unheaded
  * request point wherever the capture vehicle was facing rather than at the
- * place. `null` when the response carries no usable location, which is the
- * signal to skip heading rather than compute one from garbage.
+ * place. `null` when the response carries no usable location.
  */
 export function extractPanoramaLocation(
   metadataBody: unknown,
@@ -107,18 +73,29 @@ export function extractPanoramaLocation(
 }
 
 /**
+ * Street View's own capture date from a metadata response, e.g. `"2019-08"`.
+ * Not every panorama carries one - Google does not document it as guaranteed
+ * - so `null` means "unknown", not "very old". Surfaced to the viewer rather
+ * than judged here: a hard age cutoff would silently reject imagery for
+ * reasons a caller cannot see, and "how old is too old" is a call this
+ * function is not in a position to make on someone else's behalf.
+ */
+export function extractCaptureDate(metadataBody: unknown): string | null {
+  if (!metadataBody || typeof metadataBody !== "object") return null;
+  const date = (metadataBody as { date?: unknown }).date;
+  return typeof date === "string" && date.trim() ? date.trim() : null;
+}
+
+/**
  * The compass bearing (0-360, 0 = north) from one coordinate to another, by
  * the standard great-circle initial-bearing formula. Used to turn the camera
  * from where Street View actually found a panorama toward the place that was
  * asked for, rather than leaving it facing whichever way the capture vehicle
- * was pointed - usually straight down the road, which is why an unheaded
- * request often shows an empty street with the destination out of frame or
- * behind the camera.
+ * was pointed.
  *
  * Degenerate case: identical coordinates resolve to 0 (north) rather than
  * throwing - a panorama landing exactly on the requested point has no
- * meaningful direction to turn toward it, and "look north" is as reasonable a
- * default as any other.
+ * meaningful direction to turn toward it.
  */
 export function computeHeading(
   fromLat: number, fromLng: number, toLat: number, toLng: number,

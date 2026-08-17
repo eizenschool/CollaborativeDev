@@ -277,6 +277,29 @@
 /* Held under the image while it loads, so the slot is never a bare white gap. */
 .dsc-photo { background: var(--teal-tint); }
 
+/* FR-6.15's interactive scene and its "checking coverage" placeholder. Both
+   need their own explicit display and dimensions - an iframe has no natural
+   fallback height the way a poster's own viewBox gives it one, and a bare
+   <div> during the coverage check would otherwise collapse to zero height,
+   the same failure this module already hit once with a plain <span>. */
+.dsc-streetview-embed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.dsc-streetview-checking {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--teal-tint);
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .dsc-photo-credit {
   position: absolute;
   right: 8px;

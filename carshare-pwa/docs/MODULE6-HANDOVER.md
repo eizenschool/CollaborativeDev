@@ -29,8 +29,8 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **594 tests / 37 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
-| Module 6's own | **407 tests / 21 files** |
+| Whole suite | **610 tests / 37 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **423 tests / 21 files** |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **109 recommendable places across six states** — Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19, Kedah 4, Negeri Sembilan 2 — with real photos and reviews, plus 6 rows retired and withheld. See §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
@@ -134,7 +134,7 @@ site in Penang and scores 0 on visitation headroom.
 | `DiscoveryDemoControls.js` | Weather override and month shortcuts for demonstrations. |
 | `localDate.js` | Today's date read from local `Date` getters, not `toISOString()`'s UTC one — see §10. |
 | `placePhotos.js` | Builds the live Places Photo URL from a stored reference; returns `null` for a fixture placeholder or unconfigured key. |
-| `StreetView.js` | FR-6.15. Builds the URL for `supabase/functions/m6-streetview` - the proxy that holds `GOOGLE_PLACES_SERVER_KEY` server-side and does the metadata-first check itself. No Google key anywhere in this file or the bundle. |
+| `StreetView.js` | FR-6.15. `checkStreetViewCoverage` (calls the `m6-streetview` coverage-check function) and `buildStreetViewEmbedUrl` (pure, builds the Maps Embed API iframe URL from Module 2's existing embed key). No Google key touches the server-side check; the embed key is the same browser-restricted one Module 2 already uses for directions previews. |
 | `PlaceDescription.js` | FR-6.8/6.9/6.10. Describes a place from phrases two or more of its reviewers used independently. Quotes nobody. |
 | `geo.js` | Haversine distance. |
 
@@ -233,20 +233,41 @@ FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.15
 |---|---|
 | 6.33 — notification dispatch | Module 3's notification pipeline; the registration and matching side is built |
 
-**6.15 — Street View moved out of this table on 2026-08-17, and finished the
-same day.** `supabase/functions/m6-streetview` is deployed with
-`--no-verify-jwt` and holds `GOOGLE_PLACES_SERVER_KEY` server-side - the same
-secret `m6-ingest` already uses, so nothing new was provisioned. The function
-does FR-6.15's metadata-first check itself and streams the image through with
-a 7-day cache header; a place with no coverage gets a plain 404, which
-`PlaceImage.jsx`'s existing `<img onError>` already treats as "fall to the
-next tier". No Google key of any kind sits in the browser bundle for this
-feature - a plainer outcome than either of the two approaches considered
-before it (a new browser key, then reusing Module 2's). See
-`docs/MODULE6-API-SETUP.md` §3.4 for what was verified live: a real image at a
-covered coordinate, 404 at an uncovered one, 400 on bad input, and four
-manufactured no-photo cards in the running app all resolving to real, decoded
-Street View images.
+**6.15 — Street View moved out of this table on 2026-08-17, and went through
+three real architectures the same day.** A static-image proxy shipped first,
+was fixed once for a real "wrong building / empty road" framing bug (radius
+limit + a server-computed camera heading), and was then replaced outright by
+an **interactive embed** once a single frozen frame proved not good enough -
+the user could not correct for bad framing themselves, only report it.
+
+What is live now: `supabase/functions/m6-streetview` holds
+`GOOGLE_PLACES_SERVER_KEY` and answers a JSON coverage check only
+(`{ covered, heading, capturedAt }`), never image bytes. The actual panorama
+renders client-side in an `<iframe>` via Maps Embed API's streetview mode,
+using Module 2's **existing** `VITE_GOOGLE_MAPS_EMBED_API_KEY` - no new
+console work of any kind, because "Street View" is not a separate product to
+find and enable, it is a mode within Maps Embed API, which does not have
+"street view" in its own name. That naming gap is almost certainly why it
+could not be found in Console by searching.
+
+Coverage is checked *before* the iframe is ever created, because an iframe
+has no `onError`: an uncovered coordinate still loads normally, showing
+**Google's own** placeholder inside the frame rather than anything this code
+could intercept. `StreetViewFrame.jsx` reports the real check result up to
+the carousel, which is what decides the "Street View" vs "Illustration" tag -
+not simply being asked to render the slot, which would have mislabelled a
+failed check as real imagery. The capture date Google reports for each
+panorama (e.g. `"2018-08"`) is now surfaced in the credit line rather than
+guessed at - the coordinate first reported as wrong genuinely had 2018
+imagery, confirming the report.
+
+One real bug caught only by live testing, not by the unit suite: the first
+deploy of the JSON check endpoint had no CORS header, so every browser
+`fetch()` to it failed silently and every card fell to the illustration -
+`<img>` tags are never subject to CORS, so the static-image version never hit
+this, and it only surfaced once the check moved to a JSON `fetch()` call. See
+`docs/MODULE6-API-SETUP.md` §3.4 for the full architecture history and what
+was verified live at each stage.
 
 UC6.7 (unmet demand) and UC6.14 (serve place data) are complete. UC6.8, UC6.9,
 UC6.12, UC6.13 are not.

@@ -20,7 +20,7 @@ import {
 import PlaceImage from './PlaceImage.jsx';
 import StreetViewFrame from './StreetViewFrame.jsx';
 import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
-import { hasStreetViewProxy } from '../../../business-logic/discovery/StreetView.js';
+import { hasStreetViewEmbedKey } from '../../../business-logic/discovery/StreetView.js';
 import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
 
@@ -60,27 +60,47 @@ function Stars({ rating }) {
  */
 function Carousel({ place }) {
   const [index, setIndex] = useState(0);
+  // The result StreetViewFrame's own coverage check actually produced - not
+  // assumed from being asked to render the frame. Being on the Street View
+  // slot and having real Street View imagery are different facts; the tag and
+  // credit below must follow the second one, or a failed coverage check would
+  // caption our own illustration as "Imagery: Google Street View".
+  const [streetViewResult, setStreetViewResult] = useState(null);
   const photoFrames = place.photoReferences?.length ? place.photoReferences : [];
   const hasCoordinate = Number.isFinite(place?.lat) && Number.isFinite(place?.lng);
-  const frames = hasCoordinate && hasStreetViewProxy()
+  const frames = hasCoordinate && hasStreetViewEmbedKey()
     ? [...photoFrames, STREET_VIEW_FRAME]
     : (photoFrames.length ? photoFrames : [null]);
   const current = frames[index];
   const isStreetViewFrame = current === STREET_VIEW_FRAME;
   const move = (step) => setIndex((i) => (i + step + frames.length) % frames.length);
-  // The tag would otherwise call a real photograph an illustration.
-  const isIllustration = !isStreetViewFrame && buildPlacePhotoUrl(current?.reference) === null;
+  const streetViewCovered = isStreetViewFrame && streetViewResult?.covered === true;
+  const streetViewFellBack = isStreetViewFrame
+    && streetViewResult !== null && streetViewResult.covered !== true;
+  // The tag would otherwise call a real photograph, or real Street View
+  // imagery that turned out uncovered, an illustration mislabelled the other
+  // way - or vice versa.
+  const isIllustration = streetViewFellBack
+    || (!isStreetViewFrame && buildPlacePhotoUrl(current?.reference) === null);
 
   return (
     <div className="dsc-carousel">
       <div className="dsc-carousel-frame">
         {isStreetViewFrame
-          ? <StreetViewFrame place={place} widthPx={1000} />
+          ? <StreetViewFrame place={place} onResult={setStreetViewResult} />
           : <PlaceImage place={place} variant={index} widthPx={1000} />}
-        {isStreetViewFrame && <span className="dsc-illustration-tag">Street View</span>}
+        {streetViewCovered && <span className="dsc-illustration-tag">Street View</span>}
         {isIllustration && <span className="dsc-illustration-tag">Illustration</span>}
-        {isStreetViewFrame && (
-          <span className="dsc-photo-credit">Imagery: Google Street View</span>
+        {streetViewCovered && (
+          <span className="dsc-photo-credit">
+            Imagery: Google Street View
+            {/* Google does not guarantee every panorama carries a capture
+                date - unknown is shown as unknown, never assumed recent or
+                silently omitted, so a viewer can judge freshness themselves
+                rather than trust an illustration-free frame that might still
+                be years old. */}
+            {streetViewResult.capturedAt ? ` · Captured ${streetViewResult.capturedAt}` : ''}
+          </span>
         )}
         {!isStreetViewFrame && current?.attribution && (
           <span className="dsc-photo-credit">Photo: {current.attribution}</span>

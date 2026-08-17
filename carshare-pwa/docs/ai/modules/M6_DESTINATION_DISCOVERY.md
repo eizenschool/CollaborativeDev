@@ -104,10 +104,12 @@ manually, not on a cron - UC6.8/UC6.9's automation), notification dispatch
 Modules 2 and 4 (FR-6.35 — its shared contract is accepted, but the form
 wiring remains).
 
-FR-6.15 Street View is done and deployed. `supabase/functions/m6-streetview`
-proxies imagery using the already-authorised `GOOGLE_PLACES_SERVER_KEY` -
-`StreetView.js` builds the proxy's URL and `PlaceImage.jsx` renders it as an
-ordinary `<img>`, no browser key involved at all. See
+FR-6.15 Street View is done and deployed as an **interactive embed**, not a
+static image. `supabase/functions/m6-streetview` checks coverage only (JSON,
+using `GOOGLE_PLACES_SERVER_KEY`); the panorama itself renders client-side via
+Maps Embed API's streetview mode, using Module 2's existing
+`VITE_GOOGLE_MAPS_EMBED_API_KEY` - no new console work was needed, since
+Street View is a mode of Maps Embed API rather than a separate product. See
 `docs/MODULE6-API-SETUP.md` §3.4.
 
 The accepted FR-6.35 handoff shape is defined in

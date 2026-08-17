@@ -1,40 +1,49 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
-  buildImageUrl, buildMetadataUrl, clampDimension, computeHeading, extractPanoramaLocation,
+  buildMetadataUrl, computeHeading, extractCaptureDate, extractPanoramaLocation,
   hasCoverage, parseCoordinate,
 } from "./coverage.ts";
 
-// FR-6.15 Street View proxy. Serves imagery for a coordinate using
-// GOOGLE_PLACES_SERVER_KEY, the same Supabase secret m6-ingest holds, so the
-// credential never reaches the browser - the whole reason this key carries no
-// VITE_ prefix (docs/MODULE6-API-SETUP.md §2). A browser Street View key is not
-// needed at all with this design: `<img src>` points here, not at Google.
+// FR-6.15 Street View coverage check. Answers whether a coordinate has Street
+// View imagery, which way to point the camera, and how old the capture is -
+// so the browser can decide whether to offer the interactive embed at all,
+// and how to frame it.
 //
-// Metadata-first, same as everywhere else FR-6.15 applies: the free, unmetered
-// check always runs before the billed image request. No coverage answers with
-// a plain 404, which is exactly the signal an `<img onError>` already reacts to
-// for every other image tier this module has (see PlaceImage.jsx) - so the
-// client needs no bespoke handling for "this place has no Street View".
+// This function no longer serves image bytes. It used to proxy the Street
+// View Static image directly, holding GOOGLE_PLACES_SERVER_KEY server-side so
+// the browser never saw a Google key at all. That is superseded: the
+// interactive embed (Maps Embed API) is rendered client-side with Module 2's
+// existing VITE_GOOGLE_MAPS_EMBED_API_KEY regardless of anything this
+// function does, so there is no image left to proxy. What genuinely still
+// needs the server key is the coverage check itself - it requires Street View
+// Static API authorisation, which the embed key does not carry and should not
+// be widened to carry just for this.
 //
-// Deployed with --no-verify-jwt. This only ever returns a coordinate's public
-// Street View imagery or a 404, information /discover already shows an
-// anonymous visitor (D017/D018's public-first browsing). Requiring a Supabase
-// auth header here would mean embedding the anon key in every <img src>, for a
-// caller that gains nothing from it.
+// Deployed with --no-verify-jwt. This only ever answers "is there public
+// Street View imagery here", the same class of information /discover already
+// shows an anonymous visitor (D017/D018's public-first browsing).
 
-const DEFAULT_WIDTH = 600;
-const DEFAULT_HEIGHT = 400;
-
-// A coordinate's Street View imagery does not change between two screens
-// opening seconds apart, and rarely changes at all - so a repeat view is
-// served from cache rather than spending a second request. Same mitigation
-// MODULE6-API-SETUP.md §3.3 already documents for Place Photos.
-const IMAGE_CACHE_CONTROL = "public, max-age=604800";
+// This is called with fetch() directly from the browser, unlike the image
+// proxy it replaced - a plain <img src> is never subject to CORS, but a JSON
+// response read by client JS is. Wildcarded rather than restricted to the
+// app's own origin: the response carries nothing but a coordinate's public
+// coverage/heading/date, the same class of information /discover already
+// shows an anonymous visitor, and no cookies or credentials travel with this
+// request for an origin restriction to protect.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+};
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...CORS_HEADERS,
+    },
   });
 }
 
@@ -42,7 +51,7 @@ function env(name: string): string {
   return Deno.env.get(name)?.trim() || "";
 }
 
-async function fetchMetadataStatus(url: string): Promise<unknown> {
+async function fetchMetadata(url: string): Promise<unknown> {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
@@ -62,50 +71,30 @@ async function handle(request: Request): Promise<Response> {
   if (lat === null || lng === null) {
     return json({ error: "lat and lng are required and must be valid coordinates" }, 400);
   }
-  const width = clampDimension(params.get("w"), DEFAULT_WIDTH);
-  const height = clampDimension(params.get("h"), DEFAULT_HEIGHT);
 
-  const metadataBody = await fetchMetadataStatus(buildMetadataUrl(lat, lng, apiKey));
+  const metadataBody = await fetchMetadata(buildMetadataUrl(lat, lng, apiKey));
   if (!hasCoverage(metadataBody)) {
-    // No coverage - not an error, just a "no". The caller's <img onError>
-    // already knows what to do with this.
-    return new Response(null, { status: 404 });
+    return json({ covered: false });
   }
 
-  // Point the camera at the place rather than wherever the panorama's default
-  // orientation happens to face. The bearing is computed from the panorama's
-  // own location - not the requested coordinate - because Street View snaps
-  // to the nearest point it has imagery for, which is rarely on top of the
-  // building itself.
   const panoramaLocation = extractPanoramaLocation(metadataBody);
   const heading = panoramaLocation
     ? computeHeading(panoramaLocation.lat, panoramaLocation.lng, lat, lng)
-    : undefined;
+    : null;
 
-  const imageResponse = await fetch(buildImageUrl(lat, lng, width, height, apiKey, heading));
-  if (!imageResponse.ok || !imageResponse.body) {
-    return new Response(null, { status: 502 });
-  }
-
-  return new Response(imageResponse.body, {
-    status: 200,
-    headers: {
-      "Content-Type": imageResponse.headers.get("Content-Type") || "image/jpeg",
-      "Cache-Control": IMAGE_CACHE_CONTROL,
-      // Diagnostic only, not read by any client code. A mismatch report can be
-      // checked from the browser's network tab - where the panorama actually
-      // was and which way the camera was told to look - without redeploying
-      // anything to add temporary logging.
-      ...(panoramaLocation ? {
-        "X-Streetview-Panorama": `${panoramaLocation.lat},${panoramaLocation.lng}`,
-        "X-Streetview-Heading": String(heading),
-      } : {}),
-    },
+  return json({
+    covered: true,
+    heading,
+    capturedAt: extractCaptureDate(metadataBody),
   });
 }
 
 export default {
   fetch: async (request: Request) => {
+    // A plain GET with no custom headers should not trigger a CORS preflight
+    // at all, but a browser is free to send one anyway - answered here rather
+    // than trusted not to happen.
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
     if (request.method !== "GET") return json({ error: "GET required" }, 405);
     try {
       return await handle(request);

@@ -1,65 +1,115 @@
-// FR-6.15 - the client side of the Street View proxy. Pure URL building, no
-// fetch mocking needed: the metadata-first coverage check now happens inside
-// the Supabase Edge Function (supabase/functions/m6-streetview), not here. No
-// Supabase project is configured under test, so every builder returns null
-// unless a test explicitly passes a base URL - the same "off by default, on
-// only when configured" guarantee placePhotos.test.js pins for Place Photos.
+// FR-6.15 - the client side of interactive Street View. checkStreetViewCoverage
+// is exercised with an injected fetch stub, in line with the project rule that
+// automated tests never make a real network call. No Supabase project or embed
+// key is configured under test, so every function is off by default - the same
+// guarantee placePhotos.test.js pins for Place Photos.
 
-import { describe, expect, it } from 'vitest';
-import { buildStreetViewProxyUrl, hasStreetViewProxy } from '../StreetView.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  buildStreetViewEmbedUrl, checkStreetViewCoverage, hasStreetViewEmbedKey
+} from '../StreetView.js';
 
 const SUPABASE = { baseUrl: 'https://pnetstmovctfwqcumodx.supabase.co' };
+const EMBED_KEY = { apiKey: 'embed-key' };
 const KL = { lat: 3.139, lng: 101.6869 };
 
-describe('hasStreetViewProxy', () => {
-  it('is false with no Supabase project configured, which is the fixture-mode state', () => {
-    expect(hasStreetViewProxy('')).toBe(false);
-    expect(hasStreetViewProxy(undefined)).toBe(false);
+describe('hasStreetViewEmbedKey', () => {
+  it('is false with no embed key configured', () => {
+    expect(hasStreetViewEmbedKey('')).toBe(false);
+    expect(hasStreetViewEmbedKey(undefined)).toBe(false);
   });
 
-  it('is true once a Supabase URL is supplied', () => {
-    expect(hasStreetViewProxy(SUPABASE.baseUrl)).toBe(true);
+  it('is true once an embed key is supplied', () => {
+    expect(hasStreetViewEmbedKey('embed-key')).toBe(true);
   });
 });
 
-describe('buildStreetViewProxyUrl', () => {
-  it('builds the proxy request at the default size', () => {
-    expect(buildStreetViewProxyUrl(KL.lat, KL.lng, SUPABASE)).toBe(
-      'https://pnetstmovctfwqcumodx.supabase.co/functions/v1/m6-streetview?lat=3.139&lng=101.6869&w=600&h=400'
+describe('buildStreetViewEmbedUrl', () => {
+  it('builds the embed request', () => {
+    expect(buildStreetViewEmbedUrl(KL.lat, KL.lng, EMBED_KEY)).toBe(
+      'https://www.google.com/maps/embed/v1/streetview?key=embed-key&location=3.139,101.6869'
     );
   });
 
-  it('carries a requested size', () => {
-    const url = buildStreetViewProxyUrl(KL.lat, KL.lng, { ...SUPABASE, width: 500, height: 300 });
-    expect(url).toContain('w=500&h=300');
+  it('carries a heading when one is given', () => {
+    const url = buildStreetViewEmbedUrl(KL.lat, KL.lng, { ...EMBED_KEY, heading: 271 });
+    expect(url).toContain('&heading=271');
   });
 
-  it('clamps to the free-tier ceiling rather than requesting a size Google would reject', () => {
-    const url = buildStreetViewProxyUrl(KL.lat, KL.lng, { ...SUPABASE, width: 4000, height: 4000 });
-    expect(url).toContain('w=640&h=640');
+  it('omits heading entirely rather than defaulting to 0, which is a real direction', () => {
+    expect(buildStreetViewEmbedUrl(KL.lat, KL.lng, EMBED_KEY)).not.toContain('heading');
   });
 
-  it('tolerates a trailing slash on the configured Supabase URL', () => {
-    const url = buildStreetViewProxyUrl(KL.lat, KL.lng, { baseUrl: `${SUPABASE.baseUrl}/` });
-    expect(url).toBe(
-      'https://pnetstmovctfwqcumodx.supabase.co/functions/v1/m6-streetview?lat=3.139&lng=101.6869&w=600&h=400'
-    );
-  });
-
-  it('returns null with no Supabase project configured, rather than a URL that would 404', () => {
-    expect(buildStreetViewProxyUrl(KL.lat, KL.lng, { baseUrl: '' })).toBeNull();
+  it('returns null with no embed key configured, rather than a URL that would fail', () => {
+    expect(buildStreetViewEmbedUrl(KL.lat, KL.lng, { apiKey: '' })).toBeNull();
   });
 
   it('returns null for coordinates that are not finite numbers', () => {
-    expect(buildStreetViewProxyUrl(undefined, KL.lng, SUPABASE)).toBeNull();
-    expect(buildStreetViewProxyUrl(KL.lat, null, SUPABASE)).toBeNull();
-    expect(buildStreetViewProxyUrl(NaN, KL.lng, SUPABASE)).toBeNull();
+    expect(buildStreetViewEmbedUrl(undefined, KL.lng, EMBED_KEY)).toBeNull();
+    expect(buildStreetViewEmbedUrl(KL.lat, null, EMBED_KEY)).toBeNull();
   });
 
-  it('never leaks a Google API key - there is nothing in this URL for one to leak from', () => {
-    // The regression this module exists to prevent: a Street View URL built
-    // in the browser bundle carrying a Google key. This one carries no `key=`
-    // parameter at all, because the key lives only in the Edge Function.
-    expect(buildStreetViewProxyUrl(KL.lat, KL.lng, SUPABASE)).not.toContain('key=');
+  it('escapes the key rather than pasting it into the query raw', () => {
+    expect(buildStreetViewEmbedUrl(KL.lat, KL.lng, { apiKey: 'a b&c' })).toContain('key=a%20b%26c');
+  });
+});
+
+describe('checkStreetViewCoverage', () => {
+  it('is not covered with no Supabase project configured, and never calls fetch', async () => {
+    const fetchImpl = vi.fn();
+    const result = await checkStreetViewCoverage(KL.lat, KL.lng, { baseUrl: '', fetchImpl });
+    expect(result).toEqual({ covered: false, heading: null, capturedAt: null });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('reports coverage, heading, and capture date from a real response shape', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ covered: true, heading: 271, capturedAt: '2023-05' })
+    });
+    const result = await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+    expect(result).toEqual({ covered: true, heading: 271, capturedAt: '2023-05' });
+  });
+
+  it('reports no coverage when the function says so', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ covered: false }) });
+    const result = await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+    expect(result.covered).toBe(false);
+  });
+
+  it('is not covered on an HTTP failure', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false });
+    const result = await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+    expect(result.covered).toBe(false);
+  });
+
+  it('is not covered rather than throwing when the network call itself fails', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error('offline'));
+    await expect(checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl }))
+      .resolves.toEqual({ covered: false, heading: null, capturedAt: null });
+  });
+
+  it('is not covered rather than throwing on a malformed response body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => { throw new SyntaxError('not json'); }
+    });
+    await expect(checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl }))
+      .resolves.toEqual({ covered: false, heading: null, capturedAt: null });
+  });
+
+  it('tolerates a heading or capturedAt of the wrong type rather than passing it through', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ covered: true, heading: 'north', capturedAt: 42 })
+    });
+    const result = await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+    expect(result).toEqual({ covered: true, heading: null, capturedAt: null });
+  });
+
+  it('requests the coordinate it was given', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ covered: false }) });
+    await checkStreetViewCoverage(KL.lat, KL.lng, { ...SUPABASE, fetchImpl });
+    expect(fetchImpl.mock.calls[0][0]).toContain(`lat=${KL.lat}&lng=${KL.lng}`);
   });
 });
