@@ -29,8 +29,8 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **614 tests / 37 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
-| Module 6's own | **427 tests / 21 files** |
+| Whole suite | **628 tests / 38 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **441 tests / 22 files** |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **109 recommendable places across six states** — Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19, Kedah 4, Negeri Sembilan 2 — with real photos and reviews, plus 6 rows retired and withheld. See §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
@@ -134,6 +134,7 @@ site in Penang and scores 0 on visitation headroom.
 | `DiscoveryDemoControls.js` | Weather override and month shortcuts for demonstrations. |
 | `localDate.js` | Today's date read from local `Date` getters, not `toISOString()`'s UTC one — see §10. |
 | `placePhotos.js` | Builds the live Places Photo URL from a stored reference; returns `null` for a fixture placeholder or unconfigured key. |
+| `mediaMode.js` | 2026-08-17. Device-level "load photos/Street View automatically, or only when asked" setting - `localStorage`, off by default, survives a reload. Not `DiscoveryDemoControls.js` (in-memory, deliberately reset every reload) and not `discoveryStore.js`'s per-user `preferences` (async, signed-in-user-scoped). `presentation/discover/useMediaMode.js` binds it into React via `useSyncExternalStore` so the `/discover` toggle can reach `PlaceImage` instances on a different route. |
 | `StreetView.js` | FR-6.15. `checkStreetViewCoverage` (calls the `m6-streetview` coverage-check function) and `buildStreetViewEmbedUrl` (pure, builds the Maps Embed API iframe URL from Module 2's existing embed key). No Google key touches the server-side check; the embed key is the same browser-restricted one Module 2 already uses for directions previews. |
 | `PlaceDescription.js` | FR-6.8/6.9/6.10. Describes a place from phrases two or more of its reviewers used independently. Quotes nobody. |
 | `geo.js` | Haversine distance. |
@@ -337,8 +338,9 @@ demand.
 | Retired withholding | Closed Tin Mining Museum appears in no list |
 | Reasons, not maths | Any detail page → sentences first, "See how this was scored" collapsed |
 | Prefill | Detail → "Find a ride" carries from/to/date into the search form |
-| Real photos (live mode) | Any card → a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
-| Street View fallback (FR-6.15) | Any card whose place has no stored photo → a real Street View frame via the `m6-streetview` proxy, instead of straight to the illustration. Every place in the current live catalogue has a photo, so this needs a place with `photoReferences` temporarily cleared to see live - verified this way on 2026-08-17, not yet naturally occurring in the demo data |
+| **Opt-in media — read this before presenting** | Photos and Street View are **off by default** since 2026-08-17 (`mediaMode.js`) — every card shows the illustration until the "Photos off" chip in `/discover`'s control row is clicked. Turn it on before showing anyone the screen, or click "Show photo" / "Load Street View" on the one card you actually want to demonstrate. The setting persists in `localStorage`, so it only needs doing once per browser. |
+| Real photos (live mode) | With the media toggle on → any card shows a real Google photo, not the generated illustration — falls back to the illustration if the reference is a fixture placeholder or the photo fails to load |
+| Street View, interactive (FR-6.15) | Detail page → the carousel's last frame, for any place with a coordinate, real photos or not. With the toggle on it loads automatically; otherwise press "Load Street View" on that frame. It is an interactive embed the visitor can look around in, not a static image — see `docs/MODULE6-API-SETUP.md` §3.4 for why that replaced the earlier approach |
 | Description from reviews | Any card → four sentences naming what this place actually is, e.g. KL Tower's "Observation Deck, Sky Box and views from the top". Each phrase was used by two or more reviewers independently; none is a quote |
 | Below-threshold places, category or all | `/discover` → any category button, or `All` → the toggle under the two main sections → cards below the recommendation thresholds |
 | Anonymous browsing (live mode) | Sign out → `/home` and `/discover` still show real recommendations, scored with neutral affinity |

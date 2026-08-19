@@ -6,6 +6,7 @@
 // Presentation degrades through the defined tiers: a place under ten reviews
 // shows a low-confidence indicator instead of a number (FR-6.16), and a place
 // with no fetchable photograph falls to the category illustration (FR-6.17).
+import { useState } from 'react';
 import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin } from '../icons.jsx';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
 import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
@@ -26,10 +27,14 @@ export function Rating({ rating, reviewCount }) {
 
 export default function DestinationCard({ candidate, onOpen }) {
   const place = candidate.place;
+  const [photoShown, setPhotoShown] = useState(false);
   if (!place) return null;
 
   const seatsLeft = candidate.rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
-  const credit = place.photoReferences?.[0]?.attribution;
+  // Gated on photoShown, not just on an attribution existing: with the media
+  // setting off, PlaceImage renders the illustration, and crediting a
+  // photographer under artwork is not what the attribution requirement means.
+  const credit = photoShown ? place.photoReferences?.[0]?.attribution : null;
   // Falls back to the stored description when there are too few reviews to
   // describe the place from them (FR-6.10).
   const described = buildPlaceDescription(place, { distanceKm: candidate.distanceKm });
@@ -41,7 +46,7 @@ export default function DestinationCard({ candidate, onOpen }) {
       onClick={() => onOpen(place.id)}
     >
       <span className="dsc-card-media">
-        <PlaceImage place={place} widthPx={PHOTO_WIDTH_CARD} />
+        <PlaceImage place={place} widthPx={PHOTO_WIDTH_CARD} onShownChange={setPhotoShown} />
         {credit && <span className="dsc-photo-credit">{credit}</span>}
       </span>
 

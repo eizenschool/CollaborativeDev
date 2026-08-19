@@ -322,6 +322,37 @@
   border-radius: 999px;
 }
 
+/* The per-slot "show photo" / "load Street View" affordance PlaceImage and
+   StreetViewFrame render over their own illustration when the global media
+   setting is off. A span with role="button", not a <button> - see
+   PlaceImage.jsx's header for why nesting a real button here would be
+   invalid inside a card-sized <button>. */
+.dsc-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+  width: fit-content;
+  height: fit-content;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(17, 24, 39, 0.72);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.dsc-reveal:hover { background: rgba(17, 24, 39, 0.85); }
+.dsc-reveal:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* The always-visible global toggle in .dsc-controls. Built on .dsc-filter's
+   chip so it reads as part of the same control row rather than a separate
+   settings widget. */
+.dsc-media-toggle { display: inline-flex; align-items: center; gap: 6px; }
+
 /* --- card --------------------------------------------------------------- */
 
 .dsc-card {

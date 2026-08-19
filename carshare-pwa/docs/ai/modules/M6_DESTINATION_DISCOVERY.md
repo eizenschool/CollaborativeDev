@@ -88,7 +88,7 @@ it runs entirely offline on a 22-place fixture catalogue: recommendations, the
 two-section presentation, destination detail with reviews and the score
 breakdown, first-use preferences, interest recording, notification
 registration, the host-facing unmet demand view, and the weather gate. This is
-still the default and what the automated suite always exercises - 490+ tests
+still the default and what the automated suite always exercises - 628 tests
 pass and make zero external calls, regardless of what `.env.local` contains.
 
 With `VITE_DISCOVERY_DATA_SOURCE=supabase` set, the same screens run against a
@@ -130,7 +130,8 @@ Business logic: `src/business-logic/discovery/`
 - `DestinationDiscoveryService.js` — orchestration
 - `localDate.js` — today's date from the local calendar, not `toISOString()`'s UTC one
 - `placePhotos.js` — builds the live Places Photo URL; null for a fixture reference
-- `StreetView.js` — FR-6.15, builds the URL for the `m6-streetview` Edge Function proxy; no Google key in this file
+- `mediaMode.js` — 2026-08-17, device-level opt-in setting gating photos and Street View; `localStorage`-backed, off by default
+- `StreetView.js` — FR-6.15, `checkStreetViewCoverage` (calls the `m6-streetview` coverage-check function) and `buildStreetViewEmbedUrl` (the Maps Embed API iframe URL); no Google key touches the server-side check
 - `PlaceDescription.js` — FR-6.8/6.9/6.10, the place described from phrases two or more of its own reviewers used independently
 - `geo.js`, `__tests__/`
 

@@ -12,11 +12,13 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
-import { IconAlertTriangle, IconStar, IconArrowRight } from '../icons.jsx';
+import { IconAlertTriangle, IconStar, IconArrowRight, IconEye, IconEyeOff } from '../icons.jsx';
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
 import { PHOTO_WIDTH_LARGE } from '../../../business-logic/discovery/placePhotos.js';
 import PlaceImage from './PlaceImage.jsx';
+import { useMediaEnabled } from './useMediaMode.js';
+import { toggleMediaMode } from '../../../business-logic/discovery/mediaMode.js';
 import AudienceSwitch from './AudienceSwitch.jsx';
 import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 
@@ -45,7 +47,7 @@ function Hero({ candidate, onOpen }) {
   return (
     <button type="button" className="dsc-hero" onClick={() => onOpen(place.id)}>
       <span className="dsc-hero-media">
-        <PlaceImage place={place} widthPx={PHOTO_WIDTH_LARGE} />
+        <PlaceImage key={place.id} place={place} widthPx={PHOTO_WIDTH_LARGE} revealable />
         <span className="dsc-hero-scrim" />
         <span className="dsc-hero-text">
           <span className="dsc-hero-eyebrow"><IconStar size={12} /> Top pick for you</span>
@@ -76,6 +78,7 @@ export default function DiscoverHub() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateAdjusted, setDateAdjusted] = useState(false);
   const [showAllWithheld, setShowAllWithheld] = useState(false);
+  const mediaEnabled = useMediaEnabled();
 
   const load = useCallback(async (date) => {
     setLoading(true);
@@ -224,6 +227,25 @@ export default function DiscoverHub() {
             </button>
           ))}
         </div>
+
+        {/* Off by default: every photo is a billable Places Photo request and
+            Street View reloads Google's embed bootstrap, so nothing loads
+            until this is on, or a specific slot is revealed one at a time
+            (the top pick, the detail carousel). This is SDG 12's responsible
+            consumption applied to this module's one real ongoing cost, not a
+            hidden dev switch - see docs/MODULE6-API-SETUP.md §3.3. */}
+        <button
+          type="button"
+          className={'dsc-filter dsc-media-toggle' + (mediaEnabled ? ' active' : '')}
+          onClick={() => toggleMediaMode()}
+          aria-pressed={mediaEnabled}
+          title={mediaEnabled
+            ? 'Photos and Street View load automatically. Turn off to browse without spending photo requests.'
+            : 'Photos and Street View stay hidden until you ask - each one is a billable Google request.'}
+        >
+          {mediaEnabled ? <IconEye size={14} /> : <IconEyeOff size={14} />}
+          {mediaEnabled ? 'Photos on' : 'Photos off'}
+        </button>
       </div>
 
       {loading && <p className="dsc-empty">Finding destinations…</p>}

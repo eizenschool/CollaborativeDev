@@ -123,9 +123,19 @@ X-Goog-Api-Key: {GOOGLE_PLACES_SERVER_KEY}
 `PHOTO_NAME` is the stored `photos[].name` from §3.2.
 
 This is the **only continuing cost in the module**. Image bytes may not be copied
-into project storage, so each viewing spends a request. Three mitigations, all
+into project storage, so each viewing spends a request. Four mitigations, all
 already reflected in the UI:
 
+- **Opt-in loading (2026-08-17).** Nothing loads until the reader asks for it.
+  `mediaMode.js` is a device-level setting, off by default and persisted in
+  `localStorage` (`useMediaMode.js` binds it into React via
+  `useSyncExternalStore`), gating every `PlaceImage` in the app - list cards,
+  the home rail, the hero, and the detail carousel all wait for it. The hero
+  and the detail carousel additionally offer a per-slot "Show photo" button
+  (`revealable` on `PlaceImage`), so one photo can be seen without turning
+  everything on. Added specifically because ordinary dev reloads against the
+  live catalogue were exhausting the free 1,000/month cap. Street View is
+  gated by the same setting for a different reason - see §3.4.
 - the list renders one photograph per card, not the whole carousel;
 - the carousel loads a frame only when it is shown (`loading="lazy"`);
 - Google's own response carries `Cache-Control: private, max-age=86400` -
@@ -137,6 +147,10 @@ already reflected in the UI:
   same photo requested at a different width (a card vs. the detail carousel)
   is a separate cache entry and a separate first-time cost, not shared.
 
+**Demo hazard:** the default is off. A screen shared without first turning
+photos on shows illustrations everywhere and looks broken, not merely
+unfinished - see the reminder in `docs/MODULE6-HANDOVER.md` §7's demo table.
+
 `authorAttributions` from §3.2 must be displayed wherever a photograph is shown
 (FR-6.14), along with the "Google Maps" attribution the policy requires.
 
@@ -146,6 +160,16 @@ already reflected in the UI:
 static image.** The static-image approach (below, kept for the history) was
 tried first, fixed once for a real framing/mismatch bug, and then replaced
 outright once a direct comparison of the two architectures was asked for.
+
+**Also gated by the same opt-in media setting as photos (§3.3), for a
+different reason.** Street View costs nothing billable - the metadata check
+is free and the embed is a documented no-charge Maps Embed API SKU - so this
+is not about quota. It is that remounting Google's embed bootstrap on every
+visit to the carousel's Street View frame is genuinely slow, which is the
+same perceived-performance complaint the opt-in setting already exists to let
+a reader control. `StreetViewFrame.jsx` defers the coverage check itself
+(`checkStreetViewCoverage`) behind `useMediaEnabled()`, with its own
+`revealable` "Load Street View" button mirroring the photo one.
 
 **What is deployed.** Two credentials, two purposes:
 
