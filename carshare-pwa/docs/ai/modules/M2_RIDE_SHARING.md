@@ -128,6 +128,16 @@ held under the private schema and the short-lived client quote is encrypted as
 well as signed.
 Requests, vehicles, reviews, and messaging remain authenticated/private.
 
+Module 4 continues to obtain candidate rides through
+`RideService.searchRides()`. Its optional compatibility criteria delegate to
+the safe public RPC authored in migration `036`, while existing callers retain
+the previous exact/proximity behaviour. Public cards may show only the selected
+vehicle category and Host spoken-language set when classified; vehicle
+make/model/plate, Place IDs, coordinates, and other private fields are never
+added to the public result. Migration `036` is not deployed pending review, so
+ordinary Search falls back to the deployed contracts and only an explicitly
+selected compatibility filter produces a deployment error.
+
 For FR-6.35, Module 2 consumes the optional `destination` and `date` query
 parameters on `/ride/publish` defined in `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
 It may display an incoming label, but only the normal confirmed-location input

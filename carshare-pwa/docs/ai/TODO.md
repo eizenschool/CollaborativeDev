@@ -19,9 +19,12 @@ maintain a catalogue of their own. Both are callable today against the fixture
 catalogue and need no API key, no Supabase deployment, and no work from Brayden
 first. Import from `src/business-logic/discovery/PlaceQueryService.js`.
 
-- **Module 4 (FR-4.1, FR-4.2)** — `queryPlacesNearPoint({ lat, lng, radiusKm, category })`
-  returns places within a radius, nearest first, for landmark-proximity filtering
-  and transfer-point selection.
+- **Module 4 (FR-4.1)** — now consumes
+  `getPlaceBySourcePlaceId(sourcePlaceId)` and
+  `queryPlacesNearPoint({ lat, lng, radiusKm, category })` for its 5/10/25 km
+  confirmed-destination search. Fixture and live matching are ready;
+  `035_m4_destination_proximity_search.sql` was deployed and verified on
+  2026-08-20.
 - **Module 2 (FR-2.15, FR-2.16)** — `queryPlacesAlongRoute({ origin, destination, corridorWidthKm, category })`
   returns places inside a corridor of the route, **ordered by position along it**
   rather than by distance, so a Host sees stops in the order they will pass them.
@@ -48,6 +51,18 @@ easier to change now than after you have built against it.
 - [ ] Add a persistent daily ingestion-budget ledger if the Google Maps quota page exposes only per-method/per-minute limits. Still not built; the only real budget control this session was manual per-call tracking during ingestion, not a database-enforced cap.
 - [x] Agree and document the shared FR-6.35 payload contract for Modules 6, 2, and 4. See `docs/ai/FR-6.35_PREFILL_CONTRACT.md` and D019.
 - [x] Wire FR-6.35 into Module 2's publish form and Module 4's Search URL. `buildPrefillUrl()` now targets canonical `/search` parameters for travellers and `/ride/publish` for Hosts without weakening Module 2's confirmed-location validation. D019 was amended to record the reload-safe URL contract.
+- [x] Deploy and verify hardened `034_m4_smart_search_favourites.sql` and
+  `035_m4_destination_proximity_search.sql`; authenticated favourite mutations,
+  unavailable cards, and anonymous proximity search were live-verified on
+  2026-08-20.
+- [ ] Review, then separately deploy and verify
+  `036_m4_vehicle_language_filters.sql`. Until deployment, ordinary exact and
+  proximity Search remain available; choosing vehicle or language reports the
+  deployment dependency honestly.
+- [ ] Review and deploy `037_m4_favourites_advisor_followup.sql`, then rerun the
+  performance advisor to clear the favourite ride foreign-key notice. The
+  unused-index notice may remain until normal favourite traffic exercises the
+  new table.
 
 ## BLOCKED / NEEDS TEAM CONFIRMATION
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.

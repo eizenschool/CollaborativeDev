@@ -11,6 +11,11 @@ import { ProfileService } from '../../business-logic/ProfileService.js';
 import { VehicleService } from '../../business-logic/VehicleService.js';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
 import {
+  SPOKEN_LANGUAGE_OPTIONS,
+  VEHICLE_TYPE_OPTIONS,
+  vehicleTypeLabel
+} from '../../business-logic/CompatibilityOptions.js';
+import {
   IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart,
   IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle,
   IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar,
@@ -284,6 +289,7 @@ function InfoSecurityPanel({ user, onSaved }) {
       <div className="grid-2">
         <div>
           <BasicInfoCard user={user} onSaved={onSaved} />
+          <LanguagePreferencesCard user={user} onSaved={onSaved} />
           <ChangePasswordCard userId={user.id} />
         </div>
         <div>
@@ -292,6 +298,61 @@ function InfoSecurityPanel({ user, onSaved }) {
         </div>
       </div>
     </>
+  );
+}
+
+function LanguagePreferencesCard({ user, onSaved }) {
+  const [languages, setLanguages] = useState(user?.spokenLanguages || []);
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setLanguages(user?.spokenLanguages || []), [user?.spokenLanguages]);
+
+  function toggleLanguage(value) {
+    setLanguages((current) => current.includes(value)
+      ? current.filter((language) => language !== value)
+      : [...current, value]);
+  }
+
+  async function handleSave(event) {
+    event.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    try {
+      const updated = await ProfileService.updateSpokenLanguages(user.id, languages);
+      onSaved(updated);
+      setStatus({ type: 'success', text: 'Spoken languages updated.' });
+    } catch (error) {
+      setStatus({ type: 'error', text: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <p className="card-title">Spoken languages</p>
+      <p className="card-subtitle">Travellers can use one preferred language when searching for a compatible Host</p>
+      {status && <div className={'alert ' + (status.type === 'error' ? 'alert-error' : 'alert-success')}>{status.text}</div>}
+      <form onSubmit={handleSave}>
+        <fieldset className="compatibility-option-grid">
+          <legend className="sr-only">Languages you speak</legend>
+          {SPOKEN_LANGUAGE_OPTIONS.map((option) => (
+            <label key={option.value}>
+              <input
+                type="checkbox"
+                checked={languages.includes(option.value)}
+                onChange={() => toggleLanguage(option.value)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </fieldset>
+        <button className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }} disabled={saving}>
+          <IconSave size={14} /> {saving ? 'Saving…' : 'Save Languages'}
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -533,7 +594,7 @@ function EmergencyContactCard({ user, onSaved }) {
 
 // ---------- MY VEHICLES ----------
 
-const emptyVehicleForm = { id: null, make: '', model: '', plate: '', driverLicenseNumber: '', colour: '', seats: 4, year: new Date().getFullYear() };
+const emptyVehicleForm = { id: null, make: '', model: '', vehicleType: '', plate: '', driverLicenseNumber: '', colour: '', seats: 4, year: new Date().getFullYear() };
 
 function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount }) {
   const [form, setForm] = useState(null);
@@ -602,6 +663,7 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
           <form onSubmit={handleSave}>
             <div className="field"><label>Make</label><div className="input-wrap"><input value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} required /></div></div>
             <div className="field"><label>Model</label><div className="input-wrap"><input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} required /></div></div>
+            <div className="field"><label>Vehicle category</label><div className="input-wrap"><select value={form.vehicleType || ''} onChange={(e) => setForm({ ...form, vehicleType: e.target.value })} required><option value="">Choose a category</option>{VEHICLE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></div>
             <div className="field"><label>Plate Number</label><div className="input-wrap"><input value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} required /></div></div>
             <div className="field">
               <label>Driver's License Number <span className="hint">confirms you're licensed to drive this vehicle</span></label>
@@ -636,7 +698,7 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
               <span className={v.active ? 'badge-active' : 'badge-inactive'}>{v.active ? 'Active' : 'Inactive'}</span>
             </div>
             <div className="vehicle-meta">{v.plate}</div>
-            <div className="vehicle-meta">{v.colour} · {v.seats} seats available · {v.year}</div>
+            <div className="vehicle-meta">{[vehicleTypeLabel(v.vehicleType), v.colour, `${v.seats} seats available`, v.year].filter(Boolean).join(' · ')}</div>
             <div className="vehicle-actions">
               <button className="action-edit" onClick={() => setForm(v)}><IconEdit size={12} /> Edit</button>
               <button className="action-toggle" onClick={() => toggleActive(v)}>

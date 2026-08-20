@@ -39,4 +39,15 @@ describe('Module 4 mock favourite persistence', () => {
   it('rejects adding an unavailable ride', async () => {
     await expect(mockDb.addFavouriteRide('u_demo_2', 'r_6')).rejects.toThrow('available published ride');
   });
+
+  it('persists Host languages and vehicle categories across mock reloads', async () => {
+    await mockDb.updateProfile('u_demo_1', { spokenLanguages: ['english', 'tamil'] });
+    await mockDb.upsertVehicle('u_demo_1', {
+      id: 'v_1', make: 'Toyota', model: 'Camry', vehicleType: 'sedan', plate: 'TEST 1',
+      driverLicenseNumber: 'D1234567', colour: 'White', seats: 4, year: 2021, active: true
+    });
+
+    expect((await mockDb.getCurrentUser()).spokenLanguages).toEqual(['english', 'tamil']);
+    expect((await mockDb.listVehicles('u_demo_1')).find((vehicle) => vehicle.id === 'v_1').vehicleType).toBe('sedan');
+  });
 });

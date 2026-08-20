@@ -1,5 +1,12 @@
 import { RideService } from './RideService.js';
 import { calculateCompositeHostImpact } from './HostImpactEngine.js';
+import { PlaceQueryService } from './discovery/PlaceQueryService.js';
+import {
+  SPOKEN_LANGUAGE_OPTIONS,
+  VEHICLE_TYPE_OPTIONS,
+  normalizeSpokenLanguage,
+  normalizeVehicleType
+} from './CompatibilityOptions.js';
 
 export const SMART_SEARCH_SORTS = Object.freeze({
   DEPARTURE: 'departure',
@@ -16,6 +23,10 @@ export const SEARCH_RESTRICTION_OPTIONS = Object.freeze([
   'Music OK',
   'Quiet ride'
 ]);
+
+export const SEARCH_PROXIMITY_RADII = Object.freeze([5, 10, 25]);
+export const SEARCH_VEHICLE_TYPE_OPTIONS = VEHICLE_TYPE_OPTIONS;
+export const SEARCH_LANGUAGE_OPTIONS = SPOKEN_LANGUAGE_OPTIONS;
 
 const VALID_SCALES = new Set(['', 'Urban', 'Intercity']);
 const VALID_SORTS = new Set(Object.values(SMART_SEARCH_SORTS));
@@ -48,17 +59,34 @@ function rideDepartureValue(ride) {
   return Number.POSITIVE_INFINITY;
 }
 
+function toPublicSearchRide(ride) {
+  const {
+    pickupLocation,
+    destinationLocation,
+    pickupInstructions,
+    waypoints,
+    ...safeRide
+  } = ride;
+  return safeRide;
+}
+
 export function normalizeSmartSearchCriteria(criteria = {}) {
   const tags = Array.isArray(criteria.tags)
     ? [...new Set(criteria.tags.map(text).filter(Boolean))]
     : [];
   const journeyScale = text(criteria.journeyScale || criteria.scale);
   const sort = text(criteria.sort) || SMART_SEARCH_SORTS.DEPARTURE;
+  const destinationPlaceId = text(criteria.destinationPlaceId);
+  const requestedProximity = numberOr(criteria.proximityKm, 10);
+  const proximityKm = destinationPlaceId
+    ? (SEARCH_PROXIMITY_RADII.includes(requestedProximity) ? requestedProximity : 10)
+    : 0;
 
   return {
     pickup: text(criteria.pickup || criteria.from),
     destination: text(criteria.destination || criteria.to),
-    destinationPlaceId: text(criteria.destinationPlaceId),
+    destinationPlaceId,
+    proximityKm,
     date: text(criteria.date),
     departAfter: text(criteria.departAfter),
     journeyScale: VALID_SCALES.has(journeyScale) ? journeyScale : '',
@@ -66,8 +94,28 @@ export function normalizeSmartSearchCriteria(criteria = {}) {
     tags,
     contribution: text(criteria.contribution),
     minRating: numberOr(criteria.minRating, 0),
+    vehicleType: normalizeVehicleType(criteria.vehicleType),
+    language: normalizeSpokenLanguage(criteria.language),
     sort: VALID_SORTS.has(sort) ? sort : SMART_SEARCH_SORTS.DEPARTURE
   };
+}
+
+export function applyManualDestinationText(criteria, destination) {
+  return {
+    ...criteria,
+    destination,
+    destinationPlaceId: '',
+    proximityKm: 0
+  };
+}
+
+export function expandProximityCriteria(criteria) {
+  const normalized = normalizeSmartSearchCriteria(criteria);
+  const currentIndex = SEARCH_PROXIMITY_RADII.indexOf(normalized.proximityKm);
+  const nextRadius = SEARCH_PROXIMITY_RADII[currentIndex + 1];
+  return normalizeSmartSearchCriteria(nextRadius
+    ? { ...normalized, proximityKm: nextRadius }
+    : { ...normalized, destinationPlaceId: '', proximityKm: 0 });
 }
 
 export function validateSmartSearchCriteria(criteria, { now = new Date() } = {}) {
@@ -99,7 +147,9 @@ export function filterAndSortRides(rides = [], criteria = {}) {
   return rides
     .filter((ride) => ride.status === 'Published' && Number(ride.seatsAvailable) > 0)
     .filter((ride) => !pickup || ride.pickup?.toLowerCase().includes(pickup))
-    .filter((ride) => !destination || ride.destination?.toLowerCase().includes(destination))
+    .filter((ride) => normalized.destinationPlaceId
+      || !destination
+      || ride.destination?.toLowerCase().includes(destination))
     .filter((ride) => !normalized.date || ride.date === normalized.date)
     .filter((ride) => !normalized.departAfter || (ride.time || '') >= normalized.departAfter)
     .filter((ride) => !normalized.journeyScale || ride.journeyScale === normalized.journeyScale)
@@ -107,6 +157,8 @@ export function filterAndSortRides(rides = [], criteria = {}) {
     .filter((ride) => normalized.tags.every((tag) => ride.restrictionTags?.includes(tag)))
     .filter((ride) => !contribution || (ride.contribution || '').toLowerCase().includes(contribution))
     .filter((ride) => normalized.minRating === 0 || Number(ride.host?.rating || 0) >= normalized.minRating)
+    .filter((ride) => !normalized.vehicleType || ride.vehicleType === normalized.vehicleType)
+    .filter((ride) => !normalized.language || ride.host?.spokenLanguages?.includes(normalized.language))
     .sort((left, right) => {
       if (normalized.sort === SMART_SEARCH_SORTS.HOST_IMPACT) {
         const scoreDifference = calculateCompositeHostImpact(right.host) - calculateCompositeHostImpact(left.host);
@@ -122,6 +174,7 @@ export function smartSearchCriteriaFromParams(input) {
     pickup: params.get('pickup'),
     destination: params.get('destination'),
     destinationPlaceId: params.get('destinationPlaceId'),
+    proximityKm: params.get('proximityKm'),
     date: params.get('date'),
     departAfter: params.get('departAfter'),
     journeyScale: params.get('scale'),
@@ -129,6 +182,8 @@ export function smartSearchCriteriaFromParams(input) {
     tags: params.getAll('tag'),
     contribution: params.get('contribution'),
     minRating: params.get('minRating'),
+    vehicleType: params.get('vehicleType'),
+    language: params.get('language'),
     sort: params.get('sort')
   });
 }
@@ -139,6 +194,7 @@ export function smartSearchCriteriaToParams(criteria) {
   if (normalized.pickup) params.set('pickup', normalized.pickup);
   if (normalized.destination) params.set('destination', normalized.destination);
   if (normalized.destinationPlaceId) params.set('destinationPlaceId', normalized.destinationPlaceId);
+  if (normalized.proximityKm) params.set('proximityKm', String(normalized.proximityKm));
   if (normalized.date) params.set('date', normalized.date);
   if (normalized.departAfter) params.set('departAfter', normalized.departAfter);
   if (normalized.journeyScale) params.set('scale', normalized.journeyScale);
@@ -146,6 +202,8 @@ export function smartSearchCriteriaToParams(criteria) {
   normalized.tags.forEach((tag) => params.append('tag', tag));
   if (normalized.contribution) params.set('contribution', normalized.contribution);
   if (normalized.minRating > 0) params.set('minRating', String(normalized.minRating));
+  if (normalized.vehicleType) params.set('vehicleType', normalized.vehicleType);
+  if (normalized.language) params.set('language', normalized.language);
   if (normalized.sort !== SMART_SEARCH_SORTS.DEPARTURE) params.set('sort', normalized.sort);
   return params;
 }
@@ -177,11 +235,47 @@ export function buildSimilarSearchCriteria(ride, { now = new Date() } = {}) {
 export const SmartSearchService = {
   async search(criteria = {}) {
     const normalized = validateSmartSearchCriteria(criteria);
+    let proximity = null;
+    let proximityCentre = null;
+
+    if (normalized.destinationPlaceId) {
+      proximityCentre = await PlaceQueryService.getPlaceBySourcePlaceId(normalized.destinationPlaceId);
+      if (!proximityCentre) {
+        throw new Error('This recommended destination is no longer available. Choose another place.');
+      }
+      proximity = {
+        destinationPlaceId: normalized.destinationPlaceId,
+        radiusKm: normalized.proximityKm
+      };
+    }
+
     const candidates = await RideService.searchRides({
       from: normalized.pickup,
-      to: normalized.destination,
-      date: normalized.date
+      to: proximity ? '' : normalized.destination,
+      date: normalized.date,
+      proximity,
+      compatibility: normalized.vehicleType || normalized.language
+        ? { vehicleType: normalized.vehicleType, language: normalized.language }
+        : null
     });
-    return filterAndSortRides(candidates, normalized);
+
+    if (!proximity || RideService.backend !== 'mock') {
+      return filterAndSortRides(candidates, normalized).map(toPublicSearchRide);
+    }
+
+    const nearbyPlaces = await PlaceQueryService.queryPlacesNearPoint({
+      lat: proximityCentre.lat,
+      lng: proximityCentre.lng,
+      radiusKm: proximity.radiusKm
+    });
+    const distanceByPlaceId = new Map(nearbyPlaces.map((place) => [place.sourcePlaceId, place.distanceKm]));
+    const nearbyCandidates = candidates
+      .filter((ride) => distanceByPlaceId.has(ride.destinationLocation?.placeId))
+      .map((ride) => ({
+        ...ride,
+        proximityDistanceKm: distanceByPlaceId.get(ride.destinationLocation.placeId)
+      }));
+
+    return filterAndSortRides(nearbyCandidates, normalized).map(toPublicSearchRide);
   }
 };

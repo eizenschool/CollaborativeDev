@@ -1,6 +1,20 @@
 // ===== BUSINESS LOGIC LAYER (VehicleService) =====
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
+import { normalizeVehicleType } from './CompatibilityOptions.js';
+
+function mapVehicleRow(row) {
+  if (!row) return row;
+  return { ...row, vehicleType: row.vehicle_type ?? row.vehicleType ?? '' };
+}
+
+function vehicleError(error) {
+  const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  if (error?.code === '42703' || /vehicle_type/i.test(detail)) {
+    return new Error('Vehicle categories are not available in this environment yet.');
+  }
+  return error;
+}
 
 // Malaysian JPJ driving licenses don't have one universal public format the
 // way MyKad IC numbers do, so this is a lenient input-capture check (an
@@ -27,6 +41,7 @@ export function buildVehicleRecord(userId, vehicle) {
     model: vehicle.model.trim(),
     plate: vehicle.plate.trim(),
     driver_license_number: vehicle.driverLicenseNumber?.trim() || '',
+    vehicle_type: normalizeVehicleType(vehicle.vehicleType),
     colour: vehicle.colour?.trim() || '',
     seats: vehicle.seats,
     year: vehicle.year,
@@ -51,13 +66,14 @@ export const VehicleService = {
         .eq('owner_id', userId)
         .order('created_at', { ascending: true });
       if (error) throw error;
-      return data;
+      return data.map(mapVehicleRow);
     }
     return mockDb.listVehicles(userId);
   },
 
   async saveVehicle(userId, vehicle) {
     validateVehicle(vehicle);
+    if (!normalizeVehicleType(vehicle.vehicleType)) throw new Error('Choose a vehicle category.');
     if (isSupabaseConfigured) {
       const record = buildVehicleRecord(userId, vehicle);
       if (vehicle.id) {
@@ -69,8 +85,8 @@ export const VehicleService = {
           .eq('owner_id', userId)
           .select()
           .single();
-        if (error) throw error;
-        return data;
+        if (error) throw vehicleError(error);
+        return mapVehicleRow(data);
       }
 
       const { id: _id, ...insertRecord } = record;
@@ -79,8 +95,8 @@ export const VehicleService = {
         .insert(insertRecord)
         .select()
         .single();
-      if (error) throw error;
-      return data;
+      if (error) throw vehicleError(error);
+      return mapVehicleRow(data);
     }
     return mockDb.upsertVehicle(userId, vehicle);
   },
@@ -111,7 +127,7 @@ export const VehicleService = {
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return mapVehicleRow(data);
     }
     return mockDb.setVehicleActive(userId, vehicleId, active);
   }

@@ -243,6 +243,14 @@ the on-screen keyboard, and device safe areas.
   where safe, and return focus to the trigger when it closes.
 - Use inline feedback for field or section problems; reserve global notices for
   app-wide or cross-screen outcomes.
+- Search's Destination Discovery chooser is a centred dialog on desktop and a
+  bottom sheet at the phone breakpoint. It loads recommendations only when
+  opened, traps keyboard focus, closes on Escape, returns focus to its trigger,
+  and keeps exact ride search usable when recommendation loading fails.
+- Search exposes at most one optional vehicle category and one optional Host
+  language in both the desktop filter panel and phone sheet. Cards show these
+  classifications only when known; unclassified legacy records remain visible
+  under Any and are never assigned a visual default.
 
 ## Required UI States
 

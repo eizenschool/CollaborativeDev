@@ -1,5 +1,9 @@
 import { calculateCompositeHostImpact, getBadgeForStats } from '../../../business-logic/HostImpactEngine.js';
 import {
+  spokenLanguageLabel,
+  vehicleTypeLabel
+} from '../../../business-logic/CompatibilityOptions.js';
+import {
   IconAlertTriangle,
   IconArrowRight,
   IconCalendar,
@@ -57,6 +61,7 @@ export function FavouriteButton({ saved, pending, onToggle, rideLabel }) {
 
 export function SearchRideCard({
   ride,
+  proximityLabel = '',
   saved = false,
   favouritePending = false,
   onToggleFavourite,
@@ -67,6 +72,8 @@ export function SearchRideCard({
   const routeLabel = `${ride.pickup} to ${ride.destination}`;
   const impact = Math.round(calculateCompositeHostImpact(ride.host) * 10) / 10;
   const tier = ride.host ? getBadgeForStats(ride.host).name : null;
+  const vehicleLabel = vehicleTypeLabel(ride.vehicleType);
+  const languageLabels = (ride.host?.spokenLanguages || []).map(spokenLanguageLabel).filter(Boolean);
 
   return (
     <article className={`search-ride-card${unavailable ? ' unavailable' : ''}`}>
@@ -100,6 +107,20 @@ export function SearchRideCard({
 
         {ride.estimatedArrivalAt && (
           <p className="search-arrival"><span>Estimated arrival</span><strong>{formatArrival(ride.estimatedArrivalAt)}</strong></p>
+        )}
+
+        {proximityLabel && Number.isFinite(Number(ride.proximityDistanceKm)) && (
+          <p className="search-proximity-match">
+            <IconMapPin size={14} aria-hidden="true" />
+            Destination {Number(ride.proximityDistanceKm).toFixed(1)} km from {proximityLabel}.
+          </p>
+        )}
+
+        {(vehicleLabel || languageLabels.length > 0) && (
+          <div className="search-compatibility-row" aria-label="Vehicle and spoken languages">
+            {vehicleLabel && <span>{vehicleLabel}</span>}
+            {languageLabels.map((language) => <span key={language}>{language}</span>)}
+          </div>
         )}
 
         {ride.restrictionTags?.length > 0 && (

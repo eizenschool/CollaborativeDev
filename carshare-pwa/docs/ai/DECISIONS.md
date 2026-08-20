@@ -219,12 +219,14 @@ requirement in the report.
 
 Module 6 produces shareable URL prefill links through
 `DestinationDiscoveryService.buildPrefillUrl()`. Module 4 consumes
-`/search?pickup&destination&date&destinationPlaceId`; Module 2 consumes
+`/search?pickup&destination&date&destinationPlaceId&proximityKm=10`; Module 2 consumes
 `/ride/publish?destination&date`. Query strings are intentional so the handoff
 survives reloads and bookmarks. `destinationPlaceId` is an opaque Module 6
-catalogue/source hint for search correlation only: a fixture key is never a
-confirmed Google Place ID and is never persisted to a Ride. Module 2 remains
-responsible for confirmed-location validation. Legacy `/ride?from&to&date`
+catalogue/source hint for private confirmed-destination correlation only: a
+fixture key is never a confirmed Ride location and is never persisted to a Ride
+by Search. Supported radii are 5/10/25 km; missing or invalid radii with a valid
+hint default to 10 km, while manual destination edits return to exact text mode.
+Module 2 remains responsible for confirmed-location validation. Legacy `/ride?from&to&date`
 search links are translated to Module 4's canonical `/search` parameters. The
 complete contract is `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
 
@@ -247,8 +249,26 @@ secrets. Database webhook delivery is asynchronous and may be retried, so the
 inbox is the source of truth and the push payload is a convenience alert. The
 inbox retains 30 days and loads its newest 50 items by default.
 
+## D021 — Module 4 Compatibility Classifications Are Optional and Public-Safe
+**Status:** Accepted; implementation authored, migration pending review
+
+Vehicle category belongs to each Module 1 vehicle; spoken languages belong to
+the Host profile and therefore apply to all that Host's rides. A traveller may
+select at most one category and one preferred language. Existing rows are not
+backfilled or guessed: unclassified rides remain in Any results but cannot
+match a specific compatibility choice until their owner updates them.
+
+The allowed values are stable, validated sets shared by owner-editing UI,
+mock persistence, URL normalization, and migration `036`. Module 4's safe card
+projection may expose only `vehicle_type` and `spoken_languages` in addition to
+its existing public fields. Vehicle make, model, plate, Ride Place IDs,
+coordinates, and private profile information remain excluded. The privileged
+database implementation lives in the non-exposed `private` schema and a narrow
+public invoker RPC is the only browser search entry point. Migration `036`
+remains undeployed until its separate review.
+
 ## Open Decisions
-- database schemas/RLS for Modules 4-5 (Module 6's `024` schema is deployed; live catalogue enablement remains pending);
+- database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `036` awaits review; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;

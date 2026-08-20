@@ -1,7 +1,10 @@
 -- Module 4 Smart Search & Favourites core persistence.
 -- Numbered after the repository migrations through 033 to keep deployment order unambiguous.
 -- Depends on the deployed Module 1 and Module 2 schema through 020.
--- This file is repository-authored but must be deployed separately.
+-- Hardened version deployed and verified on 2026-08-20.
+
+create schema if not exists private;
+revoke all on schema private from public;
 
 create table public.ride_favourites (
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -25,7 +28,9 @@ create policy "users delete their own ride favourites"
 
 revoke all on table public.ride_favourites from public, anon, authenticated;
 
-create function public.add_ride_favourite(p_ride_id uuid)
+-- Privileged helpers live outside the exposed Data API schema. The public RPCs
+-- below are SECURITY INVOKER wrappers with explicitly limited grants.
+create function private.add_ride_favourite(p_ride_id uuid)
 returns void
 language plpgsql
 security definer
@@ -56,18 +61,24 @@ begin
 end;
 $$;
 
-create function public.remove_ride_favourite(p_ride_id uuid)
+create function private.remove_ride_favourite(p_ride_id uuid)
 returns void
-language sql
+language plpgsql
 security definer
 set search_path = ''
 as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
   delete from public.ride_favourites
   where user_id = auth.uid()
     and ride_id = p_ride_id;
+end;
 $$;
 
-create function public.list_my_favourite_rides()
+create function private.list_my_favourite_rides()
 returns table (
   ride_id uuid,
   host_id uuid,
@@ -88,11 +99,17 @@ returns table (
   host_reputation_score integer,
   host_rating numeric
 )
-language sql
+language plpgsql
 stable
 security definer
 set search_path = ''
 as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  return query
   select
     r.id,
     r.host_id,
@@ -118,12 +135,67 @@ as $$
   left join public.host_impact_stats h on h.user_id = r.host_id
   where f.user_id = auth.uid()
   order by f.created_at desc;
+end;
 $$;
+
+create function public.add_ride_favourite(p_ride_id uuid)
+returns void
+language sql
+security invoker
+set search_path = ''
+as $$
+  select private.add_ride_favourite(p_ride_id);
+$$;
+
+create function public.remove_ride_favourite(p_ride_id uuid)
+returns void
+language sql
+security invoker
+set search_path = ''
+as $$
+  select private.remove_ride_favourite(p_ride_id);
+$$;
+
+create function public.list_my_favourite_rides()
+returns table (
+  ride_id uuid,
+  host_id uuid,
+  pickup text,
+  destination text,
+  departure_at timestamptz,
+  journey_scale text,
+  seats_total integer,
+  seats_available integer,
+  contribution text,
+  restriction_tags text[],
+  status text,
+  favourited_at timestamptz,
+  host_full_name text,
+  host_profile_photo_url text,
+  host_completed_trips integer,
+  host_co2_saved_kg numeric,
+  host_reputation_score integer,
+  host_rating numeric
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select * from private.list_my_favourite_rides();
+$$;
+
+revoke all on function private.add_ride_favourite(uuid) from public, anon, authenticated;
+revoke all on function private.remove_ride_favourite(uuid) from public, anon, authenticated;
+revoke all on function private.list_my_favourite_rides() from public, anon, authenticated;
+grant usage on schema private to authenticated;
+grant execute on function private.add_ride_favourite(uuid) to authenticated;
+grant execute on function private.remove_ride_favourite(uuid) to authenticated;
+grant execute on function private.list_my_favourite_rides() to authenticated;
 
 revoke all on function public.add_ride_favourite(uuid) from public, anon, authenticated;
 revoke all on function public.remove_ride_favourite(uuid) from public, anon, authenticated;
 revoke all on function public.list_my_favourite_rides() from public, anon, authenticated;
-
 grant execute on function public.add_ride_favourite(uuid) to authenticated;
 grant execute on function public.remove_ride_favourite(uuid) to authenticated;
 grant execute on function public.list_my_favourite_rides() to authenticated;

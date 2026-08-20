@@ -4,20 +4,26 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { FavouriteService } from '../../../business-logic/FavouriteService.js';
 import {
+  SEARCH_PROXIMITY_RADII,
+  SEARCH_LANGUAGE_OPTIONS,
   SEARCH_RESTRICTION_OPTIONS,
+  SEARCH_VEHICLE_TYPE_OPTIONS,
   SMART_SEARCH_SORTS,
   SmartSearchService,
+  expandProximityCriteria,
   normalizeSmartSearchCriteria,
   smartSearchCriteriaFromParams,
   smartSearchCriteriaToParams,
   validateSmartSearchCriteria
 } from '../../../business-logic/SmartSearchService.js';
-import { IconFilter, IconSearch, IconX } from '../icons.jsx';
+import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
+import { IconFilter, IconMapPin, IconSearch, IconStar, IconX } from '../icons.jsx';
 import SearchForm from './SearchForm.jsx';
 import { SearchRideCard } from './RideCards.jsx';
+import DestinationRecommendationPicker from './DestinationRecommendationPicker.jsx';
 import '../../styles/search.css';
 
-function FilterPanel({ criteria, onChange, onClear, mobile, onClose, onApply }) {
+function FilterPanel({ criteria, onChange, onClear, onChooseRecommendation, mobile, onClose, onApply }) {
   const patch = (values) => onChange({ ...criteria, ...values });
   const toggleTag = (tag) => patch({
     tags: criteria.tags.includes(tag)
@@ -43,6 +49,31 @@ function FilterPanel({ criteria, onChange, onClear, mobile, onClose, onApply }) 
         </div>
       </fieldset>
 
+      <fieldset>
+        <legend>Recommended destination radius</legend>
+        {criteria.destinationPlaceId ? (
+          <>
+            <div className="search-segmented-control search-radius-control">
+              {SEARCH_PROXIMITY_RADII.map((radius) => (
+                <button
+                  key={radius}
+                  type="button"
+                  aria-pressed={criteria.proximityKm === radius}
+                  onClick={() => patch({ proximityKm: radius })}
+                >
+                  {radius} km
+                </button>
+              ))}
+            </div>
+            <p className="search-filter-helper">Matches confirmed ride destinations near {criteria.destination}.</p>
+          </>
+        ) : (
+          <button type="button" className="search-choose-destination-filter" onClick={onChooseRecommendation}>
+            <IconStar size={15} aria-hidden="true" />Choose a recommended place
+          </button>
+        )}
+      </fieldset>
+
       <div className="search-filter-grid">
         <label>Minimum seats
           <select value={criteria.minSeats} onChange={(event) => patch({ minSeats: Number(event.target.value) })}>
@@ -55,6 +86,21 @@ function FilterPanel({ criteria, onChange, onClear, mobile, onClose, onApply }) 
             <option value="4">4.0+</option>
             <option value="4.5">4.5+</option>
             <option value="4.8">4.8+</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="search-filter-grid">
+        <label>Vehicle category
+          <select value={criteria.vehicleType} onChange={(event) => patch({ vehicleType: event.target.value })}>
+            <option value="">Any</option>
+            {SEARCH_VEHICLE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label>Preferred language
+          <select value={criteria.language} onChange={(event) => patch({ language: event.target.value })}>
+            <option value="">Any</option>
+            {SEARCH_LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
       </div>
@@ -102,7 +148,10 @@ export default function SearchModule() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const filterTriggerRef = useRef(null);
+  const recommendationButtonRef = useRef(null);
+  const recommendationTriggerRef = useRef(null);
 
   useEffect(() => setCriteria(appliedCriteria), [parameterKey]);
 
@@ -143,6 +192,39 @@ export default function SearchModule() {
     window.setTimeout(() => filterTriggerRef.current?.focus(), 0);
   }
 
+  function openRecommendations(event) {
+    const trigger = event?.currentTarget;
+    recommendationTriggerRef.current = trigger?.closest('.search-filter-sheet')
+      ? recommendationButtonRef.current
+      : trigger || recommendationButtonRef.current;
+    setFiltersOpen(false);
+    setRecommendationsOpen(true);
+  }
+
+  function closeRecommendations() {
+    setRecommendationsOpen(false);
+    window.setTimeout(() => recommendationTriggerRef.current?.focus(), 0);
+  }
+
+  function selectRecommendation(place) {
+    setCriteria((current) => normalizeSmartSearchCriteria({
+      ...current,
+      destination: place.name,
+      destinationPlaceId: place.sourcePlaceId,
+      proximityKm: 10
+    }));
+    DestinationDiscoveryService.recordInterest(user?.id, place.id, criteria.date).catch(() => {});
+    closeRecommendations();
+  }
+
+  function clearRecommendedDestination() {
+    setCriteria((current) => normalizeSmartSearchCriteria({
+      ...current,
+      destinationPlaceId: '',
+      proximityKm: 0
+    }));
+  }
+
   function submitSearch(event) {
     event?.preventDefault();
     setError('');
@@ -160,6 +242,7 @@ export default function SearchModule() {
       pickup: current.pickup,
       destination: current.destination,
       destinationPlaceId: current.destinationPlaceId,
+      proximityKm: current.proximityKm,
       date: current.date,
       departAfter: current.departAfter
     }));
@@ -191,7 +274,22 @@ export default function SearchModule() {
     }
   }
 
-  const activeFilterCount = [criteria.journeyScale, criteria.minSeats > 1, criteria.minRating > 0, criteria.contribution, ...criteria.tags].filter(Boolean).length;
+  function applyProximityAlternative() {
+    const normalized = expandProximityCriteria(appliedCriteria);
+    setCriteria(normalized);
+    setSearchParams(smartSearchCriteriaToParams(normalized));
+  }
+
+  const activeFilterCount = [
+    criteria.destinationPlaceId,
+    criteria.journeyScale,
+    criteria.minSeats > 1,
+    criteria.minRating > 0,
+    criteria.vehicleType,
+    criteria.language,
+    criteria.contribution,
+    ...criteria.tags
+  ].filter(Boolean).length;
 
   return (
     <main className="smart-search-page">
@@ -202,6 +300,23 @@ export default function SearchModule() {
 
       <section className="smart-search-box">
         <SearchForm criteria={criteria} onChange={setCriteria} onSubmit={submitSearch} loading={loading} />
+        <div className={`search-destination-tool${criteria.destinationPlaceId ? ' selected' : ''}`}>
+          <span className="search-destination-tool-icon" aria-hidden="true">
+            {criteria.destinationPlaceId ? <IconMapPin size={17} /> : <IconStar size={17} />}
+          </span>
+          <span>
+            <strong>{criteria.destinationPlaceId ? `Within ${criteria.proximityKm} km of ${criteria.destination}` : 'Not sure where to go?'}</strong>
+            <small>{criteria.destinationPlaceId ? 'Only confirmed ride destinations are matched.' : 'Use Destination Discovery recommendations in this search.'}</small>
+          </span>
+          <button ref={recommendationButtonRef} type="button" onClick={openRecommendations}>
+            {criteria.destinationPlaceId ? 'Change place' : 'Browse recommendations'}
+          </button>
+          {criteria.destinationPlaceId && (
+            <button type="button" className="search-destination-clear" onClick={clearRecommendedDestination}>
+              Use text only
+            </button>
+          )}
+        </div>
         <button ref={filterTriggerRef} className="search-mobile-filter-button" type="button" onClick={() => setFiltersOpen(true)}>
           <IconFilter size={17} aria-hidden="true" /> Filters {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
         </button>
@@ -212,7 +327,7 @@ export default function SearchModule() {
 
       <div className="smart-search-layout">
         <aside className="search-desktop-filters">
-          <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} />
+          <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} onChooseRecommendation={openRecommendations} />
           <button className="search-apply-desktop" type="button" onClick={submitSearch}>Apply filters</button>
         </aside>
 
@@ -223,7 +338,21 @@ export default function SearchModule() {
           </div>
 
           {!loading && !error && rides.length === 0 && (
-            <div className="search-empty-state"><IconSearch size={28} /><h3>No matching rides yet</h3><p>Try a broader route, another date, or fewer filters.</p><button type="button" onClick={() => { setCriteria(normalizeSmartSearchCriteria()); setSearchParams(new URLSearchParams()); }}>Start over</button></div>
+            <div className="search-empty-state">
+              <IconSearch size={28} />
+              <h3>{appliedCriteria.destinationPlaceId ? `No rides within ${appliedCriteria.proximityKm} km` : 'No matching rides yet'}</h3>
+              <p>{appliedCriteria.destinationPlaceId
+                ? `No available ride currently ends close enough to ${appliedCriteria.destination}.`
+                : 'Try a broader route, another date, or fewer filters.'}</p>
+              <div className="search-empty-actions">
+                {appliedCriteria.destinationPlaceId && (
+                  <button type="button" onClick={applyProximityAlternative}>
+                    {appliedCriteria.proximityKm < 25 ? 'Expand the radius' : 'Search destination text only'}
+                  </button>
+                )}
+                <button type="button" className="secondary" onClick={() => { setCriteria(normalizeSmartSearchCriteria()); setSearchParams(new URLSearchParams()); }}>Start over</button>
+              </div>
+            </div>
           )}
 
           <div className="search-result-grid">
@@ -231,6 +360,7 @@ export default function SearchModule() {
               <SearchRideCard
                 key={ride.id}
                 ride={ride}
+                proximityLabel={appliedCriteria.destinationPlaceId ? appliedCriteria.destination : ''}
                 saved={favouriteIds.has(ride.id)}
                 favouritePending={pendingRideId === ride.id}
                 onToggleFavourite={() => toggleFavourite(ride)}
@@ -245,8 +375,18 @@ export default function SearchModule() {
 
       {filtersOpen && (
         <div className="search-filter-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closeFilters()}>
-          <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} mobile onClose={closeFilters} onApply={submitSearch} />
+          <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} onChooseRecommendation={openRecommendations} mobile onClose={closeFilters} onApply={submitSearch} />
         </div>
+      )}
+
+      {recommendationsOpen && (
+        <DestinationRecommendationPicker
+          userId={user?.id}
+          travelDate={criteria.date}
+          onSelect={selectRecommendation}
+          onClose={closeRecommendations}
+          onBrowseDiscover={() => navigate(`/discover${criteria.date ? `?date=${encodeURIComponent(criteria.date)}` : ''}`)}
+        />
       )}
     </main>
   );

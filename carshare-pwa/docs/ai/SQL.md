@@ -12,11 +12,12 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-026 and 028 as tracked Supabase migrations, plus 023,
-  027, 029, and 030 applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-034
+Deployed SQL history: 001-026, 028, 034, and 035 as tracked Supabase migrations,
+  plus 023, 027, 029, 030, 031, and 032 applied through the Dashboard SQL Editor
+  (see below)
+Repository SQL history: 001-037
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
-  033 and 034 are local and await their documented deployment steps)
+  033, 036, and 037 are local and await their documented deployment steps)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -151,10 +152,36 @@ It was drafted as `025` before Module 3's `025`/`026` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
 nobody able to tell which one to run.
 
-`034_m4_smart_search_favourites.sql` is **written but not yet deployed** - it
-adds owner-scoped ride favourites and authenticated RPCs for idempotent
-add/remove plus a safe card projection that continues showing unavailable saved
-rides. Module 4 retains its mock fallback until this migration is deployed.
+`034_m4_smart_search_favourites.sql` was deployed through the shared Supabase
+migration tooling and live-verified on 2026-08-20. Privileged favourite logic
+lives in the non-exposed `private` schema; same-name `public` RPCs are narrow
+`SECURITY INVOKER` wrappers granted only to `authenticated`. The table uses
+owner RLS, add/remove is idempotent, and the safe list projection continues
+showing unavailable saved rides without private Ride fields.
+
+`035_m4_destination_proximity_search.sql` was deployed through the shared
+Supabase migration tooling and anonymously live-verified on 2026-08-20. Its
+public `SECURITY INVOKER` RPC resolves a public Module 6 destination hint through
+a non-exposed privileged helper, privately correlates nearby catalogue source
+IDs with `rides.destination_place_id`, and returns only card fields plus
+computed distance. It accepts only 5/10/25 km, filters active Hosts, Published
+rides, remaining seats, pickup, and Kuala Lumpur departure bounds, and exposes
+no Ride Place ID, coordinate, pickup instruction, waypoint, or route geometry.
+
+`036_m4_vehicle_language_filters.sql` is **written but not deployed** pending a
+separate review. It adds nullable, validated vehicle categories and validated
+Host language sets without guessing classifications for existing rows. Its
+safe public search RPC preserves exact/proximity filtering and may return only
+the category and language set alongside existing card fields. Privileged logic
+remains in `private`; the `public` entry point is an invoker wrapper. Existing
+Search contracts remain available before deployment, while explicitly selecting
+a compatibility filter reports the missing migration honestly.
+
+The post-deployment advisors reported no Module 4 security findings. Performance
+reported the expected unused-index notice for the new favourites table and one
+missing covering index on `ride_favourites.ride_id`. The latter is addressed by
+`037_m4_favourites_advisor_followup.sql`, authored but not deployed so the
+deployed `034` remains immutable. The next new migration starts at `038`.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -164,9 +191,9 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 
 ### Tables
 
-- `profiles`: authenticated-visible safe fields only (`full_name`, photo, status).
+- `profiles`: authenticated-visible safe fields only (`full_name`, photo, status); `spoken_languages` is authored in undeployed `036`.
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
-- `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner.
+- `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner; nullable `vehicle_type` is authored in undeployed `036`.
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, public pickup instructions, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation.
@@ -183,7 +210,8 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 - `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
-Module 4 (in `034`, not yet deployed):
+Module 4 (deployed `034`; deployed `035` adds no table; `036` changes the two
+classification columns above but is not deployed):
 
 - `ride_favourites`: one owner-scoped saved reference per user and ride. The
   reference survives ride lifecycle changes and is deleted with either parent.
@@ -230,7 +258,7 @@ Module 4 (in `034`, not yet deployed):
 - `conversation_members_user_active_idx`
 - `messages_conversation_created_idx`
 - `message_attachments_message_sort_idx`
-- `ride_favourites_user_created_idx` (in undeployed `034`)
+- `ride_favourites_user_created_idx` (in deployed `034`)
 
 Fresh empty-table indexes may appear as "unused" in the performance advisor until normal traffic exercises them.
 
@@ -258,7 +286,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
-- `034_m4_smart_search_favourites.sql` - not deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
+- `034_m4_smart_search_favourites.sql` - deployed and live-verified on 2026-08-20; Module 4 owner-scoped favourites, RLS, private privileged helpers, authenticated invoker wrappers, and safe unavailable-ride listing.
+- `035_m4_destination_proximity_search.sql` - deployed and anonymously live-verified on 2026-08-20; public invoker safe-card proximity RPC over recommendable Module 6 destinations and private confirmed Ride destination IDs, with 5/10/25 km validation and no private Ride-location return fields.
+- `036_m4_vehicle_language_filters.sql` - not deployed pending separate review; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
+- `037_m4_favourites_advisor_followup.sql` - not deployed; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

@@ -42,6 +42,7 @@ describe('Supabase integration contracts', () => {
     const appUser = mapProfileRow({
       id: 'user-a',
       full_name: 'Alya Tan',
+      spoken_languages: ['english', 'malay'],
       profile_photo_url: 'https://example.com/avatar.png',
       status: 'active',
       created_at: '2026-08-12T00:00:00Z',
@@ -54,6 +55,7 @@ describe('Supabase integration contracts', () => {
     expect(appUser.email).toBe('auth-source@example.com');
     expect(appUser.phone).toBe('+60123456789');
     expect(appUser.emergencyContact.name).toBe('Mira');
+    expect(appUser.spokenLanguages).toEqual(['english', 'malay']);
   });
 
   it('omits a null vehicle id so Postgres can generate its UUID default', () => {
@@ -61,6 +63,7 @@ describe('Supabase integration contracts', () => {
       id: null,
       make: ' Perodua ',
       model: ' Myvi ',
+      vehicleType: 'hatchback',
       plate: ' VAA 1234 ',
       driverLicenseNumber: ' D1234567 ',
       colour: ' Blue ',
@@ -76,7 +79,8 @@ describe('Supabase integration contracts', () => {
       owner_id: 'user-a',
       make: 'Perodua',
       plate: 'VAA 1234',
-      driver_license_number: 'D1234567'
+      driver_license_number: 'D1234567',
+      vehicle_type: 'hatchback'
     });
   });
 

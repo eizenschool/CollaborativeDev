@@ -12,6 +12,23 @@ import { CATEGORY } from '../constants.js';
 const KL = { lat: 3.1390, lng: 101.6869 };
 const PENANG = { lat: 5.4141, lng: 100.3288 };
 
+describe('getPlaceBySourcePlaceId - Module 4 public hint resolution', () => {
+  beforeEach(() => discoveryDb.__reset());
+
+  it('resolves a recommendable public source ID through the narrow place contract', async () => {
+    const place = await PlaceQueryService.getPlaceBySourcePlaceId(' fixture_jonker ');
+    expect(place).toMatchObject({ sourcePlaceId: 'fixture_jonker', name: 'Jonker Street' });
+    expect(place.lifecycleState).toBeUndefined();
+    expect(place.reviews).toBeUndefined();
+  });
+
+  it('does not resolve empty, unknown, or retired source IDs', async () => {
+    expect(await PlaceQueryService.getPlaceBySourcePlaceId('')).toBeNull();
+    expect(await PlaceQueryService.getPlaceBySourcePlaceId('missing')).toBeNull();
+    expect(await PlaceQueryService.getPlaceBySourcePlaceId('fixture_retired')).toBeNull();
+  });
+});
+
 describe('queryPlacesNearPoint - FR-6.36', () => {
   beforeEach(() => discoveryDb.__reset());
 

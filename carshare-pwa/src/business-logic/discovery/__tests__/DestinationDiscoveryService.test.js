@@ -409,6 +409,7 @@ describe('buildPrefillUrl - the link that actually carries the destination acros
     expect(params.get('pickup')).toBe('Kuala Lumpur');
     expect(params.get('date')).toBe('2026-08-15');
     expect(params.get('destinationPlaceId')).toBe('fixture_cameron');
+    expect(params.get('proximityKm')).toBe('10');
   });
 
   it('sends the destination to Module 2 publish as "destination"', () => {
@@ -431,6 +432,7 @@ describe('buildPrefillUrl - the link that actually carries the destination acros
 
     const params = new URLSearchParams(url.split('?')[1]);
     expect(params.get('destination')).toBe("Kellie's Castle & Gardens");
+    expect(params.get('proximityKm')).toBeNull();
   });
 
   // A bare path has to keep working, because both forms treat every parameter as
