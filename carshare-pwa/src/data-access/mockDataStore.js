@@ -239,6 +239,7 @@ function normalizeModule2State(db) {
     ride.routeDistanceMeters ??= null;
     ride.routeDurationSeconds ??= null;
     ride.routeStopoverSeconds ??= null;
+    ride.startedAt ??= null;
     ride.driverArrivedAt ??= null;
     ride.passengerConfirmationDueAt ??= null;
     ride.completedAt ??= null;
@@ -899,12 +900,27 @@ export const mockDb = {
     const db = load();
     const ride = db.rides[rideId];
     if (!ride || ride.hostId !== db.currentUserId) throw new Error('Ride not found or permission denied.');
-    if (!['Published', 'Matched'].includes(ride.status) || new Date(ride.departureAt) > new Date()) throw new Error('Only a ready Ride can start at departure.');
+    if (!['Published', 'Matched'].includes(ride.status)) throw new Error('Only a ready Ride can start.');
     const accepted = Object.values(db.rideRequests).filter((request) => request.rideId === rideId && request.status === 'Accepted');
-    if (!accepted.length) throw new Error('At least one accepted passenger is required before departure.');
-    if (accepted.some((request) => request.boardingStatus === 'Pending')) throw new Error('Check in or mark No-show for every accepted passenger before starting.');
+    if (!accepted.some((request) => request.boardingStatus === 'Checked In')) throw new Error('At least one checked-in passenger is required before starting.');
+    const startedAt = new Date();
+    const early = new Date(ride.departureAt) > startedAt;
+    if (early && accepted.some((request) => request.boardingStatus !== 'Checked In')) {
+      throw new Error('All accepted passengers must Check in before starting early.');
+    }
+    for (const request of accepted.filter((item) => item.boardingStatus === 'Pending')) {
+      request.boardingStatus = 'No-show';
+      request.noShowAt = startedAt.toISOString();
+      request.noShowMarkedBy = db.currentUserId;
+    }
+    const routeSeconds = Number(ride.routeDurationSeconds) + Number(ride.routeStopoverSeconds || 0);
+    if (Number.isFinite(routeSeconds) && routeSeconds > 0) {
+      ride.estimatedArrivalAt = new Date(startedAt.getTime() + routeSeconds * 1000).toISOString();
+      ride.scheduleBufferUntil = new Date(new Date(ride.estimatedArrivalAt).getTime() + 30 * 60 * 1000).toISOString();
+    }
     ride.status = 'In Transit';
-    ride.updatedAt = new Date().toISOString();
+    ride.startedAt = startedAt.toISOString();
+    ride.updatedAt = startedAt.toISOString();
     save(db);
     return enrichRide(db, ride);
   },

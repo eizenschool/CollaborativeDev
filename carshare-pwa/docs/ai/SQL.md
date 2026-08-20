@@ -12,12 +12,13 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-026 and 028 as tracked Supabase migrations, plus 023,
-  027, 029, and 030 applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-034
+Deployed SQL history: 001-026, 028, 033, and 034 as tracked Supabase
+  migrations, plus 023, 027, 029, 030, 031, and 032 applied through the
+  Dashboard SQL Editor (see below)
+Repository SQL history: 001-036
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
-  033 deployed as project_notifications on 2026-08-20; 034 remains local and
-  awaits its documented deployment steps)
+  033 deployed as project_notifications on 2026-08-20; 034 is deployed; 035
+  remains local; 036 was applied through the Dashboard SQL Editor)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -152,10 +153,11 @@ It was drafted as `025` before Module 3's `025`/`026` were deployed, and was
 renumbered on merge rather than kept: two files sharing a number would leave
 nobody able to tell which one to run.
 
-`034_m4_smart_search_favourites.sql` is **written but not yet deployed** - it
+`034_m4_smart_search_favourites.sql` is **deployed** as
+`m4_smart_search_favourites` - it
 adds owner-scoped ride favourites and authenticated RPCs for idempotent
 add/remove plus a safe card projection that continues showing unavailable saved
-rides. Module 4 retains its mock fallback until this migration is deployed.
+rides. The live migration list was rechecked on 2026-08-21.
 
 `035_m2_ride_usability_notifications.sql` is **written but not yet deployed**
 and must follow `033_project_notifications.sql`. It reuses
@@ -164,7 +166,19 @@ arrangement, boarding, arrival, and completion events. Its private minute-Cron
 producer adds deduplicated 24-hour, final-hour, and departure-due reminders;
 departure catch-up is limited to 30 minutes. It creates no public table or
 client RPC and does not change Push subscriptions, Edge Functions, VAPID,
-service workers, or webhooks. Deploy and verify shared `033` before `035`.
+service workers, or webhooks. Shared migration `033` is already deployed; `035`
+still requires its own deployment and verification.
+
+`036_m2_early_start_and_eta_refresh.sql` was applied through the Dashboard SQL
+Editor and is not present in the tracked migration list. It removes
+authenticated execution of the legacy direct `start_ride` path, adds the actual
+`rides.started_at`, and exposes two service-role-only helpers to the
+`m2-route-quote` Edge Function. Before the scheduled departure, every Accepted
+passenger must be Checked In; after departure, at least one must be Checked In
+and remaining unresolved passengers may be marked No-show. The matching
+`m2-route-quote` Edge Function is deployed as active version 9. It requests a
+fresh traffic-aware Google route, moves the Ride to In Transit, and persists the
+recalculated ETA.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -268,7 +282,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `020_m2_add_route_locations.sql` - deployed; nullable Place ID/device-coordinate route references, public pickup instructions, constraints, and updated create/update RPCs.
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
-- `034_m4_smart_search_favourites.sql` - not deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
+- `034_m4_smart_search_favourites.sql` - deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
@@ -286,6 +300,11 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `035_m2_ride_usability_notifications.sql` - written locally and pending
   deployment after `033`; private Module 2 notification triggers and
   deduplicated minute-Cron reminders only.
+- `036_m2_early_start_and_eta_refresh.sql` - applied through the Dashboard SQL
+  Editor and recorded here because it is absent from migration history;
+  all-checked-in early Start, departure-time No-show handling, actual start
+  timestamp, and guarded traffic-aware ETA refresh. The matching
+  `m2-route-quote` Function is active as version 9.
 
 ## Rules for New Database Work
 

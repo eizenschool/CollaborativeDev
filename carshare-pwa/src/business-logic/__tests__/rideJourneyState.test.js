@@ -19,16 +19,24 @@ describe('ride journey state', () => {
     expect(isTripModeEligible(state)).toBe(true);
   });
 
-  it('requires unresolved passengers to be handled before Driver start', () => {
-    const state = getRideJourneyState({ ride: ride(0), role: 'driver', requests: [accepted(), accepted('Checked In')], now: NOW });
-    expect(state.nextAction.id).toBe(RIDE_ACTION.RESOLVE_BOARDING);
-    expect(state.blockers).toContain('Unresolved accepted passengers');
+  it('allows an early Driver start after every accepted passenger checks in', () => {
+    const state = getRideJourneyState({ ride: ride(0.5), role: 'driver', requests: [accepted('Checked In'), accepted('Checked In')], now: NOW });
+    expect(state.nextAction.id).toBe(RIDE_ACTION.START_RIDE);
+    expect(state.nextAction.label).toBe('Start trip early');
+    expect(state.description).toContain('All 2 accepted passengers checked in');
   });
 
-  it('allows Driver start only when at least one passenger checked in and none are unresolved', () => {
-    const ready = getRideJourneyState({ ride: ride(0), role: 'driver', requests: [accepted('Checked In'), accepted('No-show')], now: NOW });
+  it('keeps early start unavailable until every accepted passenger checks in', () => {
+    const state = getRideJourneyState({ ride: ride(0.5), role: 'driver', requests: [accepted(), accepted('Checked In')], now: NOW });
+    expect(state.nextAction.id).toBe(RIDE_ACTION.RESOLVE_BOARDING);
+    expect(state.description).toContain('only after everyone checks in');
+  });
+
+  it('allows normal departure start with a checked-in passenger and marks unresolved passengers', () => {
+    const ready = getRideJourneyState({ ride: ride(0), role: 'driver', requests: [accepted(), accepted('Checked In')], now: NOW });
     const noneReady = getRideJourneyState({ ride: ride(0), role: 'driver', requests: [accepted('No-show')], now: NOW });
     expect(ready.nextAction.id).toBe(RIDE_ACTION.START_RIDE);
+    expect(ready.description).toContain('marks 1 passenger who did not check in as No-show');
     expect(noneReady.nextAction.id).toBe(RIDE_ACTION.RESOLVE_BOARDING);
     expect(noneReady.blockers).toContain('At least one checked-in passenger is required');
   });

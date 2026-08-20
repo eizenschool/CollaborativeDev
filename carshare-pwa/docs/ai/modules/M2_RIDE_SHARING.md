@@ -135,8 +135,15 @@ Accepted passengers enter `?view=trip` by default in the final hour or while In
 Transit, while `?view=details` remains explicitly available. Trip mode shows
 the route, countdown, pickup instructions, navigation, the existing Module 3
 ride-group chat, and exactly one primary lifecycle action. Driver readiness and
-No-show handling are inline; Start remains blocked until every Accepted
-passenger is resolved and at least one is Checked In. Visible Trip mode refreshes
+No-show handling are inline. Local migration
+`036_m2_early_start_and_eta_refresh.sql` and the matching `m2-route-quote`
+update allow Start before the scheduled departure only after every Accepted
+passenger is Checked In. After departure, at least one Checked In passenger is
+enough and remaining unresolved passengers are marked No-show. The operation
+records the actual `started_at` and replaces ETA with a guarded Google Routes
+traffic calculation anchored to the actual start. The client no longer calls
+the legacy direct `start_ride` RPC.
+Visible Trip mode refreshes
 Ride, Request, and lifecycle context every 15 seconds and immediately after
 focus or a local mutation without adding a new Realtime publication.
 
@@ -175,13 +182,21 @@ the Driver to reconfirm; no fixed-duration ETA fallback is allowed.
 Route-deviation automation, map-pin selection, and messaging notifications
 remain deferred.
 
+Migration `036` is applied through the Dashboard SQL Editor and the updated
+`m2-route-quote` is active as version 9. The SQL file remains the repository
+record because the Dashboard-applied change is absent from migration history.
+The frontend must still be rebuilt from the matching client code; deploying
+only the frontend before the Function leaves early Start unavailable, while
+deploying only the migration leaves no client path to the service-role-only
+traffic refresh.
+
 `035_m2_ride_usability_notifications.sql` is implemented locally and depends on
-the shared, still-pending `033_project_notifications.sql`. It adds only private
+the deployed `033_project_notifications.sql`. It adds only private
 Module 2 producers and a one-minute reminder function: request decisions,
 cancellations and arrangement changes, boarding events, 24-hour/final-hour/
 departure reminders, Driver arrival, and completion. Stable recipient-scoped
 dedupe keys allow retry/catch-up; departure alerts are bounded to 30 minutes.
 Notification text and payloads exclude Place IDs, coordinates, pickup
-instructions, and companion data. Do not deploy `035` before `033`; this work
+instructions, and companion data. This work
 does not change or deploy Web Push, VAPID, service workers, subscription APIs,
 Edge Functions, or Database Webhook configuration.

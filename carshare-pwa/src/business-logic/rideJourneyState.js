@@ -97,7 +97,9 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
     const pendingRequests = requests.filter((item) => item.status === 'Pending');
     const checkedIn = accepted.filter((item) => item.boardingStatus === 'Checked In');
     const unresolved = accepted.filter((item) => item.boardingStatus === 'Pending');
-    const readiness = { accepted: accepted.length, checkedIn: checkedIn.length, unresolved: unresolved.length, pendingRequests: pendingRequests.length };
+    const notCheckedIn = accepted.filter((item) => item.boardingStatus !== 'Checked In');
+    const allCheckedIn = accepted.length > 0 && notCheckedIn.length === 0;
+    const readiness = { accepted: accepted.length, checkedIn: checkedIn.length, unresolved: unresolved.length, notCheckedIn: notCheckedIn.length, pendingRequests: pendingRequests.length };
 
     if (status === 'In Transit') {
       if (lifecycleContext?.driverArrivedAt) {
@@ -117,23 +119,30 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
       });
     }
 
+    if (allCheckedIn && ['Published', 'Matched'].includes(status)) {
+      const early = !departureReached;
+      return result({
+        role, phase: 'departure', urgency: 'now', priority: 2,
+        title: early ? 'Early start is available' : 'Ready to start',
+        description: `All ${checkedIn.length} accepted passenger${checkedIn.length === 1 ? '' : 's'} checked in. Starting refreshes the traffic ETA.`,
+        nextAction: action(RIDE_ACTION.START_RIDE, early ? 'Start trip early' : 'Start ride', tripPath),
+        countdownAt: ride?.departureAt || null, meta: readiness
+      });
+    }
+
+    if (departureReached && checkedIn.length && ['Published', 'Matched'].includes(status)) {
+      return result({
+        role, phase: 'departure', urgency: 'now', priority: 2,
+        title: 'Ready to start',
+        description: unresolved.length
+          ? `${checkedIn.length} checked in. Starting now marks ${unresolved.length} passenger${unresolved.length === 1 ? '' : 's'} who did not check in as No-show and refreshes the traffic ETA.`
+          : `${checkedIn.length} passenger${checkedIn.length === 1 ? '' : 's'} checked in. Starting refreshes the traffic ETA.`,
+        nextAction: action(RIDE_ACTION.START_RIDE, 'Start ride', tripPath),
+        countdownAt: ride?.departureAt || null, meta: readiness
+      });
+    }
+
     if (departureReached && ['Published', 'Matched'].includes(status)) {
-      if (unresolved.length) {
-        return result({
-          role, phase: 'departure', urgency: 'now', priority: 2,
-          title: 'Resolve boarding before departure',
-          description: `${unresolved.length} accepted passenger${unresolved.length === 1 ? '' : 's'} still ${unresolved.length === 1 ? 'needs' : 'need'} Check-in or No-show resolution.`,
-          nextAction: action(RIDE_ACTION.RESOLVE_BOARDING, 'Resolve boarding', tripPath),
-          countdownAt: ride?.departureAt || null, blockers: ['Unresolved accepted passengers'], meta: readiness
-        });
-      }
-      if (checkedIn.length) {
-        return result({
-          role, phase: 'departure', urgency: 'now', priority: 2,
-          title: 'Ready to start', description: `${checkedIn.length} passenger${checkedIn.length === 1 ? '' : 's'} checked in.`,
-          nextAction: action(RIDE_ACTION.START_RIDE, 'Start ride', tripPath), countdownAt: ride?.departureAt || null, meta: readiness
-        });
-      }
       return result({
         role, phase: 'departure', urgency: 'now', priority: 2,
         title: 'No passenger is ready',
@@ -147,7 +156,7 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
       return result({
         role, phase: 'check_in', urgency: 'soon', priority: 3,
         title: 'Prepare for departure',
-        description: `${checkedIn.length} of ${accepted.length} accepted passenger${accepted.length === 1 ? '' : 's'} checked in.`,
+        description: `${checkedIn.length} of ${accepted.length} accepted passenger${accepted.length === 1 ? '' : 's'} checked in. The Driver can start early only after everyone checks in.`,
         nextAction: action(RIDE_ACTION.RESOLVE_BOARDING, 'View readiness', tripPath),
         countdownAt: ride?.departureAt || null, meta: readiness
       });
