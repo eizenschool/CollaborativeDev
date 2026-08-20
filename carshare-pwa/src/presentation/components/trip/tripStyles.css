@@ -251,3 +251,58 @@
   border-color: #16A34A;
   color: #15803D;
 }
+/* ---------- Milestone wall (AchievementGrid.jsx) ---------- */
+.m5-badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 12px;
+}
+
+.m5-badge {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 10px 12px;
+  text-align: center;
+  background: #FFFFFF;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.m5-badge.earned {
+  box-shadow: 0px 2px 10px rgba(22, 163, 74, 0.12);
+}
+.m5-badge.earned:hover {
+  transform: translateY(-2px);
+}
+
+.m5-badge-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* Progress toward a locked milestone. */
+.m5-badge-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.m5-badge-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+@media (max-width: 700px) {
+  .m5-badge-grid {
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 10px;
+  }
+}
+

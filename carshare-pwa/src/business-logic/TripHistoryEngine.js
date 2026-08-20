@@ -22,6 +22,7 @@ import { RideService } from './RideService.js';
 import { RideRequestService } from './RideRequestService.js';
 import { HostImpactEngine } from './HostImpactEngine.js';
 import { departureParts } from './rideDateTime.js';
+import { evaluateAchievements } from './TripAchievements.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
@@ -250,7 +251,9 @@ export const TripHistoryEngine = {
       ...totals,
       // ~21kg CO2 absorbed per tree per year, illustrative.
       treesEquivalent: Math.round(totals.totalCarbonSavedKg / 21),
-      monthlyTrend: buildMonthlyTrend(completed, now)
+      monthlyTrend: buildMonthlyTrend(completed, now),
+      // FR-5.7 - the same completed trips, expressed as milestones.
+      achievements: evaluateAchievements(completed)
     };
   },
 

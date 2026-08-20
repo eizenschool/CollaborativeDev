@@ -6,6 +6,7 @@ import { COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
+import AchievementGrid from './AchievementGrid.jsx';
 
 export default function ImpactDashboard({ userId }) {
   const isDesktop = useIsDesktop();
@@ -78,6 +79,12 @@ export default function ImpactDashboard({ userId }) {
         </h3>
         <TrendBars points={summary.monthlyTrend} />
       </div>
+
+      {summary.achievements && (
+        <div style={{ marginTop: 16 }}>
+          <AchievementGrid achievements={summary.achievements} />
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '14px 18px', background: COLORS.primaryTint, borderRadius: 12 }}>
         <span style={{ fontSize: 18 }}>🌱</span>
