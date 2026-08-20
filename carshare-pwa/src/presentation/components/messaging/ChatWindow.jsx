@@ -22,6 +22,7 @@ import {
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
 import MessageBubble from './MessageBubble.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
+import usePhotoCapture from './usePhotoCapture.js';
 import useVideoRecorder from './useVideoRecorder.js';
 import useVoiceRecorder from './useVoiceRecorder.js';
 
@@ -163,14 +164,18 @@ export default function ChatWindow({
   const [isPending, setIsPending] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isCaptureMenuOpen, setIsCaptureMenuOpen] = useState(false);
+  const [isVideoCameraPickerOpen, setIsVideoCameraPickerOpen] = useState(false);
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
   const messageInputRef = useRef(null);
   const messageBottomRef = useRef(null);
+  const photoPreviewRef = useRef(null);
   const videoPreviewRef = useRef(null);
   const captureButtonRef = useRef(null);
   const captureMenuRef = useRef(null);
   const captureFirstActionRef = useRef(null);
+  const videoCameraPickerRef = useRef(null);
+  const videoCameraFirstActionRef = useRef(null);
   const deleteCancelRef = useRef(null);
   const deleteModalRef = useRef(null);
   const deleteReturnFocusRef = useRef(null);
@@ -220,6 +225,18 @@ export default function ChatWindow({
   });
 
   const {
+    isStarting: isPhotoStarting,
+    isCapturing: isPhotoCapturing,
+    previewStream: photoPreviewStream,
+    startCapture: startPhotoCapture,
+    capturePhoto,
+    cancelCapture: cancelPhotoCapture,
+  } = usePhotoCapture({
+    onPhotoReady: (file) => addFiles([file]),
+    onError: (error) => setErrorMessage(error.message || 'Unable to take photo.'),
+  });
+
+  const {
     isStarting: isVideoStarting,
     isRecording: isVideoRecording,
     isProcessing: isVideoProcessing,
@@ -247,13 +264,15 @@ export default function ChatWindow({
     setEditingMessage(null);
     setErrorMessage('');
     cancelVoiceRecording();
+    cancelPhotoCapture();
     cancelVideoRecording();
     setIsCaptureMenuOpen(false);
+    setIsVideoCameraPickerOpen(false);
     clearDraft(conversationId);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (photoInputRef.current) photoInputRef.current.value = '';
     if (messageInputRef.current) messageInputRef.current.style.height = '';
-  }, [cancelVideoRecording, cancelVoiceRecording, clearDraft, conversationId, releaseMediaEntries, releaseVoiceRecording]);
+  }, [cancelPhotoCapture, cancelVideoRecording, cancelVoiceRecording, clearDraft, conversationId, releaseMediaEntries, releaseVoiceRecording]);
 
   useEffect(() => {
     lastMessageIdRef.current = null;
@@ -266,10 +285,22 @@ export default function ChatWindow({
     setComposerConversationId(conversationId);
     setErrorMessage('');
     setIsCaptureMenuOpen(false);
+    setIsVideoCameraPickerOpen(false);
     cancelVoiceRecording();
+    cancelPhotoCapture();
     cancelVideoRecording();
     refreshConversation(conversationId, { markRead: true });
-  }, [cancelVideoRecording, cancelVoiceRecording, conversationId, getDraft, refreshConversation]);
+  }, [cancelPhotoCapture, cancelVideoRecording, cancelVoiceRecording, conversationId, getDraft, refreshConversation]);
+
+  useEffect(() => {
+    const preview = photoPreviewRef.current;
+    if (!preview) return undefined;
+    preview.srcObject = photoPreviewStream;
+    if (photoPreviewStream) void preview.play().catch(() => {});
+    return () => {
+      preview.srcObject = null;
+    };
+  }, [photoPreviewStream]);
 
   useEffect(() => {
     if (composerConversationId !== conversationId) return;
@@ -331,6 +362,32 @@ export default function ChatWindow({
   }, [isCaptureMenuOpen]);
 
   useEffect(() => {
+    if (!isVideoCameraPickerOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeVideoCameraPicker();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(videoCameraPickerRef.current?.querySelectorAll('button:not(:disabled)') || [])];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    window.setTimeout(() => videoCameraFirstActionRef.current?.focus(), 0);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isVideoCameraPickerOpen]);
+
+  useEffect(() => {
     const preview = videoPreviewRef.current;
     if (!preview) return undefined;
     preview.srcObject = videoPreviewStream;
@@ -341,15 +398,16 @@ export default function ChatWindow({
   }, [videoPreviewStream]);
 
   useEffect(() => {
-    if (!isVideoStarting && !isVideoRecording && !isVideoProcessing) return undefined;
+    if (!isPhotoStarting && !isPhotoCapturing && !isVideoStarting && !isVideoRecording && !isVideoProcessing) return undefined;
     const handleVideoKeyDown = (event) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      cancelVideoRecording();
+      if (isPhotoStarting || isPhotoCapturing) cancelPhotoCapture();
+      else cancelVideoRecording();
     };
     document.addEventListener('keydown', handleVideoKeyDown);
     return () => document.removeEventListener('keydown', handleVideoKeyDown);
-  }, [cancelVideoRecording, isVideoProcessing, isVideoRecording, isVideoStarting]);
+  }, [cancelPhotoCapture, cancelVideoRecording, isPhotoCapturing, isPhotoStarting, isVideoProcessing, isVideoRecording, isVideoStarting]);
 
   useEffect(() => {
     if (highlightedMessageId) {
@@ -445,14 +503,52 @@ export default function ChatWindow({
     closeCaptureMenu(false);
   }
 
-  async function openVideoCapture() {
+  function closeVideoCameraPicker(restoreFocus = true) {
+    setIsVideoCameraPickerOpen(false);
+    if (restoreFocus) {
+      window.setTimeout(() => captureButtonRef.current?.focus(), 0);
+    }
+  }
+
+  async function openPhotoCapture() {
+    // A narrow desktop window still has a mouse/trackpad and should open the
+    // camera instead of falling back to the mobile file picker.
+    const isDesktopPointer = globalThis.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches;
+    if (!isDesktop && !isDesktopPointer) {
+      openCaptureInput(photoInputRef);
+      return;
+    }
     closeCaptureMenu(false);
     setErrorMessage('');
     try {
-      await startVideoRecording();
+      await startPhotoCapture();
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to open the camera.');
+    }
+  }
+
+  async function startVideoCapture(facingMode) {
+    setErrorMessage('');
+    try {
+      await startVideoRecording(facingMode);
     } catch (error) {
       setErrorMessage(error.message || 'Unable to start video recording.');
     }
+  }
+
+  function openVideoCapture() {
+    const isDesktopPointer = globalThis.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches;
+    closeCaptureMenu(false);
+    if (isDesktop || isDesktopPointer) {
+      void startVideoCapture('user');
+      return;
+    }
+    setIsVideoCameraPickerOpen(true);
+  }
+
+  function chooseVideoCamera(facingMode) {
+    closeVideoCameraPicker(false);
+    void startVideoCapture(facingMode);
   }
 
   async function beginVoiceRecording() {
@@ -496,7 +592,7 @@ export default function ChatWindow({
 
   async function submitMessage() {
     if (isPending || isVoiceStarting || isVoiceRecording || isVoiceProcessing
-        || isVideoStarting || isVideoRecording || isVideoProcessing) return;
+        || isPhotoStarting || isPhotoCapturing || isVideoStarting || isVideoRecording || isVideoProcessing) return;
     setIsPending(true);
     setErrorMessage('');
     try {
@@ -558,6 +654,7 @@ export default function ChatWindow({
   const hasNormalDraft = Boolean(text.trim() || mediaEntries.length || location);
   const hasDraft = Boolean(hasNormalDraft || voiceRecording);
   const isVoiceBusy = isVoiceStarting || isVoiceRecording || isVoiceProcessing;
+  const isPhotoBusy = isPhotoStarting || isPhotoCapturing || photoPreviewStream;
   const isVideoBusy = isVideoStarting || isVideoRecording || isVideoProcessing;
   const memberDescription = conversation.type === 'group' ? `${conversation.members.length} members` : 'Private ride chat';
 
@@ -711,6 +808,37 @@ export default function ChatWindow({
         </footer>
       )}
 
+      {isPhotoBusy && (
+        <div className="message-video-recorder-backdrop" role="presentation">
+          <section className="message-video-recorder" role="dialog" aria-modal="true" aria-labelledby="photo-capture-title">
+            <div className="message-video-recorder-header">
+              <div>
+                <strong id="photo-capture-title">Take photo</strong>
+                <span>{isPhotoStarting ? 'Opening camera…' : isPhotoCapturing ? 'Preparing photo…' : 'Frame your photo, then capture it'}</span>
+              </div>
+              {!isPhotoCapturing && (
+                <button type="button" onClick={cancelPhotoCapture} aria-label="Cancel taking photo"><IconX size={20} /></button>
+              )}
+            </div>
+            <div className="message-video-recorder-preview">
+              <video ref={photoPreviewRef} autoPlay muted playsInline aria-label="Live camera preview" />
+              {(isPhotoStarting || isPhotoCapturing) && (
+                <div className="message-video-recorder-status" role="status">
+                  {isPhotoStarting ? 'Requesting camera access…' : 'Saving photo…'}
+                </div>
+              )}
+            </div>
+            <div className="message-video-recorder-actions">
+              <button type="button" className="message-video-recorder-cancel" onClick={cancelPhotoCapture} disabled={isPhotoCapturing}>Cancel</button>
+              <button type="button" className="message-video-recorder-stop" onClick={() => { void capturePhoto(photoPreviewRef.current); }} disabled={isPhotoStarting || isPhotoCapturing || !photoPreviewStream}>
+                <IconCamera size={15} /> Take photo
+              </button>
+            </div>
+            <p>Photo is added to your draft after capture.</p>
+          </section>
+        </div>
+      )}
+
       {isVideoBusy && (
         <div className="message-video-recorder-backdrop" role="presentation">
           <section className="message-video-recorder" role="dialog" aria-modal="true" aria-labelledby="video-recorder-title">
@@ -754,13 +882,35 @@ export default function ChatWindow({
               <button type="button" onClick={closeCaptureMenu} aria-label="Close camera options"><IconX size={18} /></button>
             </div>
             <div className="message-capture-actions">
-              <button ref={captureFirstActionRef} type="button" onClick={() => openCaptureInput(photoInputRef)}>
+              <button ref={captureFirstActionRef} type="button" onClick={openPhotoCapture}>
                 <IconCamera size={21} />
                 <span><strong>Take photo</strong><small>Use the rear camera when available</small></span>
               </button>
-              <button type="button" onClick={openVideoCapture}>
+              <button type="button" onClick={() => openVideoCapture()}>
                 <IconVideo size={21} />
                 <span><strong>Record video</strong><small>Up to the existing 50 MB limit</small></span>
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isVideoCameraPickerOpen && (
+        <div className="message-options-backdrop message-capture-backdrop" role="presentation" onMouseDown={closeVideoCameraPicker}>
+          <section ref={videoCameraPickerRef} className="message-options-modal message-capture-modal" role="dialog" aria-modal="true" aria-labelledby="video-camera-title" onMouseDown={(event) => event.stopPropagation()}>
+            <span className="message-options-handle" />
+            <div className="message-options-header">
+              <div><span id="video-camera-title">Choose video camera</span><p>Select the camera before recording.</p></div>
+              <button type="button" onClick={closeVideoCameraPicker} aria-label="Close video camera choice"><IconX size={18} /></button>
+            </div>
+            <div className="message-capture-actions">
+              <button ref={videoCameraFirstActionRef} type="button" onClick={() => chooseVideoCamera('user')}>
+                <IconCamera size={21} />
+                <span><strong>Front camera</strong><small>Record a selfie video</small></span>
+              </button>
+              <button type="button" onClick={() => chooseVideoCamera('environment')}>
+                <IconVideo size={21} />
+                <span><strong>Main camera</strong><small>Record with the rear camera</small></span>
               </button>
             </div>
           </section>

@@ -103,9 +103,13 @@ function MediaAttachment({ attachment }) {
   }
   return (
     <div className="message-media-item message-media-video">
-      <video controls preload="metadata" onError={() => setLoadFailed(true)}>
-        <source src={attachment.url} type={attachment.mimeType} />
-      </video>
+      <video
+        controls
+        playsInline
+        preload="metadata"
+        src={attachment.url}
+        onError={() => setLoadFailed(true)}
+      />
       <a href={attachment.url} target="_blank" rel="noreferrer" download={attachment.fileName || undefined}>
         Open or download {attachment.fileName || 'video'}
       </a>

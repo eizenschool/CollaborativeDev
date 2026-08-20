@@ -32,8 +32,12 @@ export default defineConfig({
             // Supabase reads (GET) may be served stale-while-revalidate for offline resilience.
             // Supabase writes are POST/PATCH/DELETE and are never matched by this GET-only pattern,
             // so "read-only offline access" is enforced at the caching layer, not just by convention.
+            // Message-media URLs are private, signed, and expire after one hour.
+            // Caching them can replay an expired response as "unavailable".
             urlPattern: ({ url, request }) =>
-              url.hostname.endsWith('.supabase.co') && request.method === 'GET',
+              url.hostname.endsWith('.supabase.co')
+              && url.pathname.startsWith('/rest/v1/')
+              && request.method === 'GET',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'supabase-read-cache',

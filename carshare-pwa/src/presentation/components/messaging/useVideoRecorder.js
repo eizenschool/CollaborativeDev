@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_VIDEO_BYTES } from '../../../business-logic/MessagingService.js';
 
 const MIME_CANDIDATES = [
+  // MP4 (H.264/AAC) is the portable choice between current desktop browsers
+  // and Safari/iPhone. Use WebM only when the recorder cannot make MP4.
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4',
   'video/webm;codecs=vp8,opus',
   'video/webm',
-  'video/mp4',
 ];
 
 const EXTENSIONS = {
@@ -18,6 +21,14 @@ export function baseVideoMimeType(value) {
 
 export function selectVideoRecordingMimeType(MediaRecorderClass = globalThis.MediaRecorder) {
   return MIME_CANDIDATES.find((candidate) => MediaRecorderClass?.isTypeSupported?.(candidate)) || '';
+}
+
+export function videoCameraConstraints(facingMode = 'environment') {
+  return {
+    facingMode: { ideal: facingMode === 'user' ? 'user' : 'environment' },
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+  };
 }
 
 function cameraError(error) {
@@ -91,7 +102,7 @@ export default function useVideoRecorder({ onRecordingReady, onError }) {
     }
   }, [clearTimer, finishUi, stopTracks]);
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(async (facingMode = 'environment') => {
     if (isStarting || isRecording || isProcessing) return false;
     if (!globalThis.isSecureContext) {
       throw new Error('Video recording requires an HTTPS connection.');
@@ -116,11 +127,7 @@ export default function useVideoRecorder({ onRecordingReady, onError }) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+        video: videoCameraConstraints(facingMode),
         audio: true,
       });
       if (!mountedRef.current || generationRef.current !== generation) {
