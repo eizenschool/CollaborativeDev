@@ -1,22 +1,31 @@
 // ===== PRESENTATION LAYER (RideHub) =====
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
+import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import RideCard from './RideCard.jsx';
-import { IconSearch, IconMapPin, IconCalendar, IconPlus, IconFilter } from '../icons.jsx';
+import { IconSearch, IconMapPin, IconCalendar, IconPlus, IconRoute } from '../icons.jsx';
 import '../../styles/ride.css';
 
 export default function RideHub() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Optional search prefill, so arriving from Module 6's Destination Discovery
+  // (FR-6.35) does not make the traveller retype the destination they just
+  // chose. Absent parameters leave every field empty, which is exactly the
+  // behaviour when opening /ride directly.
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState('find'); // 'find' | 'my'
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [date, setDate] = useState('');
+  const [from, setFrom] = useState(() => searchParams.get('from') || '');
+  const [to, setTo] = useState(() => searchParams.get('to') || '');
+  const [date, setDate] = useState(() => searchParams.get('date') || '');
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [myRides, setMyRides] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     search();
@@ -24,57 +33,91 @@ export default function RideHub() {
 
   useEffect(() => {
     if (tab === 'my' && !myRides && user) {
-      RideService.listMyRides(user.id).then(setMyRides);
+      Promise.all([RideService.listMyRides(user.id), RideRequestService.listMyRequests(user.id)])
+        .then(([rides, joining]) => setMyRides({ ...rides, joining }));
     }
   }, [tab, user, myRides]);
 
   async function search(e) {
     e?.preventDefault();
     setLoading(true);
+    setError('');
     try {
       setRides(await RideService.searchRides({ from, to, date }));
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   }
 
+  function openMemberService(destination, reason) {
+    const target = getAuthNavigation(user, destination, reason);
+    navigate(target.to, { state: target.state });
+  }
+
+  function openMyRides() {
+    if (!user) {
+      openMemberService('/ride', 'Sign in to view the rides you host or requested.');
+      return;
+    }
+    setTab('my');
+  }
+
   return (
     <div className="ride-hub">
+      <header className="ride-hub-mobile-heading">
+        <span className="ride-hero-icon" aria-hidden="true"><IconRoute size={22} /></span>
+        <div>
+          <p className="ride-hero-kicker">Travel better, together</p>
+          <h1>Where are you headed?</h1>
+          <p>Find a trusted shared journey or offer your empty seats.</p>
+        </div>
+      </header>
       <div className="ride-hub-left">
-        <div className="tabs">
-          <button className={'tab' + (tab === 'find' ? ' active' : '')} onClick={() => setTab('find')}>Find a Ride</button>
-          <button className={'tab' + (tab === 'my' ? ' active' : '')} onClick={() => setTab('my')}>My Rides</button>
+        <div className="tabs" role="tablist" aria-label="Ride workspace">
+          <button role="tab" aria-selected={tab === 'find'} className={'tab' + (tab === 'find' ? ' active' : '')} onClick={() => setTab('find')}>Find a ride</button>
+          <button role="tab" aria-selected={tab === 'my'} className={'tab' + (tab === 'my' ? ' active' : '')} onClick={openMyRides}>My rides</button>
         </div>
 
         {tab === 'find' && (
-          <div className="card">
-            <p className="card-title">Search Rides</p>
+          <section className="card ride-search-card" aria-labelledby="ride-search-title">
+            <div className="ride-search-heading">
+              <div>
+                <p className="eyebrow">PLAN YOUR JOURNEY</p>
+                <h2 id="ride-search-title">Find the right ride</h2>
+              </div>
+              <IconSearch size={19} aria-hidden="true" />
+            </div>
             <form onSubmit={search}>
               <div className="field">
+                <label htmlFor="ride-search-from">Pickup</label>
                 <div className="input-wrap">
                   <span className="prefix-icon"><IconMapPin size={14} /></span>
-                  <input placeholder="From — pickup location" value={from} onChange={(e) => setFrom(e.target.value)} />
+                  <input id="ride-search-from" autoComplete="street-address" placeholder="e.g. KL Sentral" value={from} onChange={(e) => setFrom(e.target.value)} />
                 </div>
               </div>
               <div className="field">
+                <label htmlFor="ride-search-to">Destination</label>
                 <div className="input-wrap">
                   <span className="prefix-icon"><IconMapPin size={14} /></span>
-                  <input placeholder="To — destination" value={to} onChange={(e) => setTo(e.target.value)} />
+                  <input id="ride-search-to" autoComplete="street-address" placeholder="e.g. Georgetown" value={to} onChange={(e) => setTo(e.target.value)} />
                 </div>
               </div>
               <div className="field">
+                <label htmlFor="ride-search-date">Travel date</label>
                 <div className="input-wrap">
                   <span className="prefix-icon"><IconCalendar size={14} /></span>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                  <input id="ride-search-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
                 </div>
               </div>
-              <button className="btn-primary" type="submit"><IconSearch size={14} /> Search Rides</button>
+              <button className="btn-primary" type="submit" disabled={loading}><IconSearch size={16} /> {loading ? 'Searching…' : 'Search rides'}</button>
             </form>
-          </div>
+          </section>
         )}
 
-        <button className="btn-primary btn-publish" onClick={() => navigate('/ride/publish')}>
-          <IconPlus size={15} /> Publish a Ride
+        <button className="btn-primary btn-publish" onClick={() => openMemberService('/ride/publish', 'Sign in before publishing a ride.') }>
+          <IconPlus size={17} /> <span>Publish a ride</span>
         </button>
       </div>
 
@@ -82,50 +125,58 @@ export default function RideHub() {
         {tab === 'find' && (
           <>
             <div className="ride-hub-header">
-              <h2>{loading ? 'Searching…' : `${rides.length} ride${rides.length === 1 ? '' : 's'} available`}</h2>
-              <button className="btn-secondary" type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <IconFilter size={14} /> Filters
-              </button>
+              <div>
+                <p className="eyebrow">AVAILABLE JOURNEYS</p>
+                <h2>{loading ? 'Searching nearby rides…' : `${rides.length} ride${rides.length === 1 ? '' : 's'} found`}</h2>
+              </div>
+              {!loading && <span className="result-count" aria-label={`${rides.length} search results`}>{rides.length}</span>}
             </div>
+            {error && <div className="alert alert-error" role="alert">{error}</div>}
             <div className="ride-grid">
               {rides.map((ride) => (
-                <RideCard key={ride.id} ride={ride} />
+                <RideCard key={ride.id} ride={ride} onClick={() => navigate(`/ride/${ride.id}`)} />
               ))}
               {!loading && rides.length === 0 && (
-                <p style={{ color: 'var(--muted)' }}>No rides match your search yet — try a different pickup, destination, or date.</p>
+                <section className="ride-empty-state">
+                  <span aria-hidden="true"><IconSearch size={24} /></span>
+                  <h3>No matching rides yet</h3>
+                  <p>Try a nearby pickup point, another destination, or a different travel date.</p>
+                  <button type="button" className="btn-secondary" onClick={() => { setFrom(''); setTo(''); setDate(''); }}>Clear search</button>
+                </section>
               )}
             </div>
           </>
         )}
 
         {tab === 'my' && (
-          <MyRidesView myRides={myRides} />
+          <MyRidesView myRides={myRides} onRideSelect={(ride) => navigate(`/ride/${ride.id}`)} onRequests={() => navigate('/ride/requests')} onSeeDemand={() => navigate('/discover/demand')} />
         )}
       </div>
     </div>
   );
 }
 
-function MyRidesView({ myRides }) {
-  if (!myRides) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
+function MyRidesView({ myRides, onRideSelect, onRequests, onSeeDemand }) {
+  if (!myRides) return <div className="ride-page-loading compact" role="status">Loading your rides…</div>;
 
   return (
     <>
-      <div className="ride-hub-header"><h2>Hosting</h2></div>
+      {/* Module 6 - Destination Discovery. A Host looking at their published
+          rides is exactly the person who wants to know where a ride would
+          actually be filled, so the unmet-demand view is linked from here. */}
+      <div className="ride-hub-header"><div><p className="eyebrow">YOUR RIDES</p><h2>Hosting</h2></div><button className="btn-link" onClick={onSeeDemand}>Where people want to go</button></div>
       <div className="ride-grid">
         {myRides.hosting.length === 0 && (
-          <p style={{ color: 'var(--muted)' }}>You haven't published any rides yet — use "Publish a Ride" to host your first one.</p>
+          <section className="ride-empty-state compact"><h3>No hosted rides yet</h3><p>Publish your first journey when you have seats to share, or <button className="btn-link inline" onClick={onSeeDemand}>see where people want to go</button>.</p></section>
         )}
         {myRides.hosting.map((ride) => (
-          <RideCard key={ride.id} ride={ride} statusChip />
+          <RideCard key={ride.id} ride={ride} statusChip onClick={() => onRideSelect(ride)} />
         ))}
       </div>
 
-      <div className="ride-hub-header" style={{ marginTop: 24 }}><h2>Joining</h2></div>
+      <div className="ride-hub-header joining-header"><div><p className="eyebrow">PASSENGER VIEW</p><h2>Joining</h2></div><button className="btn-link" onClick={onRequests}>View all requests</button></div>
       <div className="ride-grid">
-        <p style={{ color: 'var(--muted)' }}>
-          Ride requests aren't part of this build yet — this section is ready for the "request to join" flow (FR-2.2/2.5) to populate.
-        </p>
+        {myRides.joining.length ? myRides.joining.map((request) => request.ride && <button className="my-requests-link" key={request.id} onClick={() => onRideSelect(request.ride)}>{request.ride.pickup.split(',')[0]} → {request.ride.destination.split(',')[0]} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'} · {request.status}</button>) : <button className="my-requests-link" onClick={onRequests}>You have no ride requests yet.</button>}
       </div>
     </>
   );

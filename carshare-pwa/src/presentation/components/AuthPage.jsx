@@ -1,35 +1,93 @@
 // ===== PRESENTATION LAYER (AuthPage) =====
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { IconCar, IconMail, IconPhone, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar } from './icons.jsx';
+import { resolveAuthReturnPath } from '../../business-logic/authAccess.js';
+import { IconCar, IconMail, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar, IconGoogle, IconShield } from './icons.jsx';
 import '../styles/auth.css';
 
 export default function AuthPage() {
-  const { signUp, signIn } = useAuth();
+  const { signUp, signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = resolveAuthReturnPath(location.state);
+  const routePathRef = useRef(null);
+  const routeCarRef = useRef(null);
 
-  const [mode, setMode] = useState('signup'); // 'signup' | 'login'
-  const [method, setMethod] = useState('email'); // 'email' | 'phone'
+  const [mode, setMode] = useState('login'); // 'signup' | 'login'
   const [fullName, setFullName] = useState('');
+  const [icNumber, setIcNumber] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    const route = routePathRef.current;
+    const car = routeCarRef.current;
+    if (!route || !car) return undefined;
+
+    const duration = 7000;
+    const routeLength = route.getTotalLength();
+    const startedAt = performance.now();
+    let animationFrame;
+
+    function animateCar(now) {
+      const phase = ((now - startedAt) % duration) / duration;
+      const travellingForward = phase <= 0.5;
+      const linearProgress = travellingForward ? phase * 2 : (1 - phase) * 2;
+      const progress = linearProgress * linearProgress * (3 - 2 * linearProgress);
+      const distance = routeLength * progress;
+      const point = route.getPointAtLength(distance);
+      const direction = travellingForward ? 1 : -1;
+      const tangentDistance = Math.max(0, Math.min(routeLength, distance + direction));
+      const tangent = route.getPointAtLength(tangentDistance);
+      const angle = Math.atan2(tangent.y - point.y, tangent.x - point.x) * 180 / Math.PI;
+
+      car.setAttribute('transform', `translate(${point.x} ${point.y}) rotate(${angle})`);
+      animationFrame = requestAnimationFrame(animateCar);
+    }
+
+    animationFrame = requestAnimationFrame(animateCar);
+    return () => cancelAnimationFrame(animationFrame);
+  }, []);
+
+  // One button covers both Sign Up and Login: Supabase's Google provider
+  // creates the auth.users row on first arrival and just signs the user in on
+  // every visit after, so there's no separate "sign up with Google" call.
+  // This redirects away from the page, so on success there is nothing further
+  // to do here - AuthContext picks the session up when the browser returns.
+  async function handleGoogle() {
+    setError('');
+    setVerificationMessage('');
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.');
+      setGoogleLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setVerificationMessage('');
     setLoading(true);
     try {
       if (mode === 'signup') {
-        await signUp({ fullName, email, phone, password, method });
+        const result = await signUp({ fullName, email, password, icNumber });
+        if (result.requiresEmailConfirmation) {
+          setVerificationMessage(`We sent a confirmation link to ${result.email}. Confirm it before signing in.`);
+          return;
+        }
       } else {
         await signIn({ email, password });
       }
-      navigate('/profile');
+      navigate(returnTo, { replace: true });
     } catch (err) {
       setError(err.message || 'Something went wrong.');
     } finally {
@@ -60,7 +118,7 @@ export default function AuthPage() {
 
           <div className="route-map">
             <svg className="route-svg" viewBox="0 0 400 150" preserveAspectRatio="none">
-              <path className="route-path" d="M8,120 C 90,120 90,40 170,40 S 300,110 392,26" />
+              <path ref={routePathRef} id="auth-journey-route" className="route-path" d="M8,120 C 90,120 90,40 170,40 S 300,110 392,26" />
               <g className="route-node">
                 <circle cx="8" cy="120" r="5" />
                 <text x="18" y="138">KL Sentral</text>
@@ -73,8 +131,15 @@ export default function AuthPage() {
                 <circle cx="392" cy="26" r="5" />
                 <text x="345" y="16">Ipoh</text>
               </g>
+              <g ref={routeCarRef} className="route-car" aria-hidden="true">
+                <g className="route-car-icon">
+                  <path d="M4 16V11.5L6 7h12l2 4.5V16" />
+                  <path d="M3.5 16h17v2.5a1 1 0 0 1-1 1H17a1 1 0 0 1-1-1V17H8v1.5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V16Z" />
+                  <circle cx="7.5" cy="16" r="1.3" />
+                  <circle cx="16.5" cy="16" r="1.3" />
+                </g>
+              </g>
             </svg>
-            <span className="route-car"><IconCar size={22} /></span>
           </div>
 
           <div className="scene-stats">
@@ -105,6 +170,12 @@ export default function AuthPage() {
               : 'Pick up right where you left off.'}
           </p>
 
+          <button type="button" className="auth-back-home" onClick={() => navigate('/home')}>
+            Continue browsing without signing in
+          </button>
+
+          {location.state?.reason && <div className="auth-required-note" role="status">{location.state.reason}</div>}
+
           <div className="segmented">
             <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => setMode('signup')}>
               Sign Up
@@ -114,59 +185,73 @@ export default function AuthPage() {
             </button>
           </div>
 
-          <div className="method-toggle">
-            <button type="button" className={'method-pill' + (method === 'email' ? ' active' : '')} onClick={() => setMethod('email')}>
-              <IconMail size={14} /> Email
-            </button>
-            <button type="button" className={'method-pill' + (method === 'phone' ? ' active' : '')} onClick={() => setMethod('phone')}>
-              <IconPhone size={14} /> Phone
-            </button>
-          </div>
-
           {error && <div className="auth-error">{error}</div>}
+          {verificationMessage && <div className="alert alert-success">{verificationMessage}</div>}
+
+          <button
+            type="button"
+            className="google-btn"
+            onClick={handleGoogle}
+            disabled={googleLoading || loading}
+          >
+            <IconGoogle size={18} />
+            {googleLoading ? 'Redirecting to Google…' : mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
+          </button>
+
+          <div className="auth-divider"><span>or {mode === 'signup' ? 'sign up' : 'sign in'} with email</span></div>
 
           <form onSubmit={handleSubmit}>
             {mode === 'signup' && (
               <div className="auth-field">
-                <label>Full Name</label>
+                <label htmlFor="auth-full-name">Full Name</label>
                 <div className="auth-input-wrap">
                   <span className="prefix"><IconUser size={16} /></span>
-                  <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Jamie Delacroix" required />
+                  <input id="auth-full-name" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Jamie Delacroix" required />
                 </div>
               </div>
             )}
 
-            {method === 'email' ? (
+            {mode === 'signup' && (
               <div className="auth-field">
-                <label>Email Address</label>
+                <label htmlFor="auth-ic-number">IC Number (MyKad) <span className="hint">used to verify your identity, never stored</span></label>
                 <div className="auth-input-wrap">
-                  <span className="prefix"><IconMail size={16} /></span>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jamie@email.com" required />
-                </div>
-              </div>
-            ) : (
-              <div className="auth-field">
-                <label>Phone Number</label>
-                <div className="auth-input-wrap">
-                  <span className="prefix"><IconPhone size={16} /></span>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+60 12-345 6789" required />
+                  <span className="prefix"><IconShield size={16} /></span>
+                  <input
+                    id="auth-ic-number"
+                    value={icNumber}
+                    onChange={(e) => setIcNumber(e.target.value)}
+                    placeholder="990101-14-5678"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    required
+                  />
                 </div>
               </div>
             )}
 
             <div className="auth-field">
-              <label>Password</label>
+              <label htmlFor="auth-email">Email Address</label>
+              <div className="auth-input-wrap">
+                <span className="prefix"><IconMail size={16} /></span>
+                <input id="auth-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jamie@email.com" required />
+              </div>
+            </div>
+
+            <div className="auth-field">
+              <label htmlFor="auth-password">Password</label>
               <div className="auth-input-wrap">
                 <span className="prefix"><IconLock size={16} /></span>
                 <input
+                  id="auth-password"
                   type={showPw ? 'text' : 'password'}
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Min. 8 characters"
                   minLength={8}
                   required
                 />
-                <button type="button" className="toggle-visibility" onClick={() => setShowPw((s) => !s)}>
+                <button type="button" className="toggle-visibility" aria-label={showPw ? 'Hide password' : 'Show password'} onClick={() => setShowPw((s) => !s)}>
                   {showPw ? <IconEyeOff size={15} /> : <IconEye size={15} />}
                 </button>
               </div>

@@ -1,211 +1,182 @@
-# Connecting this project to Supabase
+# Supabase setup
 
-Right now every screen runs against `src/data-access/mockDataStore.js` - an
-in-memory/localStorage store, not a real backend. This guide switches the app
-over to a real Supabase project. **No component code changes** - every service
-in `src/business-logic/` already branches on `isSupabaseConfigured` and calls
-Supabase instead of the mock store the moment your `.env` is filled in.
+Let's Tumpang is connected to the shared Supabase project for Modules 1-3,
+including Module 3 Database, Realtime, and private Storage messaging.
 
-## 0. What you're connecting
-
-| Module | Tables it needs |
-|---|---|
-| Module 1 (Profile & Reputation) | `profiles`, `vehicles`, `host_impact_stats` |
-| Module 2 (Ride Sharing) | `rides` (reads `profiles` + `host_impact_stats` too, for the host card on each ride) |
-| Modules 3-6 (Messaging, Search, Trip Management, Verification) | not built yet - add their tables the same way, following the pattern below |
-
-## 1. Create the Supabase project
-
-1. Go to [supabase.com](https://supabase.com) → **New project**. Pick any name/region, and set a database password (save it somewhere - you won't need it for this app, but you'll want it if you ever open the SQL editor's "reset" flow).
-2. Once it's provisioned, open **Project Settings → API**. You need two values:
-   - **Project URL** (looks like `https://xxxxxxxx.supabase.co`)
-   - **anon / public key** (a long JWT string - NOT the `service_role` key, that one must never go in client code)
-
-## 2. Point the app at it
-
-In the project root:
-
-```bash
-cp .env.example .env
+```text
+Project ref: pnetstmovctfwqcumodx
+Project URL: https://pnetstmovctfwqcumodx.supabase.co
 ```
 
-Fill in the two values from step 1:
+Modules 4-6 intentionally remain on their local adapters. Module 3's production
+path no longer uses its legacy `localStorage`/`BroadcastChannel` adapter.
 
-```
-VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...
-```
+## Local configuration
 
-Restart `npm run dev` after saving `.env` (Vite only reads env files on startup). At this point `isSupabaseConfigured` becomes `true` and every service switches over - but the tables don't exist yet, so every request will fail until you run the schema below.
+Copy `.env.example` to the ignored `.env.local` file and fill in the browser-safe
+values from Supabase Project Settings:
 
-## 3. Run the schema
-
-Open your project's **SQL Editor** (left sidebar) → **New query**, paste the whole block below, and run it. It's written to match exactly what the existing service files already query - the column names here are not arbitrary, they're read straight out of `ProfileService.js`, `VehicleService.js`, `HostImpactEngine.js`, and `RideService.js`.
-
-```sql
--- ============================================================
--- profiles - Module 1 (User Profile & Reputation)
--- One row per auth user. id is a foreign key to Supabase's own
--- auth.users table, so it's created automatically by the trigger
--- at the bottom, not by the app's Sign Up form directly.
--- ============================================================
-create table profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  full_name text not null,
-  email text not null,
-  phone text default '',
-  emergency_contact jsonb not null default '{"name":"","phone":"","relationship":""}'::jsonb,
-  profile_photo_url text,
-  status text not null default 'active' check (status in ('active','deactivated')),
-  created_at timestamptz not null default now()
-);
-
--- ============================================================
--- vehicles - Module 1 (My Vehicles)
--- ============================================================
-create table vehicles (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references profiles(id) on delete cascade,
-  make text not null,
-  model text not null,
-  plate text not null,
-  colour text default '',
-  seats int not null check (seats between 1 and 8),
-  year int not null,
-  active boolean not null default false,
-  created_at timestamptz not null default now()
-);
-
--- ============================================================
--- host_impact_stats - Module 1 (Reputation & Impact) / Host Impact Engine
--- One row per user. rating is the public 0-5 "star" average shown on Ride
--- Hub cards (Module 2 FR-2.12 Rate & Review) - it's a placeholder column
--- until that screen is built; everything else feeds the Composite Impact
--- Score formula in HostImpactEngine.js.
--- ============================================================
-create table host_impact_stats (
-  user_id uuid primary key references profiles(id) on delete cascade,
-  completed_trips int not null default 0,
-  co2_saved_kg numeric not null default 0,
-  reputation_score int not null default 50 check (reputation_score between 0 and 100),
-  rating numeric check (rating between 0 and 5),
-  updated_at timestamptz not null default now()
-);
-
--- ============================================================
--- rides - Module 2 (Ride Sharing Management)
--- ============================================================
-create table rides (
-  id uuid primary key default gen_random_uuid(),
-  host_id uuid not null references profiles(id) on delete cascade,
-  vehicle_id uuid references vehicles(id) on delete set null,
-  pickup text not null,
-  destination text not null,
-  date date not null,
-  time text not null,
-  journey_scale text not null check (journey_scale in ('Urban','Intercity')),
-  seats_total int not null check (seats_total between 1 and 8),
-  seats_available int not null check (seats_available >= 0),
-  contribution text default '',
-  restriction_tags text[] not null default '{}',
-  status text not null default 'Draft'
-    check (status in ('Draft','Published','Matched','In Transit','Completed','Cancelled')),
-  created_at timestamptz not null default now()
-);
-
--- ============================================================
--- Auto-create a profiles row whenever someone signs up via
--- supabase.auth.signUp (AuthService.js passes full_name/phone in
--- the signUp options.data - this trigger reads them back out).
--- Without this, ProfileService.getProfile() would find nothing
--- for a brand-new user.
--- ============================================================
-create function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, full_name, email, phone)
-  values (
-    new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', ''),
-    new.email,
-    coalesce(new.raw_user_meta_data->>'phone', '')
-  );
-  insert into public.host_impact_stats (user_id) values (new.id);
-  return new;
-end;
-$$ language plpgsql security definer;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+```dotenv
+VITE_SUPABASE_URL=https://pnetstmovctfwqcumodx.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 ```
 
-## 4. Turn on Row Level Security (RLS)
+`VITE_SUPABASE_ANON_KEY` remains a temporary compatibility fallback, but new
+configuration and documentation must use `VITE_SUPABASE_PUBLISHABLE_KEY`.
+Never put a service-role or secret key in Vite/frontend configuration, and never
+commit `.env.local`.
 
-Supabase leaves RLS off by default on new tables, which means anyone with your anon key could read/write every row. Turn it on and add policies:
+Restart `npm run dev` after changing environment values.
 
-```sql
-alter table profiles enable row level security;
-alter table vehicles enable row level security;
-alter table host_impact_stats enable row level security;
-alter table rides enable row level security;
+## Adopted backend scope
 
--- profiles: you can read anyone's public info (name/photo shown on ride
--- cards), but only edit your own row.
-create policy "profiles are publicly readable" on profiles
-  for select using (true);
-create policy "users can update their own profile" on profiles
-  for update using (auth.uid() = id);
-create policy "users can delete their own profile" on profiles
-  for delete using (auth.uid() = id);
+- Supabase Auth: email/password with email confirmation, and Google OAuth (see
+  below for the Dashboard-side setup this needs).
+- `profiles`: authenticated-visible display fields only.
+- `profile_private`: owner-only phone and emergency contact; email remains in Auth.
+- `vehicles`: owner-only CRUD with a driver-licence field and one active vehicle per user.
+- `host_impact_stats`: authenticated read-only until a trusted update pipeline exists.
+- `rides`: authenticated search, RPC-only host mutation, confirmed route references, pickup instructions, waypoints, seat constraints, and a mandatory host-owned vehicle.
+- `ride_requests` and `ride_reviews`: RPC-only participation and mutual review lifecycle.
+- `conversations`, `conversation_members`, `messages`, and `message_attachments`: member-readable, RPC-mutated messaging with seven-day terminal retention.
+- `user_notifications`: recipient-owned cross-module inbox, with Message as its first producer; browser-device subscriptions are Edge-Function-only and never client-readable.
+- `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
+- `message-media`: private, no listing, approved media only, 50 MB object maximum, and attachment-bound signed downloads.
 
--- vehicles: publicly readable (needed for ride cards / vehicle picker),
--- but only the owner can create/edit/delete their own.
-create policy "vehicles are publicly readable" on vehicles
-  for select using (true);
-create policy "owners manage their own vehicles" on vehicles
-  for insert with check (auth.uid() = owner_id);
-create policy "owners update their own vehicles" on vehicles
-  for update using (auth.uid() = owner_id);
-create policy "owners delete their own vehicles" on vehicles
-  for delete using (auth.uid() = owner_id);
+Phone OTP, hard account deletion, translation, email notifications, and Modules
+4-6 are not part of this connection. The notification centre is implemented
+locally but needs the project-owner setup below before it sends a real device
+alert. Google OAuth code is present, but it still needs the provider
+configuration below before it works end to end.
 
--- host_impact_stats: publicly readable (ride card tier badges), never
--- writable by the client - only Module 6's verified-trip pipeline (or an
--- Edge Function / trigger you add later) should update these numbers.
-create policy "impact stats are publicly readable" on host_impact_stats
-  for select using (true);
+## Enabling Google OAuth (Dashboard + Google Cloud, not code)
 
--- rides: published rides are publicly browsable; a host can always see
--- and manage their own rides regardless of status (drafts included).
-create policy "published rides are publicly readable" on rides
-  for select using (status = 'Published' or auth.uid() = host_id);
-create policy "hosts create their own rides" on rides
-  for insert with check (auth.uid() = host_id);
-create policy "hosts update their own rides" on rides
-  for update using (auth.uid() = host_id);
-create policy "hosts delete their own rides" on rides
-  for delete using (auth.uid() = host_id);
+The app-side code (`AuthService.signInWithGoogle`, the "Continue with Google"
+button on `AuthPage.jsx`) is already in place and calls
+`supabase.auth.signInWithOAuth({ provider: 'google' })`. No new SQL migration
+is needed for this: `handle_new_user()` (`008_m1_secure_profiles_and_auth.sql`)
+already falls back through `full_name` → `name` → the email's local part, and
+already reads `avatar_url`/`picture` into `profile_photo_url` - exactly the
+`raw_user_meta_data` shape Google's provider supplies. What is still required
+is Dashboard/Cloud Console configuration, which only a project owner can do:
+
+1. In Google Cloud Console, create an OAuth 2.0 Client ID (Web application)
+   for this project.
+2. Add `https://pnetstmovctfwqcumodx.supabase.co/auth/v1/callback` as an
+   Authorized redirect URI on that client.
+3. In the Supabase Dashboard, go to Authentication → Providers → Google,
+   enable it, and paste in that Client ID and Client Secret.
+4. In Authentication → URL Configuration, make sure Site URL and Redirect URLs
+   include the app's dev/prod origins (the code sends `redirectTo:
+   window.location.origin`, so whatever origin the app is served from must be
+   allow-listed there).
+
+Until step 3 is done, clicking "Continue with Google" will reach Supabase and
+fail with a provider-not-enabled error - that is expected, not a code bug.
+
+## Database history and deployment
+
+The authoritative SQL lives in `database/sql/`. Files `001-026` are deployed
+and must not be rerun or edited. `023_m1_m2_public_ride_browsing.sql` was applied
+through the Dashboard SQL Editor and is the repository record even though its
+name is absent from migration-history output. See `docs/ai/SQL.md` for the
+complete deployment-name map and current live state.
+
+`033_project_notifications.sql` is local and **not deployed**. It must be
+deployed only together with the Notification delivery setup below. See
+`docs/ai/SQL.md` for the authoritative deployment map; do not make
+Dashboard-only schema changes.
+
+## Notification delivery setup (project owner)
+
+The inbox and Realtime bell work once `033_project_notifications.sql` is
+deployed. System alerts when the PWA is closed additionally require standard
+VAPID Web Push and a Database Webhook. Do this only for the intended production
+Supabase project, never by placing secrets in Vite.
+
+1. Generate one VAPID key pair with the same pinned library the push function
+   uses. For example, in a temporary Deno script import
+   `jsr:@negrel/webpush@0.5.0`, call `generateVapidKeys()`, then retain both
+   `exportVapidKeys(keys)` (the complete JWK JSON) and
+   `exportApplicationServerKey(keys)` (the browser-safe public key). Do not
+   rotate the pair while devices remain subscribed.
+2. Set these Edge Function secrets in the Supabase project. Use a high-entropy
+   random value for the webhook secret, and never commit any value:
+
+   ```text
+   NOTIFICATION_VAPID_KEYS_JSON=<complete VAPID JWK JSON>
+   NOTIFICATION_VAPID_SUBJECT=mailto:owner@example.com
+   NOTIFICATION_WEBHOOK_SECRET=<random webhook secret>
+   NOTIFICATION_ALLOWED_ORIGIN=https://your-app.example
+   ```
+
+   `SUPABASE_SERVICE_ROLE_KEY` is supplied by the Edge Runtime; it is not a
+   frontend environment variable and must not be copied into `.env.local`.
+3. Set the matching public `VITE_WEB_PUSH_PUBLIC_KEY` during the Vite build.
+   This is the application-server public key from step 1, not the JWK JSON and
+   not a secret. Rebuild/redeploy the frontend after setting it.
+4. Deploy both functions and the migration through the shared Supabase workflow:
+
+   ```powershell
+   supabase functions deploy notification-subscriptions
+   supabase functions deploy notification-push
+   ```
+
+   `supabase/config.toml` deliberately sets `notification-push` to
+   `verify_jwt = false`: it is a database-machine endpoint, protected instead
+   by the custom webhook secret. The subscription function retains normal user
+   JWT verification.
+5. In Dashboard → Database → Webhooks, create an `INSERT` webhook for
+   `public.user_notifications`. Point it to
+   `https://pnetstmovctfwqcumodx.supabase.co/functions/v1/notification-push`
+   (replace the project ref for another project) and add the custom HTTP header
+   `x-notification-webhook-secret` with exactly the value from step 2. Do not
+   put the secret in the URL. The function removes a stored subscription when
+   a push service reports endpoint status 404 or 410.
+
+6. Run the Supabase security/performance advisors. Then verify with two real
+   accounts over HTTPS: user B enables device notifications and closes the app;
+   user A sends text, image, video, voice, location, and group-chat messages;
+   B receives only the other members' alerts and each tap opens the correct
+   Message conversation. Check that the inbox read state synchronises after
+   opening the item.
+
+## Security model
+
+RLS and Postgres privileges are separate layers and both are configured:
+
+- `anon` receives only the approved active-profile/Host-impact and Published
+  Ride columns; after local `027`, ETA is added while waypoint JSON is removed
+  because its upgraded contract contains private Place IDs.
+- `authenticated` receives explicit table/column grants only for supported actions.
+- Owner policies use both `USING` and `WITH CHECK` for updates.
+- The Auth trigger uses an empty `search_path`, schema-qualified objects, and no client execute permission.
+- Deactivated hosts' published rides are hidden; successful sign-in reactivates the profile.
+
+Run both Supabase security and performance advisors after every database change.
+Immediately after an empty initial deployment, required indexes may be reported
+as unused; reassess those notices only after representative traffic exists.
+
+## Verification
+
+Automated checks:
+
+```powershell
+npm.cmd test
+npm.cmd run build
 ```
 
-## 5. Storage bucket for profile photos
+For live acceptance, use two real email accounts and verify:
 
-`ProfileService.updateProfilePhoto` uploads to a bucket named `avatars`. Create it: **Storage → New bucket → name it `avatars` → Public bucket** (so the returned `getPublicUrl()` links actually resolve). If you'd rather keep photos private, make the bucket private and switch `getPublicUrl` to `createSignedUrl` in `ProfileService.js` - that's the only line that would need to change.
-
-## 6. Try it
-
-```bash
-npm run dev
-```
-
-Sign up with a real email - you should see a new row appear in **Table Editor → profiles** and **host_impact_stats**. Add a vehicle, publish a ride, deactivate/delete the account - each should show up (or disappear) in the corresponding table in real time.
-
-If a request fails, the browser console will show the Postgres/PostgREST error directly (missing column, RLS policy blocking the write, etc.) - that's almost always faster to debug than re-reading this guide.
-
-## 7. Adding Module 3-6 tables later
-
-Same three-step recipe every time:
-
-1. Add the table in the SQL editor, snake_case columns, `references profiles(id)` for ownership.
-2. Add RLS policies (start from the closest existing table above and adjust who can read vs. write).
-3. In that module's business-logic service, branch on `isSupabaseConfigured` exactly like `RideService.js` does - snake_case in the Supabase query, mapped back to the camelCase shape the mock store already returns, so the presentation layer never has to know which backend is active.
+1. Sign up, click the confirmation email, sign in, refresh, and sign out.
+2. User B cannot read User A's `profile_private` row or change A's vehicle/ride.
+3. Avatar upload, profile updates, deactivate/sign-in reactivation.
+4. Vehicle create/edit/active/delete, driver-licence persistence, and the single-active constraint.
+5. Ride draft/publish/search/edit-waypoints/cancel, confirmed Place IDs, current-location pickup, and pickup instructions.
+6. An unauthenticated client cannot access any business table.
+7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, expired access denial, recipient-only notifications, and VAPID click-through after completing the Notification delivery setup.
+8. Modules 4-6 local demo functions still operate.
+9. Once Google OAuth is enabled in the Dashboard (see above): "Continue with
+   Google" reaches the Google consent screen, returns to the app signed in,
+   and creates a `profiles`/`profile_private`/`host_impact_stats` row with a
+   sensible name and avatar picked up automatically.

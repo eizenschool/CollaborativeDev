@@ -383,3 +383,100 @@ export function IconCamera(props) {
     </Svg>
   );
 }
+
+export function IconVideo(props) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="6.5" width="12.5" height="11" rx="2" />
+      <path d="m16 10 4.5-2.5v9L16 14" />
+    </Svg>
+  );
+}
+
+export function IconMicrophone(props) {
+  return (
+    <Svg {...props}>
+      <rect x="8.5" y="3" width="7" height="12" rx="3.5" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" />
+    </Svg>
+  );
+}
+
+export function IconStop(props) {
+  return (
+    <Svg {...props}>
+      <rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconSend(props) {
+  return (
+    <Svg {...props}>
+      <path d="M21 3 10.5 13.5" />
+      <path d="m21 3-6.5 18-4-7.5L3 9.5Z" />
+    </Svg>
+  );
+}
+
+export function IconPaperclip(props) {
+  return (
+    <Svg {...props}>
+      <path d="m9.5 12.5 6.8-6.8a3.3 3.3 0 0 1 4.7 4.7l-9.2 9.2a5 5 0 0 1-7.1-7.1l9-9" />
+      <path d="m7.2 14.8 8.7-8.7" />
+    </Svg>
+  );
+}
+
+export function IconSmile(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 14.5c1 1.5 2.1 2.2 3.5 2.2s2.5-.7 3.5-2.2" />
+      <circle cx="9" cy="9.5" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="9.5" r="0.8" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconMoreVertical(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconArchive(props) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="5" width="17" height="4" rx="1" />
+      <path d="M5.5 9v10.5h13V9" />
+      <path d="M9.5 13h5" />
+    </Svg>
+  );
+}
+
+export function IconClock(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </Svg>
+  );
+}
+
+// Google's "G" mark uses fixed brand colors, not currentColor, so it does not
+// go through the shared outline `Svg` wrapper used by every other icon here.
+export function IconGoogle({ size = 18, ...rest }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" {...rest}>
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.87 2.7-6.62Z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.33A9 9 0 0 0 9 18Z" />
+      <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.16.28-1.7V4.97H.95A9 9 0 0 0 0 9c0 1.45.35 2.83.95 4.03l3-2.33Z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .95 4.97l3 2.33C4.66 5.17 6.65 3.58 9 3.58Z" />
+    </svg>
+  );
+}

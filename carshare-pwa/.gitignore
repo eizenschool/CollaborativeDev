@@ -1,1 +1,11 @@
 node_modules/
+dist/
+dist-ssr/
+.env
+.env.local
+*.local
+npm-debug.log*
+.DS_Store
+
+# Supabase CLI local project link cache - carries the linked account's email
+supabase/.temp/

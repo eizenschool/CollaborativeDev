@@ -1,0 +1,59 @@
+# TODO.md
+
+Project-level coordination only. Module work belongs in `docs/ai/modules/Mx_*.md`.
+
+## NOW
+- [x] Inspect the real GitHub repository and branch structure.
+- [x] Define shared-core + per-module AI context architecture.
+- [x] Align AI context with Codex + Claude Code and Karpathy 4 Rules.
+- [ ] Add this V1.1 context package to a Git branch and review through PR.
+- [ ] Confirm which existing module branches continue and which should be refreshed from `Development`.
+- [ ] Review `Development` as the integration baseline before new feature work.
+- [x] Replace Module 2 route placeholders with a zero-charge Google Maps Embed integration and local fallback.
+- [x] Remove stale OpenStreetMap tile-cache assumptions from the PWA configuration.
+
+## READY FOR OTHER MODULES TO USE
+
+Module 6 now serves place data so Modules 2 and 4 do not have to build or
+maintain a catalogue of their own. Both are callable today against the fixture
+catalogue and need no API key, no Supabase deployment, and no work from Brayden
+first. Import from `src/business-logic/discovery/PlaceQueryService.js`.
+
+- **Module 4 (FR-4.1, FR-4.2)** — `queryPlacesNearPoint({ lat, lng, radiusKm, category })`
+  returns places within a radius, nearest first, for landmark-proximity filtering
+  and transfer-point selection.
+- **Module 2 (FR-2.15, FR-2.16)** — `queryPlacesAlongRoute({ origin, destination, corridorWidthKm, category })`
+  returns places inside a corridor of the route, **ordered by position along it**
+  rather than by distance, so a Host sees stops in the order they will pass them.
+
+Both return the same narrow shape - `placeId, sourcePlaceId, name, category, lat,
+lng, state, rating, reviewCount, photoReference` - and exclude Retired places, so
+neither caller has to know Module 6's internals or remember a withholding rule.
+When the live catalogue replaces the fixture, this contract does not change.
+
+Please tell Brayden if the shape or the ordering does not suit your screen; it is
+easier to change now than after you have built against it.
+
+## NEXT
+- [ ] Update module file maps during each module's next task.
+- [ ] Review CI branch names because the workflow references `dev` while the repository uses `Development`.
+- [ ] Enable Maps Embed API only in `my-project-cd-505310` and create a website/API-restricted key.
+- [ ] Add the final HTTPS deployment referrer to the restricted Maps Embed key.
+- [ ] Decide the next integrated vertical slice based on current code.
+- [x] **Module 6 Google Cloud work (Brayden).** The server-side key exists, is stored as the Supabase secret `GOOGLE_PLACES_SERVER_KEY`, and has been exercised successfully against Nearby Search, Place Details, and Place Photos (real ingestion, not just a smoke test - see below). Street View is not yet exercised (FR-6.15 remains unimplemented). Whether true daily hard quotas are configured in the Google Cloud console, versus relying on manual per-call discipline, is unconfirmed either way - the persistent daily ledger below is still not built, so no server-side cap actually exists yet regardless of console settings.
+- [x] Deploy `024_m6_destination_discovery.sql`. It is live as the Supabase migration `m6_destination_discovery`. The catalogue holds real Kuala Lumpur places; `anon` read is deployed and confirmed working (`029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql`, Dashboard SQL Editor), and the live-vs-fixture choice remains the `VITE_DISCOVERY_DATA_SOURCE` frontend switch.
+- [x] Deploy the versioned `supabase/functions/m6-ingest/index.ts` Edge Function with Supabase secret-key authorization on `apikey`; live function `m6-ingest` is active and has ingested real data.
+- [x] Create the third server-side Google key and store it as the Supabase secret `GOOGLE_PLACES_SERVER_KEY`. Whether the four documented hard quotas are actually set as console-enforced daily caps is unconfirmed - see the ledger item below.
+- [x] Run ingestion against a single region (Kuala Lumpur) and verify the Google-side result. This went beyond a smoke test: 20 places were ingested (`discovered: 20, enriched: 15, upserted: 15` on the first pass; `refreshDetails: true` re-enriched all 20 for review storage on a second pass), classification and description bugs were found and fixed against the real data, and the results were confirmed in the Dashboard Table Editor.
+- [ ] Add a persistent daily ingestion-budget ledger if the Google Maps quota page exposes only per-method/per-minute limits. Still not built; the only real budget control this session was manual per-call tracking during ingestion, not a database-enforced cap.
+- [x] Agree and document the shared FR-6.35 payload contract for Modules 6, 2, and 4. See `docs/ai/FR-6.35_PREFILL_CONTRACT.md` and D019.
+- [ ] Wire the accepted FR-6.35 payload into Module 2's publish form and Module 4's search form. `DestinationDiscoveryService.buildPrefillPayload()` still needs to produce the versioned shape, and the two forms must read navigation state without weakening confirmed-location validation.
+
+## BLOCKED / NEEDS TEAM CONFIRMATION
+- Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.
+- Several existing module branches are behind current `Development`.
+- Google Cloud Console setup remains unverified until the restricted Embed-only key is created. Billable Maps SKUs stay disabled except the Module 6 catalogue SKUs accepted in D018.
+- D018 needs Console work before Module 6 ingestion can run against live data: authorise Nearby/Text Search, Place Details and Place Photos, and create a **server-side** key (the two existing keys are website-restricted and unusable from an Edge Function). Store it as a Supabase secret with no `VITE_` prefix. Full request-by-request specification, including the field-mask tiers that decide the bill, is in `docs/MODULE6-API-SETUP.md`.
+- No `.env` or `.env.local` exists in this working copy, so `isSupabaseConfigured` is false and every module falls back to its mock adapter. Anyone who needs to work against the live project must copy `.env.example` themselves; "Supabase is connected" is true of the shared project, not of a fresh checkout.
+- Module 6 caches Google place content that the Maps Platform terms say should not be stored (D018). Accepted as a prototype limitation; it must appear in the report's limitations section.
+- Google OAuth (D015): code is in place, but someone with Supabase Dashboard + Google Cloud Console access still needs to register the OAuth Client ID/Secret and enable the provider - see `docs/SUPABASE-SETUP.md`. Cannot demo "Continue with Google" against the live project until that's done.

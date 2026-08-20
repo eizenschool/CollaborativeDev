@@ -2,14 +2,17 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// 3.1(a) Offline resilience: precache the app shell + Leaflet tiles (once Module 4/5 add mapping)
-// so a Client can still view cached screens (e.g. itinerary, chat history) without a connection.
-// Write actions still require connectivity - this config only ever caches GET requests.
+// 3.1(a) Offline resilience: precache the app shell. Google Maps Embed is a
+// network iframe and intentionally falls back to the local route illustration
+// when unavailable; third-party map responses are not copied into the PWA cache.
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'service-worker.js',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         name: "Let's Tumpang - Community Carpooling",
@@ -24,37 +27,19 @@ export default defineConfig({
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }
         ]
       },
-      workbox: {
-        // Core GUI screens (app shell) - cached for read-only offline viewing
+      injectManifest: {
+        // Core GUI screens (app shell) - cached for read-only offline viewing.
+        // Runtime Supabase caching stays in src/service-worker.js so the same
+        // worker can also handle Web Push and notification clicks.
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            // Leaflet.js map tiles (Module 4/5) - cache-first so a cached itinerary route
-            // is still viewable offline on signal-weak highway stretches.
-            urlPattern: /^https:\/\/[a-z]\.tile\.openstreetmap\.org\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'map-tiles-cache',
-              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
-            // Supabase reads (GET) may be served stale-while-revalidate for offline resilience.
-            // Supabase writes are POST/PATCH/DELETE and are never matched by this GET-only pattern,
-            // so "read-only offline access" is enforced at the caching layer, not just by convention.
-            urlPattern: ({ url, request }) =>
-              url.hostname.endsWith('.supabase.co') && request.method === 'GET',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-read-cache',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 }
-            }
-          }
-        ]
       }
     })
   ],
-  server: { port: 5173 }
+  server: {
+    port: 5173,
+    host: '0.0.0.0',
+    // Tunnels forward their generated subdomain as the Host header. Keep the
+    // suffixes explicit instead of allowing arbitrary Host headers.
+    allowedHosts: ['.trycloudflare.com'],
+  }
 });

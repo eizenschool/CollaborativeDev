@@ -21,13 +21,23 @@ function initialsOf(name) {
   return (name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
-export default function RideCard({ ride, statusChip }) {
+function formatEta(value) {
+  if (!value) return null;
+  return new Date(value).toLocaleString(undefined, {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    timeZone: 'Asia/Kuala_Lumpur'
+  });
+}
+
+export default function RideCard({ ride, statusChip, onClick }) {
   const badge = ride.host ? getBadgeForStats(ride.host) : null;
   const tier = badge ? badge.name.replace(' Host', '') : null;
   const tierStyle = tier ? TIER_COLORS[tier] : null;
 
+  const CardElement = onClick ? 'button' : 'article';
+
   return (
-    <div className="ride-card">
+    <CardElement type={onClick ? 'button' : undefined} className={'ride-card' + (onClick ? ' ride-card-clickable' : '')} onClick={onClick}>
       <div className="ride-card-top">
         <div className="ride-route">
           <div className="ride-route-line">
@@ -48,6 +58,8 @@ export default function RideCard({ ride, statusChip }) {
         <span className="ride-meta"><IconCalendar size={13} /> {formatDate(ride.date)} · {ride.time}</span>
         <span className="ride-seats"><IconUsers size={13} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} left</span>
       </div>
+
+      {ride.estimatedArrivalAt && <p className="ride-card-eta"><span>Estimated arrival</span><strong>{formatEta(ride.estimatedArrivalAt)}</strong></p>}
 
       {ride.restrictionTags?.length > 0 && (
         <div className="chip-row">
@@ -80,6 +92,6 @@ export default function RideCard({ ride, statusChip }) {
           <span className="contribution-tag">{ride.contribution || 'No contribution needed'}</span>
         )}
       </div>
-    </div>
+    </CardElement>
   );
 }
