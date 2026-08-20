@@ -80,13 +80,6 @@ export default function MonthlyReport({ userId, userName }) {
         <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       ) : !report ? (
         <p style={{ textAlign: 'center', color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>Loading…</p>
-      ) : !report.hasData ? (
-        <div className="m5-card m5-empty">
-          <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, color: COLORS.textPrimary, margin: 0 }}>Monthly report is not available</p>
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, marginTop: 6 }}>
-            No completed trips were recorded in this month.
-          </p>
-        </div>
       ) : (
         <>
           <ShareReportButton report={report} userName={userName} />
@@ -98,10 +91,22 @@ export default function MonthlyReport({ userId, userName }) {
             <SummaryStat label="CO₂ Saved" value={`${report.totalCarbonSavedKg} kg`} icon />
           </div>
 
+          {!report.hasData && (
+            <div className="m5-notice" role="status">
+              <span className="m5-notice-icon" aria-hidden="true"><IconLeafSmall size={18} /></span>
+              <p>No completed trips in {MONTH_NAMES[month]} yet. Pick another month, or check back once this one has trips.</p>
+            </div>
+          )}
+
           <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', color: COLORS.textSecondary, margin: '0 0 10px' }}>
             Completed trips this month
           </p>
           <div>
+            {report.trips.length === 0 && (
+              <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, margin: 0, padding: '18px 4px' }}>
+                Nothing recorded for this month.
+              </p>
+            )}
             {report.trips.map((trip) => {
               const palette = STATUS_COLORS[trip.status] || STATUS_COLORS.Completed;
               return (

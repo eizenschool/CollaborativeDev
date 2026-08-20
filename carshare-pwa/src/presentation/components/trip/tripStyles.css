@@ -624,3 +624,36 @@
   width: auto;
   height: auto;
 }
+
+/* ---------- Inline "nothing yet" notice ---------- */
+/* Replaces the full-screen empty states. A zero is a real measurement, so the
+   screen keeps its layout and this explains the zeros in place rather than
+   hiding the interface the reader is trying to learn. */
+.m5-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: var(--teal-tint);
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+.m5-notice p {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--teal-dark);
+  margin: 0;
+}
+.m5-notice-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: var(--teal);
+  flex-shrink: 0;
+}

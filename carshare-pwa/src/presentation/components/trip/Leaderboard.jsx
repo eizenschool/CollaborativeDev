@@ -59,17 +59,6 @@ export default function Leaderboard({ userId }) {
   // all-time scores. Both now describe the same period the engine queried.
   const { year, month, entries } = state.board;
 
-  if (entries.length === 0) {
-    return (
-      <div className="m5-card m5-empty">
-        <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, color: COLORS.textPrimary, margin: 0 }}>No leaderboard data available yet</p>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, marginTop: 6 }}>
-          Check back once more hosts have completed rides in {MONTH_NAMES[month]} {year}.
-        </p>
-      </div>
-    );
-  }
-
   // A podium is a claim about first, second and third. With one or two hosts
   // ranked it reads as a broken chart, so the plain ranking list carries the
   // whole board until there is an actual top three.
@@ -99,6 +88,12 @@ export default function Leaderboard({ userId }) {
       )}
 
       <div>
+        {entries.length === 0 && (
+          <div className="m5-notice" role="status">
+            <span className="m5-notice-icon" aria-hidden="true"><IconTrophySmall size={18} /></span>
+            <p>No host has completed a trip in {MONTH_NAMES[month]} yet. The ranking fills in as trips finish.</p>
+          </div>
+        )}
         {rest.map((entry) => (
           <LeaderboardRow key={entry.id} entry={entry} />
         ))}
