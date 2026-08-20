@@ -5,13 +5,14 @@ import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js'
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { IconChevronLeftSmall, IconChevronRightSmall, IconLeafSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
+import ShareReportButton from './ShareReportButton.jsx';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-export default function MonthlyReport({ userId }) {
+export default function MonthlyReport({ userId, userName }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -88,6 +89,8 @@ export default function MonthlyReport({ userId }) {
         </div>
       ) : (
         <>
+          <ShareReportButton report={report} userName={userName} />
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
             <SummaryStat label="Completed Trips" value={report.completedTrips} />
             <SummaryStat label="Distance Shared" value={`${report.totalDistanceKm} km`} />

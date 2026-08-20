@@ -306,3 +306,197 @@
   }
 }
 
+/* ---------- Share panel (ShareReportDialog.jsx) ---------- */
+.m5-share-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.m5-share-dialog {
+  background: #FFFFFF;
+  border-radius: var(--radius-card);
+  width: 100%;
+  max-width: 720px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  box-shadow: 0px 20px 60px rgba(0, 0, 0, 0.28);
+}
+
+.m5-share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: #FFFFFF;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+.m5-share-head h3 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.m5-share-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+  padding: 20px;
+}
+
+.m5-share-preview img {
+  width: 100%;
+  border-radius: 14px;
+  display: block;
+  box-shadow: 0px 6px 22px rgba(0, 0, 0, 0.16);
+}
+/* Holds the preview's shape while the first draw completes, so the panel does
+   not jump when the image arrives. */
+.m5-share-skeleton {
+  width: 100%;
+  aspect-ratio: 1080 / 1350;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #F3F4F6, #E5E7EB);
+}
+
+.m5-share-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.m5-share-controls > .m5-share-label:not(:first-child) {
+  margin-top: 18px;
+}
+
+.m5-swatches {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.m5-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  outline-offset: 2px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.m5-swatch:hover {
+  transform: scale(1.06);
+}
+.m5-swatch.active {
+  border-color: var(--ink);
+  box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.m5-share-primary {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 18px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--teal), var(--secondary));
+  color: #FFFFFF;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.m5-share-targets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.m5-share-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #FFFFFF;
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.m5-share-target:hover {
+  border-color: var(--ink);
+  box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.08);
+}
+.m5-share-target-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.m5-share-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.m5-share-actions .m5-chip {
+  min-height: 40px;
+}
+
+.m5-share-hint,
+.m5-share-note {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 14px 0 0;
+}
+.m5-share-note:empty {
+  margin: 0;
+}
+.m5-share-note {
+  color: var(--teal-dark);
+  font-weight: 600;
+}
+
+.m5-share-dialog button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .m5-share-body {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  /* On a phone the card is the point - keep it visible but leave room for the
+     controls underneath without scrolling the whole sheet. */
+  .m5-share-preview {
+    max-width: 200px;
+    margin: 0 auto;
+  }
+}
+

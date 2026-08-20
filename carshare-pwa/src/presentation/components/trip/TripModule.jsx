@@ -144,7 +144,7 @@ export default function TripModule() {
         >
           {tab === 'history' && <RideHistory userId={user?.id} onOpenTrip={(id) => navigate(`/trip/${id}`)} />}
           {tab === 'impact' && <ImpactDashboard userId={user?.id} />}
-          {tab === 'report' && <MonthlyReport userId={user?.id} />}
+          {tab === 'report' && <MonthlyReport userId={user?.id} userName={user?.fullName} />}
           {tab === 'leaderboard' && <Leaderboard userId={user?.id} />}
         </div>
       </div>
