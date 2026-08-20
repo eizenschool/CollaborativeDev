@@ -167,16 +167,17 @@ in D020.
 ## D017 — Public-First Browsing and Action-Time Authentication
 **Status:** Accepted
 The application opens on public `/home` instead of forcing authentication.
-Guests may browse Home, Search, Ride listings, and Published Ride Detail. Login
-is required only when entering account-specific services, including Message,
-Favourite, Profile, Publish/My rides, ride requests, reviews, trips, and safety
+Guests may browse Home, Search results, and Published Ride Detail. `/search` is
+the sole public ride-listing surface. Login is required when entering
+account-specific services, including the `/ride` management workspace, Message,
+Favourite, Profile, Publish Ride, ride requests, reviews, trips, and safety
 flows. Protected navigation and Ride actions use the shared `/auth` page with a
 safe internal return destination. Once its exact public payload is explicitly
 approved and deployed, Supabase `anon` access is read-only and limited by RLS
 and column grants to Published rides from active Hosts and the safe public Host
 profile/impact data required to render them; private profile, vehicle, request,
-review, and messaging data remains unavailable. Guest Ride reads exclude Place
-IDs, precise coordinates, and pickup instructions.
+review, and messaging data remains unavailable. Public Search and Ride Detail
+reads exclude Place IDs, precise coordinates, and pickup instructions.
 
 Destination Discovery (`/discover`, D018) is part of that public browsing
 surface: a visitor who cannot yet name a destination is exactly who it serves,
@@ -214,17 +215,18 @@ Weather integration also moves here from Module 5, which never carried a weather
 requirement in the report.
 
 ## D019 — FR-6.35 Destination Prefill Contract
-**Status:** Accepted
+**Status:** Accepted; amended 2026-08-20
 
-Module 6 is the producer of a versioned `discoveryPrefill` navigation-state
-payload. Modules 2 and 4 are consumers. Version 1 carries the origin, selected
-destination, optional confirmed location references, the Module 6 catalogue key
-for correlation only, and the selected travel date. The payload is transient:
-it is not placed in the URL or persisted in the database. A fixture catalogue key
-is never treated as a confirmed Google Place ID. Module 2 remains responsible
-for final confirmed-location validation, while Module 4 may consume the labels
-against its current text-based search fixture. The complete field and validation
-contract is `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
+Module 6 produces shareable URL prefill links through
+`DestinationDiscoveryService.buildPrefillUrl()`. Module 4 consumes
+`/search?pickup&destination&date&destinationPlaceId`; Module 2 consumes
+`/ride/publish?destination&date`. Query strings are intentional so the handoff
+survives reloads and bookmarks. `destinationPlaceId` is an opaque Module 6
+catalogue/source hint for search correlation only: a fixture key is never a
+confirmed Google Place ID and is never persisted to a Ride. Module 2 remains
+responsible for confirmed-location validation. Legacy `/ride?from&to&date`
+search links are translated to Module 4's canonical `/search` parameters. The
+complete contract is `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
 
 ## D020 — Shared Notification Centre and Native Web Push
 **Status:** Accepted

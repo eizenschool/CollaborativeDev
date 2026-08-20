@@ -300,8 +300,9 @@ export const DestinationDiscoveryService = {
    *
    * A query string rather than router state on purpose: it survives a reload,
    * can be shared or bookmarked, and needs no shared in-memory contract between
-   * modules. Both forms treat every parameter as optional, so a link without
-   * them behaves exactly as opening the screen directly does.
+   * modules. `destinationPlaceId` is an opaque discovery hint for Search only;
+   * it is never treated as a confirmed Ride Place ID. Both forms treat every
+   * parameter as optional, so a bare link behaves like a direct visit.
    *
    * @param target 'search' for Module 4's ride search, 'publish' for Module 2's form
    */
@@ -315,9 +316,10 @@ export const DestinationDiscoveryService = {
       return `/ride/publish${params.toString() ? `?${params}` : ''}`;
     }
 
-    if (payload.destination) params.set('to', payload.destination);
-    if (payload.pickup) params.set('from', payload.pickup);
+    if (payload.pickup) params.set('pickup', payload.pickup);
+    if (payload.destination) params.set('destination', payload.destination);
     if (travelDate) params.set('date', travelDate);
-    return `/ride${params.toString() ? `?${params}` : ''}`;
+    if (payload.destinationPlaceId) params.set('destinationPlaceId', payload.destinationPlaceId);
+    return `/search${params.toString() ? `?${params}` : ''}`;
   }
 };

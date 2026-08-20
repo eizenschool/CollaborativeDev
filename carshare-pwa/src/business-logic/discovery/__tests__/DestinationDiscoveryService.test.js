@@ -398,16 +398,17 @@ describe('buildPrefillUrl - the link that actually carries the destination acros
   const place = { name: 'Cameron Highlands Tea Terraces', sourcePlaceId: 'fixture_cameron' };
   const origin = { label: 'Kuala Lumpur' };
 
-  it('sends the destination to Module 4 search as "to"', () => {
+  it('sends the destination to Module 4 using its canonical Search parameters', () => {
     const url = DestinationDiscoveryService.buildPrefillUrl('search', place, {
       origin, travelDate: '2026-08-15'
     });
 
-    expect(url.startsWith('/ride?')).toBe(true);
+    expect(url.startsWith('/search?')).toBe(true);
     const params = new URLSearchParams(url.split('?')[1]);
-    expect(params.get('to')).toBe('Cameron Highlands Tea Terraces');
-    expect(params.get('from')).toBe('Kuala Lumpur');
+    expect(params.get('destination')).toBe('Cameron Highlands Tea Terraces');
+    expect(params.get('pickup')).toBe('Kuala Lumpur');
     expect(params.get('date')).toBe('2026-08-15');
+    expect(params.get('destinationPlaceId')).toBe('fixture_cameron');
   });
 
   it('sends the destination to Module 2 publish as "destination"', () => {
@@ -429,13 +430,13 @@ describe('buildPrefillUrl - the link that actually carries the destination acros
     }, {});
 
     const params = new URLSearchParams(url.split('?')[1]);
-    expect(params.get('to')).toBe("Kellie's Castle & Gardens");
+    expect(params.get('destination')).toBe("Kellie's Castle & Gardens");
   });
 
   // A bare path has to keep working, because both forms treat every parameter as
   // optional and must behave exactly as they do when opened directly.
   it('returns a bare path when there is nothing to carry', () => {
-    expect(DestinationDiscoveryService.buildPrefillUrl('search', null, {})).toBe('/ride');
+    expect(DestinationDiscoveryService.buildPrefillUrl('search', null, {})).toBe('/search');
     expect(DestinationDiscoveryService.buildPrefillUrl('publish', null, {})).toBe('/ride/publish');
   });
 });

@@ -4,6 +4,7 @@ import {
   SMART_SEARCH_SORTS,
   buildSimilarSearchCriteria,
   filterAndSortRides,
+  legacyRideSearchUrlFromParams,
   normalizeSmartSearchCriteria,
   smartSearchCriteriaFromParams,
   smartSearchCriteriaToParams,
@@ -38,6 +39,23 @@ describe('Module 4 smart search contracts', () => {
     expect(restored.minSeats).toBe(2);
     expect(restored.tags).toEqual(['No smoking', 'Pet-friendly']);
     expect(params.getAll('tag')).toEqual(['No smoking', 'Pet-friendly']);
+  });
+
+  it('translates legacy Ride search parameters to the canonical public Search URL', () => {
+    const url = legacyRideSearchUrlFromParams('?from=KL+Sentral&to=Kellie%27s+Castle+%26+Gardens&date=2026-08-20');
+    const [path, query] = url.split('?');
+    const params = new URLSearchParams(query);
+
+    expect(path).toBe('/search');
+    expect(params.get('pickup')).toBe('KL Sentral');
+    expect(params.get('destination')).toBe("Kellie's Castle & Gardens");
+    expect(params.get('date')).toBe('2026-08-20');
+  });
+
+  it('redirects empty legacy criteria to bare Search and ignores ordinary Ride URLs', () => {
+    expect(legacyRideSearchUrlFromParams('?from=&to=&date=')).toBe('/search');
+    expect(legacyRideSearchUrlFromParams('?panel=hosting')).toBeNull();
+    expect(legacyRideSearchUrlFromParams('')).toBeNull();
   });
 
   it('rejects past dates and invalid Kuala Lumpur departure times', () => {

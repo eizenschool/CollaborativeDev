@@ -3,6 +3,8 @@ import {
   DEFAULT_AUTH_RETURN_PATH,
   getAuthNavigation,
   normaliseAuthReturnPath,
+  normaliseInternalReturnPath,
+  parseOAuthHashError,
   resolveAuthReturnPath
 } from '../authAccess.js';
 
@@ -23,5 +25,31 @@ describe('public-first authentication navigation', () => {
     expect(normaliseAuthReturnPath('/auth')).toBe(DEFAULT_AUTH_RETURN_PATH);
     expect(normaliseAuthReturnPath('//example.com')).toBe(DEFAULT_AUTH_RETURN_PATH);
     expect(normaliseAuthReturnPath('https://example.com')).toBe(DEFAULT_AUTH_RETURN_PATH);
+    expect(normaliseAuthReturnPath('/search\\evil')).toBe(DEFAULT_AUTH_RETURN_PATH);
+  });
+
+  it('validates ride-detail return paths with a caller-selected fallback', () => {
+    expect(normaliseInternalReturnPath('/search?pickup=KL+Sentral', '/search')).toBe('/search?pickup=KL+Sentral');
+    expect(normaliseInternalReturnPath('/favourite', '/search')).toBe('/favourite');
+    expect(normaliseInternalReturnPath('//example.com', '/search')).toBe('/search');
+    expect(normaliseInternalReturnPath('https://example.com', '/search')).toBe('/search');
+  });
+});
+
+describe('reading a failed Google OAuth round trip off the URL', () => {
+  it('reads the human-readable description Supabase appends to the hash', () => {
+    expect(parseOAuthHashError('#error=server_error&error_description=Unable+to+exchange+code')).toBe(
+      'Unable to exchange code'
+    );
+  });
+
+  it('falls back to the bare error code when no description is present', () => {
+    expect(parseOAuthHashError('#error=access_denied')).toBe('access_denied');
+  });
+
+  it('returns null for a successful callback or an unrelated hash', () => {
+    expect(parseOAuthHashError('#access_token=abc&token_type=bearer')).toBeNull();
+    expect(parseOAuthHashError('')).toBeNull();
+    expect(parseOAuthHashError(undefined)).toBeNull();
   });
 });

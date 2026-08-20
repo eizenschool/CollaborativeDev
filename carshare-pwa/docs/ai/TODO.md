@@ -47,7 +47,7 @@ easier to change now than after you have built against it.
 - [x] Run ingestion against a single region (Kuala Lumpur) and verify the Google-side result. This went beyond a smoke test: 20 places were ingested (`discovered: 20, enriched: 15, upserted: 15` on the first pass; `refreshDetails: true` re-enriched all 20 for review storage on a second pass), classification and description bugs were found and fixed against the real data, and the results were confirmed in the Dashboard Table Editor.
 - [ ] Add a persistent daily ingestion-budget ledger if the Google Maps quota page exposes only per-method/per-minute limits. Still not built; the only real budget control this session was manual per-call tracking during ingestion, not a database-enforced cap.
 - [x] Agree and document the shared FR-6.35 payload contract for Modules 6, 2, and 4. See `docs/ai/FR-6.35_PREFILL_CONTRACT.md` and D019.
-- [ ] Wire the accepted FR-6.35 payload into Module 2's publish form and Module 4's search form. `DestinationDiscoveryService.buildPrefillPayload()` still needs to produce the versioned shape, and the two forms must read navigation state without weakening confirmed-location validation.
+- [x] Wire FR-6.35 into Module 2's publish form and Module 4's Search URL. `buildPrefillUrl()` now targets canonical `/search` parameters for travellers and `/ride/publish` for Hosts without weakening Module 2's confirmed-location validation. D019 was amended to record the reload-safe URL contract.
 
 ## BLOCKED / NEEDS TEAM CONFIRMATION
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.

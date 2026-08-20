@@ -72,7 +72,7 @@ export default function FavouritePage() {
             unavailable={!ride.favouriteAvailable}
             favouritePending={pendingRideId === ride.id}
             onToggleFavourite={() => remove(ride.id)}
-            onView={() => navigate(`/ride/${ride.id}`)}
+            onView={() => navigate(`/ride/${ride.id}`, { state: { returnTo: '/favourite' } })}
             onFindSimilar={() => findSimilar(ride)}
           />
         ))}

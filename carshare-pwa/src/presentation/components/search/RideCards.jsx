@@ -23,6 +23,18 @@ function formatDeparture(ride) {
   }).format(new Date(instant));
 }
 
+function formatArrival(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('en-MY', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(new Date(value));
+}
+
 function initials(name) {
   return (name || '?').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 }
@@ -85,6 +97,10 @@ export function SearchRideCard({
           <span><IconUsers size={14} aria-hidden="true" />{ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} left</span>
           <span className={`search-scale ${ride.journeyScale?.toLowerCase()}`}>{ride.journeyScale}</span>
         </div>
+
+        {ride.estimatedArrivalAt && (
+          <p className="search-arrival"><span>Estimated arrival</span><strong>{formatArrival(ride.estimatedArrivalAt)}</strong></p>
+        )}
 
         {ride.restrictionTags?.length > 0 && (
           <div className="search-tag-row" aria-label="Ride preferences">
