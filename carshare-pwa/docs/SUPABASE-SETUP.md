@@ -39,7 +39,7 @@ Restart `npm run dev` after changing environment values.
 - `rides`: authenticated search, RPC-only host mutation, confirmed route references, pickup instructions, waypoints, seat constraints, and a mandatory host-owned vehicle.
 - `ride_requests` and `ride_reviews`: RPC-only participation and mutual review lifecycle.
 - `conversations`, `conversation_members`, `messages`, and `message_attachments`: member-readable, RPC-mutated messaging with seven-day terminal retention.
-- `message_translations` (after deploying `035`): member-readable, Edge-Function-written shared text/voice translation cache.
+- `message_translations` (after deploying `036`): member-readable, Edge-Function-written shared text/voice translation cache.
 - `user_notifications`: recipient-owned cross-module inbox, with Message as its first producer; browser-device subscriptions are Edge-Function-only and never client-readable.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
 - `message-media`: private, no listing, approved media only, 50 MB object maximum, and attachment-bound signed downloads.
@@ -89,7 +89,7 @@ VAPID secrets and Database Webhook remain to be configured below. See
 `docs/ai/SQL.md` for the authoritative deployment map; do not make
 Dashboard-only schema changes.
 
-`035_m3_message_translation.sql` and `m3-message-translation` are implemented
+`036_m3_message_translation.sql` and `m3-message-translation` are implemented
 but not deployed. Complete the project-owner setup below before expecting the
 Translate controls to return live results.
 
@@ -114,7 +114,7 @@ token to `.env.local`, a `VITE_` variable, client code, GitHub, or a screenshot.
    Replace the example production origin and keep every entry origin-only: no
    path, query string, or trailing slash. Supabase's runtime database credentials
    are supplied automatically and must not be copied into frontend configuration.
-4. Apply `database/sql/035_m3_message_translation.sql` through the team's normal
+4. Apply `database/sql/036_m3_message_translation.sql` through the team's normal
    migration workflow, then deploy the authenticated Function:
 
    ```powershell

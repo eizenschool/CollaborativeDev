@@ -9,7 +9,7 @@ async function read(relativeUrl) {
 
 describe('Module 3 translation security contract', () => {
   it('makes cached translations member-readable and Edge-Function-writable only', async () => {
-    const sql = await read('../../../database/sql/035_m3_message_translation.sql');
+    const sql = await read('../../../database/sql/036_m3_message_translation.sql');
     expect(sql).toContain('alter table public.message_translations enable row level security');
     expect(sql).toContain('private.conversation_is_visible');
     expect(sql).toContain('m.deleted_at is null');

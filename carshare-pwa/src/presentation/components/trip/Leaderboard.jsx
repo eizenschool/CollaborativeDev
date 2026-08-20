@@ -1,25 +1,29 @@
 // ===== PRESENTATION LAYER (Leaderboard) =====
 // Module 5, Screen 5 - FR-5.10 / FR-5.11 (UC5.10, UC5.11)
+//
+// Deliberately the one screen in the module that does not wear the app's green:
+// a ranking should read as a contest, not as another report. The dark arena
+// panel and the gold/silver/bronze podium carry that on their own.
+//
+// All three podium places are always drawn, even when nobody has claimed them.
+// An empty plinth is an honest statement about a contest with room in it, and
+// each is labelled "Open" so it can never be read as a competitor.
 import React, { useEffect, useState } from 'react';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, TIER_COLORS } from './tripTheme.js';
-import { IconTrophySmall } from './tripIcons.jsx';
+import { IconCrownSmall, IconSparkSmall, IconTrophySmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
+import MonthStepper, { MONTH_NAMES } from './MonthStepper.jsx';
+import useCountUp from './useCountUp.js';
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
-// Deterministic gradient per host, purely cosmetic (podium/list avatars) -
-// picks from a small fixed palette based on the name, so the same host
-// always gets the same color without needing a photo.
+// Deterministic gradient per host, purely cosmetic - the same host always gets
+// the same colour without needing a photo.
 const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg, #16A34A, #0D9488)',
-  'linear-gradient(135deg, #3B82F6, #7C3AED)',
-  'linear-gradient(135deg, #F59E0B, #EF4444)',
-  'linear-gradient(135deg, #0EA5E9, #16A34A)',
-  'linear-gradient(135deg, #EC4899, #F59E0B)'
+  'linear-gradient(135deg, #34D399, #059669)',
+  'linear-gradient(135deg, #60A5FA, #7C3AED)',
+  'linear-gradient(135deg, #FBBF24, #EF4444)',
+  'linear-gradient(135deg, #22D3EE, #2563EB)',
+  'linear-gradient(135deg, #F472B6, #F59E0B)'
 ];
 
 function gradientFor(name) {
@@ -27,7 +31,18 @@ function gradientFor(name) {
   return AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
 }
 
+// Podium order is 2 - 1 - 3, so first place stands in the middle.
+const BOARD_SIZE = 10;
+
+const PLACES = [
+  { rank: 2, height: 96, tone: 'silver', delay: 160 },
+  { rank: 1, height: 132, tone: 'gold', delay: 320 },
+  { rank: 3, height: 72, tone: 'bronze', delay: 0 }
+];
+
 export default function Leaderboard({ userId }) {
+  const now = new Date();
+  const [period, setPeriod] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [state, setState] = useState({ phase: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -35,7 +50,7 @@ export default function Leaderboard({ userId }) {
     let active = true;
     if (!userId) return;
     setState({ phase: 'loading' });
-    TripHistoryEngine.getLeaderboard(userId)
+    TripHistoryEngine.getLeaderboard(userId, period.year, period.month)
       .then((data) => {
         if (active) setState({ phase: 'ready', board: data });
       })
@@ -45,160 +60,161 @@ export default function Leaderboard({ userId }) {
     return () => {
       active = false;
     };
-  }, [userId, reloadToken]);
+  }, [userId, period.year, period.month, reloadToken]);
+
+  // Kept outside the phase branches: paging months must not make the control
+  // vanish under the reader's cursor while the next month loads.
+  const header = (
+    <div className="m5-lb-header">
+      <p className="m5-lb-eyebrow"><IconSparkSmall size={13} /> Season standings</p>
+      <h2>Community Leaderboard</h2>
+      <MonthStepper
+        year={period.year}
+        month={period.month}
+        onChange={(y, m) => setPeriod({ year: y, month: m })}
+      />
+    </div>
+  );
 
   if (state.phase === 'error') {
-    return <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />;
+    return (
+      <div className="m5-lb">
+        {header}
+        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+      </div>
+    );
   }
 
   if (state.phase === 'loading') {
-    return <p style={{ color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>Loading leaderboard…</p>;
-  }
-
-  // The heading used to print today's month while getLeaderboard() ranked
-  // all-time scores. Both now describe the same period the engine queried.
-  const { year, month, entries } = state.board;
-
-  if (entries.length === 0) {
     return (
-      <div className="m5-card m5-empty">
-        <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, color: COLORS.textPrimary, margin: 0 }}>No leaderboard data available yet</p>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, marginTop: 6 }}>
-          Check back once more hosts have completed rides in {MONTH_NAMES[month]} {year}.
+      <div className="m5-lb">
+        {header}
+        <p style={{ textAlign: 'center', color: COLORS.textSecondary, fontFamily: 'Inter, sans-serif' }}>
+          Loading leaderboard…
         </p>
       </div>
     );
   }
 
-  // A podium is a claim about first, second and third. With one or two hosts
-  // ranked it reads as a broken chart, so the plain ranking list carries the
-  // whole board until there is an actual top three.
-  const hasPodium = entries.length >= 3;
-  const podium = hasPodium ? entries.slice(0, 3) : [];
-  const rest = hasPodium ? entries.slice(3) : entries;
-  const currentUserEntry = entries.find((e) => e.isCurrentUser);
+  const { month, entries } = state.board;
+  const podium = PLACES.map((place) => ({ ...place, entry: entries[place.rank - 1] || null }));
+  // Ranks 4..BOARD_SIZE, filled where someone holds them and left open where
+  // nobody does.
+  const ladder = Array.from({ length: BOARD_SIZE - 3 }, (_, index) => {
+    const rank = index + 4;
+    return { rank, entry: entries[rank - 1] || null };
+  });
+  const you = entries.find((entry) => entry.isCurrentUser);
+  const openPlaces = 3 - Math.min(3, entries.length);
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 22, margin: 0, color: COLORS.textPrimary }}>Community Leaderboard</h2>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, margin: '4px 0 0' }}>
-          {MONTH_NAMES[month]} {year} · {entries.length} host{entries.length === 1 ? '' : 's'} with a completed trip
+    <div className="m5-lb">
+      {header}
+
+      <div className="m5-arena">
+        <p className="m5-arena-caption">
+          {entries.length === 0
+            ? `No host has completed a trip in ${MONTH_NAMES[month]} yet - all three places are open.`
+            : `${entries.length} host${entries.length === 1 ? '' : 's'} ranked` +
+              (openPlaces > 0
+                ? ` · ${openPlaces} podium place${openPlaces === 1 ? '' : 's'} still open`
+                : ' · podium complete')}
         </p>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: COLORS.textSecondary, margin: '6px 0 0' }}>
-          Ranked by Composite Host Impact Score
-        </p>
+
+        <div className="m5-podium" key={`${state.board.year}-${month}`}>
+          {podium.map((place) => <PodiumPlace key={place.rank} {...place} />)}
+        </div>
       </div>
 
-      {podium.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 20, marginBottom: 32 }}>
-          {podium[1] && <PodiumCard entry={podium[1]} height={84} rank={2} />}
-          {podium[0] && <PodiumCard entry={podium[0]} height={116} rank={1} highlight />}
-          {podium[2] && <PodiumCard entry={podium[2]} height={64} rank={3} />}
-        </div>
-      )}
-
-      <div>
-        {rest.map((entry) => (
-          <LeaderboardRow key={entry.id} entry={entry} />
+      <div className="m5-lb-list">
+        <p className="m5-lb-list-title">
+          Chasing the podium
+          <span>Places 4-{BOARD_SIZE}</span>
+        </p>
+        {ladder.map(({ rank, entry }) => (
+          entry
+            ? <RankRow key={entry.id} entry={entry} />
+            : <OpenRow key={rank} rank={rank} />
         ))}
       </div>
 
-      {/* Only pin the viewer's row when a podium pushed it out of the list's
-          natural reading order - without one the list already holds everyone. */}
-      {hasPodium && currentUserEntry && currentUserEntry.rank > 3 && (
-        <div style={{ marginTop: 16, position: 'sticky', bottom: 0 }}>
-          <LeaderboardRow entry={currentUserEntry} />
+      {you && (
+        <div className="m5-lb-you">
+          <span className="m5-lb-you-rank">#{you.rank}</span>
+          <div className="m5-lb-you-body">
+            <p className="m5-lb-you-name">Your position</p>
+            <p className="m5-lb-you-meta">
+              {you.badge?.name} · {you.compositeScore} pts
+              {entries.length > 1 ? ` · of ${entries.length} ranked` : ''}
+            </p>
+          </div>
+          <IconTrophySmall size={20} />
         </div>
       )}
+
+      <p className="m5-lb-footnote">
+        Ranked by Composite Host Impact Score - the same figure shown on a host's profile.
+      </p>
     </div>
   );
 }
 
-function PodiumCard({ entry, height, highlight, rank }) {
-  const tierColor = TIER_COLORS[entry.badge?.name] || COLORS.textSecondary;
-  const rankBadgeColor = rank === 1 ? '#EAB308' : rank === 2 ? '#9CA3AF' : '#CD7F32';
+function PodiumPlace({ rank, height, tone, delay, entry }) {
+  const open = !entry;
+  // The score counts up as the plinth rises; an open place has nothing to count.
+  const score = useCountUp(open ? 0 : entry.compositeScore, { delay: delay + 260 });
+
   return (
-    <div style={{ textAlign: 'center', width: 128 }}>
-      <div style={{ position: 'relative', display: 'inline-block' }}>
-        <div className="m5-podium-avatar" style={{ background: gradientFor(entry.name) }}>
-          {entry.name?.[0] || '?'}
+    <div className={`m5-place ${tone}` + (open ? ' open' : '')} style={{ '--rise-delay': `${delay}ms` }}>
+      <div className="m5-place-who">
+        {rank === 1 && !open && <span className="m5-place-crown"><IconCrownSmall size={20} /></span>}
+
+        <div className="m5-place-avatar" style={open ? undefined : { background: gradientFor(entry.name) }}>
+          {open ? '?' : entry.name?.[0] || '?'}
         </div>
-        <span
-          style={{
-            position: 'absolute',
-            bottom: 4,
-            right: -2,
-            width: 20,
-            height: 20,
-            borderRadius: '50%',
-            background: rankBadgeColor,
-            color: '#FFFFFF',
-            fontSize: 11,
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '2px solid #FFFFFF'
-          }}
-        >
-          {rank}
-        </span>
+
+        <p className="m5-place-name">{open ? 'Open' : entry.name}</p>
+        <p className="m5-place-tier" style={open ? undefined : { color: TIER_COLORS[entry.badge?.name] }}>
+          {open ? 'Unclaimed' : entry.badge?.name}
+        </p>
       </div>
-      <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 13, margin: '4px 0 0', color: COLORS.textPrimary }}>{entry.name}</p>
-      <p style={{ fontSize: 11, color: tierColor, fontWeight: 700, margin: '2px 0 8px' }}>{entry.badge?.name}</p>
-      <div
-        className="m5-podium-bar"
-        style={{
-          height,
-          background: highlight ? `linear-gradient(180deg, ${COLORS.primary}, ${COLORS.primaryDark})` : COLORS.primaryTint,
-          boxShadow: highlight ? '0px 4px 16px rgba(22,163,74,0.28)' : 'none'
-        }}
-      >
-        {highlight && <IconTrophySmall size={22} color="#fff" />}
+
+      <div className="m5-place-block" style={{ height, '--rise-to': `${height}px` }}>
+        <span className="m5-place-rank">{rank}</span>
+        <span className="m5-place-score">{open ? '—' : `${score} pts`}</span>
       </div>
-      <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.textPrimary, marginTop: 8 }}>{entry.compositeScore} pts</p>
     </div>
   );
 }
 
-function LeaderboardRow({ entry }) {
-  const tierColor = TIER_COLORS[entry.badge?.name] || COLORS.textSecondary;
+// An unclaimed rank: the number, and nothing pretending to be a competitor.
+function OpenRow({ rank }) {
   return (
-    <div
-      className="m5-card m5-row"
-      style={{
-        padding: '12px 16px',
-        background: entry.isCurrentUser ? COLORS.primaryTint : COLORS.surface,
-        borderColor: entry.isCurrentUser ? COLORS.primary : COLORS.border
-      }}
-    >
-      <span style={{ width: 24, textAlign: 'center', fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: COLORS.textSecondary }}>{entry.rank}</span>
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: '50%',
-          background: gradientFor(entry.name),
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: 'Poppins, sans-serif',
-          fontWeight: 700,
-          fontSize: 14,
-          color: '#FFFFFF',
-          flexShrink: 0
-        }}
-      >
+    <div className="m5-rank-row open" aria-label={`Rank ${rank}, unclaimed`}>
+      <span className="m5-rank-num">{rank}</span>
+      <div className="m5-rank-avatar open" aria-hidden="true" />
+      <div className="m5-rank-body">
+        <p className="m5-rank-name">Open</p>
+      </div>
+      <span className="m5-rank-score">—</span>
+    </div>
+  );
+}
+
+function RankRow({ entry }) {
+  return (
+    <div className={'m5-rank-row' + (entry.isCurrentUser ? ' you' : '')}>
+      <span className="m5-rank-num">{entry.rank}</span>
+      <div className="m5-rank-avatar" style={{ background: gradientFor(entry.name) }}>
         {entry.name?.[0] || '?'}
       </div>
-      <div style={{ flex: 1 }}>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 700, margin: 0, color: COLORS.textPrimary }}>
-          {entry.name} {entry.isCurrentUser && <span style={{ color: COLORS.primaryDark, fontSize: 12, fontWeight: 600 }}>(You)</span>}
+      <div className="m5-rank-body">
+        <p className="m5-rank-name">
+          {entry.name}{entry.isCurrentUser && <span> (You)</span>}
         </p>
-        <p style={{ fontSize: 11, color: tierColor, margin: '2px 0 0', fontWeight: 600 }}>{entry.badge?.name}</p>
+        <p className="m5-rank-tier" style={{ color: TIER_COLORS[entry.badge?.name] }}>{entry.badge?.name}</p>
       </div>
-      <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 14, color: COLORS.textPrimary }}>{entry.compositeScore} pts</span>
+      <span className="m5-rank-score">{entry.compositeScore} pts</span>
     </div>
   );
 }

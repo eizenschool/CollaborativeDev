@@ -20,7 +20,7 @@ const PUBLIC_RIDE_SELECT = `
   departure_at, journey_scale,
   seats_total, seats_available, contribution, restriction_tags,
   status, estimated_arrival_at,
-  host:profiles(id, full_name, profile_photo_url,
+  host:profiles!rides_host_id_fkey(id, full_name, profile_photo_url,
     host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)
   )
 `;
@@ -29,13 +29,13 @@ const LEGACY_PUBLIC_RIDE_SELECT = `
   departure_at, journey_scale,
   seats_total, seats_available, contribution, restriction_tags,
   status,
-  host:profiles(id, full_name, profile_photo_url,
+  host:profiles!rides_host_id_fkey(id, full_name, profile_photo_url,
     host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)
   )
 `;
 const LEGACY_HOST_RIDE_SELECT = `
   *,
-  host:profiles(id, full_name, profile_photo_url,
+  host:profiles!rides_host_id_fkey(id, full_name, profile_photo_url,
     host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)
   )
 `;

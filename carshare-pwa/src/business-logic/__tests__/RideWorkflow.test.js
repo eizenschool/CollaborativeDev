@@ -112,6 +112,48 @@ describe('Module 2 ride workflow contracts', () => {
     expect(isRouteQuoteFresh(quote, new Date('2026-08-20T00:05:00.000Z'))).toBe(false);
   });
 
+  it('saves, restores, updates, and publishes a Draft only with a fresh route quote', async () => {
+    const draft = await mockDb.createRide('u_demo_1', {
+      pickup: 'KL Sentral', destination: 'Ipoh', departureAt: '2026-08-25T01:00:00.000Z',
+      date: '2026-08-25', time: '09:00', journeyScale: 'Intercity', vehicleId: 'v_1',
+      seatsTotal: 2, pickupLocation: { placeId: 'pickup-id' }, destinationLocation: { placeId: 'destination-id' }
+    }, 'Draft');
+    expect((await mockDb.getRide(draft.id)).status).toBe('Draft');
+
+    const updated = await mockDb.updateRide(draft.id, { contribution: 'Share tolls' });
+    expect(updated.contribution).toBe('Share tolls');
+    await expect(mockDb.publishDraft(draft.id, {
+      estimatedArrivalAt: '2026-08-25T03:00:00.000Z', expiresAt: '2026-08-14T00:00:00.000Z'
+    })).rejects.toThrow('fresh route');
+
+    const stored = JSON.parse(memory.get('letstumpang_mock_db_v1'));
+    stored.rides.r_5.estimatedArrivalAt = '2026-08-20T03:00:00.000Z';
+    stored.rides.r_5.scheduleBufferUntil = '2026-08-20T03:30:00.000Z';
+    memory.set('letstumpang_mock_db_v1', JSON.stringify(stored));
+    const published = await mockDb.publishDraft(draft.id, {
+      distanceMeters: 200000, routeDurationSeconds: 7200, stopoverSeconds: 0,
+      estimatedArrivalAt: '2026-08-25T03:00:00.000Z', expiresAt: '2026-08-14T00:10:00.000Z',
+      pickupAnchor: { latitude: 3.134, longitude: 101.686 },
+      destinationAnchor: { latitude: 4.597, longitude: 101.09 }
+    });
+    expect(published.status).toBe('Published');
+    expect(published.estimatedArrivalAt).toBe('2026-08-25T03:00:00.000Z');
+  });
+
+  it('deletes an owned Draft and rejects another account', async () => {
+    const details = {
+      pickup: 'KL Sentral', destination: 'Seremban', departureAt: '2026-08-26T01:00:00.000Z',
+      date: '2026-08-26', time: '09:00', journeyScale: 'Intercity', vehicleId: 'v_1', seatsTotal: 2
+    };
+    const deletable = await mockDb.createRide('u_demo_1', details, 'Draft');
+    await expect(mockDb.deleteDraft(deletable.id)).resolves.toBe(true);
+    expect(await mockDb.getRide(deletable.id)).toBeNull();
+
+    const protectedDraft = await mockDb.createRide('u_demo_1', details, 'Draft');
+    await mockDb.signIn({ email: 'test@example.com' });
+    await expect(mockDb.deleteDraft(protectedDraft.id)).rejects.toThrow('Only your Draft');
+  });
+
   it('uses half-open occupied intervals for equal times, overlaps, and the buffer boundary', () => {
     const firstStart = '2026-08-20T01:00:00.000Z';
     const firstEnd = '2026-08-20T03:30:00.000Z';

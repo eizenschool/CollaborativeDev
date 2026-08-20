@@ -14,11 +14,11 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging
 Deployed SQL history: 001-026 and 028 as tracked Supabase migrations, plus 023,
   027, 029, and 030 applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-035
+Repository SQL history: 001-036
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 remains local and
-  awaits its documented deployment steps; 035 is the local, undeployed Module 3
-  translation cache)
+  awaits its documented deployment steps; 035 and 036 are local, undeployed
+  Module 2 notifications and Module 3 translation cache migrations)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -158,7 +158,16 @@ adds owner-scoped ride favourites and authenticated RPCs for idempotent
 add/remove plus a safe card projection that continues showing unavailable saved
 rides. Module 4 retains its mock fallback until this migration is deployed.
 
-`035_m3_message_translation.sql` is **written but not yet deployed**. It adds a
+`035_m2_ride_usability_notifications.sql` is **written but not yet deployed**
+and must follow `033_project_notifications.sql`. It reuses
+`private.create_user_notification(...)` for Module 2 request, cancellation,
+arrangement, boarding, arrival, and completion events. Its private minute-Cron
+producer adds deduplicated 24-hour, final-hour, and departure-due reminders;
+departure catch-up is limited to 30 minutes. It creates no public table or
+client RPC and does not change Push subscriptions, Edge Functions, VAPID,
+service workers, or webhooks. Deploy and verify shared `033` before `035`.
+
+`036_m3_message_translation.sql` is **written but not yet deployed**. It adds a
 source-versioned shared cache keyed by message and target language for English,
 Simplified Chinese, Bahasa Melayu, and Tamil text/voice translations. Current
 conversation members receive SELECT only through RLS; browser roles receive no
@@ -166,7 +175,7 @@ write grant. The authenticated `m3-message-translation` Edge Function performs
 separate membership, tombstone, and expiry checks before its server client writes
 a Cloudflare-generated result. Deploying the table without the Function and its
 server-only secrets does not enable translation. The next new migration starts
-at `036`.
+at `037`.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -187,7 +196,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `conversation_members`: role, join/leave, per-user archive, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
-- `message_translations` (in undeployed `035`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
+- `message_translations` (in undeployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 
@@ -273,7 +282,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `021_m3_stabilize_realtime_reads.sql` - deployed; idempotent read-cursor advancement that avoids no-op Realtime update loops.
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
 - `034_m4_smart_search_favourites.sql` - not deployed; Module 4 owner-scoped favourites, RLS, authenticated mutations, and safe unavailable-ride listing.
-- `035_m3_message_translation.sql` - not deployed; four-language source-versioned text/voice translation cache, member-only SELECT RLS, and no browser write grant.
+- `036_m3_message_translation.sql` - not deployed; four-language source-versioned text/voice translation cache, member-only SELECT RLS, and no browser write grant.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
@@ -288,6 +297,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   2026-08-20; shared recipient-owned notification inbox, protected device
   subscriptions, narrow read RPCs, 30-day retention, Realtime, and Message
   producer integration.
+- `035_m2_ride_usability_notifications.sql` - written locally and pending
+  deployment after `033`; private Module 2 notification triggers and
+  deduplicated minute-Cron reminders only.
 
 ## Rules for New Database Work
 

@@ -10,6 +10,7 @@ import { useIsDesktop } from './useIsDesktop.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import { IconArrowLeftSmall, IconLeafSmall, IconMapPinSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState, NotFoundState } from './tripStates.jsx';
+import TripTimelineCard from './TripTimelineCard.jsx';
 import './tripStyles.css';
 
 export default function TripDetail() {
@@ -140,6 +141,7 @@ export default function TripDetail() {
 
         <div>
           <CarbonCard trip={trip} />
+          <TripTimelineCard timeline={trip.timeline} />
         </div>
       </div>
     </div>
