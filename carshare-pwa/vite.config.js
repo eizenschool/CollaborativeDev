@@ -10,6 +10,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'service-worker.js',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         name: "Let's Tumpang - Community Carpooling",
@@ -24,28 +27,11 @@ export default defineConfig({
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }
         ]
       },
-      workbox: {
-        // Core GUI screens (app shell) - cached for read-only offline viewing
+      injectManifest: {
+        // Core GUI screens (app shell) - cached for read-only offline viewing.
+        // Runtime Supabase caching stays in src/service-worker.js so the same
+        // worker can also handle Web Push and notification clicks.
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            // Supabase reads (GET) may be served stale-while-revalidate for offline resilience.
-            // Supabase writes are POST/PATCH/DELETE and are never matched by this GET-only pattern,
-            // so "read-only offline access" is enforced at the caching layer, not just by convention.
-            // Message-media URLs are private, signed, and expire after one hour.
-            // Caching them can replay an expired response as "unavailable".
-            urlPattern: ({ url, request }) =>
-              url.hostname.endsWith('.supabase.co')
-              && url.pathname.startsWith('/rest/v1/')
-              && request.method === 'GET',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-read-cache',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 }
-            }
-          }
-        ]
       }
     })
   ],

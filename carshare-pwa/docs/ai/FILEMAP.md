@@ -8,6 +8,8 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 
 ## Shared Authentication Context
 - `src/context/AuthContext.jsx` — shared authenticated-user state.
+- `src/context/NotificationContext.jsx` — shared recipient inbox, unread state,
+  and per-device push permission/subscription state.
 
 ## Shared Presentation
 - `docs/ai/UI.md` — shared mobile-first UI/UX, responsive, component, and accessibility contract.
@@ -26,6 +28,8 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/business-logic/verification/` — trip verification logic from the former Trust & Safety scope; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 - `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.
 - `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, and reverse-geocoding boundary.
+- `src/business-logic/NotificationService.js` — shared notification mapping,
+  safe action paths, unread count, and Web Push subscription orchestration.
 
 ## Shared Mapping
 - `src/presentation/components/maps/GoogleRouteMap.jsx` — shared route iframe with an offline/unconfigured fallback.
@@ -37,6 +41,11 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/data-access/mockDataStore.js` — mock/local prototype store.
 - `src/data-access/mockMessageData.js` — messaging prototype/mock data.
 - `src/data-access/module6Store.js` — trip verification prototype store (former Trust & Safety scope).
+- `src/data-access/supabaseNotificationRepository.js` — shared notification
+  inbox, read-state RPC, Realtime, and device-subscription Edge Function adapter.
+- `supabase/functions/notification-subscriptions/` and
+  `supabase/functions/notification-push/` — authenticated device registration
+  and webhook-authenticated VAPID delivery; secrets remain server-only.
 - `database/sql/` — numbered schema/RLS/trigger SQL files; see `docs/ai/SQL.md` for the current file map before reading these directly.
 
 ## Module Context

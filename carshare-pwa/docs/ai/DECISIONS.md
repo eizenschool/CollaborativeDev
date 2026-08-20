@@ -160,8 +160,9 @@ another member reads the message; sender-only deletion always tombstones the
 whole bundle. Completed private chats can be archived per user, Completed group
 travellers can leave, and Hosts cannot leave. Completed, Cancelled, and Expired
 conversation access ends permanently seven days after the terminal timestamp,
-overriding UC3.8's older permanent archive wording. Translation and messaging
-notifications remain deferred.
+overriding UC3.8's older permanent archive wording. Translation remains
+deferred; Message notifications are delivered through the shared centre defined
+in D020.
 
 ## D017 — Public-First Browsing and Action-Time Authentication
 **Status:** Accepted
@@ -224,6 +225,25 @@ is never treated as a confirmed Google Place ID. Module 2 remains responsible
 for final confirmed-location validation, while Module 4 may consume the labels
 against its current text-based search fixture. The complete field and validation
 contract is `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
+
+## D020 — Shared Notification Centre and Native Web Push
+**Status:** Accepted
+
+`user_notifications` is the application-wide recipient inbox. Every producer
+uses the trusted database helper with a source module, event type, safe internal
+path, payload, and stable dedupe key; only the shared notification provider owns
+the unread count, Realtime subscription, read state, bell, and `/notifications`
+route. Message is the first producer and creates one notification for each
+other current conversation member. Text bodies are shown in the notification;
+attachment-only messages use a type summary.
+
+Device alerts use standard Web Push (VAPID) with the browser's service worker.
+The browser obtains permission only from an explicit user action. Browser code
+has the public application-server key only; the VAPID private key, service-role
+credentials, and Database Webhook secret remain in Supabase Edge Function
+secrets. Database webhook delivery is asynchronous and may be retried, so the
+inbox is the source of truth and the push payload is a convenience alert. The
+inbox retains 30 days and loads its newest 50 items by default.
 
 ## Open Decisions
 - database schemas/RLS for Modules 4-5 (Module 6's `024` schema is deployed; live catalogue enablement remains pending);

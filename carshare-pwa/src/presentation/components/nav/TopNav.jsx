@@ -5,10 +5,13 @@
 // screens here; the rest route to a lightweight ComingSoonScreen until their
 // module lands, so the nav's final shape is demonstrable without faking
 // functionality that isn't built yet.
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { IconCar, IconHome, IconSearch, IconRoute, IconMessage, IconHeart, IconUser, IconBell, IconLogOut } from '../icons.jsx';
+import { NotificationPopover } from '../notifications/NotificationCenter.jsx';
 
 const NAV_ITEMS = [
   { to: '/home', label: 'Home', Icon: IconHome },
@@ -21,8 +24,11 @@ const NAV_ITEMS = [
 
 export default function TopNav() {
   const { user, signOut } = useAuth();
+  const { unreadCount } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationRef = useRef(null);
   const initials = (user?.fullName || user?.user_metadata?.full_name || user?.email || '?')
     .split(' ')
     .map((p) => p[0])
@@ -34,6 +40,22 @@ export default function TopNav() {
     await signOut();
     navigate('/home', { replace: true });
   }
+
+  useEffect(() => {
+    if (!notificationsOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (!notificationRef.current?.contains(event.target)) setNotificationsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setNotificationsOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [notificationsOpen]);
 
   return (
     <header className="topnav">
@@ -58,9 +80,21 @@ export default function TopNav() {
 
       <div className="topnav-actions">
         {user ? <>
-          <button className="icon-btn" title="Notifications" type="button">
-            <IconBell size={18} />
-          </button>
+          <div className="notification-nav-wrap" ref={notificationRef}>
+            <button
+              className="icon-btn notification-bell"
+              title="Notifications"
+              type="button"
+              aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+              aria-expanded={notificationsOpen}
+              aria-haspopup="dialog"
+              onClick={() => setNotificationsOpen((open) => !open)}
+            >
+              <IconBell size={18} />
+              {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            </button>
+            {notificationsOpen && <NotificationPopover onClose={() => setNotificationsOpen(false)} />}
+          </div>
           <div
             className="topnav-avatar"
             style={user.profilePhotoUrl ? { backgroundImage: `url(${user.profilePhotoUrl})` } : undefined}
