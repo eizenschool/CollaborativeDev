@@ -1,10 +1,8 @@
 // ===== PRESENTATION LAYER (TopNav) =====
 // The one persistent, shared element across every screen and every module -
 // matches the nav bar spec used across the whole app (6 items: Home, Search,
-// Ride, Message, Favourite, Profile). Only "Profile" is wired to real Module 1
-// screens here; the rest route to a lightweight ComingSoonScreen until their
-// module lands, so the nav's final shape is demonstrable without faking
-// functionality that isn't built yet.
+// Ride, Message, Favourite, Profile). Search is the public ride-browsing surface;
+// Ride is the authenticated hosting and joining workspace.
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
@@ -16,7 +14,7 @@ import { NotificationPopover } from '../notifications/NotificationCenter.jsx';
 const NAV_ITEMS = [
   { to: '/home', label: 'Home', Icon: IconHome },
   { to: '/search', label: 'Search', Icon: IconSearch },
-  { to: '/ride', label: 'Ride', Icon: IconRoute },
+  { to: '/ride', label: 'Ride', Icon: IconRoute, requiresAuth: true },
   { to: '/message', label: 'Message', Icon: IconMessage, requiresAuth: true },
   { to: '/favourite', label: 'Favourite', Icon: IconHeart, requiresAuth: true },
   { to: '/profile', label: 'Profile', Icon: IconUser, requiresAuth: true }

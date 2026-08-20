@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
-import { getAuthNavigation } from '../../../business-logic/authAccess.js';
+import { getAuthNavigation, normaliseInternalReturnPath } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
@@ -130,6 +130,7 @@ function RequestSheet({ ride, onDismiss, onSubmit, saving, error }) {
 export default function RideDetail() {
   const { rideId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [ride, setRide] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -177,6 +178,7 @@ export default function RideDetail() {
   const waypoints = ride.waypoints?.length ? ride.waypoints : [];
   const departureReached = new Date(ride.departureAt) <= new Date();
   const checkInOpen = new Date(ride.departureAt).getTime() - Date.now() <= REQUEST_CUTOFF_HOURS * 60 * 60 * 1000;
+  const returnTo = normaliseInternalReturnPath(location.state?.returnTo, '/search');
 
   async function cancelRide(reason) {
     setError('');
@@ -254,7 +256,7 @@ export default function RideDetail() {
     <main className="phone-ride-page ride-detail-page">
       <div className="ride-detail-map-wrap">
         <RouteMap ride={ride} />
-        <button className="map-back-button" onClick={() => navigate('/ride')} aria-label="Go back"><IconArrowLeft size={18} /></button>
+        <button className="map-back-button" onClick={() => navigate(returnTo)} aria-label="Go back"><IconArrowLeft size={18} /></button>
         <span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span>
         <a className="map-open-overlay" href={GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, pickupLocation: ride.pickupLocation, destination: ride.destination, destinationLocation: ride.destinationLocation, waypoints: ride.waypoints })} target="_blank" rel="noreferrer" aria-label="Open this route in Google Maps">Open map</a>
       </div>

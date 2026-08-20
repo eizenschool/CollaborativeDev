@@ -234,7 +234,9 @@ export default function SearchModule() {
                 saved={favouriteIds.has(ride.id)}
                 favouritePending={pendingRideId === ride.id}
                 onToggleFavourite={() => toggleFavourite(ride)}
-                onView={() => navigate(`/ride/${ride.id}`)}
+                onView={() => navigate(`/ride/${ride.id}`, {
+                  state: { returnTo: `${location.pathname}${location.search}` }
+                })}
               />
             ))}
           </div>

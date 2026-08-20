@@ -161,9 +161,11 @@ The persistent navigation has six destinations in this order:
 Use `TopNav.jsx`; do not implement a separate navigation bar inside a module.
 The current route determines the active state.
 
-- The default website entry is public Home. Guests may browse Home, Search,
-  Ride listings, and Published Ride Detail without creating a session.
-- Message, Favourite, Profile, Publish Ride, personal ride/request views, and
+- The default website entry is public Home. Guests may browse Home, Search
+  results, and Published Ride Detail without creating a session. `/search` is
+  the only public ride-listing surface.
+- Message, Favourite, Profile, the `/ride` management workspace, Publish Ride,
+  personal ride/request views, and
   other account-specific services require authentication. A guest who selects
   one is sent to the shared auth page with a clear reason and a safe return
   destination; do not hide the navigation item or force login on initial entry.

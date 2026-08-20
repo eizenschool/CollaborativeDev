@@ -113,8 +113,10 @@ retains the pre-027 Host-only full-row fallback for environments that have not
 yet applied migration 028.
 Responsive verification targets are 375px, 768px, 1024px, and 1440px.
 
-Ride search and Published Ride Detail are public browsing surfaces. Guests are
-sent to the shared auth page only when they select Publish/My rides, Request to
+Module 4 Search and Published Ride Detail are public browsing surfaces. The
+bare `/ride` route is the authenticated workspace for hosted and joining rides;
+the former basic RideHub search has been retired. Guests are sent to the shared
+auth page only when they select Ride management, Publish, Request to
 join, Message host, or another account-specific Ride action. Migration
 `023_m1_m2_public_ride_browsing.sql` is deployed with column-scoped anon reads
 for only Published rides from active Hosts plus the safe profile and impact
@@ -126,10 +128,10 @@ held under the private schema and the short-lived client quote is encrypted as
 well as signed.
 Requests, vehicles, reviews, and messaging remain authenticated/private.
 
-For FR-6.35, Module 2 consumes the versioned `discoveryPrefill` navigation
-state defined in `docs/ai/FR-6.35_PREFILL_CONTRACT.md`. It may display incoming
-labels, but it must not treat a fixture catalogue key as a confirmed Google
-location.
+For FR-6.35, Module 2 consumes the optional `destination` and `date` query
+parameters on `/ride/publish` defined in `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
+It may display an incoming label, but only the normal confirmed-location input
+can establish a Google location reference.
 
 ## Deployment Gate / Deferred
 

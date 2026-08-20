@@ -3,6 +3,7 @@ import {
   DEFAULT_AUTH_RETURN_PATH,
   getAuthNavigation,
   normaliseAuthReturnPath,
+  normaliseInternalReturnPath,
   resolveAuthReturnPath
 } from '../authAccess.js';
 
@@ -23,5 +24,13 @@ describe('public-first authentication navigation', () => {
     expect(normaliseAuthReturnPath('/auth')).toBe(DEFAULT_AUTH_RETURN_PATH);
     expect(normaliseAuthReturnPath('//example.com')).toBe(DEFAULT_AUTH_RETURN_PATH);
     expect(normaliseAuthReturnPath('https://example.com')).toBe(DEFAULT_AUTH_RETURN_PATH);
+    expect(normaliseAuthReturnPath('/search\\evil')).toBe(DEFAULT_AUTH_RETURN_PATH);
+  });
+
+  it('validates ride-detail return paths with a caller-selected fallback', () => {
+    expect(normaliseInternalReturnPath('/search?pickup=KL+Sentral', '/search')).toBe('/search?pickup=KL+Sentral');
+    expect(normaliseInternalReturnPath('/favourite', '/search')).toBe('/favourite');
+    expect(normaliseInternalReturnPath('//example.com', '/search')).toBe('/search');
+    expect(normaliseInternalReturnPath('https://example.com', '/search')).toBe('/search');
   });
 });

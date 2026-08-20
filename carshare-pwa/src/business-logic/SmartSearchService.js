@@ -150,6 +150,19 @@ export function smartSearchCriteriaToParams(criteria) {
   return params;
 }
 
+export function legacyRideSearchUrlFromParams(input) {
+  const params = input instanceof URLSearchParams ? input : new URLSearchParams(input || '');
+  const hasLegacyCriteria = ['from', 'to', 'date'].some((key) => params.has(key));
+  if (!hasLegacyCriteria) return null;
+
+  const canonical = smartSearchCriteriaToParams({
+    pickup: params.get('from'),
+    destination: params.get('to'),
+    date: params.get('date')
+  });
+  return `/search${canonical.toString() ? `?${canonical}` : ''}`;
+}
+
 export function buildSimilarSearchCriteria(ride, { now = new Date() } = {}) {
   const dateIsUsable = ride?.date && ride.date >= localDateParts(now);
   return normalizeSmartSearchCriteria({

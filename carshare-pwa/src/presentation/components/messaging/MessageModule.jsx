@@ -187,7 +187,7 @@ export default function MessageModule() {
       isLoading={folderState.loading}
       error={folderState.error}
       onRetry={() => refreshConversations(folder)}
-      onBrowseRides={() => navigate('/ride')}
+      onBrowseRides={() => navigate('/search')}
     />
   );
 

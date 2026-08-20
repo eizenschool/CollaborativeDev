@@ -1,182 +1,136 @@
 // ===== PRESENTATION LAYER (RideHub) =====
-import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
-import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import RideCard from './RideCard.jsx';
-import { IconSearch, IconMapPin, IconCalendar, IconPlus, IconRoute } from '../icons.jsx';
+import { IconPlus, IconRoute, IconSearch, IconUsers } from '../icons.jsx';
 import '../../styles/ride.css';
 
 export default function RideHub() {
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  // Optional search prefill, so arriving from Module 6's Destination Discovery
-  // (FR-6.35) does not make the traveller retype the destination they just
-  // chose. Absent parameters leave every field empty, which is exactly the
-  // behaviour when opening /ride directly.
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState('find'); // 'find' | 'my'
-  const [from, setFrom] = useState(() => searchParams.get('from') || '');
-  const [to, setTo] = useState(() => searchParams.get('to') || '');
-  const [date, setDate] = useState(() => searchParams.get('date') || '');
-  const [rides, setRides] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [myRides, setMyRides] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    search();
-  }, []);
-
-  useEffect(() => {
-    if (tab === 'my' && !myRides && user) {
-      Promise.all([RideService.listMyRides(user.id), RideRequestService.listMyRequests(user.id)])
-        .then(([rides, joining]) => setMyRides({ ...rides, joining }));
-    }
-  }, [tab, user, myRides]);
-
-  async function search(e) {
-    e?.preventDefault();
+  const loadMyRides = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     setError('');
     try {
-      setRides(await RideService.searchRides({ from, to, date }));
-    } catch (err) {
-      setError(err.message);
+      const [rides, joining] = await Promise.all([
+        RideService.listMyRides(user.id),
+        RideRequestService.listMyRequests(user.id)
+      ]);
+      setMyRides({ ...rides, joining });
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load your rides.');
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
-  function openMemberService(destination, reason) {
-    const target = getAuthNavigation(user, destination, reason);
-    navigate(target.to, { state: target.state });
-  }
+  useEffect(() => { loadMyRides(); }, [loadMyRides]);
 
-  function openMyRides() {
-    if (!user) {
-      openMemberService('/ride', 'Sign in to view the rides you host or requested.');
-      return;
-    }
-    setTab('my');
+  function openRide(ride, returnTo = '/ride') {
+    navigate(`/ride/${ride.id}`, { state: { returnTo } });
   }
 
   return (
-    <div className="ride-hub">
+    <main className="ride-hub ride-management-hub">
       <header className="ride-hub-mobile-heading">
         <span className="ride-hero-icon" aria-hidden="true"><IconRoute size={22} /></span>
         <div>
-          <p className="ride-hero-kicker">Travel better, together</p>
-          <h1>Where are you headed?</h1>
-          <p>Find a trusted shared journey or offer your empty seats.</p>
+          <p className="ride-hero-kicker">Ride workspace</p>
+          <h1>My rides</h1>
+          <p>Manage the journeys you host and the rides you asked to join.</p>
         </div>
       </header>
-      <div className="ride-hub-left">
-        <div className="tabs" role="tablist" aria-label="Ride workspace">
-          <button role="tab" aria-selected={tab === 'find'} className={'tab' + (tab === 'find' ? ' active' : '')} onClick={() => setTab('find')}>Find a ride</button>
-          <button role="tab" aria-selected={tab === 'my'} className={'tab' + (tab === 'my' ? ' active' : '')} onClick={openMyRides}>My rides</button>
-        </div>
 
-        {tab === 'find' && (
-          <section className="card ride-search-card" aria-labelledby="ride-search-title">
-            <div className="ride-search-heading">
-              <div>
-                <p className="eyebrow">PLAN YOUR JOURNEY</p>
-                <h2 id="ride-search-title">Find the right ride</h2>
-              </div>
-              <IconSearch size={19} aria-hidden="true" />
-            </div>
-            <form onSubmit={search}>
-              <div className="field">
-                <label htmlFor="ride-search-from">Pickup</label>
-                <div className="input-wrap">
-                  <span className="prefix-icon"><IconMapPin size={14} /></span>
-                  <input id="ride-search-from" autoComplete="street-address" placeholder="e.g. KL Sentral" value={from} onChange={(e) => setFrom(e.target.value)} />
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="ride-search-to">Destination</label>
-                <div className="input-wrap">
-                  <span className="prefix-icon"><IconMapPin size={14} /></span>
-                  <input id="ride-search-to" autoComplete="street-address" placeholder="e.g. Georgetown" value={to} onChange={(e) => setTo(e.target.value)} />
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="ride-search-date">Travel date</label>
-                <div className="input-wrap">
-                  <span className="prefix-icon"><IconCalendar size={14} /></span>
-                  <input id="ride-search-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                </div>
-              </div>
-              <button className="btn-primary" type="submit" disabled={loading}><IconSearch size={16} /> {loading ? 'Searching…' : 'Search rides'}</button>
-            </form>
-          </section>
+      <aside className="ride-hub-left">
+        <section className="card ride-management-card" aria-labelledby="ride-management-title">
+          <span className="ride-management-icon" aria-hidden="true"><IconRoute size={22} /></span>
+          <p className="eyebrow">RIDE WORKSPACE</p>
+          <h1 id="ride-management-title">My rides</h1>
+          <p>Publish journeys, manage passengers, and keep track of rides you are joining.</p>
+          <div className="ride-management-actions">
+            <button className="btn-primary btn-publish" type="button" aria-label="Publish a ride" onClick={() => navigate('/ride/publish')}>
+              <IconPlus size={17} /> <span>Publish a ride</span>
+            </button>
+            <button className="btn-secondary ride-request-button" type="button" onClick={() => navigate('/ride/requests')}>
+              <IconUsers size={17} /> My requests
+            </button>
+          </div>
+          <button className="btn-link ride-demand-link" type="button" onClick={() => navigate('/discover/demand')}>
+            Where people want to go
+          </button>
+        </section>
+      </aside>
+
+      <section className="ride-hub-right" aria-busy={loading}>
+        {error && (
+          <div className="alert alert-error ride-management-error" role="alert">
+            <span>{error}</span>
+            <button type="button" className="btn-link" onClick={loadMyRides}>Retry</button>
+          </div>
         )}
-
-        <button className="btn-primary btn-publish" onClick={() => openMemberService('/ride/publish', 'Sign in before publishing a ride.') }>
-          <IconPlus size={17} /> <span>Publish a ride</span>
-        </button>
-      </div>
-
-      <div className="ride-hub-right">
-        {tab === 'find' && (
-          <>
-            <div className="ride-hub-header">
-              <div>
-                <p className="eyebrow">AVAILABLE JOURNEYS</p>
-                <h2>{loading ? 'Searching nearby rides…' : `${rides.length} ride${rides.length === 1 ? '' : 's'} found`}</h2>
-              </div>
-              {!loading && <span className="result-count" aria-label={`${rides.length} search results`}>{rides.length}</span>}
-            </div>
-            {error && <div className="alert alert-error" role="alert">{error}</div>}
-            <div className="ride-grid">
-              {rides.map((ride) => (
-                <RideCard key={ride.id} ride={ride} onClick={() => navigate(`/ride/${ride.id}`)} />
-              ))}
-              {!loading && rides.length === 0 && (
-                <section className="ride-empty-state">
-                  <span aria-hidden="true"><IconSearch size={24} /></span>
-                  <h3>No matching rides yet</h3>
-                  <p>Try a nearby pickup point, another destination, or a different travel date.</p>
-                  <button type="button" className="btn-secondary" onClick={() => { setFrom(''); setTo(''); setDate(''); }}>Clear search</button>
-                </section>
-              )}
-            </div>
-          </>
+        {loading && <div className="ride-page-loading compact" role="status">Loading your rides…</div>}
+        {!loading && !error && myRides && (
+          <MyRidesView
+            myRides={myRides}
+            onRideSelect={(ride) => openRide(ride)}
+            onRequests={() => navigate('/ride/requests')}
+            onSeeDemand={() => navigate('/discover/demand')}
+            onFindRides={() => navigate('/search')}
+          />
         )}
-
-        {tab === 'my' && (
-          <MyRidesView myRides={myRides} onRideSelect={(ride) => navigate(`/ride/${ride.id}`)} onRequests={() => navigate('/ride/requests')} onSeeDemand={() => navigate('/discover/demand')} />
-        )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 
-function MyRidesView({ myRides, onRideSelect, onRequests, onSeeDemand }) {
-  if (!myRides) return <div className="ride-page-loading compact" role="status">Loading your rides…</div>;
+function MyRidesView({ myRides, onRideSelect, onRequests, onSeeDemand, onFindRides }) {
+  const hosting = myRides.hosting || [];
+  const joining = myRides.joining || [];
 
   return (
     <>
-      {/* Module 6 - Destination Discovery. A Host looking at their published
-          rides is exactly the person who wants to know where a ride would
-          actually be filled, so the unmet-demand view is linked from here. */}
-      <div className="ride-hub-header"><div><p className="eyebrow">YOUR RIDES</p><h2>Hosting</h2></div><button className="btn-link" onClick={onSeeDemand}>Where people want to go</button></div>
+      <div className="ride-hub-header">
+        <div><p className="eyebrow">YOUR RIDES</p><h2>Hosting</h2></div>
+        <button className="btn-link" type="button" onClick={onSeeDemand}>Where people want to go</button>
+      </div>
       <div className="ride-grid">
-        {myRides.hosting.length === 0 && (
-          <section className="ride-empty-state compact"><h3>No hosted rides yet</h3><p>Publish your first journey when you have seats to share, or <button className="btn-link inline" onClick={onSeeDemand}>see where people want to go</button>.</p></section>
+        {hosting.length === 0 && (
+          <section className="ride-empty-state compact">
+            <h3>No hosted rides yet</h3>
+            <p>Publish your first journey when you have seats to share, or see where people want to go.</p>
+            <button className="btn-secondary" type="button" onClick={onSeeDemand}>See unmet demand</button>
+          </section>
         )}
-        {myRides.hosting.map((ride) => (
+        {hosting.map((ride) => (
           <RideCard key={ride.id} ride={ride} statusChip onClick={() => onRideSelect(ride)} />
         ))}
       </div>
 
-      <div className="ride-hub-header joining-header"><div><p className="eyebrow">PASSENGER VIEW</p><h2>Joining</h2></div><button className="btn-link" onClick={onRequests}>View all requests</button></div>
+      <div className="ride-hub-header joining-header">
+        <div><p className="eyebrow">PASSENGER VIEW</p><h2>Joining</h2></div>
+        <button className="btn-link" type="button" onClick={onRequests}>View all requests</button>
+      </div>
       <div className="ride-grid">
-        {myRides.joining.length ? myRides.joining.map((request) => request.ride && <button className="my-requests-link" key={request.id} onClick={() => onRideSelect(request.ride)}>{request.ride.pickup.split(',')[0]} → {request.ride.destination.split(',')[0]} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'} · {request.status}</button>) : <button className="my-requests-link" onClick={onRequests}>You have no ride requests yet.</button>}
+        {joining.length > 0 ? joining.map((request) => request.ride && (
+          <button className="my-requests-link" type="button" key={request.id} onClick={() => onRideSelect(request.ride)}>
+            {request.ride.pickup.split(',')[0]} → {request.ride.destination.split(',')[0]} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'} · {request.status}
+          </button>
+        )) : (
+          <section className="ride-empty-state compact">
+            <span aria-hidden="true"><IconSearch size={24} /></span>
+            <h3>No rides you are joining yet</h3>
+            <p>Use Smart Search to find a published ride and send a request to its Host.</p>
+            <button className="btn-secondary" type="button" onClick={onFindRides}>Find rides</button>
+          </section>
+        )}
       </div>
     </>
   );
