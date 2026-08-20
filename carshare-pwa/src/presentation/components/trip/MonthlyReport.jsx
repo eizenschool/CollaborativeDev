@@ -6,11 +6,7 @@ import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { IconChevronLeftSmall, IconChevronRightSmall, IconLeafSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
 import ShareReportButton from './ShareReportButton.jsx';
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
+import MonthStepper, { MONTH_NAMES } from './MonthStepper.jsx';
 
 export default function MonthlyReport({ userId, userName }) {
   const now = new Date();
@@ -18,10 +14,6 @@ export default function MonthlyReport({ userId, userName }) {
   const [month, setMonth] = useState(now.getMonth());
   const [state, setState] = useState({ phase: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
-
-  // UC5.8 C2 - reports cover completed trips, so there is nothing to report on
-  // a month that has not happened yet.
-  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
 
   useEffect(() => {
     let active = true;
@@ -41,39 +33,10 @@ export default function MonthlyReport({ userId, userName }) {
 
   const report = state.phase === 'ready' ? state.report : null;
 
-  function shiftMonth(delta) {
-    let m = month + delta;
-    let y = year;
-    if (m < 0) {
-      m = 11;
-      y -= 1;
-    } else if (m > 11) {
-      m = 0;
-      y += 1;
-    }
-    if (new Date(y, m, 1) > new Date(now.getFullYear(), now.getMonth(), 1)) return;
-    setMonth(m);
-    setYear(y);
-  }
-
   return (
     <div style={{ maxWidth: 680, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, marginBottom: 24 }}>
-        <button onClick={() => shiftMonth(-1)} className="m5-icon-btn" aria-label="Previous month">
-          <IconChevronLeftSmall size={18} />
-        </button>
-        <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 17, margin: 0, minWidth: 170, textAlign: 'center', color: COLORS.textPrimary }}>
-          {MONTH_NAMES[month]} {year}
-        </p>
-        <button
-          onClick={() => shiftMonth(1)}
-          className="m5-icon-btn"
-          disabled={isCurrentMonth}
-          aria-label="Next month"
-          style={{ opacity: isCurrentMonth ? 0.4 : 1, cursor: isCurrentMonth ? 'not-allowed' : 'pointer' }}
-        >
-          <IconChevronRightSmall size={18} />
-        </button>
+      <div style={{ marginBottom: 24 }}>
+        <MonthStepper year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
       </div>
 
       {state.phase === 'error' ? (
