@@ -23,6 +23,7 @@ import { RideRequestService } from './RideRequestService.js';
 import { HostImpactEngine } from './HostImpactEngine.js';
 import { departureParts } from './rideDateTime.js';
 import { evaluateAchievements } from './TripAchievements.js';
+import { buildTripTimeline } from './TripTimeline.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
@@ -237,7 +238,21 @@ export const TripHistoryEngine = {
       (id) => RideRequestService.listRideRequests(id)
     );
 
-    return { ...card, participants };
+    // The timeline reads Module 2's own timestamps. A Host may see every
+    // request; a passenger sees only their own, which still tells their side
+    // of the story. Losing either source is not worth failing the page for.
+    const [timelineRequests, lifecycle] = await Promise.all([
+      isHost
+        ? RideRequestService.listRideRequests(tripId).catch(() => [])
+        : Promise.resolve(ownRequest ? [ownRequest] : []),
+      RideService.getLifecycleContext(tripId).catch(() => null)
+    ]);
+
+    return {
+      ...card,
+      participants,
+      timeline: buildTripTimeline({ ride, requests: timelineRequests, lifecycle, now })
+    };
   },
 
   // ---------- FR-5.6 / FR-5.7 - Environmental Impact Dashboard ----------
