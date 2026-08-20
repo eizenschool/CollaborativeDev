@@ -203,6 +203,12 @@ const seedData = {
       companionNames: [], status: 'Accepted', createdAt: '2026-08-05T04:00:00.000Z', processedAt: '2026-08-05T05:00:00.000Z'
     }
   },
+  favourites: {
+    u_demo_1: [
+      { rideId: 'r_1', createdAt: '2026-08-12T09:00:00.000Z' },
+      { rideId: 'r_6', createdAt: '2026-08-11T09:00:00.000Z' }
+    ]
+  },
   rideReviews: {}
 };
 
@@ -213,6 +219,7 @@ function toMockDepartureAt(date, time) {
 function normalizeModule2State(db) {
   db.rideRequests ||= {};
   db.rideReviews ||= {};
+  db.favourites ||= {};
   for (const ride of Object.values(db.rides || {})) {
     // Repair the pre-vehicle demo Host ride already persisted in older offline
     // browser sessions so Edit Ride can hydrate the same contract as Supabase.
@@ -434,6 +441,7 @@ export const mockDb = {
     delete db.users[userId];
     delete db.vehicles[userId];
     delete db.impact[userId];
+    delete db.favourites[userId];
     if (db.currentUserId === userId) db.currentUserId = null;
     save(db);
     return true;
@@ -520,6 +528,47 @@ export const mockDb = {
       .filter((r) => !date || r.date === date)
       .map((r) => enrichRide(db, r))
       .sort((a, b) => new Date(a.departureAt) - new Date(b.departureAt));
+  },
+
+  async listFavouriteRides(userId) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    save(db);
+    return (db.favourites[userId] || [])
+      .map((entry) => db.rides[entry.rideId]
+        ? { ...enrichRide(db, db.rides[entry.rideId]), favouritedAt: entry.createdAt }
+        : null)
+      .filter(Boolean)
+      .map((ride) => ({
+        ...ride,
+        favouriteAvailable: ride.status === 'Published' && Number(ride.seatsAvailable) > 0
+      }))
+      .sort((left, right) => new Date(right.favouritedAt) - new Date(left.favouritedAt));
+  },
+
+  async addFavouriteRide(userId, rideId) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    const ride = db.rides[rideId];
+    if (!ride || ride.status !== 'Published' || Number(ride.seatsAvailable) < 1) {
+      throw new Error('Only an available published ride can be saved.');
+    }
+    db.favourites[userId] ||= [];
+    if (!db.favourites[userId].some((entry) => entry.rideId === rideId)) {
+      db.favourites[userId].unshift({ rideId, createdAt: new Date().toISOString() });
+    }
+    save(db);
+    return true;
+  },
+
+  async removeFavouriteRide(userId, rideId) {
+    await delay();
+    const db = load();
+    db.favourites[userId] = (db.favourites[userId] || []).filter((entry) => entry.rideId !== rideId);
+    save(db);
+    return true;
   },
 
   // Every ride regardless of lifecycle state, mirroring Supabase's

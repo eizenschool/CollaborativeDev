@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isRouteQuoteFresh,
   routeChangeRequiresConfirmation,
@@ -35,7 +35,13 @@ globalThis.localStorage = {
 };
 
 describe('Module 2 ride workflow contracts', () => {
-  beforeEach(() => memory.clear());
+  beforeEach(() => {
+    memory.clear();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-14T00:00:00.000Z'));
+  });
+
+  afterEach(() => vi.useRealTimers());
 
   it('stores Malaysia local schedule as one UTC instant and derives compatible parts', () => {
     const departureAt = toDepartureAt('2026-08-20', '09:30');
