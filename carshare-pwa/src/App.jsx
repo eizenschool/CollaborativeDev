@@ -4,6 +4,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
 } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import { resolveAuthReturnPath } from './business-logic/authAccess.js';
@@ -25,6 +26,7 @@ import { IconSearch, IconHeart } from './presentation/components/icons.jsx';
 import MessageModule from './presentation/components/messaging/MessageModule.jsx';
 import TripModule from './presentation/components/trip/TripModule.jsx';
 import TripDetail from './presentation/components/trip/TripDetail.jsx';
+import NotificationCenter from './presentation/components/notifications/NotificationCenter.jsx';
 
 function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
   const { user } = useAuth();
@@ -46,10 +48,29 @@ function AuthEntry() {
     : <AuthPage />;
 }
 
+function ServiceWorkerNotificationNavigation() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!navigator.serviceWorker) return undefined;
+    const handleMessage = (event) => {
+      const actionPath = event.data?.type === 'notification-click' ? event.data.actionPath : null;
+      if (typeof actionPath === 'string' && actionPath.startsWith('/') && !actionPath.startsWith('//') && !actionPath.includes('\\')) {
+        navigate(actionPath);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+  }, [navigate]);
+
+  return null;
+}
+
 function AppShell() {
   return (
     <div className="app-shell">
       <TopNav />
+      <ServiceWorkerNotificationNavigation />
 
       <Routes>
         {/* Profile Settings, My Vehicles, Reputation, Host Dashboard, and Account
@@ -76,6 +97,7 @@ function AppShell() {
         <Route path="/message" element={<RequireAuth reason="Sign in to open your messages."><MessageModule /></RequireAuth>} />
         <Route path="/message/:conversationId" element={<RequireAuth reason="Sign in to open this conversation."><MessageModule /></RequireAuth>} />
         <Route path="/message/:conversationId/history" element={<RequireAuth reason="Sign in to view message history."><MessageModule /></RequireAuth>} />
+        <Route path="/notifications" element={<RequireAuth reason="Sign in to view your notifications."><NotificationCenter /></RequireAuth>} />
         <Route path="/favourite" element={<RequireAuth reason="Sign in to view your favourite rides."><ComingSoonScreen icon={IconHeart} label="Favourite" /></RequireAuth>} />
         {/* Module 5 - Trip Management & Eco Impact */}
         <Route path="/trip" element={<RequireAuth reason="Sign in to view your trips."><TripModule /></RequireAuth>} />

@@ -35,6 +35,8 @@ Shared implementation locations:
   and shared presentation primitives.
 - `src/presentation/components/nav/TopNav.jsx` - the shared responsive
   navigation component.
+- `src/presentation/components/notifications/NotificationCenter.jsx` - shared
+  notification bell popover and protected full inbox.
 - `src/presentation/components/icons.jsx` - shared icon set.
 - Module style files - module-specific layouts and states only.
 
@@ -169,6 +171,10 @@ The current route determines the active state.
   scene must not consume mobile viewport space.
 - Sign out must remain directly reachable at the bottom of Profile content on
   phone even though the desktop top-navigation action group is hidden there.
+- The six persistent destinations remain unchanged. On desktop, the authenticated
+  action group includes a badge-bearing notification bell that opens the shared
+  centre. On phone, notification access is in Profile → Account Settings and
+  opens the same protected `/notifications` page; never add a seventh tab.
 - The desktop auth journey scene keeps the car animated on the complete KL
   Sentral-Genting-Ipoh route; the car must follow the SVG curve rather than use
   an unrelated screen position. Drive the car from the route's own SVG geometry

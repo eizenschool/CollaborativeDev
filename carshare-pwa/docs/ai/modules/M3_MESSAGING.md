@@ -24,8 +24,8 @@ Supabase-backed ride communication for UC3.4, UC3.7, and UC3.8.
 
 - Presentation: `src/presentation/components/messaging/` and routes `/message`, `/message/:conversationId`, `/message/:conversationId/history`. `useVideoRecorder.js` owns in-page camera permission, supported MP4/WebM selection, the 50 MB stop guard, and camera-track cleanup.
 - Business logic: `src/business-logic/MessagingService.js` validates bundles and standalone voice messages, coordinates uploads, maps `messageTypes`, and keeps failed drafts retryable. `src/presentation/components/messaging/useVoiceRecorder.js` owns microphone permission, MIME selection, timing, track shutdown, and unmount cleanup.
-- Data access: `src/data-access/supabaseMessagingRepository.js` is the production adapter for PostgREST RPC, Realtime, and private Storage signed URLs.
-- Database: `database/sql/016_m3_supabase_messaging.sql`; `017_m3_advisor_followup.sql` covers the direct-user foreign key; `018_m3_versioned_media_paths.sql` finalizes sender/conversation/message/version object paths; `025_m3_add_voice_messages.sql` adds private standalone audio attachments and their duration contract; `026_m3_add_wav_voice_fallback.sql` adds the playback-safe WAV fallback.
+- Data access: `src/data-access/supabaseMessagingRepository.js` is the production adapter for PostgREST RPC, Realtime, and private Storage signed URLs. `src/data-access/supabaseNotificationRepository.js` is the shared recipient-notification adapter, not a Module 3-specific inbox.
+- Database: `database/sql/016_m3_supabase_messaging.sql`; `017_m3_advisor_followup.sql` covers the direct-user foreign key; `018_m3_versioned_media_paths.sql` finalizes sender/conversation/message/version object paths; `025_m3_add_voice_messages.sql` adds private standalone audio attachments and their duration contract; `026_m3_add_wav_voice_fallback.sql` adds the playback-safe WAV fallback; `033_project_notifications.sql` extends `send_message` so every other active conversation member receives one shared-centre notification.
 - The previous `localMessagingStore.js` and dummy message data are legacy-only and are no longer imported by the production Module 3 path.
 
 ## Security Boundary
@@ -34,4 +34,4 @@ Clients receive SELECT-only grants on messaging tables. All mutations use narrow
 
 ## Deferred
 
-Phone/WebRTC calling, telephone-number access, translation/UC3.6, push/email notifications, hazard advisories, address geocoding, and map point selection. Two-account cross-browser manual acceptance plus physical-device camera/microphone checks remain required before a release sign-off.
+Phone/WebRTC calling, telephone-number access, translation/UC3.6, email notifications, hazard advisories, address geocoding, and map point selection. The shared in-app/Web Push notification integration is implemented in `033` but still requires its project-owner deployment and two-account physical-device validation. Two-account cross-browser manual acceptance plus physical-device camera/microphone checks remain required before a release sign-off.

@@ -39,12 +39,15 @@ Restart `npm run dev` after changing environment values.
 - `rides`: authenticated search, RPC-only host mutation, confirmed route references, pickup instructions, waypoints, seat constraints, and a mandatory host-owned vehicle.
 - `ride_requests` and `ride_reviews`: RPC-only participation and mutual review lifecycle.
 - `conversations`, `conversation_members`, `messages`, and `message_attachments`: member-readable, RPC-mutated messaging with seven-day terminal retention.
+- `user_notifications`: recipient-owned cross-module inbox, with Message as its first producer; browser-device subscriptions are Edge-Function-only and never client-readable.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
 - `message-media`: private, no listing, approved media only, 50 MB object maximum, and attachment-bound signed downloads.
 
-Phone OTP, hard account deletion, translation, messaging notifications, and
-Modules 4-6 are not part of this connection. Google OAuth code is present, but
-it still needs the provider configuration below before it works end to end.
+Phone OTP, hard account deletion, translation, email notifications, and Modules
+4-6 are not part of this connection. The notification centre is implemented
+locally but needs the project-owner setup below before it sends a real device
+alert. Google OAuth code is present, but it still needs the provider
+configuration below before it works end to end.
 
 ## Enabling Google OAuth (Dashboard + Google Cloud, not code)
 
@@ -79,11 +82,64 @@ through the Dashboard SQL Editor and is the repository record even though its
 name is absent from migration-history output. See `docs/ai/SQL.md` for the
 complete deployment-name map and current live state.
 
-`028_m2_route_schedule_and_completion.sql` and the matching Module 2 Edge
-Functions are local and **not deployed**. They require a fresh live migration
-history check, explicit deployment authorization, server-only Routes secrets,
-and the hard-quota gate in `docs/GOOGLE-MAPS-SETUP.md`. New schema work after
-this local migration starts at `028`. Do not make Dashboard-only schema changes.
+`033_project_notifications.sql` is local and **not deployed**. It must be
+deployed only together with the Notification delivery setup below. See
+`docs/ai/SQL.md` for the authoritative deployment map; do not make
+Dashboard-only schema changes.
+
+## Notification delivery setup (project owner)
+
+The inbox and Realtime bell work once `033_project_notifications.sql` is
+deployed. System alerts when the PWA is closed additionally require standard
+VAPID Web Push and a Database Webhook. Do this only for the intended production
+Supabase project, never by placing secrets in Vite.
+
+1. Generate one VAPID key pair with the same pinned library the push function
+   uses. For example, in a temporary Deno script import
+   `jsr:@negrel/webpush@0.5.0`, call `generateVapidKeys()`, then retain both
+   `exportVapidKeys(keys)` (the complete JWK JSON) and
+   `exportApplicationServerKey(keys)` (the browser-safe public key). Do not
+   rotate the pair while devices remain subscribed.
+2. Set these Edge Function secrets in the Supabase project. Use a high-entropy
+   random value for the webhook secret, and never commit any value:
+
+   ```text
+   NOTIFICATION_VAPID_KEYS_JSON=<complete VAPID JWK JSON>
+   NOTIFICATION_VAPID_SUBJECT=mailto:owner@example.com
+   NOTIFICATION_WEBHOOK_SECRET=<random webhook secret>
+   NOTIFICATION_ALLOWED_ORIGIN=https://your-app.example
+   ```
+
+   `SUPABASE_SERVICE_ROLE_KEY` is supplied by the Edge Runtime; it is not a
+   frontend environment variable and must not be copied into `.env.local`.
+3. Set the matching public `VITE_WEB_PUSH_PUBLIC_KEY` during the Vite build.
+   This is the application-server public key from step 1, not the JWK JSON and
+   not a secret. Rebuild/redeploy the frontend after setting it.
+4. Deploy both functions and the migration through the shared Supabase workflow:
+
+   ```powershell
+   supabase functions deploy notification-subscriptions
+   supabase functions deploy notification-push
+   ```
+
+   `supabase/config.toml` deliberately sets `notification-push` to
+   `verify_jwt = false`: it is a database-machine endpoint, protected instead
+   by the custom webhook secret. The subscription function retains normal user
+   JWT verification.
+5. In Dashboard → Database → Webhooks, create an `INSERT` webhook for
+   `public.user_notifications`. Point it to
+   `https://pnetstmovctfwqcumodx.supabase.co/functions/v1/notification-push`
+   (replace the project ref for another project) and add the custom HTTP header
+   `x-notification-webhook-secret` with exactly the value from step 2. Do not
+   put the secret in the URL. The function removes a stored subscription when
+   a push service reports endpoint status 404 or 410.
+
+6. Run the Supabase security/performance advisors. Then verify with two real
+   accounts over HTTPS: user B enables device notifications and closes the app;
+   user A sends text, image, video, voice, location, and group-chat messages;
+   B receives only the other members' alerts and each tap opens the correct
+   Message conversation. Check that the inbox read state synchronises after
+   opening the item.
 
 ## Security model
 
@@ -118,7 +174,7 @@ For live acceptance, use two real email accounts and verify:
 4. Vehicle create/edit/active/delete, driver-licence persistence, and the single-active constraint.
 5. Ride draft/publish/search/edit-waypoints/cancel, confirmed Place IDs, current-location pickup, and pickup instructions.
 6. An unauthenticated client cannot access any business table.
-7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, and expired access denial.
+7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, expired access denial, recipient-only notifications, and VAPID click-through after completing the Notification delivery setup.
 8. Modules 4-6 local demo functions still operate.
 9. Once Google OAuth is enabled in the Dashboard (see above): "Continue with
    Google" reaches the Google consent screen, returns to the app signed in,
