@@ -1,6 +1,7 @@
 // ===== PRESENTATION LAYER (RideCard) =====
 import { IconMapPin, IconCalendar, IconUsers, IconStar, IconMedal } from '../icons.jsx';
 import { getBadgeForStats } from '../../../business-logic/HostImpactEngine.js';
+import { formatJourneyCountdown } from '../../../business-logic/rideJourneyState.js';
 
 // Bronze/Silver/Gold/Platinum pill colours - same tier names/thresholds as
 // HostImpactEngine.badgeTiers, just a display-only colour map for this module.
@@ -29,7 +30,7 @@ function formatEta(value) {
   });
 }
 
-export default function RideCard({ ride, statusChip, onClick }) {
+export default function RideCard({ ride, statusChip, roleLabel, journeyState, compact = false, onClick }) {
   const badge = ride.host ? getBadgeForStats(ride.host) : null;
   const tier = badge ? badge.name.replace(' Host', '') : null;
   const tierStyle = tier ? TIER_COLORS[tier] : null;
@@ -37,7 +38,7 @@ export default function RideCard({ ride, statusChip, onClick }) {
   const CardElement = onClick ? 'button' : 'article';
 
   return (
-    <CardElement type={onClick ? 'button' : undefined} className={'ride-card' + (onClick ? ' ride-card-clickable' : '')} onClick={onClick}>
+    <CardElement type={onClick ? 'button' : undefined} className={'ride-card' + (onClick ? ' ride-card-clickable' : '') + (compact ? ' ride-card-compact' : '')} onClick={onClick}>
       <div className="ride-card-top">
         <div className="ride-route">
           <div className="ride-route-line">
@@ -49,19 +50,22 @@ export default function RideCard({ ride, statusChip, onClick }) {
             <span className="ride-route-text muted">{ride.destination}</span>
           </div>
         </div>
-        <span className={'scale-badge ' + (ride.journeyScale === 'Intercity' ? 'scale-intercity' : 'scale-urban')}>
-          {ride.journeyScale}
-        </span>
+        <div className="ride-card-badges">
+          {roleLabel && <span className="ride-role-badge">{roleLabel}</span>}
+          <span className={'scale-badge ' + (ride.journeyScale === 'Intercity' ? 'scale-intercity' : 'scale-urban')}>{ride.journeyScale}</span>
+        </div>
       </div>
 
       <div className="ride-meta-row">
         <span className="ride-meta"><IconCalendar size={13} /> {formatDate(ride.date)} · {ride.time}</span>
-        <span className="ride-seats"><IconUsers size={13} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} left</span>
+        {!['Completed', 'Cancelled', 'Expired'].includes(ride.status) && <span className="ride-seats"><IconUsers size={13} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} left</span>}
       </div>
 
-      {ride.estimatedArrivalAt && <p className="ride-card-eta"><span>Estimated arrival</span><strong>{formatEta(ride.estimatedArrivalAt)}</strong></p>}
+      {journeyState && <div className={`ride-card-next urgency-${journeyState.urgency}`}><span>{compact ? journeyState.nextAction.label : journeyState.title}</span>{journeyState.countdownAt && <strong>{formatJourneyCountdown(journeyState.countdownAt)}</strong>}</div>}
 
-      {ride.restrictionTags?.length > 0 && (
+      {!compact && ride.estimatedArrivalAt && <p className="ride-card-eta"><span>Estimated arrival</span><strong>{formatEta(ride.estimatedArrivalAt)}</strong></p>}
+
+      {!compact && ride.restrictionTags?.length > 0 && (
         <div className="chip-row">
           {ride.restrictionTags.map((tag) => (
             <span className="chip" key={tag}>{tag}</span>
@@ -69,7 +73,7 @@ export default function RideCard({ ride, statusChip, onClick }) {
         </div>
       )}
 
-      <div className="ride-card-bottom">
+      {compact ? <div className="ride-card-bottom ride-card-compact-bottom">{statusChip && <span className={'status-chip status-' + ride.status.toLowerCase().replace(' ', '-')}>{ride.status}</span>}</div> : <div className="ride-card-bottom">
         {ride.host && (
           <div className="ride-host">
             <div className="ride-host-avatar" style={ride.host.profilePhotoUrl ? { backgroundImage: `url(${ride.host.profilePhotoUrl})` } : undefined}>
@@ -91,7 +95,7 @@ export default function RideCard({ ride, statusChip, onClick }) {
         ) : (
           <span className="contribution-tag">{ride.contribution || 'No contribution needed'}</span>
         )}
-      </div>
+      </div>}
     </CardElement>
   );
 }

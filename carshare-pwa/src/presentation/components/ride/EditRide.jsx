@@ -63,6 +63,10 @@ export default function EditRide() {
     return () => { active = false; };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (ride?.status === 'Draft') navigate(`/ride/${rideId}/publish`, { replace: true });
+  }, [navigate, ride?.status, rideId]);
+
   if (!ride || !form) return <div className="ride-page-loading">Loading ride…</div>;
   const locked = !['Draft', 'Published'].includes(ride.status) || (ride.status === 'Published' && ride.hasAcceptedRequests);
 
