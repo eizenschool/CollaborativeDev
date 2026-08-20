@@ -123,6 +123,24 @@ describe('NotificationService', () => {
     });
   });
 
+  it('re-registers an existing browser subscription for the current account', async () => {
+    const existing = {
+      endpoint: 'https://push.example/existing',
+      toJSON: () => ({
+        endpoint: 'https://push.example/existing',
+        expirationTime: null,
+        keys: { p256dh: 'existing-public-key', auth: 'existing-auth-key' },
+      }),
+    };
+    const repository = { ...createRepository(), savePushSubscription: vi.fn().mockResolvedValue(true) };
+    const { pushManager } = installPushEnvironment({ subscription: existing });
+    const service = createNotificationService(repository, { vapidPublicKey: 'AQID-_8' });
+
+    await expect(service.syncPushSubscription()).resolves.toBe('enabled');
+    expect(repository.savePushSubscription).toHaveBeenCalledWith(existing.toJSON());
+    expect(pushManager.subscribe).not.toHaveBeenCalled();
+  });
+
   it('surfaces a subscription registration failure and keeps the listener internal to the provider', async () => {
     const repository = {
       ...createRepository(),

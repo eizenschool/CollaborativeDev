@@ -41,12 +41,21 @@ export function NotificationProvider({ children }) {
   }, [user]);
 
   const refreshPushStatus = useCallback(async () => {
+    setPushError('');
     try {
-      setPushStatus(await NotificationService.getPushStatus());
-    } catch {
-      setPushStatus('unavailable');
+      const status = await NotificationService.getPushStatus();
+      if (user && status === 'enabled') {
+        await NotificationService.syncPushSubscription();
+      }
+      setPushStatus(status);
+    } catch (requestError) {
+      // A local PushSubscription can survive account changes. If the server
+      // re-registration fails, expose a retry button instead of claiming that
+      // device alerts are enabled for the current account.
+      setPushStatus('available');
+      setPushError(requestError.message || 'Unable to register device notifications for this account.');
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     refreshNotifications();
