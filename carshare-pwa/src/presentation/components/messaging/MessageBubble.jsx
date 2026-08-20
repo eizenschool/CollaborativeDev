@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { IconCheck, IconEdit, IconMoreVertical, IconTrash } from '../icons.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
+import MessageTranslation from './MessageTranslation.jsx';
 
 function getInitials(name = 'Member') {
   return name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
@@ -135,6 +136,9 @@ export default function MessageBubble({
   currentUserId,
   onEdit = () => {},
   onDelete = () => {},
+  onTranslate = () => Promise.reject(new Error('Translation is unavailable.')),
+  translationLanguage = '',
+  onTranslationLanguageChange = () => {},
   highlighted = false,
 }) {
   if (message.kind === 'system') {
@@ -180,6 +184,15 @@ export default function MessageBubble({
           {audio && <MediaAttachment attachment={audio} />}
           {location && <GoogleLocationMap latitude={location.latitude} longitude={location.longitude} compact />}
         </div>
+        {(audio || message.text) && (
+          <MessageTranslation
+            message={message}
+            targetLanguage={translationLanguage}
+            onTargetLanguageChange={onTranslationLanguageChange}
+            onTranslate={onTranslate}
+            isVoiceMessage={Boolean(audio)}
+          />
+        )}
         <div className={`message-bubble-meta ${isCurrentUser ? 'message-bubble-meta-current-user' : ''}`}>
           <span>{message.timestamp}</span>
           {message.editedAt && <span className="message-edited-label">edited</span>}

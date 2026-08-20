@@ -96,6 +96,13 @@ function createRepository({ messages = [], failUploadName = null, failEdit = fal
       return path;
     },
     removeMedia: async (paths) => { removedPaths.push(...paths); return true; },
+    translateMessage: async ({ targetLanguage }) => ({
+      sourceLanguage: 'ms',
+      transcript: null,
+      translatedText: targetLanguage === 'zh' ? '我们在这里见面。' : 'Meet here.',
+      targetLanguage,
+      cached: true,
+    }),
     sendMessage: async ({ messageId, text, attachments }) => {
       sequence += 1;
       const id = messageId;
@@ -197,6 +204,20 @@ describe('composite message validation', () => {
 });
 
 describe('MessagingService repository orchestration', () => {
+  it('validates supported translation languages and maps cached results', async () => {
+    const service = createMessagingService(createRepository());
+    await expect(service.translateMessage(rawMessage().id, 'zh')).resolves.toEqual({
+      sourceLanguage: 'ms',
+      transcript: null,
+      translatedText: '我们在这里见面。',
+      targetLanguage: 'zh',
+      cached: true,
+    });
+    await expect(service.translateMessage(rawMessage().id, 'fr')).rejects.toThrow(
+      'Choose English, Chinese, Bahasa Melayu, or Tamil',
+    );
+  });
+
   it('maps Realtime payloads to their owning conversation', () => {
     expect(getMessagingChangeConversationId({
       table: 'conversations',

@@ -160,9 +160,17 @@ another member reads the message; sender-only deletion always tombstones the
 whole bundle. Completed private chats can be archived per user, Completed group
 travellers can leave, and Hosts cannot leave. Completed, Cancelled, and Expired
 conversation access ends permanently seven days after the terminal timestamp,
-overriding UC3.8's older permanent archive wording. Translation remains
-deferred; Message notifications are delivered through the shared centre defined
-in D020.
+overriding UC3.8's older permanent archive wording. Translation/UC3.6 is an
+explicit, on-demand four-language action for English, Simplified Chinese,
+Bahasa Melayu, and Tamil. An authenticated Supabase Edge Function resolves the
+message source server-side, uses Cloudflare Workers AI's free-plan models for
+translation and voice transcription, and writes a shared source-versioned cache
+that members can read only while the conversation remains visible. Cloudflare
+secrets never enter the browser. Translated speech is optional and user-triggered
+through the device's Web Speech voice; no generated audio is stored. When the
+shared free allowance is exhausted, translation stops with a retry-after-reset
+message and never selects a paid fallback. Message notifications are delivered
+through the shared centre defined in D020.
 
 ## D017 — Public-First Browsing and Action-Time Authentication
 **Status:** Accepted
