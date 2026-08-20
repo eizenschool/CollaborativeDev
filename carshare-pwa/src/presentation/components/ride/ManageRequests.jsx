@@ -78,7 +78,9 @@ export default function ManageRequests() {
   const departureReached = ride && new Date(ride.departureAt) <= new Date();
   const unresolved = accepted.filter((request) => request.boardingStatus === 'Pending');
   const checkedIn = accepted.filter((request) => request.boardingStatus === 'Checked In');
-  const readyToStart = departureReached && unresolved.length === 0 && checkedIn.length > 0 && ['Published', 'Matched'].includes(ride?.status);
+  const allCheckedIn = accepted.length > 0 && checkedIn.length === accepted.length;
+  const readyToStart = ['Published', 'Matched'].includes(ride?.status)
+    && (allCheckedIn || (departureReached && checkedIn.length > 0));
 
   function RequestCard({ request, actions = false, muted = false }) {
     const person = request.requester || { fullName: 'Member', reputationScore: 0, rating: null };
@@ -117,7 +119,7 @@ export default function ManageRequests() {
           : <section className="empty-request-state"><IconUsers size={34} /><strong>No pending requests</strong><p>New passenger requests will appear here.</p></section>}
 
         {history.length > 0 && <section className="request-group rejected-group"><button type="button" className="rejected-toggle" aria-expanded={showHistory} onClick={() => setShowHistory((show) => !show)}>History ({history.length})</button>{showHistory && history.map((request) => <RequestCard request={request} muted key={request.id} />)}</section>}
-        {departureReached && accepted.length > 0 && <section className="request-start-card" aria-live="polite"><div><strong>{readyToStart ? 'Everyone is resolved' : unresolved.length ? `${unresolved.length} passenger${unresolved.length === 1 ? '' : 's'} still unresolved` : 'No passenger is checked in'}</strong><p>{readyToStart ? `${checkedIn.length} passenger${checkedIn.length === 1 ? '' : 's'} ready to leave.` : 'At least one accepted passenger must Check in before this shared ride can start.'}</p></div><button type="button" className="primary-action" disabled={!readyToStart || starting} onClick={startRide}>{starting ? 'Starting…' : 'Start ride'}</button></section>}
+        {accepted.length > 0 && <section className="request-start-card" aria-live="polite"><div><strong>{allCheckedIn ? `${checkedIn.length} passenger${checkedIn.length === 1 ? '' : 's'} ready to leave` : `${checkedIn.length} of ${accepted.length} passengers checked in`}</strong><p>{allCheckedIn ? 'Starting now recalculates ETA using current traffic.' : departureReached && checkedIn.length > 0 ? `Start ride is available after departure; ${accepted.length - checkedIn.length} passenger${accepted.length - checkedIn.length === 1 ? '' : 's'} will be marked No-show.` : `All ${accepted.length} accepted passenger${accepted.length === 1 ? '' : 's'} must Check in before the Driver can start early.`}</p></div><button type="button" className="primary-action" disabled={!readyToStart || starting} onClick={startRide}>{starting ? 'Recalculating ETA…' : !departureReached ? 'Start trip early' : 'Start ride'}</button></section>}
       </div>
     </main>
   );
