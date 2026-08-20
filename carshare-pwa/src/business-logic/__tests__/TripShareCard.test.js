@@ -23,14 +23,48 @@ function report(overrides = {}) {
 }
 
 describe('Module 5 share card eligibility', () => {
-  it('refuses a month with nothing to show', () => {
-    expect(canShareReport(report({ hasData: false, completedTrips: 0 }))).toBe(false);
+  it('refuses only when there is no month at all', () => {
     expect(canShareReport(null)).toBe(false);
-    expect(buildShareContent(report({ hasData: false, completedTrips: 0 }))).toBeNull();
+    expect(canShareReport({})).toBe(false);
+    expect(buildShareContent(null)).toBeNull();
   });
 
   it('accepts a month with at least one completed trip', () => {
     expect(canShareReport(report())).toBe(true);
+  });
+
+  it('accepts an empty month too - zero is a real figure', () => {
+    const empty = report({ hasData: false, completedTrips: 0, totalDistanceKm: 0, passengersCarried: 0, totalCarbonSavedKg: 0 });
+    expect(canShareReport(empty)).toBe(true);
+    expect(buildShareContent(empty)).not.toBeNull();
+  });
+});
+
+describe('Module 5 share card at zero', () => {
+  const empty = () => buildShareContent(
+    report({ hasData: false, completedTrips: 0, totalDistanceKm: 0, passengersCarried: 0, totalCarbonSavedKg: 0 }),
+    { userName: 'Jamie Delacroix' }
+  );
+
+  it('still leads with the month and a real zero', () => {
+    const card = empty();
+    expect(card.headline).toBe('0');
+    expect(card.monthLabel).toBe('August 2026');
+    expect(card.stats.map((s) => s.value)).toEqual(['0', '0 km', '0']);
+  });
+
+  it('reads as a starting point rather than a failure', () => {
+    const card = empty();
+    expect(card.footnote).toMatch(/starts the count/i);
+    expect(card.footnote).not.toMatch(/0 trees/);
+    expect(card.shareText).not.toMatch(/I saved 0 kg/);
+    expect(card.shareText).toMatch(/Starting my carpooling/i);
+  });
+
+  it('agrees in number even at zero', () => {
+    // Zero takes the plural: "0 shared trips", never "0 shared trip".
+    expect(empty().stats[0].label).toBe('shared trips');
+    expect(empty().stats[2].label).toBe('passengers carried');
   });
 });
 

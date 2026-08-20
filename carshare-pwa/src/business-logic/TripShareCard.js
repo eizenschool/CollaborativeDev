@@ -45,10 +45,11 @@ export function themeById(id) {
   return CARD_THEMES.find((theme) => theme.id === id) || CARD_THEMES[0];
 }
 
-// A month with no completed trips has nothing to boast about, so the caller
-// hides the entry point rather than producing an empty card.
+// Any real month can be shared, including one that recorded nothing. A zero is
+// the true figure for that month, and a starting point is worth posting - the
+// wording below changes so the card reads as a beginning rather than a failure.
 export function canShareReport(report) {
-  return Boolean(report && report.hasData && report.completedTrips > 0);
+  return Boolean(report && Number.isInteger(report.month) && Number.isInteger(report.year));
 }
 
 export function treesEquivalent(carbonKg) {
@@ -80,11 +81,15 @@ export function buildShareContent(report, { userName = '' } = {}) {
     // the card would read "0 trees" and undersell a real saving.
     footnote: trees > 0
       ? `That's about ${trees} ${trees === 1 ? 'tree' : 'trees'} working for a year.`
-      : 'Every shared seat keeps a car off the road.',
+      : report.completedTrips > 0
+        ? 'Every shared seat keeps a car off the road.'
+        : 'No trips this month - the next shared seat starts the count.',
     byline: userName ? `${userName} · Let's Tumpang` : "Let's Tumpang",
-    shareText:
-      `I saved ${carbon} kg of CO₂ in ${monthLabel} by carpooling on Let's Tumpang` +
-      ` - ${report.completedTrips} shared ${tripWord}, ${report.totalDistanceKm} km together.`,
+    shareText: report.completedTrips > 0
+      ? `I saved ${carbon} kg of CO₂ in ${monthLabel} by carpooling on Let's Tumpang` +
+        ` - ${report.completedTrips} shared ${tripWord}, ${report.totalDistanceKm} km together.`
+      : `Starting my carpooling year on Let's Tumpang. ${monthLabel}: nothing shared yet - ` +
+        'every seat filled from here keeps a car off the road.',
     shareTitle: `My ${monthLabel} eco impact`,
     filename: `lets-tumpang-impact-${report.year}-${String(report.month + 1).padStart(2, '0')}.png`
   };
