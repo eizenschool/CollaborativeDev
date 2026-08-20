@@ -7,6 +7,7 @@ import { IconChevronLeftSmall, IconChevronRightSmall, IconLeafSmall } from './tr
 import { ErrorState } from './tripStates.jsx';
 import ShareReportButton from './ShareReportButton.jsx';
 import MonthStepper, { MONTH_NAMES } from './MonthStepper.jsx';
+import StatTile from './StatTile.jsx';
 
 export default function MonthlyReport({ userId, userName }) {
   const now = new Date();
@@ -47,11 +48,11 @@ export default function MonthlyReport({ userId, userName }) {
         <>
           <ShareReportButton report={report} userName={userName} />
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
-            <SummaryStat label="Completed Trips" value={report.completedTrips} />
-            <SummaryStat label="Distance Shared" value={`${report.totalDistanceKm} km`} />
-            <SummaryStat label="Passengers Carried" value={report.passengersCarried} />
-            <SummaryStat label="CO₂ Saved" value={`${report.totalCarbonSavedKg} kg`} icon />
+          <div className="m5-stat-grid cols-4">
+            <StatTile icon={<IconLeafSmall size={17} />} label="CO₂ saved" value={`${report.totalCarbonSavedKg} kg`} accent />
+            <StatTile label="Completed trips" value={report.completedTrips} />
+            <StatTile label="Distance shared" value={`${report.totalDistanceKm} km`} />
+            <StatTile label="Passengers carried" value={report.passengersCarried} />
           </div>
 
           {!report.hasData && (
@@ -61,8 +62,9 @@ export default function MonthlyReport({ userId, userName }) {
             </div>
           )}
 
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase', color: COLORS.textSecondary, margin: '0 0 10px' }}>
+          <p className="m5-section-title">
             Completed trips this month
+            <span>{report.trips.length} {report.trips.length === 1 ? 'trip' : 'trips'}</span>
           </p>
           <div>
             {report.trips.length === 0 && (
@@ -89,29 +91,6 @@ export default function MonthlyReport({ userId, userName }) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function SummaryStat({ label, value, icon }) {
-  return (
-    <div
-      className="m5-card"
-      style={{
-        padding: 18,
-        textAlign: 'center',
-        background: icon ? `linear-gradient(160deg, ${COLORS.tealTint} 0%, #FFFFFF 100%)` : COLORS.surface
-      }}
-    >
-      {icon && (
-        <span className="m5-icon-circle" style={{ background: COLORS.teal, color: '#FFFFFF', width: 36, height: 36, marginBottom: 8 }}>
-          <IconLeafSmall size={16} />
-        </span>
-      )}
-      <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 24, color: icon ? COLORS.teal : COLORS.textPrimary, margin: 0 }}>
-        {value}
-      </p>
-      <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: COLORS.textSecondary, margin: '4px 0 0' }}>{label}</p>
     </div>
   );
 }

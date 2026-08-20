@@ -12,6 +12,7 @@ import { useIsDesktop } from './useIsDesktop.js';
 import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
 import MonthStepper from './MonthStepper.jsx';
+import StatTile from './StatTile.jsx';
 
 // The seven lifecycle states Module 2 actually stores on a ride. 'Expired'
 // belongs here too - a published ride nobody joined lapses rather than
@@ -85,11 +86,11 @@ export default function RideHistory({ userId, onOpenTrip }) {
     <div>
       {/* Real counts, so the page opens with figures rather than a filter rail
           and empty space - and reads 0 rather than vanishing before any trip. */}
-      <div className="m5-history-summary">
-        <SummaryTile label="Trips" value={summary.total} />
-        <SummaryTile label="Hosted" value={summary.hosted} />
-        <SummaryTile label="Joined" value={summary.joined} />
-        <SummaryTile label="CO₂ saved" value={`${summary.carbonSavedKg} kg`} accent />
+      <div className="m5-stat-grid cols-4">
+        <StatTile icon={<IconLeafSmall size={17} />} label="CO₂ saved" value={`${summary.carbonSavedKg} kg`} accent />
+        <StatTile label="Trips" value={summary.total} />
+        <StatTile label="Hosted" value={summary.hosted} />
+        <StatTile label="Joined" value={summary.joined} />
       </div>
 
       {/* One scrolling row rather than a narrow column: eight chips of unequal
@@ -140,7 +141,7 @@ export default function RideHistory({ userId, onOpenTrip }) {
       ) : (
         months.map((group) => (
           <section key={group.key} className="m5-month">
-            <h3 className="m5-month-heading">
+            <h3 className="m5-section-title m5-month-heading">
               {group.label}
               <span>{group.trips.length} {group.trips.length === 1 ? 'trip' : 'trips'}</span>
             </h3>
@@ -156,14 +157,6 @@ export default function RideHistory({ userId, onOpenTrip }) {
   );
 }
 
-function SummaryTile({ label, value, accent }) {
-  return (
-    <div className={'m5-summary-tile' + (accent ? ' accent' : '')}>
-      <p className="m5-summary-value">{value}</p>
-      <p className="m5-summary-label">{label}</p>
-    </div>
-  );
-}
 
 // These groups pick exactly one option, so they are radio groups rather than
 // plain buttons. That also keeps the whole group to a single Tab stop - as

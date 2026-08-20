@@ -11,7 +11,7 @@ import RideHistory from './RideHistory.jsx';
 import ImpactDashboard from './ImpactDashboard.jsx';
 import MonthlyReport from './MonthlyReport.jsx';
 import Leaderboard from './Leaderboard.jsx';
-import { IconArrowLeftSmall, IconLeafSmall } from './tripIcons.jsx';
+import { IconLeafSmall } from './tripIcons.jsx';
 import { COLORS } from './tripTheme.js';
 import './tripStyles.css';
 
@@ -46,71 +46,14 @@ export default function TripModule() {
 
   return (
     <div className="m5-root">
-      {/* The banner repeats on all four tabs and carried no information beyond
-          its title, so it stays compact: it used to spend ~155px of every
-          screen on two lines of text. */}
-      <div
-        style={{
-          position: 'relative',
-          overflow: 'hidden',
-          padding: '16px 24px',
-          background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.teal} 100%)`
-        }}
-      >
-        {/* decorative background circles, purely cosmetic */}
-        <div style={{ position: 'absolute', top: -70, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-        <div style={{ position: 'absolute', bottom: -80, right: 120, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-
-        <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button
-            onClick={() => navigate('/profile')}
-            aria-label="Back to Profile"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.35)',
-              background: 'rgba(255,255,255,0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#FFFFFF',
-              flexShrink: 0,
-              backdropFilter: 'blur(4px)'
-            }}
-          >
-            <IconArrowLeftSmall size={18} />
-          </button>
-
-          <span
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.2)',
-              border: '1px solid rgba(255,255,255,0.35)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
-              flexShrink: 0,
-              backdropFilter: 'blur(4px)'
-            }}
-          >
-            <IconLeafSmall size={20} />
-          </span>
-
-          <div>
-            <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 22, margin: 0, color: '#FFFFFF', letterSpacing: -0.2 }}>
-              My Trips &amp; Impact
-            </h1>
-            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '2px 0 0' }}>
-              Your ride history and environmental impact, all in one place
-            </p>
-          </div>
+      <header className="m5-hero">
+        <span className="m5-hero-icon" aria-hidden="true"><IconLeafSmall size={25} /></span>
+        <div>
+          <p>YOUR JOURNEYS</p>
+          <h1>My Trips &amp; Impact</h1>
+          <small>Your ride history and environmental impact, all in one place</small>
         </div>
-      </div>
+      </header>
 
       <div className="m5-tabs" role="tablist" aria-label="Trips and impact">
         {TABS.map((t, index) => {

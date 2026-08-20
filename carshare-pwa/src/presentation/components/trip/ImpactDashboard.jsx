@@ -7,6 +7,7 @@ import { useIsDesktop } from './useIsDesktop.js';
 import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
 import AchievementGrid from './AchievementGrid.jsx';
+import StatTile from './StatTile.jsx';
 
 export default function ImpactDashboard({ userId }) {
   const isDesktop = useIsDesktop();
@@ -40,9 +41,9 @@ export default function ImpactDashboard({ userId }) {
   const summary = state.summary;
 
   const stats = [
-    { icon: <IconLeafSmall size={22} />, label: 'Total Carbon Saved', value: `${summary.totalCarbonSavedKg} kg` },
-    { icon: <IconRoadSmall size={22} />, label: 'Shared Travel Distance', value: `${summary.totalDistanceKm} km` },
-    { icon: <IconUsersSmall size={22} />, label: 'Passengers Carried', value: summary.passengersCarried }
+    { icon: <IconLeafSmall size={17} />, label: 'CO₂ saved', value: `${summary.totalCarbonSavedKg} kg`, accent: true },
+    { icon: <IconRoadSmall size={17} />, label: 'Distance shared', value: `${summary.totalDistanceKm} km` },
+    { icon: <IconUsersSmall size={17} />, label: 'Passengers carried', value: summary.passengersCarried }
   ];
 
   return (
@@ -57,27 +58,17 @@ export default function ImpactDashboard({ userId }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(3, 1fr)' : '1fr', gap: 16 }}>
-        {stats.map((s) => (
-          <div key={s.label} className="m5-stat-card" style={{ background: `linear-gradient(160deg, ${COLORS.tealTint} 0%, #FFFFFF 100%)`, border: `1px solid ${COLORS.teal}22` }}>
-            <span className="m5-icon-circle" style={{ background: COLORS.teal, color: '#FFFFFF' }}>{s.icon}</span>
-            <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 30, color: COLORS.teal, margin: '2px 0 0' }}>
-              {s.value}
-            </p>
-            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, margin: '4px 0 0' }}>{s.label}</p>
-          </div>
-        ))}
+      <div className="m5-stat-grid cols-3">
+        {stats.map((s) => <StatTile key={s.label} {...s} />)}
       </div>
 
-      <div className="m5-card" style={{ marginTop: 16, padding: 24 }}>
-        <h3 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, margin: '0 0 16px', color: COLORS.textPrimary }}>
-          Carbon saved trend
-        </h3>
+      <div className="m5-card m5-section" style={{ padding: 20 }}>
+        <p className="m5-section-title">Carbon saved trend <span>Last 6 months</span></p>
         <TrendBars points={summary.monthlyTrend} />
       </div>
 
       {summary.achievements && (
-        <div style={{ marginTop: 16 }}>
+        <div className="m5-section">
           <AchievementGrid achievements={summary.achievements} />
         </div>
       )}

@@ -11,9 +11,55 @@
    scrolled ~66px past its content and the last card sat under the fixed nav.
    New rules here use theme.css tokens; the older rules below still carry the
    raw hex this file was written with. */
+:root {
+  --m5-gap-section: 18px;
+}
+
 .m5-root {
   flex: 1;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(220, 252, 231, .75), transparent 27%),
+    var(--bg);
+}
+
+.m5-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 30px 24px 20px;
+}
+.m5-hero p {
+  margin: 0 0 4px;
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+.m5-hero h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.m5-hero small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.m5-hero-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 17px;
+  color: #FFFFFF;
+  background: linear-gradient(145deg, var(--teal), var(--teal-dark));
+  box-shadow: 0 12px 25px rgba(22, 163, 74, .24);
 }
 
 .m5-page {
@@ -25,9 +71,9 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 20px 24px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E5E7EB;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 24px 16px;
 }
 
 .m5-back-btn {
@@ -64,10 +110,10 @@
 .m5-tabs {
   display: flex;
   gap: 8px;
-  padding: 14px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px 16px;
   overflow-x: auto;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E5E7EB;
 }
 
 .m5-tab {
@@ -102,6 +148,18 @@
    UI.md: 16px page padding on phone, and keep content clear of the fixed tab
    bar including the safe-area inset. */
 @media (max-width: 700px) {
+  .m5-hero {
+    min-height: 116px;
+    margin: 0 0 16px;
+    padding: 23px 20px;
+    border-bottom: 1px solid #dcece1;
+    background: linear-gradient(135deg, #e5f9eb 0%, #f6faf7 70%);
+  }
+  .m5-hero p { font-size: 9px; }
+  .m5-hero h1 { font-size: 21px; }
+  .m5-hero small { max-width: 270px; font-size: 11.5px; line-height: 1.45; }
+  .m5-hero-icon { width: 48px; height: 48px; border-radius: 15px; }
+
   .m5-header,
   .m5-tabs {
     padding-left: 16px;
@@ -720,23 +778,8 @@
   margin-top: 26px;
 }
 .m5-month-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  font-family: 'Poppins', sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--ink);
-  margin: 0 0 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
-}
-.m5-month-heading span {
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
 }
 
 .m5-trip-grid {
@@ -1413,4 +1456,95 @@
     margin-left: 0;
   }
   .m5-entry-value { font-size: 18px; }
+}
+
+/* ---------- Shared stat tile (StatTile.jsx) ---------- */
+/* Replaces three separate treatments of the same idea. One size, one weight,
+   one border - the only variation is the accent, which each screen uses once. */
+.m5-stat-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: var(--m5-gap-section);
+}
+.m5-stat-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.m5-stat-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+.m5-stat {
+  background: #FFFFFF;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 12px;
+  text-align: center;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.m5-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.06);
+}
+.m5-stat.accent {
+  background: linear-gradient(160deg, var(--teal-tint) 0%, #FFFFFF 100%);
+  border-color: rgba(13, 148, 136, 0.25);
+}
+
+.m5-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  margin: 0 auto 8px;
+  background: var(--teal-tint);
+  color: var(--secondary);
+}
+.m5-stat.accent .m5-stat-icon {
+  background: var(--secondary);
+  color: #FFFFFF;
+}
+
+.m5-stat-value {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 0;
+}
+.m5-stat.accent .m5-stat-value {
+  color: var(--secondary);
+}
+.m5-stat-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+/* ---------- Shared section heading ---------- */
+.m5-section {
+  margin-bottom: var(--m5-gap-section);
+}
+.m5-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  margin: 0 0 12px;
+}
+.m5-section-title span {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+@media (max-width: 700px) {
+  .m5-stat-grid.cols-3,
+  .m5-stat-grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+  .m5-stat-value { font-size: 21px; }
 }
