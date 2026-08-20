@@ -6,6 +6,7 @@ const sharedRouteUrl = new URL('../../../supabase/functions/_shared/m2Routes.ts'
 const quoteFunctionUrl = new URL('../../../supabase/functions/m2-route-quote/index.ts', import.meta.url);
 const locationInputUrl = new URL('../../presentation/components/maps/ConfirmedLocationInput.jsx', import.meta.url);
 const rideServiceUrl = new URL('../RideService.js', import.meta.url);
+const rideRequestServiceUrl = new URL('../RideRequestService.js', import.meta.url);
 
 describe('Module 2 route schedule and lifecycle contracts', () => {
   it('serializes Driver publication and applies half-open ETA intervals', async () => {
@@ -44,6 +45,18 @@ describe('Module 2 route schedule and lifecycle contracts', () => {
     expect(service).toContain('LEGACY_HOST_RIDE_SELECT');
     expect(service).toContain('data.host_id === sessionData.session.user.id');
     expect(service).toContain('vehicle_id ?? row.vehicleId');
+  });
+
+  it('disambiguates every ride host profile embed by its foreign key', async () => {
+    const [rideService, rideRequestService] = await Promise.all([
+      readFile(rideServiceUrl, 'utf8'),
+      readFile(rideRequestServiceUrl, 'utf8')
+    ]);
+    expect(rideService.match(/host:profiles!rides_host_id_fkey\(/g)?.length).toBe(3);
+    expect(rideRequestService.match(/host:profiles!rides_host_id_fkey\(/g)?.length).toBe(2);
+    expect(rideService).not.toMatch(/host:profiles\(/);
+    expect(rideRequestService).not.toMatch(/host:profiles\(/);
+    expect(rideRequestService).toContain('requester:profiles!ride_requests_requester_id_fkey(');
   });
 
   it('enforces GPS, No-show, dual confirmation, and 24-hour completion in RPCs', async () => {
