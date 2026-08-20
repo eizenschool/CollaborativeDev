@@ -421,6 +421,25 @@
   gap: 5px;
 }
 
+.search-arrival {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 13px 0 0;
+  padding: 9px 11px;
+  border-radius: 11px;
+  color: var(--teal-dark);
+  background: var(--teal-tint);
+  font-size: 10.5px;
+}
+
+.search-arrival strong {
+  color: var(--ink);
+  font-size: 11px;
+  text-align: right;
+}
+
 .search-scale {
   padding: 5px 8px;
   border-radius: 999px;

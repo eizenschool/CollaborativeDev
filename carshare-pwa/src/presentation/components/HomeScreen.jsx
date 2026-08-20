@@ -1,5 +1,5 @@
 // ===== PRESENTATION LAYER (HomeScreen) =====
-// The public landing page. Guests can browse Home and Ride content first;
+// The public landing page. Guests can browse Home, Search, and Published Ride Detail;
 // account-specific actions are protected by the shared route gate.
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -8,7 +8,7 @@ import DiscoverRail from './discover/DiscoverRail.jsx';
 
 const ACTIONS = [
   { to: '/ride/publish', Icon: IconRoute, title: 'Publish a ride', sub: 'Offer your empty seats' },
-  { to: '/ride', Icon: IconCar, title: 'Find a ride', sub: 'Browse available rides' },
+  { to: '/search', Icon: IconCar, title: 'Find a ride', sub: 'Browse available rides' },
   { to: '/ride/requests', Icon: IconCheckCircle, title: 'My requests', sub: 'Track rides you asked to join' },
   { to: '/profile', Icon: IconUser, title: 'My profile', sub: 'Vehicles, reputation & settings' }
 ];

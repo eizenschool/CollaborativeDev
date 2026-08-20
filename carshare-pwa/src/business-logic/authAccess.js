@@ -1,10 +1,15 @@
 export const DEFAULT_AUTH_RETURN_PATH = '/home';
 
-export function normaliseAuthReturnPath(value) {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/auth')) {
-    return DEFAULT_AUTH_RETURN_PATH;
+export function normaliseInternalReturnPath(value, fallback = DEFAULT_AUTH_RETURN_PATH) {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
+    return fallback;
   }
   return value;
+}
+
+export function normaliseAuthReturnPath(value) {
+  const safePath = normaliseInternalReturnPath(value);
+  return safePath.startsWith('/auth') ? DEFAULT_AUTH_RETURN_PATH : safePath;
 }
 
 export function resolveAuthReturnPath(state) {

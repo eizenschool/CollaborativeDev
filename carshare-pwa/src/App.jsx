@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import { resolveAuthReturnPath } from './business-logic/authAccess.js';
+import { legacyRideSearchUrlFromParams } from './business-logic/SmartSearchService.js';
 import TopNav from './presentation/components/nav/TopNav.jsx';
 import AuthPage from './presentation/components/AuthPage.jsx';
 import HomeScreen from './presentation/components/HomeScreen.jsx';
@@ -48,6 +49,19 @@ function AuthEntry() {
     : <AuthPage />;
 }
 
+function RideEntry() {
+  const location = useLocation();
+  const legacySearchUrl = legacyRideSearchUrlFromParams(location.search);
+
+  if (legacySearchUrl) return <Navigate to={legacySearchUrl} replace />;
+
+  return (
+    <RequireAuth reason="Sign in to manage the rides you host or requested.">
+      <RideHub />
+    </RequireAuth>
+  );
+}
+
 function ServiceWorkerNotificationNavigation() {
   const navigate = useNavigate();
 
@@ -82,15 +96,15 @@ function AppShell() {
         <Route path="/reputation" element={<Navigate to="/profile" replace />} />
         <Route path="/host" element={<Navigate to="/profile" replace />} />
         {/* Module 2 - Ride Sharing Management mobile flow. */}
-        <Route path="/ride" element={<RideHub />} />
+        <Route path="/ride" element={<RideEntry />} />
         <Route path="/ride/publish" element={<RequireAuth reason="Sign in before publishing a ride."><PublishRide /></RequireAuth>} />
         <Route path="/ride/requests" element={<RequireAuth reason="Sign in to view your ride requests."><MyRequests /></RequireAuth>} />
         <Route path="/ride/:rideId/requests" element={<RequireAuth reason="Sign in to manage ride requests."><ManageRequests /></RequireAuth>} />
         <Route path="/ride/:rideId/edit" element={<RequireAuth reason="Sign in to edit this ride."><EditRide /></RequireAuth>} />
         <Route path="/ride/:rideId/review" element={<RequireAuth reason="Sign in to review this ride."><RateReview /></RequireAuth>} />
         <Route path="/ride/:rideId" element={<RideDetail />} />
-        {/* Home, Search, Ride browse, and Ride Detail form the public browsing
-            surface. Account-specific destinations are guarded at the route. */}
+        {/* Home, Search, and Published Ride Detail form the public browsing
+            surface. The Ride workspace and other personal destinations are guarded. */}
         <Route path="/home" element={<HomeScreen />} />
         <Route path="/search" element={<SearchModule />} />
         {/* Module 3 - Messaging */}

@@ -18,7 +18,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/presentation/styles/` — shared and module style files.
 
 ## Shared Integration Contracts
-- `docs/ai/FR-6.35_PREFILL_CONTRACT.md` — accepted Module 6 destination handoff payload consumed by Modules 2 and 4.
+- `docs/ai/FR-6.35_PREFILL_CONTRACT.md` — accepted URL-based Module 6 destination handoff consumed by Modules 2 and 4.
 
 ## Business Logic
 - `src/business-logic/` — business-rule/service layer.
