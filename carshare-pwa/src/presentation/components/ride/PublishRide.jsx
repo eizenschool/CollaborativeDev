@@ -1,6 +1,6 @@
 // ===== PRESENTATION LAYER (PublishRide) =====
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { isRouteQuoteFresh, RideService } from '../../../business-logic/RideService.js';
 import { departureParts, formatMalaysiaDeparture } from '../../../business-logic/rideDateTime.js';
@@ -39,6 +39,7 @@ const emptyForm = {
 export default function PublishRide() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { rideId: draftRideId } = useParams();
 
   // Optional destination prefill, so offering to drive from Module 6's unserved
   // list (FR-6.35) carries the destination across rather than opening a blank
@@ -61,7 +62,31 @@ export default function PublishRide() {
   const [previewStatus, setPreviewStatus] = useState({ state: 'idle', message: '' });
   const [routeQuote, setRouteQuote] = useState(null);
   const [quoteStatus, setQuoteStatus] = useState({ state: 'idle', message: '' });
+  const [draftLoading, setDraftLoading] = useState(Boolean(draftRideId));
+  const [draftLoadError, setDraftLoadError] = useState('');
   const locationRequested = useRef(false);
+
+  useEffect(() => {
+    if (!draftRideId) return undefined;
+    let active = true;
+    setDraftLoading(true);
+    setDraftLoadError('');
+    RideService.getRide(draftRideId).then((draft) => {
+      if (!active) return;
+      if (!draft || draft.hostId !== user.id || draft.status !== 'Draft') throw new Error('This Draft is unavailable or no longer editable.');
+      setForm({
+        pickup: draft.pickup || '', pickupLocation: draft.pickupLocation || null,
+        destination: draft.destination || '', destinationLocation: draft.destinationLocation || null,
+        pickupInstructions: draft.pickupInstructions || '', journeyScale: draft.journeyScale || 'Urban',
+        date: draft.date || '', time: draft.time || '', seatsTotal: draft.seatsTotal || 1,
+        vehicleId: draft.vehicleId || null, vehicleCapacity: null,
+        contribution: draft.contribution || '', restrictionTags: draft.restrictionTags || [],
+        waypoints: draft.waypoints || []
+      });
+      setFurthestStep(STEPS.length - 1);
+    }).catch((loadError) => active && setDraftLoadError(loadError.message)).finally(() => active && setDraftLoading(false));
+    return () => { active = false; };
+  }, [draftRideId, user.id]);
 
   useEffect(() => {
     let active = true;
@@ -76,6 +101,12 @@ export default function PublishRide() {
       });
     return () => { active = false; };
   }, [user.id, vehicleGateAttempt]);
+
+  useEffect(() => {
+    if (!draftRideId || !vehicles?.length || !form.vehicleId || form.vehicleCapacity) return;
+    const vehicle = vehicles.find((item) => item.id === form.vehicleId);
+    if (vehicle) setForm((current) => ({ ...current, vehicleCapacity: vehicle.seats }));
+  }, [draftRideId, form.vehicleCapacity, form.vehicleId, vehicles]);
 
   useEffect(() => {
     if (!hasRegisteredVehicle(vehicles) || locationRequested.current) return;
@@ -107,7 +138,7 @@ export default function PublishRide() {
   async function calculateRouteQuote() {
     setQuoteStatus({ state: 'loading', message: 'Calculating traffic-aware route and ETA…' });
     try {
-      const quote = await RideService.quoteRide(form);
+      const quote = await RideService.quoteRide(form, { rideId: draftRideId || null });
       setRouteQuote(quote);
       setQuoteStatus({ state: 'ready', message: 'Route verified. Your Driver schedule is locked and rechecked when you publish.' });
       return quote;
@@ -153,8 +184,9 @@ export default function PublishRide() {
     setSaving(true);
     setError('');
     try {
-      await RideService.publishRide(user.id, form, 'Draft');
-      navigate('/ride');
+      if (draftRideId) await RideService.updateRide(draftRideId, form);
+      else await RideService.publishRide(user.id, form, 'Draft');
+      navigate('/ride', { state: { notice: 'Draft saved.' } });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -173,14 +205,20 @@ export default function PublishRide() {
     setError('');
     try {
       const quote = isRouteQuoteFresh(routeQuote) ? routeQuote : await calculateRouteQuote();
-      await RideService.publishRide(user.id, { ...form, routeQuote: quote }, 'Published');
-      navigate('/ride');
+      const published = draftRideId
+        ? await RideService.publishDraft(draftRideId, quote)
+        : await RideService.publishRide(user.id, { ...form, routeQuote: quote }, 'Published');
+      navigate(`/ride/${published.id}`, { replace: true, state: { returnTo: '/ride', notice: 'Ride published.' } });
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
     }
   }
+
+  if (draftLoading) return <main className="publish-access-state" role="status">Loading your Draft…</main>;
+
+  if (draftLoadError) return <main className="publish-access-state"><section className="publish-access-card" role="alert"><h1>Draft unavailable</h1><p>{draftLoadError}</p><button className="btn-primary" onClick={() => navigate('/ride')}>Back to My rides</button></section></main>;
 
   if (!vehicles && !vehicleGateError) {
     return <main className="publish-access-state" role="status">Checking that you have a vehicle…</main>;
@@ -222,7 +260,7 @@ export default function PublishRide() {
     <main className="publish-ride">
       <header className="publish-mobile-header">
         <button className="round-icon-button" onClick={step === 0 ? () => navigate('/ride') : back} aria-label="Go back"><IconArrowLeft size={18} /></button>
-        <div><p>Step {step + 1} of {STEPS.length}</p><h1>{STEPS[step]}</h1></div>
+        <div><p>{draftRideId ? 'Resume Draft · ' : ''}Step {step + 1} of {STEPS.length}</p><h1>{STEPS[step]}</h1></div>
         {step === STEPS.length - 1 && <button className="save-draft-mobile" onClick={saveAsDraft} disabled={saving}>Save draft</button>}
         <div className="publish-progress-dots" role="progressbar" aria-label="Publish ride progress" aria-valuemin="1" aria-valuemax={STEPS.length} aria-valuenow={step + 1}>{STEPS.map((label, index) => <i key={label} className={index <= step ? 'active' : ''} />)}</div>
       </header>

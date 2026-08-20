@@ -113,6 +113,33 @@ retains the pre-027 Host-only full-row fallback for environments that have not
 yet applied migration 028.
 Responsive verification targets are 375px, 768px, 1024px, and 1440px.
 
+The authenticated Ride workspace is action-first. `/ride` combines Driver and
+Passenger journeys into one departure-ordered overview, while each card keeps
+an explicit role badge. The shared pure `rideJourneyState.js` model ranks one
+cross-role next step above the complete list, so the user does not need to pick
+a role before seeing the most urgent action. The same model drives Ride cards,
+My Requests, and Ride Detail so terminal Rides cannot expose check-in or
+cancellation actions. Draft cards resume the existing five-step publisher at
+`/ride/:rideId/publish`, can be deleted with confirmation, and a successful
+publish opens the new Ride Detail with a success/next-step notice.
+
+Requester cancellation is an immediate requester-owned transition, not another
+Host decision. Host approval applies only while a join request is `Pending`; a
+`Cancelled` request is written immediately, restores seats when it was
+`Accepted`, notifies the Driver, and must never be rendered as “awaiting
+approval”. If the Published Ride is still open, the former requester may submit
+another request after cancellation.
+
+Ride Detail keeps `/ride/:rideId` as the single execution surface. Drivers and
+Accepted passengers enter `?view=trip` by default in the final hour or while In
+Transit, while `?view=details` remains explicitly available. Trip mode shows
+the route, countdown, pickup instructions, navigation, the existing Module 3
+ride-group chat, and exactly one primary lifecycle action. Driver readiness and
+No-show handling are inline; Start remains blocked until every Accepted
+passenger is resolved and at least one is Checked In. Visible Trip mode refreshes
+Ride, Request, and lifecycle context every 15 seconds and immediately after
+focus or a local mutation without adding a new Realtime publication.
+
 Module 4 Search and Published Ride Detail are public browsing surfaces. The
 bare `/ride` route is the authenticated workspace for hosted and joining rides;
 the former basic RideHub search has been retired. Guests are sent to the shared
@@ -147,3 +174,14 @@ Cloud usage alerts remain an operational follow-up. Failed/legacy rows must ask
 the Driver to reconfirm; no fixed-duration ETA fallback is allowed.
 Route-deviation automation, map-pin selection, and messaging notifications
 remain deferred.
+
+`035_m2_ride_usability_notifications.sql` is implemented locally and depends on
+the shared, still-pending `033_project_notifications.sql`. It adds only private
+Module 2 producers and a one-minute reminder function: request decisions,
+cancellations and arrangement changes, boarding events, 24-hour/final-hour/
+departure reminders, Driver arrival, and completion. Stable recipient-scoped
+dedupe keys allow retry/catch-up; departure alerts are bounded to 30 minutes.
+Notification text and payloads exclude Place IDs, coordinates, pickup
+instructions, and companion data. Do not deploy `035` before `033`; this work
+does not change or deploy Web Push, VAPID, service workers, subscription APIs,
+Edge Functions, or Database Webhook configuration.

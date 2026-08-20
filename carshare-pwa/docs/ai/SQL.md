@@ -156,6 +156,15 @@ adds owner-scoped ride favourites and authenticated RPCs for idempotent
 add/remove plus a safe card projection that continues showing unavailable saved
 rides. Module 4 retains its mock fallback until this migration is deployed.
 
+`035_m2_ride_usability_notifications.sql` is **written but not yet deployed**
+and must follow `033_project_notifications.sql`. It reuses
+`private.create_user_notification(...)` for Module 2 request, cancellation,
+arrangement, boarding, arrival, and completion events. Its private minute-Cron
+producer adds deduplicated 24-hour, final-hour, and departure-due reminders;
+departure catch-up is limited to 30 minutes. It creates no public table or
+client RPC and does not change Push subscriptions, Edge Functions, VAPID,
+service workers, or webhooks. Deploy and verify shared `033` before `035`.
+
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
 Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
@@ -270,6 +279,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `031_m6_place_types.sql` - deployed through the Dashboard SQL Editor; adds `places.types` and `places.primary_type` so a classification fix can be re-applied without buying enrichment again. No grants: `authenticated` inherits them from `024`'s table-level grant, and `anon` is deliberately left without them because `PLACE_SELECT` does not name them.
 - `032_m6_reclassify_ingested_places.sql` - deployed through the Dashboard SQL Editor; retires four hotels, a shopping mall and a columbarium that the Penang/Melaka/Selangor sweep filed as destinations, and corrects the category of four real destinations. Idempotent.
 - `033_project_notifications.sql` - local pending deployment; shared recipient-owned notification inbox, protected device subscriptions, narrow read RPCs, 30-day retention, Realtime, and Message producer integration.
+- `035_m2_ride_usability_notifications.sql` - local pending deployment after `033`; private Module 2 notification triggers and deduplicated minute-Cron reminders only.
 
 ## Rules for New Database Work
 

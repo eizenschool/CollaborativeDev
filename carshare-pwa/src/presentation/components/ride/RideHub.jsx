@@ -1,137 +1,123 @@
 // ===== PRESENTATION LAYER (RideHub) =====
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
+import { RideReviewService } from '../../../business-logic/RideReviewService.js';
+import { compareJourneyStates, formatJourneyCountdown, getRideJourneyState, journeyGroup } from '../../../business-logic/rideJourneyState.js';
 import RideCard from './RideCard.jsx';
-import { IconPlus, IconRoute, IconSearch, IconUsers } from '../icons.jsx';
+import { IconPlus, IconSearch, IconTrash, IconUsers, IconX } from '../icons.jsx';
 import '../../styles/ride.css';
+
+const HISTORY_PHASES = new Set(['completed', 'terminal']);
+
+function compareWorkspaceDeparture(left, right) {
+  const leftHistory = HISTORY_PHASES.has(left.state.phase);
+  const rightHistory = HISTORY_PHASES.has(right.state.phase);
+  if (leftHistory !== rightHistory) return leftHistory ? 1 : -1;
+  const difference = new Date(left.ride.departureAt).getTime() - new Date(right.ride.departureAt).getTime();
+  return leftHistory ? -difference : difference;
+}
+
+function WorkspaceGroup({ groupKey, eyebrow, title, items, collapsible = false, onOpenItem, onDeleteDraft }) {
+  if (!items.length) return null;
+
+  const heading = <div className="ride-hub-header"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><span>{items.length}</span></div>;
+  const cards = <div className={`ride-grid ride-grid-${groupKey}`}>{items.map((item) => <div className="ride-journey-card-wrap" key={`${item.state.role}-${item.request?.id || 'host'}-${item.ride.id}`}><RideCard ride={item.ride} statusChip roleLabel={item.state.role === 'driver' ? 'Driver' : 'Passenger'} journeyState={item.state} compact onClick={() => onOpenItem(item)} />{item.state.phase === 'draft' && <button type="button" className="ride-draft-delete" onClick={() => onDeleteDraft(item.ride)}><IconTrash size={14} /> Delete draft</button>}</div>)}</div>;
+
+  if (!collapsible) return <section className={`ride-journey-group ride-journey-group-${groupKey}`} aria-labelledby={`ride-${groupKey}-heading`}><div id={`ride-${groupKey}-heading`}>{heading}</div>{cards}</section>;
+  return <details className={`ride-journey-group ride-journey-group-${groupKey} ride-history-group`}><summary aria-labelledby={`ride-${groupKey}-heading`}><span id={`ride-${groupKey}-heading`}>{heading}</span></summary>{cards}</details>;
+}
 
 export default function RideHub() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [myRides, setMyRides] = useState(null);
+  const [workspace, setWorkspace] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [draftToDelete, setDraftToDelete] = useState(null);
+  const [deletingDraft, setDeletingDraft] = useState(false);
 
-  const loadMyRides = useCallback(async () => {
+  const loadWorkspace = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setError('');
     try {
-      const [rides, joining] = await Promise.all([
-        RideService.listMyRides(user.id),
-        RideRequestService.listMyRequests(user.id)
-      ]);
-      setMyRides({ ...rides, joining });
+      const [rides, passengerRequests] = await Promise.all([RideService.listMyRides(user.id), RideRequestService.listMyRequests(user.id)]);
+      const hosting = rides.hosting || [];
+      const activeHosted = hosting.filter((ride) => !['Draft', 'Completed', 'Cancelled', 'Expired'].includes(ride.status));
+      const requestPairs = await Promise.all(activeHosted.map(async (ride) => {
+        try { return [ride.id, await RideRequestService.listRideRequests(ride.id)]; }
+        catch { return [ride.id, []]; }
+      }));
+      const completedRideIds = [...new Set([
+        ...hosting.filter((ride) => ride.status === 'Completed').map((ride) => ride.id),
+        ...passengerRequests.filter((request) => request.ride?.status === 'Completed').map((request) => request.ride.id)
+      ])];
+      const reviewPairs = await Promise.all(completedRideIds.map(async (rideId) => {
+        try { return [rideId, await RideReviewService.getEligibility(user.id, rideId)]; }
+        catch { return [rideId, null]; }
+      }));
+      setWorkspace({ hosting, passengerRequests, requestsByRide: Object.fromEntries(requestPairs), reviewsByRide: Object.fromEntries(reviewPairs) });
     } catch (loadError) {
       setError(loadError.message || 'Unable to load your rides.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [user]);
 
-  useEffect(() => { loadMyRides(); }, [loadMyRides]);
+  useEffect(() => { loadWorkspace(); }, [loadWorkspace]);
 
-  function openRide(ride, returnTo = '/ride') {
-    navigate(`/ride/${ride.id}`, { state: { returnTo } });
+  const driverItems = useMemo(() => (workspace?.hosting || []).map((ride) => ({
+    ride, state: getRideJourneyState({ ride, role: 'driver', requests: workspace?.requestsByRide?.[ride.id] || [], reviewEligibility: workspace?.reviewsByRide?.[ride.id] ?? null })
+  })).sort(compareJourneyStates), [workspace]);
+  const passengerItems = useMemo(() => (workspace?.passengerRequests || []).filter((request) => request.ride).map((request) => ({
+    ride: request.ride, request, state: getRideJourneyState({ ride: request.ride, role: 'passenger', request, reviewEligibility: workspace?.reviewsByRide?.[request.ride.id] ?? null })
+  })).sort(compareJourneyStates), [workspace]);
+
+  const priorityItems = useMemo(() => [...driverItems, ...passengerItems].sort(compareJourneyStates), [driverItems, passengerItems]);
+  const items = useMemo(() => [...driverItems, ...passengerItems], [driverItems, passengerItems]);
+  const groupedItems = useMemo(() => {
+    const groups = { attention: [], upcoming: [], drafts: [], history: [] };
+    items.forEach((item) => groups[journeyGroup(item.state)].push(item));
+    groups.attention.sort(compareJourneyStates);
+    groups.upcoming.sort(compareJourneyStates);
+    groups.drafts.sort(compareJourneyStates);
+    groups.history.sort(compareWorkspaceDeparture);
+    return groups;
+  }, [items]);
+  const nextItem = priorityItems.find((item) => !HISTORY_PHASES.has(item.state.phase)) || priorityItems[0] || null;
+
+  function openItem(item) {
+    navigate(item.state.nextAction.path || `/ride/${item.ride.id}`, { state: { returnTo: '/ride' } });
+  }
+
+  async function deleteDraft() {
+    if (!draftToDelete) return;
+    setDeletingDraft(true);
+    setError('');
+    try {
+      await RideService.deleteDraft(draftToDelete.id);
+      setDraftToDelete(null);
+      await loadWorkspace();
+    } catch (deleteError) { setError(deleteError.message || 'Unable to delete this draft.'); }
+    finally { setDeletingDraft(false); }
   }
 
   return (
     <main className="ride-hub ride-management-hub">
-      <header className="ride-hub-mobile-heading">
-        <span className="ride-hero-icon" aria-hidden="true"><IconRoute size={22} /></span>
-        <div>
-          <p className="ride-hero-kicker">Ride workspace</p>
-          <h1>My rides</h1>
-          <p>Manage the journeys you host and the rides you asked to join.</p>
-        </div>
-      </header>
-
-      <aside className="ride-hub-left">
-        <section className="card ride-management-card" aria-labelledby="ride-management-title">
-          <span className="ride-management-icon" aria-hidden="true"><IconRoute size={22} /></span>
-          <p className="eyebrow">RIDE WORKSPACE</p>
-          <h1 id="ride-management-title">My rides</h1>
-          <p>Publish journeys, manage passengers, and keep track of rides you are joining.</p>
-          <div className="ride-management-actions">
-            <button className="btn-primary btn-publish" type="button" aria-label="Publish a ride" onClick={() => navigate('/ride/publish')}>
-              <IconPlus size={17} /> <span>Publish a ride</span>
-            </button>
-            <button className="btn-secondary ride-request-button" type="button" onClick={() => navigate('/ride/requests')}>
-              <IconUsers size={17} /> My requests
-            </button>
-          </div>
-          <button className="btn-link ride-demand-link" type="button" onClick={() => navigate('/discover/demand')}>
-            Where people want to go
-          </button>
-        </section>
-      </aside>
+      <header className="ride-workspace-header"><div><p className="ride-workspace-kicker">Ride workspace</p><h1>My rides</h1><p>See what needs your attention first.</p></div><div className="ride-workspace-actions"><button className="btn-primary" type="button" onClick={() => navigate('/ride/publish')}><IconPlus size={17} /> Publish ride</button><button className="btn-secondary" type="button" onClick={() => navigate('/ride/requests')}><IconUsers size={17} /> Requests</button></div></header>
 
       <section className="ride-hub-right" aria-busy={loading}>
-        {error && (
-          <div className="alert alert-error ride-management-error" role="alert">
-            <span>{error}</span>
-            <button type="button" className="btn-link" onClick={loadMyRides}>Retry</button>
-          </div>
-        )}
-        {loading && <div className="ride-page-loading compact" role="status">Loading your rides…</div>}
-        {!loading && !error && myRides && (
-          <MyRidesView
-            myRides={myRides}
-            onRideSelect={(ride) => openRide(ride)}
-            onRequests={() => navigate('/ride/requests')}
-            onSeeDemand={() => navigate('/discover/demand')}
-            onFindRides={() => navigate('/search')}
-          />
-        )}
+        {error && <div className="alert alert-error ride-management-error" role="alert"><span>{error}</span><button type="button" className="btn-link" onClick={loadWorkspace}>Retry</button></div>}
+        {loading && <div className="ride-page-loading compact" role="status">Loading your ride workspace…</div>}
+        {!loading && !error && workspace && <>
+          {nextItem ? <section className={`ride-next-action urgency-${nextItem.state.urgency}`} aria-labelledby="ride-next-action-title"><div><p className="eyebrow">YOUR NEXT STEP · {nextItem.state.role.toUpperCase()}</p><h2 id="ride-next-action-title">{nextItem.state.title}</h2><p>{nextItem.state.description}</p>{nextItem.state.countdownAt && <strong>{formatJourneyCountdown(nextItem.state.countdownAt)}</strong>}</div><button type="button" className="btn-primary" onClick={() => openItem(nextItem)}>{nextItem.state.nextAction.label}</button></section>
+            : <section className="ride-empty-state compact"><IconSearch size={24} /><h3>No rides yet</h3><p>Publish a ride or use Search to request your first journey.</p><button className="btn-secondary" type="button" onClick={() => navigate('/search')}>Find rides</button></section>}
+          {items.length > 0 && <div className="ride-inbox-groups"><WorkspaceGroup groupKey="attention" eyebrow="Next actions" title="Needs attention" items={groupedItems.attention} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="upcoming" eyebrow="Upcoming" title="Scheduled rides" items={groupedItems.upcoming} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="drafts" eyebrow="Drafts" title="Finish publishing" items={groupedItems.drafts} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="history" eyebrow="History" title="Past rides and requests" items={groupedItems.history} collapsible onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /></div>}
+        </>}
       </section>
+
+      {draftToDelete && <div className="sheet-backdrop" onMouseDown={() => !deletingDraft && setDraftToDelete(null)}><section className="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-draft-title" onMouseDown={(event) => event.stopPropagation()}><span className="sheet-handle" /><div className="sheet-title-row"><h2 id="delete-draft-title">Delete this draft?</h2><button type="button" aria-label="Close delete draft dialog" disabled={deletingDraft} onClick={() => setDraftToDelete(null)}><IconX size={19} /></button></div><p>This unpublished ride cannot be recovered after deletion.</p><button type="button" className="danger-button" disabled={deletingDraft} onClick={deleteDraft}>{deletingDraft ? 'Deleting…' : 'Delete draft'}</button></section></div>}
     </main>
-  );
-}
-
-function MyRidesView({ myRides, onRideSelect, onRequests, onSeeDemand, onFindRides }) {
-  const hosting = myRides.hosting || [];
-  const joining = myRides.joining || [];
-
-  return (
-    <>
-      <div className="ride-hub-header">
-        <div><p className="eyebrow">YOUR RIDES</p><h2>Hosting</h2></div>
-        <button className="btn-link" type="button" onClick={onSeeDemand}>Where people want to go</button>
-      </div>
-      <div className="ride-grid">
-        {hosting.length === 0 && (
-          <section className="ride-empty-state compact">
-            <h3>No hosted rides yet</h3>
-            <p>Publish your first journey when you have seats to share, or see where people want to go.</p>
-            <button className="btn-secondary" type="button" onClick={onSeeDemand}>See unmet demand</button>
-          </section>
-        )}
-        {hosting.map((ride) => (
-          <RideCard key={ride.id} ride={ride} statusChip onClick={() => onRideSelect(ride)} />
-        ))}
-      </div>
-
-      <div className="ride-hub-header joining-header">
-        <div><p className="eyebrow">PASSENGER VIEW</p><h2>Joining</h2></div>
-        <button className="btn-link" type="button" onClick={onRequests}>View all requests</button>
-      </div>
-      <div className="ride-grid">
-        {joining.length > 0 ? joining.map((request) => request.ride && (
-          <button className="my-requests-link" type="button" key={request.id} onClick={() => onRideSelect(request.ride)}>
-            {request.ride.pickup.split(',')[0]} → {request.ride.destination.split(',')[0]} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'} · {request.status}
-          </button>
-        )) : (
-          <section className="ride-empty-state compact">
-            <span aria-hidden="true"><IconSearch size={24} /></span>
-            <h3>No rides you are joining yet</h3>
-            <p>Use Smart Search to find a published ride and send a request to its Host.</p>
-            <button className="btn-secondary" type="button" onClick={onFindRides}>Find rides</button>
-          </section>
-        )}
-      </div>
-    </>
   );
 }

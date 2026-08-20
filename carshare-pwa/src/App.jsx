@@ -98,6 +98,7 @@ function AppShell() {
         {/* Module 2 - Ride Sharing Management mobile flow. */}
         <Route path="/ride" element={<RideEntry />} />
         <Route path="/ride/publish" element={<RequireAuth reason="Sign in before publishing a ride."><PublishRide /></RequireAuth>} />
+        <Route path="/ride/:rideId/publish" element={<RequireAuth reason="Sign in to continue this Draft."><PublishRide /></RequireAuth>} />
         <Route path="/ride/requests" element={<RequireAuth reason="Sign in to view your ride requests."><MyRequests /></RequireAuth>} />
         <Route path="/ride/:rideId/requests" element={<RequireAuth reason="Sign in to manage ride requests."><ManageRequests /></RequireAuth>} />
         <Route path="/ride/:rideId/edit" element={<RequireAuth reason="Sign in to edit this ride."><EditRide /></RequireAuth>} />
