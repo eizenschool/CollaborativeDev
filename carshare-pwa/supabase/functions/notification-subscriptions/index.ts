@@ -12,7 +12,10 @@ function corsHeaders(request: Request) {
   const requestOrigin = request.headers.get("origin") || "";
   return {
     "Access-Control-Allow-Origin": allowedOrigin && requestOrigin === allowedOrigin ? allowedOrigin : "null",
-    "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+    // Supabase JS sends x-client-info on every browser request. Keep the
+    // tracing/retry headers here too so a later SDK upgrade does not make the
+    // preflight fail before the authenticated request reaches the function.
+    "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type, x-retry-count, traceparent, tracestate, baggage",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     Vary: "Origin",
   };

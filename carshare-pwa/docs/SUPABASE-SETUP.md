@@ -82,8 +82,9 @@ through the Dashboard SQL Editor and is the repository record even though its
 name is absent from migration-history output. See `docs/ai/SQL.md` for the
 complete deployment-name map and current live state.
 
-`033_project_notifications.sql` is local and **not deployed**. It must be
-deployed only together with the Notification delivery setup below. See
+`033_project_notifications.sql` is deployed as `project_notifications`. The
+two notification Edge Functions are also deployed; only their project-owner
+VAPID secrets and Database Webhook remain to be configured below. See
 `docs/ai/SQL.md` for the authoritative deployment map; do not make
 Dashboard-only schema changes.
 
@@ -115,7 +116,8 @@ Supabase project, never by placing secrets in Vite.
 3. Set the matching public `VITE_WEB_PUSH_PUBLIC_KEY` during the Vite build.
    This is the application-server public key from step 1, not the JWK JSON and
    not a secret. Rebuild/redeploy the frontend after setting it.
-4. Deploy both functions and the migration through the shared Supabase workflow:
+4. The migration and both functions are already deployed through the shared
+   Supabase workflow. Repeat deployment only when their source changes:
 
    ```powershell
    supabase functions deploy notification-subscriptions

@@ -11,6 +11,10 @@ precacheAndRoute(self.__WB_MANIFEST);
 registerRoute(
   ({ url, request }) => url.hostname.endsWith('.supabase.co')
     && url.pathname.startsWith('/rest/v1/')
+    // Notification read state must always be fresh. Serving this private,
+    // user-scoped endpoint from a URL-only cache can hide new unread items
+    // after an account switch or a slow network response.
+    && !url.pathname.startsWith('/rest/v1/user_notifications')
     && request.method === 'GET',
   new NetworkFirst({
     cacheName: 'supabase-read-cache',

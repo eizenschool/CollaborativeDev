@@ -16,7 +16,8 @@ Deployed SQL history: 001-026 and 028 as tracked Supabase migrations, plus 023,
   027, 029, and 030 applied through the Dashboard SQL Editor (see below)
 Repository SQL history: 001-034
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
-  033 and 034 are local and await their documented deployment steps)
+  033 deployed as project_notifications on 2026-08-20; 034 remains local and
+  awaits its documented deployment steps)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -125,12 +126,12 @@ record for this round: it retires the six rows that are not destinations and
 recategorises four that are. Neither file changes any grant, and `032` is
 idempotent. Deploy `031` before `032`.
 
-`033_project_notifications.sql` is the next local migration. It introduces the
-cross-module `user_notifications` inbox, device subscription records, narrow
-read-state RPCs, a private producer helper, Realtime publication, 30-day
-retention, and Message as the first producer by extending `send_message`.
-It is intentionally **not deployed** until the project owner also configures
-the VAPID Edge Function secrets and Database Webhook described in
+`033_project_notifications.sql` is deployed as `project_notifications`. It
+introduces the cross-module `user_notifications` inbox, device subscription
+records, narrow read-state RPCs, a private producer helper, Realtime
+publication, 30-day retention, and Message as the first producer by extending
+`send_message`. The Edge Functions are deployed; the project owner still must
+configure their VAPID secrets and Database Webhook as described in
 `docs/SUPABASE-SETUP.md`. Future producers must call
 `private.create_user_notification(...)`; they must not create their own bell,
 unread counter, or browser-push implementation.
@@ -269,7 +270,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `030_m6_anon_source_place_id.sql` - deployed through the Dashboard SQL Editor; grants `anon` read on `source_place_id`, which `029` had wrongly excluded and which broke every anonymous discovery read until fixed.
 - `031_m6_place_types.sql` - deployed through the Dashboard SQL Editor; adds `places.types` and `places.primary_type` so a classification fix can be re-applied without buying enrichment again. No grants: `authenticated` inherits them from `024`'s table-level grant, and `anon` is deliberately left without them because `PLACE_SELECT` does not name them.
 - `032_m6_reclassify_ingested_places.sql` - deployed through the Dashboard SQL Editor; retires four hotels, a shopping mall and a columbarium that the Penang/Melaka/Selangor sweep filed as destinations, and corrects the category of four real destinations. Idempotent.
-- `033_project_notifications.sql` - local pending deployment; shared recipient-owned notification inbox, protected device subscriptions, narrow read RPCs, 30-day retention, Realtime, and Message producer integration.
+- `033_project_notifications.sql` - deployed as `project_notifications` on
+  2026-08-20; shared recipient-owned notification inbox, protected device
+  subscriptions, narrow read RPCs, 30-day retention, Realtime, and Message
+  producer integration.
 
 ## Rules for New Database Work
 

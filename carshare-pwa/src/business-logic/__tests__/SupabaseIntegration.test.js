@@ -179,6 +179,31 @@ describe('Supabase integration contracts', () => {
     expect(sql).toContain('grant execute on function public.mark_conversation_read');
   });
 
+  it('keeps notification Edge Function CORS compatible with Supabase JS', async () => {
+    const functionSource = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../supabase/functions/notification-subscriptions/index.ts', import.meta.url),
+      'utf8'
+    ));
+    expect(functionSource).toContain('authorization, apikey, x-client-info, content-type');
+  });
+
+  it('never serves user notification read state from the PWA runtime cache', async () => {
+    const serviceWorkerSource = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../service-worker.js', import.meta.url),
+      'utf8'
+    ));
+    expect(serviceWorkerSource).toContain("!url.pathname.startsWith('/rest/v1/user_notifications')");
+  });
+
+  it('reports actual Web Push outcomes instead of counting every attempt as delivered', async () => {
+    const pushFunctionSource = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../supabase/functions/notification-push/index.ts', import.meta.url),
+      'utf8'
+    ));
+    expect(pushFunctionSource).toContain('return "delivered" as const');
+    expect(pushFunctionSource).toContain('failed > 0 ? 502 : 200');
+  });
+
   it('allows current conversation members to sign private chat media without listing the bucket', async () => {
     const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
       new URL('../../../database/sql/022_m3_allow_member_media_signing.sql', import.meta.url),

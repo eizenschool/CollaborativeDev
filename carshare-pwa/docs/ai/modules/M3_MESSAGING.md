@@ -34,4 +34,4 @@ Clients receive SELECT-only grants on messaging tables. All mutations use narrow
 
 ## Deferred
 
-Phone/WebRTC calling, telephone-number access, translation/UC3.6, email notifications, hazard advisories, address geocoding, and map point selection. The shared in-app/Web Push notification integration is implemented in `033` but still requires its project-owner deployment and two-account physical-device validation. Two-account cross-browser manual acceptance plus physical-device camera/microphone checks remain required before a release sign-off.
+Phone/WebRTC calling, telephone-number access, translation/UC3.6, email notifications, hazard advisories, address geocoding, and map point selection. The shared in-app/Web Push notification integration is deployed in `033`; it still requires the project-owner VAPID secrets, Database Webhook, and two-account physical-device validation. Two-account cross-browser manual acceptance plus physical-device camera/microphone checks remain required before a release sign-off.
