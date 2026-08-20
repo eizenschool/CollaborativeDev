@@ -21,6 +21,22 @@ function Svg({ size = 24, children, ...props }) {
   );
 }
 
+export function IconCrownSmall(props) {
+  return (
+    <Svg {...props}>
+      <path d="M3 7l4.5 3.5L12 4l4.5 6.5L21 7l-2 11H5L3 7z" />
+    </Svg>
+  );
+}
+
+export function IconSparkSmall(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5 10.1 12 4.5 10l5.6-1.4L12 3z" />
+    </Svg>
+  );
+}
+
 export function IconAlertSmall(props) {
   return (
     <Svg {...props}>

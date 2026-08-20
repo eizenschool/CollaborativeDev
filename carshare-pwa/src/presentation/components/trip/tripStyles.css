@@ -964,3 +964,352 @@
   color: var(--teal-dark);
   font-weight: 600;
 }
+
+/* ---------- Leaderboard arena (Leaderboard.jsx) ---------- */
+/* This screen intentionally leaves the app's green behind. A ranking that looks
+   like the reports either side of it does not read as a contest, and the metal
+   tones only make sense against a dark ground. */
+.m5-lb {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.m5-lb-header {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.m5-lb-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #B45309;
+  background: #FEF3C7;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin: 0 0 10px;
+}
+.m5-lb-header h2 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--ink);
+  margin: 0 0 12px;
+}
+
+.m5-arena {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 22px 20px 0;
+  background: linear-gradient(160deg, #1E293B 0%, #0F172A 100%);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.28);
+}
+/* A soft glow behind first place, so the eye lands in the middle. */
+.m5-arena::before {
+  content: '';
+  position: absolute;
+  top: -90px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  height: 320px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(245, 197, 24, 0.18) 0%, transparent 68%);
+  pointer-events: none;
+}
+.m5-arena-caption {
+  position: relative;
+  text-align: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.75);
+  margin: 0 0 20px;
+}
+
+.m5-podium {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.m5-place {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+.m5-place-who {
+  position: relative;
+  text-align: center;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.m5-place-crown {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #F5C518;
+}
+
+.m5-place-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  color: #FFFFFF;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+}
+.m5-place.gold .m5-place-avatar { width: 64px; height: 64px; font-size: 24px; border-color: #F5C518; }
+.m5-place.silver .m5-place-avatar { border-color: #CBD5E1; }
+.m5-place.bronze .m5-place-avatar { border-color: #D08B4E; }
+
+/* An unclaimed place is drawn as a vacancy, never as a person. */
+.m5-place.open .m5-place-avatar {
+  background: rgba(148, 163, 184, 0.12);
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.5);
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.m5-place-name {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  color: #F8FAFC;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m5-place-tier {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  margin: 2px 0 0;
+  color: rgba(148, 163, 184, 0.9);
+}
+.m5-place.open .m5-place-name,
+.m5-place.open .m5-place-tier {
+  color: rgba(148, 163, 184, 0.7);
+  font-weight: 500;
+}
+
+.m5-place-block {
+  width: 100%;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 12px;
+  gap: 4px;
+}
+.m5-place.gold .m5-place-block {
+  background: linear-gradient(180deg, #F5C518 0%, #B4881B 100%);
+  box-shadow: 0 -4px 22px rgba(245, 197, 24, 0.32);
+}
+.m5-place.silver .m5-place-block {
+  background: linear-gradient(180deg, #E2E8F0 0%, #94A3B8 100%);
+}
+.m5-place.bronze .m5-place-block {
+  background: linear-gradient(180deg, #D9A066 0%, #A16207 100%);
+}
+.m5-place.open .m5-place-block {
+  background: rgba(148, 163, 184, 0.10);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+.m5-place-rank {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: rgba(15, 23, 42, 0.72);
+  line-height: 1;
+}
+.m5-place-score {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.62);
+}
+.m5-place.open .m5-place-rank,
+.m5-place.open .m5-place-score {
+  color: rgba(148, 163, 184, 0.75);
+}
+
+/* ----- Ranks below the podium ----- */
+.m5-lb-list {
+  margin-top: 22px;
+}
+.m5-lb-list-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.m5-lb-list-empty {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+  background: #FFFFFF;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  margin: 0;
+}
+
+.m5-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.m5-rank-row.you {
+  border-color: var(--teal);
+  background: var(--teal-tint);
+}
+.m5-rank-num {
+  width: 24px;
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  color: var(--muted);
+}
+.m5-rank-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: #FFFFFF;
+  flex-shrink: 0;
+}
+.m5-rank-body { flex: 1; min-width: 0; }
+.m5-rank-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+.m5-rank-name span { color: var(--teal-dark); font-size: 12px; }
+.m5-rank-tier {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  margin: 2px 0 0;
+}
+.m5-rank-score {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* ----- Your standing ----- */
+.m5-lb-you {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--teal), var(--secondary));
+  color: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.24);
+}
+.m5-lb-you-rank {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+}
+.m5-lb-you-body { flex: 1; }
+.m5-lb-you-name {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0;
+}
+.m5-lb-you-meta {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.m5-lb-footnote {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin: 16px 0 0;
+}
+
+@media (max-width: 700px) {
+  .m5-arena { padding: 18px 12px 0; }
+  .m5-podium { gap: 6px; }
+  .m5-place-avatar { width: 44px; height: 44px; font-size: 17px; }
+  .m5-place.gold .m5-place-avatar { width: 52px; height: 52px; font-size: 20px; }
+  .m5-place-name { font-size: 12px; }
+}
+
+/* ----- Unclaimed ranks below the podium ----- */
+/* Kept deliberately plain: these rungs exist so the ladder has visible height,
+   not to compete with the podium for attention. */
+.m5-rank-row.open {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border);
+}
+.m5-rank-row.open .m5-rank-num,
+.m5-rank-row.open .m5-rank-name,
+.m5-rank-row.open .m5-rank-score {
+  color: #B6BEC9;
+  font-weight: 600;
+}
+.m5-rank-avatar.open {
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+
+.m5-lb-list-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.m5-lb-list-title span {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #B6BEC9;
+}
