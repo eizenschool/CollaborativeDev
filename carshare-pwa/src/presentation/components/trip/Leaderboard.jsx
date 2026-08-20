@@ -14,6 +14,7 @@ import { COLORS, TIER_COLORS } from './tripTheme.js';
 import { IconCrownSmall, IconSparkSmall, IconTrophySmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
 import MonthStepper, { MONTH_NAMES } from './MonthStepper.jsx';
+import useCountUp from './useCountUp.js';
 
 // Deterministic gradient per host, purely cosmetic - the same host always gets
 // the same colour without needing a photo.
@@ -34,9 +35,9 @@ function gradientFor(name) {
 const BOARD_SIZE = 10;
 
 const PLACES = [
-  { rank: 2, height: 96, tone: 'silver' },
-  { rank: 1, height: 132, tone: 'gold' },
-  { rank: 3, height: 72, tone: 'bronze' }
+  { rank: 2, height: 96, tone: 'silver', delay: 160 },
+  { rank: 1, height: 132, tone: 'gold', delay: 320 },
+  { rank: 3, height: 72, tone: 'bronze', delay: 0 }
 ];
 
 export default function Leaderboard({ userId }) {
@@ -120,7 +121,7 @@ export default function Leaderboard({ userId }) {
                 : ' · podium complete')}
         </p>
 
-        <div className="m5-podium">
+        <div className="m5-podium" key={`${state.board.year}-${month}`}>
           {podium.map((place) => <PodiumPlace key={place.rank} {...place} />)}
         </div>
       </div>
@@ -158,10 +159,13 @@ export default function Leaderboard({ userId }) {
   );
 }
 
-function PodiumPlace({ rank, height, tone, entry }) {
+function PodiumPlace({ rank, height, tone, delay, entry }) {
   const open = !entry;
+  // The score counts up as the plinth rises; an open place has nothing to count.
+  const score = useCountUp(open ? 0 : entry.compositeScore, { delay: delay + 260 });
+
   return (
-    <div className={`m5-place ${tone}` + (open ? ' open' : '')}>
+    <div className={`m5-place ${tone}` + (open ? ' open' : '')} style={{ '--rise-delay': `${delay}ms` }}>
       <div className="m5-place-who">
         {rank === 1 && !open && <span className="m5-place-crown"><IconCrownSmall size={20} /></span>}
 
@@ -175,9 +179,9 @@ function PodiumPlace({ rank, height, tone, entry }) {
         </p>
       </div>
 
-      <div className="m5-place-block" style={{ height }}>
+      <div className="m5-place-block" style={{ height, '--rise-to': `${height}px` }}>
         <span className="m5-place-rank">{rank}</span>
-        <span className="m5-place-score">{open ? '—' : `${entry.compositeScore} pts`}</span>
+        <span className="m5-place-score">{open ? '—' : `${score} pts`}</span>
       </div>
     </div>
   );
