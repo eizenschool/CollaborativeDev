@@ -12,9 +12,13 @@
 //     accordingly and copy the image first so it can be pasted alongside.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  CARD_FORMATS,
   CARD_THEMES,
+  DEFAULT_FORMAT_ID,
   DEFAULT_THEME_ID,
   buildTextShareTargets,
+  filenameFor,
+  formatById,
   themeById
 } from '../../../business-logic/TripShareCard.js';
 import { canvasToPng, drawShareCard } from './shareCardCanvas.js';
@@ -35,6 +39,7 @@ export default function ShareReportDialog({ content, onClose }) {
   const trackUrl = useObjectUrl();
 
   const [themeId, setThemeId] = useState(DEFAULT_THEME_ID);
+  const [formatId, setFormatId] = useState(DEFAULT_FORMAT_ID);
   const [preview, setPreview] = useState(null);
   const [blob, setBlob] = useState(null);
   const [note, setNote] = useState('');
@@ -49,7 +54,7 @@ export default function ShareReportDialog({ content, onClose }) {
     (async () => {
       if (document.fonts?.ready) await document.fonts.ready;
       if (!active || !canvasRef.current) return;
-      drawShareCard(canvasRef.current, content, themeById(themeId));
+      drawShareCard(canvasRef.current, content, themeById(themeId), formatById(formatId));
       const png = await canvasToPng(canvasRef.current);
       if (!active) return;
       setBlob(png);
@@ -58,7 +63,7 @@ export default function ShareReportDialog({ content, onClose }) {
       if (active) setNote('The card could not be drawn.');
     });
     return () => { active = false; };
-  }, [content, themeId, trackUrl]);
+  }, [content, themeId, formatId, trackUrl]);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -81,7 +86,7 @@ export default function ShareReportDialog({ content, onClose }) {
 
   async function handleShareSheet() {
     try {
-      const file = new File([blob], content.filename, { type: 'image/png' });
+      const file = new File([blob], filenameFor(content, formatId), { type: 'image/png' });
       if (!navigator.canShare?.({ files: [file] })) {
         setNote('This browser cannot share files. Download or copy the image instead.');
         return;
@@ -97,9 +102,10 @@ export default function ShareReportDialog({ content, onClose }) {
   function handleDownload() {
     const link = document.createElement('a');
     link.href = preview;
-    link.download = content.filename;
+    const name = filenameFor(content, formatId);
+    link.download = name;
     link.click();
-    setNote(`Saved as ${content.filename}`);
+    setNote(`Saved as ${name}`);
   }
 
   async function handleCopyImage() {
@@ -147,6 +153,27 @@ export default function ShareReportDialog({ content, onClose }) {
           </div>
 
           <div className="m5-share-controls">
+            <p className="m5-share-label" id="m5-format-label">Size</p>
+            <div className="m5-share-formats" role="radiogroup" aria-labelledby="m5-format-label">
+              {CARD_FORMATS.map((format) => (
+                <button
+                  key={format.id}
+                  role="radio"
+                  aria-checked={formatId === format.id}
+                  className={'m5-format' + (formatId === format.id ? ' active' : '')}
+                  onClick={() => setFormatId(format.id)}
+                >
+                  <span
+                    className="m5-format-shape"
+                    style={{ aspectRatio: `${format.width} / ${format.height}` }}
+                    aria-hidden="true"
+                  />
+                  <span className="m5-format-name">{format.name}</span>
+                  <span className="m5-format-hint">{format.hint}</span>
+                </button>
+              ))}
+            </div>
+
             <p className="m5-share-label" id="m5-theme-label">Colour</p>
             <div className="m5-swatches" role="radiogroup" aria-labelledby="m5-theme-label">
               {CARD_THEMES.map((theme) => (

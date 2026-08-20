@@ -357,7 +357,6 @@
 }
 
 .m5-share-preview img {
-  width: 100%;
   border-radius: 14px;
   display: block;
   box-shadow: 0px 6px 22px rgba(0, 0, 0, 0.16);
@@ -555,4 +554,73 @@
 
 @media (prefers-reduced-motion: reduce) {
   .m5-timeline-dot.pulsing { animation: none; }
+}
+
+/* ---------- Share card size picker (ShareReportDialog.jsx) ---------- */
+.m5-share-formats {
+  display: flex;
+  gap: 10px;
+}
+
+.m5-format {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #FFFFFF;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.m5-format:hover {
+  border-color: var(--teal);
+}
+.m5-format.active {
+  border-color: var(--teal);
+  background: var(--teal-tint);
+  box-shadow: 0px 2px 8px rgba(22, 163, 74, 0.14);
+}
+
+/* A miniature of the real aspect ratio, so the choice is visible rather than
+   only named. Height is fixed and the width follows from aspect-ratio. */
+.m5-format-shape {
+  height: 34px;
+  border-radius: 4px;
+  border: 2px solid var(--muted);
+  display: block;
+}
+.m5-format.active .m5-format-shape {
+  border-color: var(--teal-dark);
+}
+
+.m5-format-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.m5-format-hint {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* The preview swaps aspect ratio with the format, so it must be capped in BOTH
+   directions: a tall Story would push the controls off the panel, and a square
+   card at the same height is wider than its column and would overlap them. */
+.m5-share-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  overflow: hidden;
+}
+.m5-share-preview img {
+  max-width: 100%;
+  max-height: 380px;
+  width: auto;
+  height: auto;
 }

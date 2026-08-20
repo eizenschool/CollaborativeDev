@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CARD_FORMATS,
   CARD_THEMES,
+  DEFAULT_FORMAT_ID,
   DEFAULT_THEME_ID,
   buildShareContent,
   buildTextShareTargets,
   canShareReport,
+  filenameFor,
+  formatById,
   themeById,
   treesEquivalent
 } from '../TripShareCard.js';
@@ -115,5 +119,40 @@ describe('Module 5 text share targets', () => {
     for (const target of buildTextShareTargets(buildShareContent(report()))) {
       expect(target.href).not.toMatch(/file|image|attachment/i);
     }
+  });
+});
+
+describe('Module 5 share card formats', () => {
+  it('offers the three ratios the social apps expect', () => {
+    expect(CARD_FORMATS.map((f) => f.id)).toEqual(['story', 'post', 'square']);
+    expect(formatById(DEFAULT_FORMAT_ID).id).toBe('post');
+  });
+
+  it('falls back to Post for an unknown id', () => {
+    expect(formatById('billboard').id).toBe('post');
+    expect(formatById(undefined).id).toBe('post');
+  });
+
+  it('describes each format with real pixel dimensions', () => {
+    for (const format of CARD_FORMATS) {
+      expect(format.width).toBeGreaterThan(0);
+      expect(format.height).toBeGreaterThan(0);
+      expect(format.name).toBeTruthy();
+    }
+    const byId = Object.fromEntries(CARD_FORMATS.map((f) => [f.id, f]));
+    expect(byId.story.height).toBeGreaterThan(byId.post.height);
+    expect(byId.square.width).toBe(byId.square.height);
+  });
+
+  it('names each saved size differently so one does not overwrite another', () => {
+    const card = buildShareContent(report());
+    const names = CARD_FORMATS.map((f) => filenameFor(card, f.id));
+    expect(new Set(names).size).toBe(CARD_FORMATS.length);
+    expect(filenameFor(card, 'story')).toBe('lets-tumpang-impact-2026-08-story.png');
+    expect(names.every((n) => n.endsWith('.png'))).toBe(true);
+  });
+
+  it('builds no filename without a card', () => {
+    expect(filenameFor(null, 'post')).toBeNull();
   });
 });

@@ -24,6 +24,21 @@ export const CARD_THEMES = [
   { id: 'midnight', name: 'Midnight', from: '#1E293B', to: '#0F172A', swatch: '#1E293B' }
 ];
 
+// Aspect ratios the social apps actually expect. Only the canvas size changes -
+// the card lays itself out to whatever height it is given, so one drawing
+// routine serves all three.
+export const CARD_FORMATS = [
+  { id: 'story', name: 'Story', width: 1080, height: 1920, hint: '9:16' },
+  { id: 'post', name: 'Post', width: 1080, height: 1350, hint: '4:5' },
+  { id: 'square', name: 'Square', width: 1080, height: 1080, hint: '1:1' }
+];
+
+export const DEFAULT_FORMAT_ID = 'post';
+
+export function formatById(id) {
+  return CARD_FORMATS.find((format) => format.id === id) || CARD_FORMATS[1];
+}
+
 export const DEFAULT_THEME_ID = CARD_THEMES[0].id;
 
 export function themeById(id) {
@@ -73,6 +88,11 @@ export function buildShareContent(report, { userName = '' } = {}) {
     shareTitle: `My ${monthLabel} eco impact`,
     filename: `lets-tumpang-impact-${report.year}-${String(report.month + 1).padStart(2, '0')}.png`
   };
+}
+
+export function filenameFor(content, formatId) {
+  if (!content) return null;
+  return content.filename.replace(/.png$/, `-${formatById(formatId).id}.png`);
 }
 
 // Web share links carry text only - no social network accepts an image through
