@@ -175,6 +175,19 @@ function useOnlineStatus() {
   return online;
 }
 
+function OAuthErrorRedirect() {
+  const { oauthError, clearOauthError } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!oauthError) return;
+    navigate('/auth', { replace: true, state: { reason: oauthError } });
+    clearOauthError();
+  }, [oauthError, clearOauthError, navigate]);
+
+  return null;
+}
+
 export default function App() {
   const { loading } = useAuth();
   const online = useOnlineStatus();
@@ -196,6 +209,7 @@ export default function App() {
 
   return (
     <>
+      <OAuthErrorRedirect />
       {!online && (
         <div className="offline-banner">
           You&apos;re offline — viewing cached screens.

@@ -1,12 +1,28 @@
 // ===== PRESENTATION LAYER SUPPORT (AuthContext - shares session state across GUI components; delegates all real logic to business-logic/AuthService) =====
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { AuthService } from '../business-logic/AuthService.js';
+import { parseOAuthHashError } from '../business-logic/authAccess.js';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [oauthError, setOauthError] = useState(null);
+
+  // Runs once on the page load that Google/Supabase redirects back to. A
+  // failed round trip (see parseOAuthHashError) never surfaces through
+  // AuthService, so it has to be read directly off the URL here, then
+  // stripped so it doesn't linger in the address bar or resurface on refresh.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const message = parseOAuthHashError(window.location.hash);
+    if (!message) return;
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    setOauthError(message);
+  }, []);
+
+  const clearOauthError = useCallback(() => setOauthError(null), []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -65,7 +81,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signInWithGoogle, signOut, refresh, setUser }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signInWithGoogle, signOut, refresh, setUser, oauthError, clearOauthError }}>
       {children}
     </AuthContext.Provider>
   );
