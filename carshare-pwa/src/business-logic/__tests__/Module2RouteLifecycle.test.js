@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 
 const migrationUrl = new URL('../../../database/sql/028_m2_route_schedule_and_completion.sql', import.meta.url);
+const earlyStartMigrationUrl = new URL('../../../database/sql/037_m2_early_start_and_eta_refresh.sql', import.meta.url);
 const sharedRouteUrl = new URL('../../../supabase/functions/_shared/m2Routes.ts', import.meta.url);
 const quoteFunctionUrl = new URL('../../../supabase/functions/m2-route-quote/index.ts', import.meta.url);
 const locationInputUrl = new URL('../../presentation/components/maps/ConfirmedLocationInput.jsx', import.meta.url);
 const rideServiceUrl = new URL('../RideService.js', import.meta.url);
+const rideRequestServiceUrl = new URL('../RideRequestService.js', import.meta.url);
 
 describe('Module 2 route schedule and lifecycle contracts', () => {
   it('serializes Driver publication and applies half-open ETA intervals', async () => {
@@ -46,6 +48,18 @@ describe('Module 2 route schedule and lifecycle contracts', () => {
     expect(service).toContain('vehicle_id ?? row.vehicleId');
   });
 
+  it('disambiguates every ride host profile embed by its foreign key', async () => {
+    const [rideService, rideRequestService] = await Promise.all([
+      readFile(rideServiceUrl, 'utf8'),
+      readFile(rideRequestServiceUrl, 'utf8')
+    ]);
+    expect(rideService.match(/host:profiles!rides_host_id_fkey\(/g)?.length).toBe(3);
+    expect(rideRequestService.match(/host:profiles!rides_host_id_fkey\(/g)?.length).toBe(2);
+    expect(rideService).not.toMatch(/host:profiles\(/);
+    expect(rideRequestService).not.toMatch(/host:profiles\(/);
+    expect(rideRequestService).toContain('requester:profiles!ride_requests_requester_id_fkey(');
+  });
+
   it('enforces GPS, No-show, dual confirmation, and 24-hour completion in RPCs', async () => {
     const sql = await readFile(migrationUrl, 'utf8');
     expect(sql).toContain('p_accuracy_meters > 100');
@@ -67,8 +81,32 @@ describe('Module 2 route schedule and lifecycle contracts', () => {
     expect(shared).toContain('AES-GCM');
     expect(shared).toContain('HMAC');
     expect(shared).toContain('routingPreference: "TRAFFIC_AWARE"');
-    expect(edge.indexOf('await rpc<void>("preflight_m2_route_quote"')).toBeLessThan(edge.indexOf('await rpc<number>("consume_m2_route_quota"'));
-    expect(edge.indexOf('await rpc<number>("consume_m2_route_quota"')).toBeLessThan(edge.indexOf('const route = await computeRoute(ride, googleKey)'));
+    const quoteBranch = edge.slice(edge.indexOf('if (input.action === "quote")'));
+    expect(quoteBranch.indexOf('await rpc<void>("preflight_m2_route_quote"')).toBeLessThan(quoteBranch.indexOf('await rpc<number>("consume_m2_route_quota"'));
+    expect(quoteBranch.indexOf('await rpc<number>("consume_m2_route_quota"')).toBeLessThan(quoteBranch.indexOf('const route = await computeRoute(ride, googleKey)'));
+  });
+
+  it('starts early only after check-in and persists a traffic-refreshed ETA', async () => {
+    const [sql, edge] = await Promise.all([
+      readFile(earlyStartMigrationUrl, 'utf8'),
+      readFile(quoteFunctionUrl, 'utf8')
+    ]);
+    expect(sql).toContain('add column started_at timestamptz');
+    expect(sql).toContain("All accepted passengers must Check in before starting early");
+    expect(sql).toContain('if v_ride.departure_at > now()');
+    expect(sql).toContain('if p_started_at < v_ride.departure_at');
+    expect(sql).toContain("boarding_status = 'Checked In'");
+    expect(sql).toContain("set boarding_status = 'No-show'");
+    expect(sql).toContain('estimated_arrival_at > coalesce(started_at, departure_at)');
+    expect(sql).toMatch(/p_started_at\r?\n\s+\+ pg_catalog\.make_interval/);
+    expect(sql).toContain('revoke all on function public.start_ride(uuid) from public, anon, authenticated');
+    expect(sql).toContain('grant execute on function public.start_quoted_ride(');
+    expect(edge).toContain('input.action === "start"');
+    expect(edge).toContain('normalizeRide(startRidePayload(row, routingDepartureAt), { requireOneHour: false })');
+    expect(edge).toContain('await rpc<string>("start_quoted_ride"');
+    const startBranch = edge.slice(edge.indexOf('if (input.action === "start")'), edge.indexOf('const ride = normalizeRide(input.ride)'));
+    expect(startBranch.indexOf('preflight_m2_ride_start')).toBeLessThan(startBranch.indexOf('consume_m2_route_quota'));
+    expect(startBranch.indexOf('consume_m2_route_quota')).toBeLessThan(startBranch.indexOf('computeRoute(ride, googleKey)'));
   });
 
   it('debounces for one second and invalidates stale suggestion sequences', async () => {

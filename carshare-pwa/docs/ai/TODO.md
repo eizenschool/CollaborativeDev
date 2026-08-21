@@ -38,6 +38,7 @@ Please tell Brayden if the shape or the ordering does not suit your screen; it i
 easier to change now than after you have built against it.
 
 ## NEXT
+- [ ] Complete the documented two-account four-language/device-voice acceptance checks for deployed `036_m3_message_translation.sql` and active `m3-message-translation` version 2.
 - [ ] Update module file maps during each module's next task.
 - [ ] Review CI branch names because the workflow references `dev` while the repository uses `Development`.
 - [ ] Enable Maps Embed API only in `my-project-cd-505310` and create a website/API-restricted key.
@@ -56,10 +57,10 @@ easier to change now than after you have built against it.
   unavailable cards, and anonymous proximity search were live-verified on
   2026-08-20.
 - [ ] Review, then separately deploy and verify
-  `036_m4_vehicle_language_filters.sql`. Until deployment, ordinary exact and
+  `039_m4_vehicle_language_filters.sql`. Until deployment, ordinary exact and
   proximity Search remain available; choosing vehicle or language reports the
   deployment dependency honestly.
-- [ ] Review and deploy `037_m4_favourites_advisor_followup.sql`, then rerun the
+- [ ] Review and deploy `040_m4_favourites_advisor_followup.sql`, then rerun the
   performance advisor to clear the favourite ride foreign-key notice. The
   unused-index notice may remain until normal favourite traffic exercises the
   new table.

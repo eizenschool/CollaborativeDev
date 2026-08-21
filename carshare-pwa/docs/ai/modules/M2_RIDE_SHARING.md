@@ -113,6 +113,40 @@ retains the pre-027 Host-only full-row fallback for environments that have not
 yet applied migration 028.
 Responsive verification targets are 375px, 768px, 1024px, and 1440px.
 
+The authenticated Ride workspace is action-first. `/ride` combines Driver and
+Passenger journeys into one departure-ordered overview, while each card keeps
+an explicit role badge. The shared pure `rideJourneyState.js` model ranks one
+cross-role next step above the complete list, so the user does not need to pick
+a role before seeing the most urgent action. The same model drives Ride cards,
+My Requests, and Ride Detail so terminal Rides cannot expose check-in or
+cancellation actions. Draft cards resume the existing five-step publisher at
+`/ride/:rideId/publish`, can be deleted with confirmation, and a successful
+publish opens the new Ride Detail with a success/next-step notice.
+
+Requester cancellation is an immediate requester-owned transition, not another
+Host decision. Host approval applies only while a join request is `Pending`; a
+`Cancelled` request is written immediately, restores seats when it was
+`Accepted`, notifies the Driver, and must never be rendered as “awaiting
+approval”. If the Published Ride is still open, the former requester may submit
+another request after cancellation.
+
+Ride Detail keeps `/ride/:rideId` as the single execution surface. Drivers and
+Accepted passengers enter `?view=trip` by default in the final hour or while In
+Transit, while `?view=details` remains explicitly available. Trip mode shows
+the route, countdown, pickup instructions, navigation, the existing Module 3
+ride-group chat, and exactly one primary lifecycle action. Driver readiness and
+No-show handling are inline. Local migration
+`037_m2_early_start_and_eta_refresh.sql` and the matching `m2-route-quote`
+update allow Start before the scheduled departure only after every Accepted
+passenger is Checked In. After departure, at least one Checked In passenger is
+enough and remaining unresolved passengers are marked No-show. The operation
+records the actual `started_at` and replaces ETA with a guarded Google Routes
+traffic calculation anchored to the actual start. The client no longer calls
+the legacy direct `start_ride` RPC.
+Visible Trip mode refreshes
+Ride, Request, and lifecycle context every 15 seconds and immediately after
+focus or a local mutation without adding a new Realtime publication.
+
 Module 4 Search and Published Ride Detail are public browsing surfaces. The
 bare `/ride` route is the authenticated workspace for hosted and joining rides;
 the former basic RideHub search has been retired. Guests are sent to the shared
@@ -130,11 +164,11 @@ Requests, vehicles, reviews, and messaging remain authenticated/private.
 
 Module 4 continues to obtain candidate rides through
 `RideService.searchRides()`. Its optional compatibility criteria delegate to
-the safe public RPC authored in migration `036`, while existing callers retain
+the safe public RPC authored in migration `039`, while existing callers retain
 the previous exact/proximity behaviour. Public cards may show only the selected
 vehicle category and Host spoken-language set when classified; vehicle
 make/model/plate, Place IDs, coordinates, and other private fields are never
-added to the public result. Migration `036` is not deployed pending review, so
+added to the public result. Migration `039` is not deployed pending review, so
 ordinary Search falls back to the deployed contracts and only an explicitly
 selected compatibility filter produces a deployment error.
 
@@ -157,3 +191,22 @@ Cloud usage alerts remain an operational follow-up. Failed/legacy rows must ask
 the Driver to reconfirm; no fixed-duration ETA fallback is allowed.
 Route-deviation automation, map-pin selection, and messaging notifications
 remain deferred.
+
+Migration `037` is applied through the Dashboard SQL Editor and the updated
+`m2-route-quote` is active as version 9. The SQL file remains the repository
+record because the Dashboard-applied change is absent from migration history.
+The frontend must still be rebuilt from the matching client code; deploying
+only the frontend before the Function leaves early Start unavailable, while
+deploying only the migration leaves no client path to the service-role-only
+traffic refresh.
+
+`038_m2_ride_usability_notifications.sql` is implemented locally and depends on
+the deployed `033_project_notifications.sql`. It adds only private
+Module 2 producers and a one-minute reminder function: request decisions,
+cancellations and arrangement changes, boarding events, 24-hour/final-hour/
+departure reminders, Driver arrival, and completion. Stable recipient-scoped
+dedupe keys allow retry/catch-up; departure alerts are bounded to 30 minutes.
+Notification text and payloads exclude Place IDs, coordinates, pickup
+instructions, and companion data. This work
+does not change or deploy Web Push, VAPID, service workers, subscription APIs,
+Edge Functions, or Database Webhook configuration.

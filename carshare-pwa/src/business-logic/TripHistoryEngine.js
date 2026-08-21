@@ -22,6 +22,8 @@ import { RideService } from './RideService.js';
 import { RideRequestService } from './RideRequestService.js';
 import { HostImpactEngine } from './HostImpactEngine.js';
 import { departureParts } from './rideDateTime.js';
+import { evaluateAchievements } from './TripAchievements.js';
+import { buildTripTimeline } from './TripTimeline.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
@@ -29,6 +31,11 @@ const round1 = (value) => Math.round(value * 10) / 10;
 // is missing and why, rather than implying the module is unfinished.
 export const LEADERBOARD_NEEDS_COMPLETED_TRIPS =
   'The community leaderboard is not available on the live backend yet. Ranking hosts needs completed trips, and no ride has reached Completed on the connected database.';
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 const SHORT_MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -151,6 +158,53 @@ function buildMonthlyTrend(completedTrips, now = new Date(), months = 6) {
   return buckets;
 }
 
+// ---------- History summary (FR-5.1 / FR-5.2) ----------
+// Counts for the History screen's summary strip and its status filters. A
+// filter that shows how many trips it holds is worth more than a bare label,
+// and the strip gives the page real figures at the top even before a trip is
+// completed.
+export function summariseHistory(trips = []) {
+  const byStatus = {};
+  let hosted = 0;
+  let joined = 0;
+  let completed = 0;
+  let carbonSavedKg = 0;
+
+  for (const trip of trips) {
+    byStatus[trip.status] = (byStatus[trip.status] || 0) + 1;
+    if (trip.role === 'Host') hosted += 1;
+    else joined += 1;
+    if (trip.status === 'Completed') {
+      completed += 1;
+      carbonSavedKg += trip.carbonSavedKg || 0;
+    }
+  }
+
+  return {
+    total: trips.length,
+    hosted,
+    joined,
+    completed,
+    carbonSavedKg: round1(carbonSavedKg),
+    byStatus
+  };
+}
+
+// Trips grouped under the month they departed in, newest month first, so a long
+// history reads as a timeline instead of an undifferentiated wall of cards.
+export function groupHistoryByMonth(trips = []) {
+  const groups = new Map();
+  for (const trip of trips) {
+    const key = trip.date.slice(0, 7);
+    if (!groups.has(key)) {
+      const [year, month] = key.split('-').map(Number);
+      groups.set(key, { key, year, month: month - 1, label: `${MONTH_NAMES[month - 1]} ${year}`, trips: [] });
+    }
+    groups.get(key).trips.push(trip);
+  }
+  return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
+}
+
 // UC5.3's participant list. mockDb.listRideRequests() deliberately refuses
 // non-hosts, which is the right privacy boundary: a Host sees everyone they
 // accepted, a passenger sees the Host and their own party.
@@ -236,7 +290,21 @@ export const TripHistoryEngine = {
       (id) => RideRequestService.listRideRequests(id)
     );
 
-    return { ...card, participants };
+    // The timeline reads Module 2's own timestamps. A Host may see every
+    // request; a passenger sees only their own, which still tells their side
+    // of the story. Losing either source is not worth failing the page for.
+    const [timelineRequests, lifecycle] = await Promise.all([
+      isHost
+        ? RideRequestService.listRideRequests(tripId).catch(() => [])
+        : Promise.resolve(ownRequest ? [ownRequest] : []),
+      RideService.getLifecycleContext(tripId).catch(() => null)
+    ]);
+
+    return {
+      ...card,
+      participants,
+      timeline: buildTripTimeline({ ride, requests: timelineRequests, lifecycle, now })
+    };
   },
 
   // ---------- FR-5.6 / FR-5.7 - Environmental Impact Dashboard ----------
@@ -250,7 +318,9 @@ export const TripHistoryEngine = {
       ...totals,
       // ~21kg CO2 absorbed per tree per year, illustrative.
       treesEquivalent: Math.round(totals.totalCarbonSavedKg / 21),
-      monthlyTrend: buildMonthlyTrend(completed, now)
+      monthlyTrend: buildMonthlyTrend(completed, now),
+      // FR-5.7 - the same completed trips, expressed as milestones.
+      achievements: evaluateAchievements(completed)
     };
   },
 

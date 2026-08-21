@@ -6,6 +6,8 @@ import { COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
 import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
+import AchievementGrid from './AchievementGrid.jsx';
+import StatTile from './StatTile.jsx';
 
 export default function ImpactDashboard({ userId }) {
   const isDesktop = useIsDesktop();
@@ -38,51 +40,45 @@ export default function ImpactDashboard({ userId }) {
 
   const summary = state.summary;
 
-  if (!summary.hasData) {
-    return (
-      <div className="m5-card m5-empty">
-        <span className="m5-icon-circle" style={{ background: COLORS.tealTint, color: COLORS.teal, width: 52, height: 52 }}>
-          <IconLeafSmall size={22} />
-        </span>
-        <p style={{ fontFamily: 'Inter, sans-serif', color: COLORS.textSecondary, marginTop: 4, maxWidth: 340, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
-          Environmental impact statistics are not available yet — complete your first ride to start tracking your
-          impact.
-        </p>
-      </div>
-    );
-  }
-
   const stats = [
-    { icon: <IconLeafSmall size={22} />, label: 'Total Carbon Saved', value: `${summary.totalCarbonSavedKg} kg` },
-    { icon: <IconRoadSmall size={22} />, label: 'Shared Travel Distance', value: `${summary.totalDistanceKm} km` },
-    { icon: <IconUsersSmall size={22} />, label: 'Passengers Carried', value: summary.passengersCarried }
+    { icon: <IconLeafSmall size={17} />, label: 'CO₂ saved', value: `${summary.totalCarbonSavedKg} kg`, accent: true },
+    { icon: <IconRoadSmall size={17} />, label: 'Distance shared', value: `${summary.totalDistanceKm} km` },
+    { icon: <IconUsersSmall size={17} />, label: 'Passengers carried', value: summary.passengersCarried }
   ];
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(3, 1fr)' : '1fr', gap: 16 }}>
-        {stats.map((s) => (
-          <div key={s.label} className="m5-stat-card" style={{ background: `linear-gradient(160deg, ${COLORS.tealTint} 0%, #FFFFFF 100%)`, border: `1px solid ${COLORS.teal}22` }}>
-            <span className="m5-icon-circle" style={{ background: COLORS.teal, color: '#FFFFFF' }}>{s.icon}</span>
-            <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 30, color: COLORS.teal, margin: '2px 0 0' }}>
-              {s.value}
-            </p>
-            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 500, color: COLORS.textSecondary, margin: '4px 0 0' }}>{s.label}</p>
-          </div>
-        ))}
+      {/* A zero is a measurement, not a missing service, so the dashboard keeps
+          its shape and says why the figures are still zero. Replacing the whole
+          screen hid the very layout a new user is trying to understand. */}
+      {!summary.hasData && (
+        <div className="m5-notice" role="status">
+          <span className="m5-notice-icon" aria-hidden="true"><IconLeafSmall size={18} /></span>
+          <p>Nothing to count yet. These figures start moving as soon as your first shared trip is completed.</p>
+        </div>
+      )}
+
+      <div className="m5-stat-grid cols-3">
+        {stats.map((s) => <StatTile key={s.label} {...s} />)}
       </div>
 
-      <div className="m5-card" style={{ marginTop: 16, padding: 24 }}>
-        <h3 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, margin: '0 0 16px', color: COLORS.textPrimary }}>
-          Carbon saved trend
-        </h3>
+      <div className="m5-card m5-section" style={{ padding: 20 }}>
+        <p className="m5-section-title">Carbon saved trend <span>Last 6 months</span></p>
         <TrendBars points={summary.monthlyTrend} />
       </div>
+
+      {summary.achievements && (
+        <div className="m5-section">
+          <AchievementGrid achievements={summary.achievements} />
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '14px 18px', background: COLORS.primaryTint, borderRadius: 12 }}>
         <span style={{ fontSize: 18 }}>🌱</span>
         <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: COLORS.primaryDark, margin: 0 }}>
-          You've helped avoid the equivalent of planting {summary.treesEquivalent} trees.
+          {summary.treesEquivalent > 0
+            ? `You've helped avoid the equivalent of planting ${summary.treesEquivalent} tree${summary.treesEquivalent === 1 ? '' : 's'}.`
+            : 'Every shared seat keeps a car off the road - your first trip starts the count.'}
         </p>
       </div>
     </div>

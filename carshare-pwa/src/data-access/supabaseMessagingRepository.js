@@ -38,6 +38,19 @@ function normalizeError(error, fallback) {
   return Object.assign(new Error(message), { code: error?.code });
 }
 
+async function normalizeFunctionError(error, fallback) {
+  let payload = null;
+  try {
+    payload = await error?.context?.json?.();
+  } catch {
+    // A network or gateway error may not include a JSON response body.
+  }
+  const message = payload?.error || error?.message?.replace(/^.*?: /, '') || fallback;
+  return Object.assign(new Error(message), {
+    code: payload?.code || error?.code || 'TRANSLATION_FAILED',
+  });
+}
+
 async function requireUserId() {
   const client = requireSupabase();
   const { data, error } = await client.auth.getUser();
@@ -273,6 +286,20 @@ export const supabaseMessagingRepository = {
     });
     if (error) throw normalizeError(error, 'Unable to delete message.');
     return data || [];
+  },
+
+  async translateMessage({ messageId, targetLanguage }) {
+    const client = requireSupabase();
+    const { data, error } = await client.functions.invoke('m3-message-translation', {
+      body: { messageId, targetLanguage },
+    });
+    if (error) throw await normalizeFunctionError(error, 'Unable to translate this message.');
+    if (!data?.translatedText) {
+      throw Object.assign(new Error('Translation returned no text.'), {
+        code: 'AI_INVALID_RESPONSE',
+      });
+    }
+    return data;
   },
 
   async markConversationRead(conversationId) {

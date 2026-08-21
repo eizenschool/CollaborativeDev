@@ -57,7 +57,7 @@ Profile exposes an explicit Sign out action after the page content on phone
 because the desktop top-navigation actions are hidden below 700px.
 Profile's Overview panel continues to omit the redundant Quick actions card
 because Home owns primary navigation.
-Module 4's reviewed-but-undeployed migration `036` adds optional owner-managed
+Module 4's reviewed-but-undeployed migration `039` adds optional owner-managed
 classification fields: one `vehicles.vehicle_type` per vehicle and a set of
 `profiles.spoken_languages` for the Host. The profile and vehicle screens and
 mock adapter support these fields now. Existing rows are intentionally not

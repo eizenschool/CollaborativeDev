@@ -61,7 +61,7 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
 - FR-4.5 vehicle and language compatibility is implemented across Search,
   owner vehicle management, Host profile editing, favourites, mock persistence,
   and safe card display. Existing rows remain unclassified: they appear under
-  Any but do not match a specific choice. Migration `036` is deliberately not
+  Any but do not match a specific choice. Migration `039` is deliberately not
   deployed pending its separate review. Until then ordinary exact/proximity
   search still falls back safely, while selecting either compatibility filter
   reports the missing deployment honestly.
@@ -74,10 +74,10 @@ Presentation: `src/presentation/components/search/` and
 
 Database: `database/sql/034_m4_smart_search_favourites.sql` and
 `database/sql/035_m4_destination_proximity_search.sql` (both deployed and
-verified), plus `database/sql/036_m4_vehicle_language_filters.sql` (authored,
+verified), plus `database/sql/039_m4_vehicle_language_filters.sql` (authored,
 review pending, not deployed). Post-deployment advisors reported no Module 4
 security finding; their favourite foreign-key index follow-up is authored as
-`037_m4_favourites_advisor_followup.sql` and remains undeployed for review.
+`040_m4_favourites_advisor_followup.sql` and remains undeployed for review.
 
 ## Open Questions
 Deferred beyond this slice: route-corridor and multi-leg matching and transfer

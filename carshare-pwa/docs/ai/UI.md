@@ -149,14 +149,21 @@ one-off module value must have a concrete reason.
 
 ## Navigation and App Shell
 
-The persistent navigation has six destinations in this order:
+The persistent navigation has seven destinations in this order:
 
 1. Home
 2. Search
 3. Ride
-4. Message
-5. Favourite
-6. Profile
+4. Trips
+5. Message
+6. Favourite
+7. Profile
+
+Trips was added by team decision: trip history is the page a user returns to
+after every ride, and reaching it only through Profile made Module 5 read as a
+sub-feature of Module 1. It sits beside Ride because one arranges rides and the
+other records them. On a 375px phone seven items leave 50px each, above the
+42px minimum in `theme.css`, so no navigation styling changed.
 
 Use `TopNav.jsx`; do not implement a separate navigation bar inside a module.
 The current route determines the active state.
@@ -164,7 +171,7 @@ The current route determines the active state.
 - The default website entry is public Home. Guests may browse Home, Search
   results, and Published Ride Detail without creating a session. `/search` is
   the only public ride-listing surface.
-- Message, Favourite, Profile, the `/ride` management workspace, Publish Ride,
+- Trips, Message, Favourite, Profile, the `/ride` management workspace, Publish Ride,
   personal ride/request views, and
   other account-specific services require authentication. A guest who selects
   one is sent to the shared auth page with a clear reason and a safe return

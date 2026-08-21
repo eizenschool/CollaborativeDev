@@ -1,20 +1,23 @@
 // ===== PRESENTATION LAYER (TopNav) =====
 // The one persistent, shared element across every screen and every module -
-// matches the nav bar spec used across the whole app (6 items: Home, Search,
-// Ride, Message, Favourite, Profile). Search is the public ride-browsing surface;
-// Ride is the authenticated hosting and joining workspace.
+// matches the nav bar spec used across the whole app (7 items: Home, Search,
+// Ride, Trips, Message, Favourite, Profile). Search is the public ride-browsing
+// surface; Ride is the authenticated hosting and joining workspace; Trips is the
+// record of what already happened, which every ride app of this kind promotes to
+// the bar rather than burying in a profile.
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
-import { IconCar, IconHome, IconSearch, IconRoute, IconMessage, IconHeart, IconUser, IconBell, IconLogOut } from '../icons.jsx';
+import { IconCar, IconHome, IconSearch, IconRoute, IconClock, IconMessage, IconHeart, IconUser, IconBell, IconLogOut } from '../icons.jsx';
 import { NotificationPopover } from '../notifications/NotificationCenter.jsx';
 
 const NAV_ITEMS = [
   { to: '/home', label: 'Home', Icon: IconHome },
   { to: '/search', label: 'Search', Icon: IconSearch },
   { to: '/ride', label: 'Ride', Icon: IconRoute, requiresAuth: true },
+  { to: '/trip', label: 'Trips', Icon: IconClock, requiresAuth: true },
   { to: '/message', label: 'Message', Icon: IconMessage, requiresAuth: true },
   { to: '/favourite', label: 'Favourite', Icon: IconHeart, requiresAuth: true },
   { to: '/profile', label: 'Profile', Icon: IconUser, requiresAuth: true }

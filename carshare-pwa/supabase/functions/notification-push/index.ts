@@ -77,7 +77,7 @@ Deno.serve(async (request) => {
       body: record.body,
       actionPath: record.action_path,
     });
-    await Promise.all((subscriptions || []).map(async (subscription) => {
+    const outcomes = await Promise.all((subscriptions || []).map(async (subscription) => {
       try {
         const subscriber = server.subscribe({
           endpoint: subscription.endpoint,
@@ -88,15 +88,26 @@ Deno.serve(async (request) => {
           urgency: webpush.Urgency.High,
           topic: `notification-${record.id}`,
         });
+        return "delivered" as const;
       } catch (pushError) {
         if (pushError instanceof webpush.PushMessageError && pushError.isGone()) {
           await admin.from("web_push_subscriptions").delete().eq("endpoint", subscription.endpoint);
-          return;
+          return "removed" as const;
         }
-        console.error("Push delivery failed", { notificationId: record.id, endpoint: subscription.endpoint, pushError });
+        console.error("Push delivery failed", { notificationId: record.id, pushError });
+        return "failed" as const;
       }
     }));
-    return response({ ok: true, delivered: (subscriptions || []).length });
+    const delivered = outcomes.filter((outcome) => outcome === "delivered").length;
+    const failed = outcomes.filter((outcome) => outcome === "failed").length;
+    const removed = outcomes.filter((outcome) => outcome === "removed").length;
+    return response({
+      ok: failed === 0,
+      attempted: outcomes.length,
+      delivered,
+      failed,
+      removed,
+    }, failed > 0 ? 502 : 200);
   } catch (error) {
     console.error(error);
     return response({ error: error instanceof Error ? error.message : "Push delivery failed." }, 500);

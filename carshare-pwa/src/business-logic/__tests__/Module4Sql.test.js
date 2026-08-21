@@ -52,7 +52,7 @@ describe('Module 4 SQL contract', () => {
 
   it('adds bounded compatibility classifications behind a safe public search wrapper', async () => {
     const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
-      new URL('../../../database/sql/036_m4_vehicle_language_filters.sql', import.meta.url),
+      new URL('../../../database/sql/039_m4_vehicle_language_filters.sql', import.meta.url),
       'utf8'
     ));
     const returnedColumns = sql.match(/returns table\s*\(([\s\S]*?)\)\s*language/i)?.[1] || '';

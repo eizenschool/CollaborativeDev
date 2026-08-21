@@ -79,6 +79,17 @@ export function createNotificationService(repository = supabaseNotificationRepos
       return subscription ? 'enabled' : 'available';
     },
 
+    async syncPushSubscription() {
+      if (!isPushSupported()) return 'unsupported';
+      if (!vapidPublicKey) return 'unconfigured';
+      if (Notification.permission === 'denied') return 'denied';
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription) return 'available';
+      await repository.savePushSubscription(subscription.toJSON());
+      return 'enabled';
+    },
+
     async enablePush() {
       if (!isPushSupported()) {
         throw new Error('This browser does not support device notifications over this connection.');

@@ -1,11 +1,18 @@
 // ===== PRESENTATION LAYER (RideHistory) =====
 // Module 5, Screen 1 - FR-5.1 / FR-5.2 (UC5.1, UC5.2)
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
+import { useNavigate } from 'react-router-dom';
+import {
+  TripHistoryEngine,
+  groupHistoryByMonth,
+  summariseHistory
+} from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
-import { IconLeafSmall } from './tripIcons.jsx';
+import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
+import MonthStepper from './MonthStepper.jsx';
+import StatTile from './StatTile.jsx';
 
 // The seven lifecycle states Module 2 actually stores on a ride. 'Expired'
 // belongs here too - a published ride nobody joined lapses rather than
@@ -15,8 +22,10 @@ const ROLES = ['All', 'Hosted', 'Joined'];
 
 export default function RideHistory({ userId, onOpenTrip }) {
   const isDesktop = useIsDesktop();
+  const navigate = useNavigate();
   const [state, setState] = useState({ phase: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
+  const [period, setPeriod] = useState('all');
   const [stage, setStage] = useState('All');
   const [role, setRole] = useState('All');
 
@@ -38,15 +47,32 @@ export default function RideHistory({ userId, onOpenTrip }) {
 
   const trips = state.phase === 'ready' ? state.trips : null;
 
+  const summary = useMemo(() => summariseHistory(trips || []), [trips]);
+
+  // The oldest trip is the floor: paging back past it could only ever show
+  // empty months.
+  const earliest = useMemo(() => {
+    if (!trips || trips.length === 0) return null;
+    const oldest = trips.reduce((min, t) => (t.date < min ? t.date : min), trips[0].date);
+    const [year, month] = oldest.split('-').map(Number);
+    return { year, month: month - 1 };
+  }, [trips]);
+
   const filtered = useMemo(() => {
     if (!trips) return [];
+    const periodKey = period === 'all'
+      ? null
+      : `${period.year}-${String(period.month + 1).padStart(2, '0')}`;
     return trips.filter((t) => {
+      if (periodKey && t.date.slice(0, 7) !== periodKey) return false;
       const stageOk = stage === 'All' || t.status === stage;
       const roleOk =
         role === 'All' || (role === 'Hosted' && t.role === 'Host') || (role === 'Joined' && t.role === 'Passenger');
       return stageOk && roleOk;
     });
-  }, [trips, stage, role]);
+  }, [trips, stage, role, period]);
+
+  const months = useMemo(() => groupHistoryByMonth(filtered), [filtered]);
 
   if (state.phase === 'error') {
     return <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />;
@@ -57,27 +83,80 @@ export default function RideHistory({ userId, onOpenTrip }) {
   }
 
   return (
-    <div style={{ display: isDesktop ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '260px 1fr' : undefined, gap: 28 }}>
-      <div>
-        <FilterGroup label="Status" options={STAGES} value={stage} onChange={setStage} />
-        <div style={{ height: 20 }} />
+    <div>
+      {/* Real counts, so the page opens with figures rather than a filter rail
+          and empty space - and reads 0 rather than vanishing before any trip. */}
+      <div className="m5-stat-grid cols-4">
+        <StatTile icon={<IconLeafSmall size={17} />} label="CO₂ saved" value={`${summary.carbonSavedKg} kg`} accent />
+        <StatTile label="Trips" value={summary.total} />
+        <StatTile label="Hosted" value={summary.hosted} />
+        <StatTile label="Joined" value={summary.joined} />
+      </div>
+
+      {/* One scrolling row rather than a narrow column: eight chips of unequal
+          width wrapped into ragged rows and left the list squeezed beside them. */}
+      <div className="m5-history-filters">
+        <div className="m5-history-period">
+          {period === 'all' ? (
+            <button
+              className="m5-chip active-period"
+              onClick={() => setPeriod({ year: new Date().getFullYear(), month: new Date().getMonth() })}
+              disabled={!earliest}
+            >
+              All time <span className="m5-chip-count">{summary.total}</span>
+            </button>
+          ) : (
+            <MonthStepper
+              year={period.year}
+              month={period.month}
+              earliest={earliest}
+              onChange={(y, m) => setPeriod({ year: y, month: m })}
+              trailing={
+                <button className="m5-chip" onClick={() => setPeriod('all')}>All time</button>
+              }
+            />
+          )}
+        </div>
+        <FilterGroup
+          label="Status"
+          options={STAGES}
+          value={stage}
+          onChange={setStage}
+          counts={summary.byStatus}
+          total={summary.total}
+        />
         <SegmentedRoleToggle value={role} onChange={setRole} />
       </div>
 
-      <div>
-        {filtered.length === 0 ? (
-          <EmptyState stageFiltered={stage !== 'All'} />
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(2, 1fr)' : '1fr', gap: 16 }}>
-            {filtered.map((trip) => (
-              <TripCard key={trip.id} trip={trip} onClick={() => onOpenTrip(trip.id)} />
-            ))}
-          </div>
-        )}
-      </div>
+      {filtered.length === 0 ? (
+        <EmptyState
+          stage={stage}
+          role={role}
+          summary={summary}
+          onPickStage={setStage}
+          onClearFilters={() => { setStage('All'); setRole('All'); setPeriod('all'); }}
+          onFindRide={() => navigate('/ride')}
+          onPublishRide={() => navigate('/ride/publish')}
+        />
+      ) : (
+        months.map((group) => (
+          <section key={group.key} className="m5-month">
+            <h3 className="m5-section-title m5-month-heading">
+              {group.label}
+              <span>{group.trips.length} {group.trips.length === 1 ? 'trip' : 'trips'}</span>
+            </h3>
+            <div className="m5-trip-grid">
+              {group.trips.map((trip) => (
+                <TripCard key={trip.id} trip={trip} onClick={() => onOpenTrip(trip.id)} />
+              ))}
+            </div>
+          </section>
+        ))
+      )}
     </div>
   );
 }
+
 
 // These groups pick exactly one option, so they are radio groups rather than
 // plain buttons. That also keeps the whole group to a single Tab stop - as
@@ -112,7 +191,7 @@ function useRovingRadioGroup(options, value, onChange) {
   return optionProps;
 }
 
-function FilterGroup({ label, options, value, onChange }) {
+function FilterGroup({ label, options, value, onChange, counts = {}, total = 0 }) {
   const optionProps = useRovingRadioGroup(options, value, onChange);
   const labelId = `m5-filter-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
@@ -123,9 +202,10 @@ function FilterGroup({ label, options, value, onChange }) {
       >
         {label}
       </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} role="radiogroup" aria-labelledby={labelId}>
+      <div className="m5-chip-row" role="radiogroup" aria-labelledby={labelId}>
         {options.map((opt, index) => {
           const active = value === opt;
+          const count = opt === 'All' ? total : (counts[opt] || 0);
           const palette = STATUS_COLORS[opt];
           const activeColor = palette ? palette.text : COLORS.primaryDark;
           return (
@@ -141,6 +221,8 @@ function FilterGroup({ label, options, value, onChange }) {
               }}
             >
               {opt}
+              {/* A filter that shows what it holds saves a click on an empty one. */}
+              <span className="m5-chip-count" style={{ opacity: count === 0 ? 0.45 : 1 }}>{count}</span>
             </button>
           );
         })}
@@ -187,26 +269,55 @@ function SegmentedRoleToggle({ value, onChange }) {
 
 function TripCard({ trip, onClick }) {
   const palette = STATUS_COLORS[trip.status] || STATUS_COLORS.Published;
+  const seatsFilled = Math.max(0, (trip.seatsTotal || 0) - (trip.seatsAvailable ?? 0));
+  const counterpart = trip.role === 'Passenger' ? trip.host?.fullName : null;
+
   return (
-    <button onClick={onClick} className="m5-card m5-trip-card" style={{ padding: 18, fontFamily: 'Inter, sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-        <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, margin: 0, color: COLORS.textPrimary, lineHeight: 1.4 }}>
-          {trip.pickup} → {trip.destination}
-        </p>
-        <span style={{ flexShrink: 0, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, letterSpacing: 0.2, color: palette.text, background: palette.bg }}>
+    <button onClick={onClick} className="m5-card m5-trip-card">
+      <div className="m5-trip-head">
+        <p className="m5-trip-route">{trip.pickup} → {trip.destination}</p>
+        <span className="m5-trip-status" style={{ color: palette.text, background: palette.bg }}>
           {trip.status}
         </span>
       </div>
-      <p style={{ fontSize: 13, color: COLORS.textSecondary, margin: '8px 0 0' }}>
-        {trip.date} · {trip.time}
-      </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.teal, background: COLORS.tealTint, padding: '3px 10px', borderRadius: 999 }}>
-          {trip.role}
+
+      <div className="m5-trip-meta">
+        <span>{trip.date} · {trip.time}</span>
+        <span aria-hidden="true">·</span>
+        <span>{trip.journeyScale}</span>
+      </div>
+
+      <div className="m5-trip-facts">
+        <span className="m5-trip-fact">
+          <IconUsersSmall size={14} /> {seatsFilled}/{trip.seatsTotal} seats
+        </span>
+        {trip.distanceKm != null && (
+          <span className="m5-trip-fact">
+            <IconRoadSmall size={14} /> ~{trip.distanceKm} km
+          </span>
+        )}
+        {trip.contribution && <span className="m5-trip-fact">{trip.contribution}</span>}
+      </div>
+
+      {trip.restrictionTags?.length > 0 && (
+        <div className="m5-trip-tags">
+          {trip.restrictionTags.slice(0, 3).map((tag) => (
+            <span key={tag} className="m5-trip-tag">{tag}</span>
+          ))}
+          {trip.restrictionTags.length > 3 && (
+            <span className="m5-trip-tag">+{trip.restrictionTags.length - 3}</span>
+          )}
+        </div>
+      )}
+
+      <div className="m5-trip-foot">
+        <span className="m5-trip-role">
+          {/* Whose trip this was matters more to a passenger than to a host. */}
+          {counterpart ? `Passenger · ${counterpart}` : trip.role}
         </span>
         {trip.carbonSavedKg != null && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: COLORS.teal }}>
-            <IconLeafSmall size={14} /> {trip.carbonSavedKg} kg CO₂ saved
+          <span className="m5-trip-carbon">
+            <IconLeafSmall size={14} /> {trip.carbonSavedKg} kg CO₂
           </span>
         )}
       </div>
@@ -214,20 +325,61 @@ function TripCard({ trip, onClick }) {
   );
 }
 
-function EmptyState({ stageFiltered }) {
+// Two different situations deserve two different answers. A filtered-out list
+// is a navigation problem - the fastest fix is one tap onto a status that has
+// something in it. An account with no trips at all is not an error state, it is
+// the start, so it points at the thing to do next instead of apologising.
+function EmptyState({ stage, role, summary, onPickStage, onClearFilters, onFindRide, onPublishRide }) {
+  const filtered = stage !== 'All' || role !== 'All';
+
+  if (!filtered) {
+    return (
+      <div className="m5-card m5-blank">
+        <span className="m5-blank-icon"><IconLeafSmall size={26} /></span>
+        <h3>Your trips will live here</h3>
+        <p>
+          Every ride you host or join is kept here with its route, who came along, and the
+          CO₂ it saved.
+        </p>
+        <div className="m5-blank-actions">
+          <button className="m5-blank-primary" onClick={onFindRide}>Find a ride</button>
+          <button className="m5-blank-secondary" onClick={onPublishRide}>Publish a ride</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Statuses that would actually show something, so the suggestion is never a
+  // dead end.
+  const alternatives = Object.entries(summary.byStatus)
+    .filter(([name, count]) => count > 0 && name !== stage)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
   return (
-    <div className="m5-card m5-empty">
-      <span className="m5-icon-circle" style={{ background: COLORS.bg, color: COLORS.textSecondary }}>
-        <IconLeafSmall size={20} />
-      </span>
-      <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 16, color: COLORS.textPrimary, margin: 0 }}>
-        {stageFiltered ? 'No trips found under selected status' : 'No ride history found'}
+    <div className="m5-card m5-blank">
+      <span className="m5-blank-icon muted"><IconLeafSmall size={26} /></span>
+      <h3>{stage === 'All' ? `No ${role.toLowerCase()} trips` : `No ${stage} trips`}</h3>
+      <p>
+        {summary.total === 0
+          ? 'You have no trips recorded yet.'
+          : `You have ${summary.total} trip${summary.total === 1 ? '' : 's'} under other filters.`}
       </p>
-      <p style={{ fontSize: 14, marginTop: 6 }}>
-        {stageFiltered
-          ? 'Try a different status filter, or check back after your next ride.'
-          : 'Trips you host or join will show up here once you take your first ride.'}
-      </p>
+
+      {alternatives.length > 0 && (
+        <div className="m5-blank-jump">
+          <span>Jump to</span>
+          {alternatives.map(([name, count]) => (
+            <button key={name} className="m5-chip" onClick={() => onPickStage(name)}>
+              {name} <strong>{count}</strong>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="m5-blank-actions">
+        <button className="m5-blank-secondary" onClick={onClearFilters}>Clear filters</button>
+      </div>
     </div>
   );
 }

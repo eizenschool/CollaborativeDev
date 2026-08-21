@@ -160,9 +160,17 @@ another member reads the message; sender-only deletion always tombstones the
 whole bundle. Completed private chats can be archived per user, Completed group
 travellers can leave, and Hosts cannot leave. Completed, Cancelled, and Expired
 conversation access ends permanently seven days after the terminal timestamp,
-overriding UC3.8's older permanent archive wording. Translation remains
-deferred; Message notifications are delivered through the shared centre defined
-in D020.
+overriding UC3.8's older permanent archive wording. Translation/UC3.6 is an
+explicit, on-demand four-language action for English, Simplified Chinese,
+Bahasa Melayu, and Tamil. An authenticated Supabase Edge Function resolves the
+message source server-side, uses Cloudflare Workers AI's free-plan models for
+translation and voice transcription, and writes a shared source-versioned cache
+that members can read only while the conversation remains visible. Cloudflare
+secrets never enter the browser. Translated speech is optional and user-triggered
+through the device's Web Speech voice; no generated audio is stored. When the
+shared free allowance is exhausted, translation stops with a retry-after-reset
+message and never selects a paid fallback. Message notifications are delivered
+through the shared centre defined in D020.
 
 ## D017 — Public-First Browsing and Action-Time Authentication
 **Status:** Accepted
@@ -259,16 +267,16 @@ backfilled or guessed: unclassified rides remain in Any results but cannot
 match a specific compatibility choice until their owner updates them.
 
 The allowed values are stable, validated sets shared by owner-editing UI,
-mock persistence, URL normalization, and migration `036`. Module 4's safe card
+mock persistence, URL normalization, and migration `039`. Module 4's safe card
 projection may expose only `vehicle_type` and `spoken_languages` in addition to
 its existing public fields. Vehicle make, model, plate, Ride Place IDs,
 coordinates, and private profile information remain excluded. The privileged
 database implementation lives in the non-exposed `private` schema and a narrow
-public invoker RPC is the only browser search entry point. Migration `036`
+public invoker RPC is the only browser search entry point. Migration `039`
 remains undeployed until its separate review.
 
 ## Open Decisions
-- database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `036` awaits review; Module 6's `024` schema is deployed);
+- database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;

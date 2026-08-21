@@ -11,13 +11,16 @@ history lives in `database/sql/`; do not duplicate full migrations here.
 Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
-Adopted live scope: Module 1 + Module 2 + Module 3 messaging
-Deployed SQL history: 001-026, 028, 034, and 035 as tracked Supabase migrations,
-  plus 023, 027, 029, 030, 031, and 032 applied through the Dashboard SQL Editor
-  (see below)
-Repository SQL history: 001-037
+Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 favourites/proximity
+Deployed SQL history: 001-026, 028, 033, 034, and 036_m3 as tracked Supabase
+  migrations, plus tracked 035_m4 and 023, 027, 029, 030, 031, 032, and
+  037_m2 applied through
+  the Dashboard SQL Editor (see below)
+Repository SQL history: 001-040
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
-  033, 036, and 037 are local and await their documented deployment steps)
+  033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
+  deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
+  through the Dashboard SQL Editor; 038, 039, and 040 remain undeployed)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -126,12 +129,12 @@ record for this round: it retires the six rows that are not destinations and
 recategorises four that are. Neither file changes any grant, and `032` is
 idempotent. Deploy `031` before `032`.
 
-`033_project_notifications.sql` is the next local migration. It introduces the
-cross-module `user_notifications` inbox, device subscription records, narrow
-read-state RPCs, a private producer helper, Realtime publication, 30-day
-retention, and Message as the first producer by extending `send_message`.
-It is intentionally **not deployed** until the project owner also configures
-the VAPID Edge Function secrets and Database Webhook described in
+`033_project_notifications.sql` is deployed as `project_notifications`. It
+introduces the cross-module `user_notifications` inbox, device subscription
+records, narrow read-state RPCs, a private producer helper, Realtime
+publication, 30-day retention, and Message as the first producer by extending
+`send_message`. The Edge Functions are deployed; the project owner still must
+configure their VAPID secrets and Database Webhook as described in
 `docs/SUPABASE-SETUP.md`. Future producers must call
 `private.create_user_notification(...)`; they must not create their own bell,
 unread counter, or browser-push implementation.
@@ -168,7 +171,33 @@ computed distance. It accepts only 5/10/25 km, filters active Hosts, Published
 rides, remaining seats, pickup, and Kuala Lumpur departure bounds, and exposes
 no Ride Place ID, coordinate, pickup instruction, waypoint, or route geometry.
 
-`036_m4_vehicle_language_filters.sql` is **written but not deployed** pending a
+`036_m3_message_translation.sql` is deployed as `m3_message_translation`. It
+adds a source-versioned shared cache keyed by message and target language for
+English, Simplified Chinese, Bahasa Melayu, and Tamil text/voice translations.
+Current conversation members receive SELECT only through RLS; browser roles
+receive no write grant. The authenticated `m3-message-translation` Edge
+Function performs separate membership, tombstone, and expiry checks before its
+server client writes a Cloudflare-generated result.
+
+`037_m2_early_start_and_eta_refresh.sql` was applied through the Dashboard SQL
+Editor and is not present in the tracked migration list. It removes
+authenticated execution of the legacy direct `start_ride` path, adds the actual
+`rides.started_at`, and exposes two service-role-only helpers to the
+`m2-route-quote` Edge Function. Before the scheduled departure, every Accepted
+passenger must be Checked In; after departure, at least one must be Checked In
+and remaining unresolved passengers may be marked No-show. The matching
+`m2-route-quote` Edge Function is deployed as active version 9.
+
+`038_m2_ride_usability_notifications.sql` is **written but not yet deployed**
+and must follow `033_project_notifications.sql`. It reuses
+`private.create_user_notification(...)` for Module 2 request, cancellation,
+arrangement, boarding, arrival, and completion events. Its private minute-Cron
+producer adds deduplicated 24-hour, final-hour, and departure-due reminders;
+departure catch-up is limited to 30 minutes. It creates no public table or
+client RPC and does not change Push subscriptions, Edge Functions, VAPID,
+service workers, or webhooks.
+
+`039_m4_vehicle_language_filters.sql` is **written but not deployed** pending a
 separate review. It adds nullable, validated vehicle categories and validated
 Host language sets without guessing classifications for existing rows. Its
 safe public search RPC preserves exact/proximity filtering and may return only
@@ -180,8 +209,8 @@ a compatibility filter reports the missing migration honestly.
 The post-deployment advisors reported no Module 4 security findings. Performance
 reported the expected unused-index notice for the new favourites table and one
 missing covering index on `ride_favourites.ride_id`. The latter is addressed by
-`037_m4_favourites_advisor_followup.sql`, authored but not deployed so the
-deployed `034` remains immutable. The next new migration starts at `038`.
+`040_m4_favourites_advisor_followup.sql`, authored but not deployed so the
+deployed `034` remains immutable. The next new migration starts at `041`.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -191,9 +220,9 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 
 ### Tables
 
-- `profiles`: authenticated-visible safe fields only (`full_name`, photo, status); `spoken_languages` is authored in undeployed `036`.
+- `profiles`: authenticated-visible safe fields only (`full_name`, photo, status); `spoken_languages` is authored in undeployed `039`.
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
-- `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner; nullable `vehicle_type` is authored in undeployed `036`.
+- `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner; nullable `vehicle_type` is authored in undeployed `039`.
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, public pickup instructions, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation.
@@ -202,6 +231,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `conversation_members`: role, join/leave, per-user archive, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
+- `message_translations` (in deployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 
@@ -210,7 +240,7 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 - `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
-Module 4 (deployed `034`; deployed `035` adds no table; `036` changes the two
+Module 4 (deployed `034`; deployed `035` adds no table; `039` changes the two
 classification columns above but is not deployed):
 
 - `ride_favourites`: one owner-scoped saved reference per user and ride. The
@@ -233,6 +263,7 @@ classification columns above but is not deployed):
   ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
 - Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Translation-cache browser access is SELECT-only and follows the same visible-conversation/tombstone boundary; the authenticated Edge Function rechecks access before using its server credential to cache a result.
 - Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
 - All four messaging tables are in the `supabase_realtime` publication.
 
@@ -288,8 +319,11 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `022_m3_allow_member_media_signing.sql` - deployed; permits private Storage signing only for a current conversation member's committed media, while keeping object listing blocked.
 - `034_m4_smart_search_favourites.sql` - deployed and live-verified on 2026-08-20; Module 4 owner-scoped favourites, RLS, private privileged helpers, authenticated invoker wrappers, and safe unavailable-ride listing.
 - `035_m4_destination_proximity_search.sql` - deployed and anonymously live-verified on 2026-08-20; public invoker safe-card proximity RPC over recommendable Module 6 destinations and private confirmed Ride destination IDs, with 5/10/25 km validation and no private Ride-location return fields.
-- `036_m4_vehicle_language_filters.sql` - not deployed pending separate review; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
-- `037_m4_favourites_advisor_followup.sql` - not deployed; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
+- `036_m3_message_translation.sql` - deployed; four-language source-versioned text/voice translation cache, member-only SELECT RLS, and no browser write grant.
+- `037_m2_early_start_and_eta_refresh.sql` - applied through the Dashboard SQL Editor; all-checked-in early Start, departure-time No-show handling, actual start timestamp, and guarded traffic-aware ETA refresh.
+- `038_m2_ride_usability_notifications.sql` - not deployed; private Module 2 notification triggers and deduplicated minute-Cron reminders only.
+- `039_m4_vehicle_language_filters.sql` - not deployed pending separate review; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
+- `040_m4_favourites_advisor_followup.sql` - not deployed; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
@@ -300,7 +334,18 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `030_m6_anon_source_place_id.sql` - deployed through the Dashboard SQL Editor; grants `anon` read on `source_place_id`, which `029` had wrongly excluded and which broke every anonymous discovery read until fixed.
 - `031_m6_place_types.sql` - deployed through the Dashboard SQL Editor; adds `places.types` and `places.primary_type` so a classification fix can be re-applied without buying enrichment again. No grants: `authenticated` inherits them from `024`'s table-level grant, and `anon` is deliberately left without them because `PLACE_SELECT` does not name them.
 - `032_m6_reclassify_ingested_places.sql` - deployed through the Dashboard SQL Editor; retires four hotels, a shopping mall and a columbarium that the Penang/Melaka/Selangor sweep filed as destinations, and corrects the category of four real destinations. Idempotent.
-- `033_project_notifications.sql` - local pending deployment; shared recipient-owned notification inbox, protected device subscriptions, narrow read RPCs, 30-day retention, Realtime, and Message producer integration.
+- `033_project_notifications.sql` - deployed as `project_notifications` on
+  2026-08-20; shared recipient-owned notification inbox, protected device
+  subscriptions, narrow read RPCs, 30-day retention, Realtime, and Message
+  producer integration.
+- `038_m2_ride_usability_notifications.sql` - written locally and pending
+  deployment after `033`; private Module 2 notification triggers and
+  deduplicated minute-Cron reminders only.
+- `037_m2_early_start_and_eta_refresh.sql` - applied through the Dashboard SQL
+  Editor and recorded here because it is absent from migration history;
+  all-checked-in early Start, departure-time No-show handling, actual start
+  timestamp, and guarded traffic-aware ETA refresh. The matching
+  `m2-route-quote` Function is active as version 9.
 
 ## Rules for New Database Work
 

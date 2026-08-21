@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation, normaliseInternalReturnPath } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
@@ -8,6 +8,7 @@ import { RideReviewService } from '../../../business-logic/RideReviewService.js'
 import { isAtLeastHoursAway, REQUEST_CUTOFF_HOURS } from '../../../business-logic/rideDateTime.js';
 import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedService.js';
 import { MessagingService } from '../../../business-logic/MessagingService.js';
+import { formatJourneyCountdown, getRideJourneyState, isTripModeEligible, RIDE_ACTION } from '../../../business-logic/rideJourneyState.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import {
   IconAlertTriangle, IconArrowLeft, IconCalendar, IconCheck, IconEdit,
@@ -86,6 +87,43 @@ function HostIdentity({ ride }) {
   );
 }
 
+function TripModeView({
+  ride, journeyState, isHost, activeRequest, hostRequests, lifecycleContext,
+  lifecycleBusy, notice, error, onLifecycle, onDetails, onBack, onManageRequests, onTripChat
+}) {
+  const accepted = hostRequests.filter((request) => request.status === 'Accepted');
+  const pending = hostRequests.filter((request) => request.status === 'Pending');
+  const departureReached = new Date(ride.departureAt) <= new Date();
+  const mapsUrl = GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, pickupLocation: ride.pickupLocation, destination: ride.destination, destinationLocation: ride.destinationLocation, waypoints: ride.waypoints });
+  const checkedInCount = accepted.filter((request) => request.boardingStatus === 'Checked In').length;
+  const unresolvedCount = accepted.filter((request) => request.boardingStatus === 'Pending').length;
+
+  return <main className="phone-ride-page ride-detail-page trip-mode-page">
+    <header className="trip-mode-header"><button className="round-icon-button" type="button" onClick={onBack} aria-label="Go back"><IconArrowLeft size={18} /></button><div><p className="eyebrow">TRIP MODE · {isHost ? 'DRIVER' : 'PASSENGER'}</p><h1>{ride.pickup?.split(',')[0]} → {ride.destination?.split(',')[0]}</h1></div><button type="button" className="btn-link" onClick={onDetails}>View ride details</button></header>
+    <div className="trip-mode-content">
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      {notice && <div className="alert alert-success" role="status">{notice}</div>}
+      <section className={`trip-command-card urgency-${journeyState.urgency}`} aria-live="polite"><span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span><h2>{journeyState.title}</h2><p>{journeyState.description}</p>{journeyState.countdownAt && <strong className="trip-countdown">{formatJourneyCountdown(journeyState.countdownAt)}</strong>}{journeyState.blockers.map((blocker) => <small key={blocker}>{blocker}</small>)}</section>
+      <section className="trip-route-card"><RouteMap ride={ride} /><div><p><strong>{ride.pickup}</strong><span>Pickup</span></p><p><strong>{ride.destination}</strong><span>Destination</span></p>{ride.status === 'In Transit' && ride.estimatedArrivalAt && <p><strong>{formatDateTime(ride.estimatedArrivalAt)}</strong><span>Updated traffic ETA</span></p>}</div></section>
+      {ride.pickupInstructions && <section className="ride-info-card pickup-instructions-card"><p className="eyebrow">PICKUP INSTRUCTIONS</p><p><IconMapPin size={15} /> {ride.pickupInstructions}</p></section>}
+
+      {isHost && <section className="ride-info-card trip-readiness-card"><div className="trip-section-heading"><div><p className="eyebrow">PASSENGER READINESS</p><h2>{checkedInCount} of {accepted.length} checked in</h2></div>{pending.length > 0 && <button type="button" className="btn-link" onClick={onManageRequests}>{pending.length} pending request{pending.length === 1 ? '' : 's'}</button>}</div>{accepted.length ? <div className="trip-passenger-list">{accepted.map((request) => <div key={request.id}><span><strong>{request.requester?.fullName || 'Passenger'}</strong><small>{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</small></span><b className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>{request.boardingStatus}</b>{request.boardingStatus === 'Pending' && departureReached && <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle(`no-show-${request.id}`, () => RideRequestService.markNoShow(request.id))}>{lifecycleBusy === `no-show-${request.id}` ? 'Working…' : 'Mark No-show'}</button>}</div>)}</div> : <p>No accepted passengers yet.</p>}</section>}
+
+      {!isHost && activeRequest && <section className="ride-info-card trip-passenger-status"><p className="eyebrow">YOUR BOARDING STATUS</p><h2>{activeRequest.boardingStatus}</h2>{activeRequest.checkedInAt && <p>Checked in {formatDateTime(activeRequest.checkedInAt)}</p>}{activeRequest.checkInDistanceMeters != null && <small>{activeRequest.checkInDistanceMeters} m from pickup</small>}</section>}
+
+      <section className="trip-mode-actions" aria-label="Trip actions">
+        {!isHost && journeyState.nextAction.id === RIDE_ACTION.CHECK_IN && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : 'Check in near pickup'}</button>}
+        {isHost && journeyState.nextAction.id === RIDE_ACTION.START_RIDE && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('start', () => RideService.startRide(ride.id))}>{lifecycleBusy === 'start' ? 'Recalculating ETA…' : journeyState.nextAction.label}</button>}
+        {isHost && ride.status === 'In Transit' && !lifecycleContext?.driverArrivedAt && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('driver-arrival', () => RideService.confirmDriverArrival(ride.id))}>{lifecycleBusy === 'driver-arrival' ? 'Checking GPS…' : 'Confirm destination arrival'}</button>}
+        {!isHost && journeyState.nextAction.id === RIDE_ACTION.CONFIRM_PASSENGER_ARRIVAL && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('passenger-arrival', () => RideRequestService.confirmArrival(activeRequest.id))}>{lifecycleBusy === 'passenger-arrival' ? 'Confirming…' : 'Confirm I arrived'}</button>}
+        {isHost && departureReached && unresolvedCount > 0 && journeyState.nextAction.id !== RIDE_ACTION.START_RIDE && <button type="button" className="btn-secondary full" onClick={onManageRequests}>Resolve all passengers</button>}
+        <a className="outline-action full" href={mapsUrl} target="_blank" rel="noreferrer"><IconRoute size={16} /> Open in Google Maps</a>
+        <button type="button" className="outline-action full" onClick={onTripChat}><IconMessage size={16} /> Open trip chat</button>
+      </section>
+    </div>
+  </main>;
+}
+
 function CancelSheet({ onDismiss, onConfirm }) {
   const [reason, setReason] = useState('');
   const reasons = ['Change of plans', 'Vehicle issue', 'Emergency', 'Other'];
@@ -131,6 +169,7 @@ export default function RideDetail() {
   const { rideId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [ride, setRide] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -143,42 +182,85 @@ export default function RideDetail() {
   const [isOpeningChat, setIsOpeningChat] = useState(false);
   const [lifecycleContext, setLifecycleContext] = useState(null);
   const [lifecycleBusy, setLifecycleBusy] = useState('');
+  const [hostRequests, setHostRequests] = useState([]);
+  const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState('');
+  const [clock, setClock] = useState(() => new Date());
 
-  useEffect(() => {
-    let alive = true;
-    RideService.getRide(rideId).then(async (found) => {
-      if (!alive) return;
+  const loadDetail = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    try {
+      const found = await RideService.getRide(rideId);
       setRide(found);
-      if (found?.hostId) RideReviewService.listProfileReviews(found.hostId).then((items) => alive && setReviews(items)).catch(() => {});
-      if (user && found?.hostId !== user.id) {
-        const requests = await RideRequestService.listMyRequests(user.id);
-        const request = requests.find((item) => item.rideId === rideId && ['Pending', 'Accepted'].includes(item.status)) || null;
-        if (alive) setActiveRequest(request);
-        if (request?.status === 'Accepted') {
-          RideService.getLifecycleContext(rideId).then((context) => alive && setLifecycleContext(context)).catch(() => {});
-        }
-      } else if (user && found?.hostId === user.id) {
-        RideService.getLifecycleContext(rideId).then((context) => alive && setLifecycleContext(context)).catch(() => {});
+      if (!found) return;
+      if (found.hostId) RideReviewService.listProfileReviews(found.hostId).then(setReviews).catch(() => {});
+      if (user && found.status === 'Completed') {
+        setReviewEligibility(await RideReviewService.getEligibility(user.id, rideId).catch(() => null));
+      } else {
+        setReviewEligibility(null);
       }
-    }).finally(() => {
-      if (alive) setLoading(false);
-    });
-    return () => { alive = false; };
-  }, [rideId, user?.id]);
+      if (user && found.hostId === user.id) {
+        const [requests, context] = await Promise.all([
+          RideRequestService.listRideRequests(rideId).catch(() => []),
+          RideService.getLifecycleContext(rideId).catch(() => null)
+        ]);
+        setHostRequests(requests);
+        setActiveRequest(null);
+        setLifecycleContext(context);
+      } else if (user) {
+        const requests = await RideRequestService.listMyRequests(user.id);
+        const request = requests.find((item) => item.rideId === rideId && ['Pending', 'Accepted'].includes(item.status)) || requests.find((item) => item.rideId === rideId) || null;
+        setActiveRequest(request);
+        setHostRequests([]);
+        setLifecycleContext(request?.status === 'Accepted' ? await RideService.getLifecycleContext(rideId).catch(() => null) : null);
+      }
+      setClock(new Date());
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load this ride.');
+    } finally { if (!silent) setLoading(false); }
+  }, [rideId, user]);
+
+  useEffect(() => { loadDetail(); }, [loadDetail]);
+  useEffect(() => { window.scrollTo({ top: 0, left: 0 }); }, [rideId]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(new Date()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const isHost = Boolean(ride && ride.hostId === user?.id);
+  const journeyState = useMemo(() => ride ? getRideJourneyState({
+    ride, role: isHost ? 'driver' : 'passenger', request: activeRequest,
+    requests: hostRequests, lifecycleContext, reviewEligibility, now: clock
+  }) : null, [activeRequest, clock, hostRequests, isHost, lifecycleContext, reviewEligibility, ride]);
+  const tripModeEligible = Boolean(user) && isTripModeEligible(journeyState);
+  const showTripMode = tripModeEligible && searchParams.get('view') !== 'details';
+  useEffect(() => {
+    if (!showTripMode) return undefined;
+    const refreshVisible = () => { if (document.visibilityState === 'visible') loadDetail({ silent: true }); };
+    const interval = window.setInterval(refreshVisible, 15000);
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+    };
+  }, [loadDetail, showTripMode]);
 
   if (loading) return <div className="ride-page-loading">Loading ride…</div>;
   if (!ride) return <div className="ride-page-loading">This ride could not be found.</div>;
 
-  const isHost = ride.hostId === user?.id;
   const canEdit = isHost && ['Draft', 'Published'].includes(ride.status) && !ride.hasAcceptedRequests;
   const canCancel = isHost && ['Published', 'Matched'].includes(ride.status);
-  const canRequest = !isHost && ride.status === 'Published' && ride.seatsAvailable > 0 && isAtLeastHoursAway(ride.departureAt);
+  const hasActiveRequest = ['Pending', 'Accepted'].includes(activeRequest?.status);
+  const canResubmitRequest = activeRequest?.status !== 'Rejected';
+  const canRequest = !isHost && ride.status === 'Published' && ride.seatsAvailable > 0 && isAtLeastHoursAway(ride.departureAt) && canResubmitRequest;
   const canMessageHost = !isHost && ride.status === 'Published';
   const requestDeadline = new Date(new Date(ride.departureAt).getTime() - REQUEST_CUTOFF_HOURS * 60 * 60 * 1000);
   const waypoints = ride.waypoints?.length ? ride.waypoints : [];
   const departureReached = new Date(ride.departureAt) <= new Date();
   const checkInOpen = new Date(ride.departureAt).getTime() - Date.now() <= REQUEST_CUTOFF_HOURS * 60 * 60 * 1000;
-  const returnTo = normaliseInternalReturnPath(location.state?.returnTo, '/search');
+  const returnTo = normaliseInternalReturnPath(location.state?.returnTo, user ? '/ride' : '/search');
 
   async function cancelRide(reason) {
     setError('');
@@ -224,6 +306,18 @@ export default function RideDetail() {
     }
   }
 
+  async function openTripChat() {
+    setError('');
+    setIsOpeningChat(true);
+    try {
+      const conversations = await MessagingService.listConversations();
+      const group = conversations.find((conversation) => conversation.rideId === ride.id && conversation.type === 'group');
+      navigate(group ? `/message/${group.id}` : '/message');
+    } catch (chatError) {
+      setError(chatError.message || 'Unable to open the trip chat.');
+    } finally { setIsOpeningChat(false); }
+  }
+
   function openRequest() {
     if (!user) {
       const target = getAuthNavigation(null, `/ride/${ride.id}`, 'Sign in before requesting to join this ride.');
@@ -236,20 +330,27 @@ export default function RideDetail() {
   async function runLifecycle(action, work) {
     setLifecycleBusy(action);
     setError('');
+    setLifecycleNotice('');
     try {
       await work();
-      const nextRide = await RideService.getRide(ride.id);
-      setRide(nextRide);
-      if (user && nextRide?.hostId !== user.id) {
-        const requests = await RideRequestService.listMyRequests(user.id);
-        setActiveRequest(requests.find((request) => request.rideId === ride.id && ['Pending', 'Accepted'].includes(request.status)) || null);
-      }
-      setLifecycleContext(await RideService.getLifecycleContext(ride.id).catch(() => null));
+      await loadDetail({ silent: true });
+      if (action === 'start') setLifecycleNotice('Trip started. The traffic-aware ETA has been updated.');
     } catch (err) {
       setError(err.message);
     } finally {
       setLifecycleBusy('');
     }
+  }
+
+  if (showTripMode) {
+    return <TripModeView
+      ride={ride} journeyState={journeyState} isHost={isHost} activeRequest={activeRequest}
+      hostRequests={hostRequests} lifecycleContext={lifecycleContext} lifecycleBusy={lifecycleBusy}
+      notice={lifecycleNotice || location.state?.notice} error={error}
+      onLifecycle={runLifecycle} onDetails={() => setSearchParams({ view: 'details' })}
+      onBack={() => navigate(returnTo)} onManageRequests={() => navigate(`/ride/${ride.id}/requests`)}
+      onTripChat={openTripChat}
+    />;
   }
 
   return (
@@ -263,6 +364,8 @@ export default function RideDetail() {
 
       <div className="ride-detail-content">
         {error && <div className="alert alert-error" role="alert">{error}</div>}
+        {location.state?.notice && <div className="alert alert-success" role="status">{location.state.notice}</div>}
+        {tripModeEligible && <section className="trip-mode-return-banner"><div><strong>Trip mode is ready</strong><span>{journeyState.title}</span></div><button type="button" className="btn-primary" onClick={() => setSearchParams({ view: 'trip' })}>Back to trip mode</button></section>}
         <section className="ride-info-card lifecycle-card"><Lifecycle status={ride.status} /></section>
         <section className="ride-info-card trip-info-mobile">
           <div className="trip-title-row"><h1>{ride.pickup?.split(',')[0]} <span>→</span> {ride.destination?.split(',')[0]}</h1><b className="scale-badge">{ride.journeyScale}</b></div>
@@ -283,8 +386,8 @@ export default function RideDetail() {
 
         {(isHost || activeRequest?.status === 'Accepted') && <section className="ride-info-card ride-verification-card">
           <p className="eyebrow">TRIP VERIFICATION</p>
-          {activeRequest?.status === 'Accepted' && <div className="verification-row"><span>Passenger check-in</span><strong>{activeRequest.boardingStatus}</strong>{activeRequest.boardingStatus === 'Pending' && <button type="button" disabled={!checkInOpen || Boolean(lifecycleBusy)} onClick={() => runLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : checkInOpen ? 'Check in near pickup' : 'Opens 1 hour before'}</button>}</div>}
-          {isHost && ['Published', 'Matched'].includes(ride.status) && <div className="verification-row"><span>Departure</span><strong>Resolve every accepted passenger before starting.</strong><button type="button" disabled={!departureReached || Boolean(lifecycleBusy)} onClick={() => runLifecycle('start', () => RideService.startRide(ride.id))}>{lifecycleBusy === 'start' ? 'Starting…' : departureReached ? 'Start ride' : 'Available at departure'}</button></div>}
+          {activeRequest?.status === 'Accepted' && ['Published', 'Matched', 'In Transit'].includes(ride.status) && <div className="verification-row"><span>Passenger check-in</span><strong>{activeRequest.boardingStatus}</strong>{activeRequest.boardingStatus === 'Pending' && ['Published', 'Matched'].includes(ride.status) && <button type="button" disabled={!checkInOpen || Boolean(lifecycleBusy)} onClick={() => runLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : checkInOpen ? 'Check in near pickup' : 'Opens 1 hour before'}</button>}</div>}
+        {isHost && ['Published', 'Matched'].includes(ride.status) && <div className="verification-row"><span>Departure</span><strong>{journeyState.nextAction.id === RIDE_ACTION.START_RIDE ? journeyState.description : 'All accepted passengers must Check in before the Driver can start early.'}</strong><button type="button" disabled={journeyState.nextAction.id !== RIDE_ACTION.START_RIDE || Boolean(lifecycleBusy)} onClick={() => runLifecycle('start', () => RideService.startRide(ride.id))}>{lifecycleBusy === 'start' ? 'Recalculating ETA…' : journeyState.nextAction.id === RIDE_ACTION.START_RIDE ? journeyState.nextAction.label : 'Waiting for all check-ins'}</button></div>}
           {isHost && ride.status === 'In Transit' && !lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Destination</span><strong>GPS must be within 200 m with accuracy ≤100 m.</strong><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => runLifecycle('driver-arrival', () => RideService.confirmDriverArrival(ride.id))}>{lifecycleBusy === 'driver-arrival' ? 'Checking GPS…' : 'Confirm destination arrival'}</button></div>}
           {lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Driver arrived</span><strong>{formatDateTime(lifecycleContext.driverArrivedAt)}</strong>{lifecycleContext.passengerConfirmationDueAt && <small>Auto-completes by {formatDateTime(lifecycleContext.passengerConfirmationDueAt)} if confirmations remain.</small>}</div>}
           {activeRequest?.boardingStatus === 'Checked In' && ride.status === 'In Transit' && lifecycleContext?.driverArrivedAt && !activeRequest.arrivalConfirmedAt && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => runLifecycle('passenger-arrival', () => RideRequestService.confirmArrival(activeRequest.id))}>{lifecycleBusy === 'passenger-arrival' ? 'Confirming…' : 'Confirm I arrived'}</button>}
@@ -303,19 +406,24 @@ export default function RideDetail() {
 
       <div className="ride-bottom-actions" aria-label="Ride actions">
         {isHost ? <>
-          <div className="host-action-row">
+          {ride.status === 'Draft' ? <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/publish`)}><IconEdit size={15} /> Continue draft</button> : <div className="host-action-row">
             {canEdit && <button className="outline-action" onClick={() => navigate(`/ride/${ride.id}/edit`)}><IconEdit size={15} /> Edit ride</button>}
-            <button className="primary-action" onClick={() => navigate(`/ride/${ride.id}/requests`)}><IconUsers size={15} /> Manage requests</button>
-          </div>
+            {['Published', 'Matched'].includes(ride.status) && <button className="primary-action" onClick={() => navigate(`/ride/${ride.id}/requests`)}><IconUsers size={15} /> Manage requests</button>}
+          </div>}
           {ride.status === 'Published' && <button className="outline-action full" onClick={() => changeRecruitment('close')}>Close recruitment</button>}
           {ride.status === 'Matched' && isAtLeastHoursAway(ride.departureAt) && <button className="outline-action full" onClick={() => changeRecruitment('reopen')}>Reopen recruitment</button>}
-          {ride.status === 'Completed' && <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate accepted passengers</button>}
+          {ride.status === 'Completed' && <button className="primary-action full" onClick={() => navigate(journeyState.nextAction.path || `/ride/${ride.id}`)}>{journeyState.nextAction.label}</button>}
           {canCancel && <button className="cancel-action" onClick={() => setCancelling(true)}>Cancel this ride</button>}
         </> : <>
           {canMessageHost && <button className="outline-action full" disabled={isOpeningChat} onClick={messageHost}><IconMessage size={15} /> {isOpeningChat ? 'Opening chat…' : 'Message host'}</button>}
-          {ride.status === 'Completed' ? <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/review`)}>★ Rate & review</button>
-            : activeRequest ? <div className="request-sent"><IconCheck size={15} /> {activeRequest.status === 'Accepted' ? 'Request accepted' : 'Request sent — awaiting approval'}</div>
-              : <button className="primary-action full" disabled={!canRequest} onClick={openRequest}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
+          {ride.status === 'Completed' ? <button className="primary-action full" onClick={() => navigate(journeyState.nextAction.path || `/ride/${ride.id}`)}>{journeyState.nextAction.label}</button>
+            : activeRequest?.status === 'Accepted' ? <div className="request-sent"><IconCheck size={15} /> Request accepted</div>
+              : activeRequest?.status === 'Pending' ? <div className="request-sent"><IconCheck size={15} /> Request sent — awaiting Host approval</div>
+                : activeRequest?.status === 'Cancelled' ? <div className="request-status-message request-cancelled-message"><IconX size={15} /> Request cancelled — no Driver approval needed</div>
+                  : activeRequest?.status === 'Rejected' ? <div className="request-status-message"><IconX size={15} /> Request rejected. This ride request cannot be resubmitted.</div>
+                  : activeRequest ? <div className="request-status-message"><IconX size={15} /> Request {activeRequest.status.toLowerCase()}. You can submit a new request while this ride is open.</div>
+                    : null}
+          {ride.status !== 'Completed' && !hasActiveRequest && canResubmitRequest && <button className="primary-action full" disabled={!canRequest} onClick={openRequest}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
         </>}
       </div>
       {cancelling && <CancelSheet onDismiss={() => setCancelling(false)} onConfirm={cancelRide} />}

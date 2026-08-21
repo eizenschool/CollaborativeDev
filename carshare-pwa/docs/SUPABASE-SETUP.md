@@ -39,11 +39,12 @@ Restart `npm run dev` after changing environment values.
 - `rides`: authenticated search, RPC-only host mutation, confirmed route references, pickup instructions, waypoints, seat constraints, and a mandatory host-owned vehicle.
 - `ride_requests` and `ride_reviews`: RPC-only participation and mutual review lifecycle.
 - `conversations`, `conversation_members`, `messages`, and `message_attachments`: member-readable, RPC-mutated messaging with seven-day terminal retention.
+- `message_translations` (after deploying `036`): member-readable, Edge-Function-written shared text/voice translation cache.
 - `user_notifications`: recipient-owned cross-module inbox, with Message as its first producer; browser-device subscriptions are Edge-Function-only and never client-readable.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
 - `message-media`: private, no listing, approved media only, 50 MB object maximum, and attachment-bound signed downloads.
 
-Phone OTP, hard account deletion, translation, email notifications, and Modules
+Phone OTP, hard account deletion, email notifications, and Modules
 4-6 are not part of this connection. The notification centre is implemented
 locally but needs the project-owner setup below before it sends a real device
 alert. Google OAuth code is present, but it still needs the provider
@@ -82,10 +83,56 @@ through the Dashboard SQL Editor and is the repository record even though its
 name is absent from migration-history output. See `docs/ai/SQL.md` for the
 complete deployment-name map and current live state.
 
-`033_project_notifications.sql` is local and **not deployed**. It must be
-deployed only together with the Notification delivery setup below. See
+`033_project_notifications.sql` is deployed as `project_notifications`. The
+two notification Edge Functions are also deployed; only their project-owner
+VAPID secrets and Database Webhook remain to be configured below. See
 `docs/ai/SQL.md` for the authoritative deployment map; do not make
 Dashboard-only schema changes.
+
+`036_m3_message_translation.sql` and `m3-message-translation` are deployed in
+the shared project; the Function is active as version 2. The project-owner setup
+below remains the required process for another environment or a controlled
+redeployment.
+
+## Message translation setup (project owner)
+
+Translation is deliberately proxied through Supabase. Never add a Cloudflare
+token to `.env.local`, a `VITE_` variable, client code, GitHub, or a screenshot.
+
+1. Create or use a Cloudflare account on **Workers Free**. Do not enable Workers
+   Paid or prepaid AI Gateway credits for this academic zero-charge deployment.
+2. In Cloudflare Dashboard → Workers AI → Use REST API, create the standard
+   Workers AI API token and retain its Account ID and token. The generated token
+   needs Workers AI Read/Edit permissions; do not share its value in chat.
+3. In Supabase Dashboard → Edge Functions → Secrets, add:
+
+   ```text
+   CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
+   CLOUDFLARE_AI_TOKEN=<Workers AI token>
+   M3_TRANSLATION_ALLOWED_ORIGINS=http://localhost:5173,https://your-app.example
+   ```
+
+   Replace the example production origin and keep every entry origin-only: no
+   path, query string, or trailing slash. Supabase's runtime database credentials
+   are supplied automatically and must not be copied into frontend configuration.
+4. In a new environment, apply `database/sql/036_m3_message_translation.sql`
+   through the team's normal migration workflow, then deploy the authenticated
+   Function (the shared project has already completed this step):
+
+   ```powershell
+   supabase functions deploy m3-message-translation
+   ```
+
+   `supabase/config.toml` keeps JWT verification enabled. The Function also calls
+   `auth.getUser()` and manually confirms active membership, message tombstone,
+   and conversation expiry before its privileged cache write or private audio read.
+5. Run the Supabase security/performance advisors. Confirm `anon` cannot read the
+   table, a non-member cannot translate another conversation's message, and an
+   authenticated member cannot insert/update/delete cache rows directly.
+6. Test all four languages with two real accounts. Repeating the same message and
+   target must return `cached: true`; edited/deleted/expired messages must not
+   return stale text. Cloudflare HTTP 429 must show the free-limit message and
+   never call another provider.
 
 ## Notification delivery setup (project owner)
 
@@ -115,7 +162,8 @@ Supabase project, never by placing secrets in Vite.
 3. Set the matching public `VITE_WEB_PUSH_PUBLIC_KEY` during the Vite build.
    This is the application-server public key from step 1, not the JWK JSON and
    not a secret. Rebuild/redeploy the frontend after setting it.
-4. Deploy both functions and the migration through the shared Supabase workflow:
+4. The migration and both functions are already deployed through the shared
+   Supabase workflow. Repeat deployment only when their source changes:
 
    ```powershell
    supabase functions deploy notification-subscriptions
@@ -174,7 +222,7 @@ For live acceptance, use two real email accounts and verify:
 4. Vehicle create/edit/active/delete, driver-licence persistence, and the single-active constraint.
 5. Ride draft/publish/search/edit-waypoints/cancel, confirmed Place IDs, current-location pickup, and pickup instructions.
 6. An unauthenticated client cannot access any business table.
-7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, expired access denial, recipient-only notifications, and VAPID click-through after completing the Notification delivery setup.
+7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, expired access denial, four-language text/voice translation and shared caching after completing Message translation setup, recipient-only notifications, and VAPID click-through after completing the Notification delivery setup.
 8. Modules 4-6 local demo functions still operate.
 9. Once Google OAuth is enabled in the Dashboard (see above): "Continue with
    Google" reaches the Google consent screen, returns to the app signed in,

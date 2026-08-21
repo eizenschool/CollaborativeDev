@@ -14,7 +14,7 @@ const REQUEST_SELECT = `
     id, host_id, pickup, destination, departure_at, journey_scale,
     seats_total, seats_available, contribution, restriction_tags,
     status, estimated_arrival_at,
-    host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))
+    host:profiles!rides_host_id_fkey(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))
   )
 `;
 const LEGACY_REQUEST_SELECT = `
@@ -26,7 +26,7 @@ const LEGACY_REQUEST_SELECT = `
   ride:rides(
     id, host_id, pickup, destination, departure_at, journey_scale,
     seats_total, seats_available, contribution, restriction_tags, status,
-    host:profiles(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))
+    host:profiles!rides_host_id_fkey(id, full_name, profile_photo_url, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating))
   )
 `;
 

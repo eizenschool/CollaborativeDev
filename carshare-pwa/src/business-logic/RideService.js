@@ -181,6 +181,7 @@ export function mapRideRow(row) {
     restrictionTags: row.restriction_tags || row.restrictionTags || [],
     waypoints: normalizeWaypoints(row.waypoints),
     status: row.status,
+    startedAt: row.started_at ?? row.startedAt ?? null,
     estimatedArrivalAt: row.estimated_arrival_at ?? row.estimatedArrivalAt ?? null,
     proximityDistanceKm: row.proximity_distance_km ?? row.proximityDistanceKm ?? null,
     routeDistanceMeters: row.route_distance_meters ?? row.routeDistanceMeters ?? null,
@@ -566,9 +567,8 @@ export const RideService = {
 
   async startRide(rideId) {
     if (isSupabaseConfigured) {
-      const { error } = await supabase.rpc('start_ride', { p_ride_id: rideId });
-      if (error) throw rpcError(error);
-      return this.getRide(rideId);
+      const result = await invokeRouteFunction({ action: 'start', rideId });
+      return this.getRide(result.rideId);
     }
     return mockDb.startRide(rideId);
   },

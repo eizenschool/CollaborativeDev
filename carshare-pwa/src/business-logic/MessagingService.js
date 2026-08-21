@@ -26,6 +26,12 @@ export const MAX_MESSAGE_MEDIA_BYTES = 100 * 1024 * 1024;
 export const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 export const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 export const AUDIO_MIME_TYPES = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav'];
+export const TRANSLATION_LANGUAGES = Object.freeze({
+  en: 'English',
+  zh: '中文',
+  ms: 'Bahasa Melayu',
+  ta: 'தமிழ்',
+});
 
 function cleanText(text) {
   return typeof text === 'string' ? text.trim() : '';
@@ -569,6 +575,23 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       const paths = await repository.deleteMessage(messageId);
       await repository.removeMedia(paths).catch(() => {});
       return true;
+    },
+
+    async translateMessage(messageId, targetLanguage) {
+      if (!messageId) throw new Error('A message is required for translation.');
+      if (!Object.hasOwn(TRANSLATION_LANGUAGES, targetLanguage)) {
+        throw new Error('Choose English, Chinese, Bahasa Melayu, or Tamil.');
+      }
+      const result = await repository.translateMessage({ messageId, targetLanguage });
+      const translatedText = cleanText(result.translatedText);
+      if (!translatedText) throw new Error('Translation returned no text.');
+      return {
+        sourceLanguage: result.sourceLanguage,
+        transcript: result.transcript || null,
+        translatedText,
+        targetLanguage: result.targetLanguage,
+        cached: Boolean(result.cached),
+      };
     },
 
     async markConversationRead(conversationId) {

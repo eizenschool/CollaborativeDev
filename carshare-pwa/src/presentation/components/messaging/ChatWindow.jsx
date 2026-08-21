@@ -30,6 +30,19 @@ function getInitials(name = 'Member') {
   return name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 }
 
+function translationPreferenceKey(userId) {
+  return `m3-translation-language:${userId}`;
+}
+
+function storedTranslationLanguage(userId) {
+  try {
+    const value = localStorage.getItem(translationPreferenceKey(userId));
+    return ['en', 'zh', 'ms', 'ta'].includes(value) ? value : '';
+  } catch {
+    return '';
+  }
+}
+
 function MemberAvatar({ member, className }) {
   if (member?.avatarUrl) return <img src={member.avatarUrl} alt={member.name} className={className} />;
   return <span className={`${className} message-avatar-fallback`}>{getInitials(member?.name)}</span>;
@@ -165,6 +178,7 @@ export default function ChatWindow({
   const [isLocating, setIsLocating] = useState(false);
   const [isCaptureMenuOpen, setIsCaptureMenuOpen] = useState(false);
   const [isVideoCameraPickerOpen, setIsVideoCameraPickerOpen] = useState(false);
+  const [translationLanguage, setTranslationLanguage] = useState(() => storedTranslationLanguage(currentUser.id));
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
   const messageInputRef = useRef(null);
@@ -178,6 +192,19 @@ export default function ChatWindow({
   const videoCameraFirstActionRef = useRef(null);
   const deleteCancelRef = useRef(null);
   const deleteModalRef = useRef(null);
+
+  const changeTranslationLanguage = useCallback((language) => {
+    setTranslationLanguage(language);
+    try {
+      localStorage.setItem(translationPreferenceKey(currentUser.id), language);
+    } catch {
+      // Translation still works when storage is blocked; only preference memory is lost.
+    }
+  }, [currentUser.id]);
+
+  const translateMessage = useCallback((messageId, language) => (
+    MessagingService.translateMessage(messageId, language)
+  ), []);
   const deleteReturnFocusRef = useRef(null);
   const lastMessageIdRef = useRef(null);
 
@@ -695,6 +722,9 @@ export default function ChatWindow({
             currentUserId={currentUser.id}
             onEdit={beginEdit}
             onDelete={openDeleteDialog}
+            onTranslate={translateMessage}
+            translationLanguage={translationLanguage}
+            onTranslationLanguageChange={changeTranslationLanguage}
             highlighted={message.id === highlightedMessageId}
           />
         )) : <ChatEmptyState />}
