@@ -529,12 +529,18 @@ const emptyVehicleForm = { id: null, make: '', model: '', vehicleType: '', plate
 function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   async function handleSave(e) {
     e.preventDefault();
     setError('');
     try {
-      await VehicleService.saveVehicle(userId, { ...form, seats: Number(form.seats), year: Number(form.year) });
+      const saved = await VehicleService.saveVehicle(userId, { ...form, seats: Number(form.seats), year: Number(form.year) });
+      // The vehicle is stored either way; say so plainly when the category
+      // could not be, rather than letting the chosen value disappear.
+      setNotice(saved?.categoryPending
+        ? 'Vehicle saved. The vehicle category was not stored — that upgrade is not deployed in this environment yet.'
+        : '');
       setForm(null);
       await refresh();
     } catch (err) {
@@ -557,7 +563,7 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
     <>
       <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div><h2>My Vehicles</h2><p>Manage vehicles available for your rides</p></div>
-        <button className="btn-primary" style={{ width: 'auto', padding: '9px 16px' }} onClick={() => { setError(''); setForm(emptyVehicleForm); }}>
+        <button className="btn-primary" style={{ width: 'auto', padding: '9px 16px' }} onClick={() => { setError(''); setNotice(''); setForm(emptyVehicleForm); }}>
           <IconPlus size={13} /> Add Vehicle
         </button>
       </div>
@@ -617,6 +623,8 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
         </div>
       )}
 
+      {notice && <div className="alert alert-info">{notice}</div>}
+
       {loading ? (
         <p style={{ color: 'var(--muted)' }}>Loading vehicles…</p>
       ) : (
@@ -630,7 +638,7 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
             <div className="vehicle-meta">{v.plate}</div>
             <div className="vehicle-meta">{[vehicleTypeLabel(v.vehicleType), v.colour, `${v.seats} seats available`, v.year].filter(Boolean).join(' · ')}</div>
             <div className="vehicle-actions">
-              <button className="action-edit" onClick={() => setForm(v)}><IconEdit size={12} /> Edit</button>
+              <button className="action-edit" onClick={() => { setError(''); setNotice(''); setForm(v); }}><IconEdit size={12} /> Edit</button>
               <button className="action-toggle" onClick={() => toggleActive(v)}>
                 {v.active ? <><IconPause size={12} /> Deactivate</> : <><IconPlay size={12} /> Activate</>}
               </button>

@@ -64,7 +64,10 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   Any but do not match a specific choice. Migration `039` is deliberately not
   deployed pending its separate review. Until then ordinary exact/proximity
   search still falls back safely, while selecting either compatibility filter
-  reports the missing deployment honestly.
+  reports the missing deployment honestly. Saving a vehicle also falls back:
+  it retries without `vehicle_type` and reports the unstored category, because
+  blocking the write would take Module 1 vehicle registration - and with it
+  Module 2 hosting, which requires a host vehicle - down with the filter.
 
 Business logic: `src/business-logic/SmartSearchService.js` and
 `src/business-logic/FavouriteService.js`.

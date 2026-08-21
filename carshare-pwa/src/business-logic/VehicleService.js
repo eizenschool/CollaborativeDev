@@ -8,12 +8,12 @@ function mapVehicleRow(row) {
   return { ...row, vehicleType: row.vehicle_type ?? row.vehicleType ?? '' };
 }
 
-function vehicleError(error) {
+// Migration 039 adds vehicles.vehicle_type. Until it is deployed the column is
+// missing, and blocking the save would take the pre-existing Module 1 vehicle
+// registration (and Module 2 hosting, which requires a vehicle) down with it.
+function isUndeployedVehicleCategory(error) {
   const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
-  if (error?.code === '42703' || /vehicle_type/i.test(detail)) {
-    return new Error('Vehicle categories are not available in this environment yet.');
-  }
-  return error;
+  return error?.code === '42703' || error?.code === 'PGRST204' || /vehicle_type/i.test(detail);
 }
 
 // Malaysian JPJ driving licenses don't have one universal public format the
@@ -76,26 +76,23 @@ export const VehicleService = {
     if (!normalizeVehicleType(vehicle.vehicleType)) throw new Error('Choose a vehicle category.');
     if (isSupabaseConfigured) {
       const record = buildVehicleRecord(userId, vehicle);
-      if (vehicle.id) {
-        const { id, owner_id: _ownerId, ...patch } = record;
-        const { data, error } = await supabase
-          .from('vehicles')
-          .update(patch)
-          .eq('id', id)
-          .eq('owner_id', userId)
-          .select()
-          .single();
-        if (error) throw vehicleError(error);
-        return mapVehicleRow(data);
-      }
+      const run = vehicle.id
+        ? (values) => {
+          const { id, owner_id: _ownerId, ...patch } = values;
+          return supabase.from('vehicles').update(patch).eq('id', id).eq('owner_id', userId).select().single();
+        }
+        : (values) => {
+          const { id: _id, ...insertRecord } = values;
+          return supabase.from('vehicles').insert(insertRecord).select().single();
+        };
 
-      const { id: _id, ...insertRecord } = record;
-      const { data, error } = await supabase
-        .from('vehicles')
-        .insert(insertRecord)
-        .select()
-        .single();
-      if (error) throw vehicleError(error);
+      let { data, error } = await run(record);
+      if (error && isUndeployedVehicleCategory(error)) {
+        const { vehicle_type: _vehicleType, ...legacyRecord } = record;
+        ({ data, error } = await run(legacyRecord));
+        if (!error) return { ...mapVehicleRow(data), categoryPending: true };
+      }
+      if (error) throw error;
       return mapVehicleRow(data);
     }
     return mockDb.upsertVehicle(userId, vehicle);
