@@ -136,7 +136,7 @@ Transit, while `?view=details` remains explicitly available. Trip mode shows
 the route, countdown, pickup instructions, navigation, the existing Module 3
 ride-group chat, and exactly one primary lifecycle action. Driver readiness and
 No-show handling are inline. Local migration
-`036_m2_early_start_and_eta_refresh.sql` and the matching `m2-route-quote`
+`037_m2_early_start_and_eta_refresh.sql` and the matching `m2-route-quote`
 update allow Start before the scheduled departure only after every Accepted
 passenger is Checked In. After departure, at least one Checked In passenger is
 enough and remaining unresolved passengers are marked No-show. The operation
@@ -162,6 +162,16 @@ held under the private schema and the short-lived client quote is encrypted as
 well as signed.
 Requests, vehicles, reviews, and messaging remain authenticated/private.
 
+Module 4 continues to obtain candidate rides through
+`RideService.searchRides()`. Its optional compatibility criteria delegate to
+the safe public RPC authored in migration `039`, while existing callers retain
+the previous exact/proximity behaviour. Public cards may show only the selected
+vehicle category and Host spoken-language set when classified; vehicle
+make/model/plate, Place IDs, coordinates, and other private fields are never
+added to the public result. Migration `039` is not deployed pending review, so
+ordinary Search falls back to the deployed contracts and only an explicitly
+selected compatibility filter produces a deployment error.
+
 For FR-6.35, Module 2 consumes the optional `destination` and `date` query
 parameters on `/ride/publish` defined in `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.
 It may display an incoming label, but only the normal confirmed-location input
@@ -182,7 +192,7 @@ the Driver to reconfirm; no fixed-duration ETA fallback is allowed.
 Route-deviation automation, map-pin selection, and messaging notifications
 remain deferred.
 
-Migration `036` is applied through the Dashboard SQL Editor and the updated
+Migration `037` is applied through the Dashboard SQL Editor and the updated
 `m2-route-quote` is active as version 9. The SQL file remains the repository
 record because the Dashboard-applied change is absent from migration history.
 The frontend must still be rebuilt from the matching client code; deploying
@@ -190,7 +200,7 @@ only the frontend before the Function leaves early Start unavailable, while
 deploying only the migration leaves no client path to the service-role-only
 traffic refresh.
 
-`035_m2_ride_usability_notifications.sql` is implemented locally and depends on
+`038_m2_ride_usability_notifications.sql` is implemented locally and depends on
 the deployed `033_project_notifications.sql`. It adds only private
 Module 2 producers and a one-minute reminder function: request decisions,
 cancellations and arrangement changes, boarding events, 24-hour/final-hour/

@@ -47,6 +47,16 @@ function isUndeployedModule2Upgrade(error) {
     || /estimated_arrival_at|get_participant_ride_detail/i.test(detail);
 }
 
+function isUndeployedProximitySearch(error) {
+  const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return error?.code === 'PGRST202' || /search_public_rides_near_destination/i.test(detail);
+}
+
+function isUndeployedCompatibilitySearch(error) {
+  const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return error?.code === 'PGRST202' || /search_public_rides_with_compatibility/i.test(detail);
+}
+
 export function normalizeWaypoints(waypoints = []) {
   return waypoints
     .map((item) => typeof item === 'string'
@@ -164,6 +174,7 @@ export function mapRideRow(row) {
     time: legacyParts.time,
     journeyScale: row.journey_scale ?? row.journeyScale,
     vehicleId: row.vehicle_id ?? row.vehicleId,
+    vehicleType: row.vehicle_type ?? row.vehicleType ?? row.vehicle?.vehicle_type ?? row.vehicle?.vehicleType ?? '',
     seatsTotal: row.seats_total ?? row.seatsTotal,
     seatsAvailable: row.seats_available ?? row.seatsAvailable,
     contribution: row.contribution,
@@ -172,6 +183,7 @@ export function mapRideRow(row) {
     status: row.status,
     startedAt: row.started_at ?? row.startedAt ?? null,
     estimatedArrivalAt: row.estimated_arrival_at ?? row.estimatedArrivalAt ?? null,
+    proximityDistanceKm: row.proximity_distance_km ?? row.proximityDistanceKm ?? null,
     routeDistanceMeters: row.route_distance_meters ?? row.routeDistanceMeters ?? null,
     routeDurationSeconds: row.route_duration_seconds ?? row.routeDurationSeconds ?? null,
     routeStopoverSeconds: row.route_stopover_seconds ?? row.routeStopoverSeconds ?? null,
@@ -194,10 +206,30 @@ export function mapRideRow(row) {
           completedTrips: stats?.completed_trips ?? stats?.completedTrips ?? 0,
           co2SavedKg: stats?.co2_saved_kg ?? stats?.co2SavedKg ?? 0,
           reputationScore: stats?.reputation_score ?? stats?.reputationScore ?? 0,
-          rating: stats?.rating ?? null
+          rating: stats?.rating ?? null,
+          spokenLanguages: host.spoken_languages ?? host.spokenLanguages ?? row.host_spoken_languages ?? []
         }
       : row.host ?? null
   };
+}
+
+function mapProximityRideRow(row) {
+  return mapRideRow({
+    ...row,
+    id: row.ride_id,
+    host: {
+      id: row.host_id,
+      full_name: row.host_full_name,
+      profile_photo_url: row.host_profile_photo_url,
+      spoken_languages: row.host_spoken_languages,
+      host_impact_stats: {
+        completed_trips: row.host_completed_trips,
+        co2_saved_kg: row.host_co2_saved_kg,
+        reputation_score: row.host_reputation_score,
+        rating: row.host_rating
+      }
+    }
+  });
 }
 
 export function validateRideDraft(rideData, {
@@ -305,8 +337,45 @@ export const RideService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
   journeyScales: JOURNEY_SCALES,
 
-  async searchRides({ from, to, date } = {}) {
+  async searchRides({ from, to, date, proximity = null, compatibility = null } = {}) {
     if (isSupabaseConfigured) {
+      const range = date ? klDayRange(date) : null;
+      const { data: compatibleData, error: compatibilityError } = await supabase.rpc(
+        'search_public_rides_with_compatibility',
+        {
+          p_pickup: from || null,
+          p_destination: proximity ? null : (to || null),
+          p_departure_start: range?.start || null,
+          p_departure_end: range?.end || null,
+          p_destination_place_id: proximity?.destinationPlaceId || null,
+          p_radius_km: proximity?.radiusKm || null,
+          p_vehicle_type: compatibility?.vehicleType || null,
+          p_language: compatibility?.language || null
+        }
+      );
+      if (!compatibilityError) return (compatibleData || []).map(mapProximityRideRow);
+      if (!isUndeployedCompatibilitySearch(compatibilityError)) throw rpcError(compatibilityError);
+      if (compatibility) {
+        throw new Error('Vehicle and language filters are not available in this environment yet.');
+      }
+
+      if (proximity) {
+        const { data, error } = await supabase.rpc('search_public_rides_near_destination', {
+          p_destination_place_id: proximity.destinationPlaceId,
+          p_radius_km: proximity.radiusKm,
+          p_pickup: from || null,
+          p_departure_start: range?.start || null,
+          p_departure_end: range?.end || null
+        });
+        if (error) {
+          if (isUndeployedProximitySearch(error)) {
+            throw new Error('Destination proximity search is not available in this environment yet.');
+          }
+          throw rpcError(error);
+        }
+        return (data || []).map(mapProximityRideRow);
+      }
+
       const run = (select) => {
         let query = supabase.from('rides').select(select).eq('status', 'Published');
         if (from) query = query.ilike('pickup', `%${from}%`);

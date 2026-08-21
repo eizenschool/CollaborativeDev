@@ -15,7 +15,7 @@ state. No handoff value is persisted automatically.
 
 ```text
 Module 6 destination detail
-  -> Module 4 Search: /search?pickup&destination&date&destinationPlaceId
+  -> Module 4 Search: /search?pickup&destination&date&destinationPlaceId&proximityKm=10
   -> Module 2 Publish: /ride/publish?destination&date
 ```
 
@@ -30,11 +30,18 @@ bare route and each consumer preserves its normal defaults.
 | `destination` | Display text for the selected destination. |
 | `date` | Optional `YYYY-MM-DD` travel date. |
 | `destinationPlaceId` | Opaque Module 6 catalogue/source hint for future search correlation. |
+| `proximityKm` | Confirmed-destination radius. Module 6 sends `10`; Search supports `5`, `10`, and `25`. |
 
-`destinationPlaceId` is not a confirmed Ride Place ID. Fixture values such as
-`fixture_jonker` may be carried because Search treats the value as opaque, but
-they must never become a confirmed Google location, expose private Ride fields,
-or be persisted to a Ride.
+`destinationPlaceId` is not a confirmed Ride Place ID. It selects a public
+Module 6 catalogue destination which the backend privately correlates with a
+Ride's confirmed destination. Fixture values such as `fixture_jonker` may be
+carried, but they must never become a confirmed Ride location, expose private
+Ride fields, or be persisted to a Ride by the Search handoff.
+
+When a URL has `destinationPlaceId` but omits or supplies an unsupported
+`proximityKm`, Search defaults to 10 km for compatibility. A radius without a
+place hint is ignored. Manually editing destination text clears both the place
+hint and radius and returns to ordinary substring matching.
 
 Module 4 reads these values through its normal URL criteria parser. Search
 criteria remain editable, shareable, and synchronized with the complete Search
@@ -63,6 +70,7 @@ Module 6 must:
 3. URL-encode every value through `URLSearchParams`.
 4. Send Search to `/search`, never to the personal `/ride` workspace.
 5. Record strong intent only for `I will drive` or notification registration.
+6. Send `proximityKm=10` whenever a usable destination source ID is present.
 
 ## Compatibility and safety
 
@@ -75,16 +83,17 @@ Module 6 must:
 - Query values are untrusted input. They do not bypass date validation,
   Published/seat-availability filtering, authentication, RLS, or confirmed
   location rules.
-- Search URL state contains only public criteria. Place IDs, precise Ride
-  coordinates, pickup instructions, and other private Ride fields are never
-  introduced by this contract.
+- Search URL state contains only public criteria and a public catalogue/source
+  hint. Ride Place IDs, precise Ride coordinates, pickup instructions, and
+  other private Ride fields are never introduced by this contract or returned
+  by proximity results.
 - Renaming a parameter or changing its meaning requires a coordinated update to
   Modules 2, 4, and 6 plus D019.
 
 ## Acceptance checks
 
-- Module 6 `Find a ride` opens `/search` with origin, destination, date, and the
-  opaque destination hint pre-filled when supplied.
+- Module 6 `Find a ride` opens `/search` with origin, destination, date, the
+  opaque destination hint, and a 10 km radius pre-filled when supplied.
 - Module 6 `I will drive` opens `/ride/publish` with destination and date
   pre-filled but unconfirmed.
 - Direct `/search`, `/ride`, and `/ride/publish` visits retain their normal

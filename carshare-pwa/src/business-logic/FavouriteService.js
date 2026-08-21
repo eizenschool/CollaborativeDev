@@ -20,6 +20,7 @@ export function mapFavouriteRideRow(row) {
     destination: row.destination,
     departure_at: row.departure_at,
     journey_scale: row.journey_scale,
+    vehicle_type: row.vehicle_type,
     seats_total: row.seats_total,
     seats_available: row.seats_available,
     contribution: row.contribution,
@@ -29,6 +30,7 @@ export function mapFavouriteRideRow(row) {
       id: row.host_id,
       full_name: row.host_full_name,
       profile_photo_url: row.host_profile_photo_url,
+      spoken_languages: row.host_spoken_languages,
       host_impact_stats: {
         completed_trips: row.host_completed_trips,
         co2_saved_kg: row.host_co2_saved_kg,

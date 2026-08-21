@@ -13,6 +13,12 @@ import { rideIntervalsOverlap } from '../business-logic/rideDateTime.js';
 
 const STORAGE_KEY = 'letstumpang_mock_db_v1';
 
+const FIXTURE_DESTINATION_PLACE_IDS = Object.freeze({
+  r_1: 'fixture_georgetown',
+  r_3: 'fixture_chain_a',
+  r_6: 'fixture_jonker'
+});
+
 const seedData = {
   currentUserId: 'u_demo_1',
   users: {
@@ -23,6 +29,7 @@ const seedData = {
       phone: '+1 555 0134',
       passwordHash: 'demo-hash', // never store plaintext even in the mock
       emergencyContact: { name: '', phone: '', relationship: '' },
+      spokenLanguages: ['english', 'malay'],
       profilePhotoUrl: null,
       status: 'active', // 'active' | 'deactivated' - Account Settings (FR-1.x)
       createdAt: '2026-02-10T00:00:00.000Z'
@@ -36,16 +43,17 @@ const seedData = {
       phone: '',
       passwordHash: 'demo-hash',
       emergencyContact: { name: '', phone: '', relationship: '' },
+      spokenLanguages: [],
       profilePhotoUrl: null,
       status: 'active',
       createdAt: '2026-01-01T00:00:00.000Z'
     },
     // Other hosts, seeded read-only so the Ride Hub (Module 2) has a realistic
     // marketplace to browse/search against without a live backend. Not signable-in.
-    u_host_ahmad: { id: 'u_host_ahmad', fullName: 'Ahmad Rizal', profilePhotoUrl: null, status: 'active' },
-    u_host_sarah: { id: 'u_host_sarah', fullName: 'Sarah Tan', profilePhotoUrl: null, status: 'active' },
-    u_host_raj: { id: 'u_host_raj', fullName: 'Raj Kumar', profilePhotoUrl: null, status: 'active' },
-    u_host_nurul: { id: 'u_host_nurul', fullName: 'Nurul Ain', profilePhotoUrl: null, status: 'active' }
+    u_host_ahmad: { id: 'u_host_ahmad', fullName: 'Ahmad Rizal', profilePhotoUrl: null, spokenLanguages: ['malay', 'english'], status: 'active' },
+    u_host_sarah: { id: 'u_host_sarah', fullName: 'Sarah Tan', profilePhotoUrl: null, spokenLanguages: ['english', 'mandarin', 'cantonese'], status: 'active' },
+    u_host_raj: { id: 'u_host_raj', fullName: 'Raj Kumar', profilePhotoUrl: null, spokenLanguages: ['english', 'tamil'], status: 'active' },
+    u_host_nurul: { id: 'u_host_nurul', fullName: 'Nurul Ain', profilePhotoUrl: null, spokenLanguages: ['malay'], status: 'active' }
   },
   vehicles: {
     u_demo_1: [
@@ -53,6 +61,7 @@ const seedData = {
         id: 'v_1',
         make: 'Toyota',
         model: 'Camry',
+        vehicleType: 'sedan',
         plate: 'NSW 4KL 291',
         colour: 'Pearl White',
         seats: 4,
@@ -63,13 +72,18 @@ const seedData = {
         id: 'v_2',
         make: 'Honda',
         model: 'Civic',
+        vehicleType: 'sedan',
         plate: 'VIC 8BM 774',
         colour: 'Midnight Blue',
         seats: 3,
         year: 2019,
         active: false
       }
-    ]
+    ],
+    u_host_ahmad: [{ id: 'v_ahmad', make: 'Perodua', model: 'Alza', vehicleType: 'mpv', plate: 'WXX 101', colour: 'Silver', seats: 6, year: 2023, active: true }],
+    u_host_sarah: [{ id: 'v_sarah', make: 'Honda', model: 'HR-V', vehicleType: 'suv', plate: 'BXX 202', colour: 'White', seats: 4, year: 2022, active: true }],
+    u_host_raj: [{ id: 'v_raj', make: 'Perodua', model: 'Myvi', vehicleType: 'hatchback', plate: 'VXX 303', colour: 'Blue', seats: 3, year: 2021, active: true }],
+    u_host_nurul: [{ id: 'v_nurul', make: 'Toyota', model: 'Hiace', vehicleType: 'van', plate: 'WXX 404', colour: 'Black', seats: 8, year: 2020, active: true }]
   },
   // Reputation Score Engine inputs (3.1.2.a) - completed trips, CO2 saved, and
   // reputation score feed the weighted Composite Impact Score on the Host Dashboard.
@@ -96,6 +110,7 @@ const seedData = {
       date: '2026-08-15',
       time: '07:00',
       journeyScale: 'Intercity',
+      vehicleId: 'v_ahmad',
       seatsTotal: 3,
       seatsAvailable: 3,
       contribution: 'Snacks & drinks',
@@ -111,6 +126,7 @@ const seedData = {
       date: '2026-08-17',
       time: '07:30',
       journeyScale: 'Urban',
+      vehicleId: 'v_sarah',
       seatsTotal: 2,
       seatsAvailable: 2,
       contribution: 'Toll contribution',
@@ -126,6 +142,7 @@ const seedData = {
       date: '2026-08-18',
       time: '08:15',
       journeyScale: 'Urban',
+      vehicleId: 'v_raj',
       seatsTotal: 1,
       seatsAvailable: 1,
       contribution: 'No contribution needed',
@@ -141,6 +158,7 @@ const seedData = {
       date: '2026-08-19',
       time: '08:30',
       journeyScale: 'Intercity',
+      vehicleId: 'v_nurul',
       seatsTotal: 4,
       seatsAvailable: 4,
       contribution: 'Hot drinks',
@@ -176,6 +194,7 @@ const seedData = {
       date: '2026-08-10',
       time: '09:00',
       journeyScale: 'Intercity',
+      vehicleId: 'v_ahmad',
       seatsTotal: 3,
       seatsAvailable: 2,
       contribution: 'Share snacks',
@@ -220,10 +239,17 @@ function normalizeModule2State(db) {
   db.rideRequests ||= {};
   db.rideReviews ||= {};
   db.favourites ||= {};
+  for (const user of Object.values(db.users || {})) user.spokenLanguages ||= [];
   for (const ride of Object.values(db.rides || {})) {
     // Repair the pre-vehicle demo Host ride already persisted in older offline
     // browser sessions so Edit Ride can hydrate the same contract as Supabase.
     if (ride.id === 'r_5' && !ride.vehicleId) ride.vehicleId = 'v_1';
+    if (!ride.destinationLocation && FIXTURE_DESTINATION_PLACE_IDS[ride.id]) {
+      ride.destinationLocation = {
+        source: 'place',
+        placeId: FIXTURE_DESTINATION_PLACE_IDS[ride.id]
+      };
+    }
     ride.departureAt ||= toMockDepartureAt(ride.date, ride.time);
     ride.date ||= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur', dateStyle: 'short' }).format(new Date(ride.departureAt));
     ride.publishedAt ??= ride.status === 'Draft' ? null : ride.createdAt;
@@ -366,6 +392,7 @@ export const mockDb = {
       phone: '',
       passwordHash: password ? 'hashed:' + password.length : '',
       emergencyContact: { name: '', phone: '', relationship: '' },
+      spokenLanguages: [],
       profilePhotoUrl: null,
       status: 'active',
       createdAt: new Date().toISOString()
@@ -1058,11 +1085,13 @@ function enrichReview(db, review) {
 
 function enrichRide(db, ride) {
   const host = db.users[ride.hostId];
+  const vehicle = (db.vehicles[ride.hostId] || []).find((item) => item.id === ride.vehicleId);
   const impact = db.impact[ride.hostId] || { completedTrips: 0, co2SavedKg: 0, reputationScore: 0, rating: null };
   const hasAcceptedRequests = Object.values(db.rideRequests)
     .some((request) => request.rideId === ride.id && request.status === 'Accepted');
   return {
     ...ride,
+    vehicleType: vehicle?.vehicleType || '',
     hasAcceptedRequests,
     host: host
       ? {
@@ -1072,7 +1101,8 @@ function enrichRide(db, ride) {
           completedTrips: impact.completedTrips,
           co2SavedKg: impact.co2SavedKg,
           reputationScore: impact.reputationScore,
-          rating: impact.rating
+          rating: impact.rating,
+          spokenLanguages: host.spokenLanguages || []
         }
       : null
   };

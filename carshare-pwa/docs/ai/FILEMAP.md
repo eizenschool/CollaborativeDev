@@ -24,10 +24,13 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/business-logic/` — business-rule/service layer.
 - `src/business-logic/discovery/` — Module 6 place scoring, lifecycle, seasonal calendar, and chain detection.
 - `supabase/functions/m6-ingest/` — server-side Module 6 Nearby Search sweep, Place Details enrichment, and catalogue upsert; reads `GOOGLE_PLACES_SERVER_KEY` only from Supabase secrets.
-- `src/business-logic/discovery/PlaceQueryService.js` — radius and route-corridor place queries served to Modules 2 and 4; callable now against the fixture catalogue with no API key.
+- `src/business-logic/discovery/PlaceQueryService.js` — public source-hint lookup plus radius and route-corridor place queries served to Modules 2 and 4; callable now against the fixture catalogue with no API key.
 - `src/business-logic/verification/` — trip verification logic from the former Trust & Safety scope; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 - `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.
 - `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, and reverse-geocoding boundary.
+- `src/business-logic/CompatibilityOptions.js` — shared validated vehicle-category and Host-language values used by Module 1 owner editors and Module 4 Search.
+- `src/business-logic/SmartSearchService.js` — Module 4 criteria normalization, URL state, filtering, sorting, and Module 2 ride-search delegation.
+- `src/business-logic/FavouriteService.js` — Module 4 owner-scoped favourite adapter and safe unavailable-card mapping.
 - `src/business-logic/NotificationService.js` — shared notification mapping,
   safe action paths, unread count, and Web Push subscription orchestration.
 

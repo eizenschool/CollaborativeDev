@@ -89,9 +89,10 @@ VAPID secrets and Database Webhook remain to be configured below. See
 `docs/ai/SQL.md` for the authoritative deployment map; do not make
 Dashboard-only schema changes.
 
-`036_m3_message_translation.sql` and `m3-message-translation` are implemented
-but not deployed. Complete the project-owner setup below before expecting the
-Translate controls to return live results.
+`036_m3_message_translation.sql` and `m3-message-translation` are deployed in
+the shared project; the Function is active as version 2. The project-owner setup
+below remains the required process for another environment or a controlled
+redeployment.
 
 ## Message translation setup (project owner)
 
@@ -114,8 +115,9 @@ token to `.env.local`, a `VITE_` variable, client code, GitHub, or a screenshot.
    Replace the example production origin and keep every entry origin-only: no
    path, query string, or trailing slash. Supabase's runtime database credentials
    are supplied automatically and must not be copied into frontend configuration.
-4. Apply `database/sql/036_m3_message_translation.sql` through the team's normal
-   migration workflow, then deploy the authenticated Function:
+4. In a new environment, apply `database/sql/036_m3_message_translation.sql`
+   through the team's normal migration workflow, then deploy the authenticated
+   Function (the shared project has already completed this step):
 
    ```powershell
    supabase functions deploy m3-message-translation

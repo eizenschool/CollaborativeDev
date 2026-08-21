@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 
 const migrationUrl = new URL('../../../database/sql/028_m2_route_schedule_and_completion.sql', import.meta.url);
-const earlyStartMigrationUrl = new URL('../../../database/sql/036_m2_early_start_and_eta_refresh.sql', import.meta.url);
+const earlyStartMigrationUrl = new URL('../../../database/sql/037_m2_early_start_and_eta_refresh.sql', import.meta.url);
 const sharedRouteUrl = new URL('../../../supabase/functions/_shared/m2Routes.ts', import.meta.url);
 const quoteFunctionUrl = new URL('../../../supabase/functions/m2-route-quote/index.ts', import.meta.url);
 const locationInputUrl = new URL('../../presentation/components/maps/ConfirmedLocationInput.jsx', import.meta.url);
@@ -98,7 +98,7 @@ describe('Module 2 route schedule and lifecycle contracts', () => {
     expect(sql).toContain("boarding_status = 'Checked In'");
     expect(sql).toContain("set boarding_status = 'No-show'");
     expect(sql).toContain('estimated_arrival_at > coalesce(started_at, departure_at)');
-    expect(sql).toContain('p_started_at\n    + pg_catalog.make_interval');
+    expect(sql).toMatch(/p_started_at\r?\n\s+\+ pg_catalog\.make_interval/);
     expect(sql).toContain('revoke all on function public.start_ride(uuid) from public, anon, authenticated');
     expect(sql).toContain('grant execute on function public.start_quoted_ride(');
     expect(edge).toContain('input.action === "start"');

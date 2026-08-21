@@ -77,6 +77,16 @@ function corridorPosition(origin, end, point) {
 }
 
 export const PlaceQueryService = {
+  /** Resolve the public Google/source hint carried by Module 6 Search links. */
+  async getPlaceBySourcePlaceId(sourcePlaceId) {
+    const wanted = typeof sourcePlaceId === 'string' ? sourcePlaceId.trim() : '';
+    if (!wanted) return null;
+
+    const place = selectRecommendable(await discoveryDb.listPlaces())
+      .find((candidate) => candidate.sourcePlaceId === wanted);
+    return place ? toContract(place) : null;
+  },
+
   /**
    * FR-6.36 - places within `radiusKm` of a coordinate, optionally one category.
    *

@@ -4,6 +4,7 @@ import {
   IconMapPin,
   IconSearch
 } from '../icons.jsx';
+import { applyManualDestinationText } from '../../../business-logic/SmartSearchService.js';
 
 export default function SearchForm({ criteria, onChange, onSubmit, loading }) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
@@ -33,7 +34,7 @@ export default function SearchForm({ criteria, onChange, onSubmit, loading }) {
             id="smart-search-destination"
             autoComplete="street-address"
             value={criteria.destination}
-            onChange={(event) => patch({ destination: event.target.value, destinationPlaceId: '' })}
+            onChange={(event) => onChange(applyManualDestinationText(criteria, event.target.value))}
             placeholder="e.g. Georgetown"
           />
         </span>

@@ -1,9 +1,19 @@
 // ===== BUSINESS LOGIC LAYER (ProfileService) =====
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
+import { normalizeSpokenLanguages } from './CompatibilityOptions.js';
 
 const EMPTY_EMERGENCY_CONTACT = { name: '', phone: '', relationship: '' };
 const PROFILE_SELECT = `
+  id,
+  full_name,
+  spoken_languages,
+  profile_photo_url,
+  status,
+  created_at,
+  profile_private(phone, emergency_contact)
+`;
+const LEGACY_PROFILE_SELECT = `
   id,
   full_name,
   profile_photo_url,
@@ -11,6 +21,11 @@ const PROFILE_SELECT = `
   created_at,
   profile_private(phone, emergency_contact)
 `;
+
+function isUndeployedCompatibilityProfile(error) {
+  const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return error?.code === '42703' || /spoken_languages/i.test(detail);
+}
 
 function privateRow(row) {
   const value = row?.profile_private;
@@ -23,6 +38,7 @@ export function mapProfileRow(row, authUser) {
   return {
     id: row.id,
     fullName: row.full_name,
+    spokenLanguages: normalizeSpokenLanguages(row.spoken_languages),
     email: authUser?.email || '',
     phone: privateProfile?.phone || '',
     emergencyContact: privateProfile?.emergency_contact || EMPTY_EMERGENCY_CONTACT,
@@ -44,10 +60,13 @@ export const ProfileService = {
 
   async getProfile(userId, authUser = null) {
     if (isSupabaseConfigured) {
-      const [{ data, error }, user] = await Promise.all([
+      let [{ data, error }, user] = await Promise.all([
         supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).single(),
         currentAuthUser(authUser)
       ]);
+      if (error && isUndeployedCompatibilityProfile(error)) {
+        ({ data, error } = await supabase.from('profiles').select(LEGACY_PROFILE_SELECT).eq('id', userId).single());
+      }
       if (error) throw error;
       return mapProfileRow(data, user);
     }
@@ -86,6 +105,24 @@ export const ProfileService = {
     }
 
     return mockDb.updateProfile(userId, { fullName, email, phone });
+  },
+
+  async updateSpokenLanguages(userId, spokenLanguages) {
+    const normalizedLanguages = normalizeSpokenLanguages(spokenLanguages);
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ spoken_languages: normalizedLanguages })
+        .eq('id', userId);
+      if (error) {
+        if (isUndeployedCompatibilityProfile(error)) {
+          throw new Error('Spoken-language preferences are not available in this environment yet.');
+        }
+        throw error;
+      }
+      return ProfileService.getProfile(userId);
+    }
+    return mockDb.updateProfile(userId, { spokenLanguages: normalizedLanguages });
   },
 
   // Split out from updateProfileInfo: a password change is a sensitive action

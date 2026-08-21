@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '../../..')
 const migration = readFileSync(
-  resolve(root, 'database/sql/035_m2_ride_usability_notifications.sql'),
+  resolve(root, 'database/sql/038_m2_ride_usability_notifications.sql'),
   'utf8',
 )
 
