@@ -8,8 +8,17 @@ function getInitials(name = 'Member') {
 }
 
 function SenderAvatar({ message }) {
-  if (message.senderAvatar) {
-    return <img src={message.senderAvatar} alt={message.senderName} className="message-bubble-avatar" />;
+  const [failedUrl, setFailedUrl] = useState(null);
+  if (message.senderAvatar && failedUrl !== message.senderAvatar) {
+    return (
+      <img
+        src={message.senderAvatar}
+        alt={message.senderName}
+        className="message-bubble-avatar"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedUrl(message.senderAvatar)}
+      />
+    );
   }
   return (
     <span className="message-bubble-avatar message-avatar-fallback">

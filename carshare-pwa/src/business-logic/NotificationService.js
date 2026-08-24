@@ -2,6 +2,12 @@
 import { supabaseNotificationRepository } from '../data-access/supabaseNotificationRepository.js';
 
 export const NOTIFICATION_LIMIT = 50;
+export const USER_MESSAGE_EVENT_TYPE = 'message';
+export const VOICE_CALL_EVENT_TYPE = 'voice_call';
+export const PUSH_ONLY_EVENT_TYPES = Object.freeze([
+  USER_MESSAGE_EVENT_TYPE,
+  VOICE_CALL_EVENT_TYPE,
+]);
 
 function normalizeActionPath(value) {
   return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')
@@ -53,7 +59,10 @@ export function createNotificationService(repository = supabaseNotificationRepos
     backend: repository.backend,
 
     async listNotifications(limit = NOTIFICATION_LIMIT) {
-      const rows = await repository.listNotifications(Math.min(Math.max(Number(limit) || NOTIFICATION_LIMIT, 1), NOTIFICATION_LIMIT));
+      const rows = await repository.listNotifications(
+        Math.min(Math.max(Number(limit) || NOTIFICATION_LIMIT, 1), NOTIFICATION_LIMIT),
+        { excludeEventTypes: PUSH_ONLY_EVENT_TYPES },
+      );
       return rows.map(mapNotificationRow);
     },
 

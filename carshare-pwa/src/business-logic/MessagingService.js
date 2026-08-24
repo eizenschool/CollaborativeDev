@@ -33,6 +33,13 @@ export const TRANSLATION_LANGUAGES = Object.freeze({
   ta: 'தமிழ்',
 });
 
+export function countUnreadMessages(conversations = []) {
+  return conversations.reduce((total, conversation) => {
+    const unreadCount = Number(conversation?.unreadCount);
+    return total + (Number.isFinite(unreadCount) && unreadCount > 0 ? unreadCount : 0);
+  }, 0);
+}
+
 function cleanText(text) {
   return typeof text === 'string' ? text.trim() : '';
 }

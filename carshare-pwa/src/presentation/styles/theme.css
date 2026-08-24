@@ -58,6 +58,7 @@ body {
 }
 
 .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.mobile-appbar { display: none; }
 
 /* ---------- Top nav bar ---------- */
 .topnav {
@@ -82,7 +83,12 @@ body {
 }
 .topnav-item:hover { background: var(--bg); color: var(--ink); }
 .topnav-item.active { background: var(--teal-tint); color: var(--teal-dark); }
-.topnav-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.topnav-icon { position: relative; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.nav-unread-badge {
+  position: absolute; top: -8px; right: -10px; min-width: 17px; height: 17px;
+  padding: 0 4px; border: 2px solid #fff; border-radius: 999px; background: var(--danger); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; line-height: 1;
+}
 .nav-label { white-space: nowrap; }
 
 .topnav-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
@@ -116,6 +122,16 @@ body {
    content its safe area above the bar. */
 @media (max-width: 700px) {
   .app-shell { padding-bottom: 64px; }
+  .mobile-appbar {
+    position: sticky; top: 0; z-index: 35; min-height: calc(56px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 16px 0; border-bottom: 1px solid var(--border); background: #fff;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    box-shadow: 0 2px 8px rgba(17,24,39,.05);
+  }
+  .mobile-appbar-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .mobile-appbar-brand .brand-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-notification-bell { width: 40px; height: 40px; flex-shrink: 0; background: var(--bg); color: var(--ink); }
+  .mobile-notification-bell[aria-current='page'] { background: var(--teal-tint); color: var(--teal-dark); }
   .topnav {
     position: fixed; inset: auto 0 0; z-index: 40; height: calc(64px + env(safe-area-inset-bottom));
     padding: 6px 10px max(6px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); border-bottom: 0;
@@ -128,6 +144,7 @@ body {
   .topnav-item.active { background: transparent; color: var(--teal); }
   .topnav-item.active .topnav-icon { width: 31px; height: 24px; border-radius: 999px; background: var(--teal-tint); }
   .topnav-icon { height: 24px; }
+  .nav-unread-badge { top: -6px; right: -9px; }
 }
 
 /* ---------- Coming soon placeholder screens ---------- */

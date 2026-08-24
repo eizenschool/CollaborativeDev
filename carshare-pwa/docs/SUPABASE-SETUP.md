@@ -94,6 +94,11 @@ the shared project; the Function is active as version 2. The project-owner setup
 below remains the required process for another environment or a controlled
 redeployment.
 
+`041_m3_add_voice_calls.sql`, `042_m3_turn_guard.sql`, and the two TURN Edge
+Functions are the voice-call production boundary. Follow
+`docs/VOICE-CALL-DEPLOYMENT.md` for the Cloudflare key, server-only secrets,
+five-minute quota monitor, Netlify HTTPS, and two-device acceptance sequence.
+
 ## Message translation setup (project owner)
 
 Translation is deliberately proxied through Supabase. Never add a Cloudflare

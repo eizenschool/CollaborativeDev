@@ -5,9 +5,11 @@ import * as webpush from "jsr:@negrel/webpush@0.5.0";
 type NotificationRecord = {
   id: string;
   recipient_id: string;
+  event_type: string;
   title: string;
   body: string;
   action_path: string;
+  payload: Record<string, unknown>;
 };
 
 type WebhookPayload = {
@@ -36,9 +38,13 @@ function validRecord(record: NotificationRecord | undefined): record is Notifica
   return Boolean(record
     && typeof record.id === "string"
     && typeof record.recipient_id === "string"
+    && typeof record.event_type === "string"
     && typeof record.title === "string"
     && typeof record.body === "string"
     && typeof record.action_path === "string"
+    && record.payload !== null
+    && typeof record.payload === "object"
+    && !Array.isArray(record.payload)
     && record.action_path.startsWith("/")
     && !record.action_path.startsWith("//")
     && !record.action_path.includes("\\"));
@@ -71,11 +77,15 @@ Deno.serve(async (request) => {
     if (error) throw error;
 
     const server = await applicationServer();
+    const isVoiceCall = record.event_type === "voice_call";
+    const callId = typeof record.payload.callId === "string" ? record.payload.callId : null;
     const message = JSON.stringify({
       notificationId: record.id,
       title: record.title,
       body: record.body,
       actionPath: record.action_path,
+      eventType: record.event_type,
+      callId,
     });
     const outcomes = await Promise.all((subscriptions || []).map(async (subscription) => {
       try {
@@ -84,7 +94,9 @@ Deno.serve(async (request) => {
           keys: { p256dh: subscription.p256dh, auth: subscription.auth },
         });
         await subscriber.pushTextMessage(message, {
-          ttl: 60 * 60 * 24,
+          // A delayed call alert is actively misleading after the 45-second
+          // ringing window; durable ride/message alerts retain one-day TTL.
+          ttl: isVoiceCall ? 45 : 60 * 60 * 24,
           urgency: webpush.Urgency.High,
           topic: `notification-${record.id}`,
         });

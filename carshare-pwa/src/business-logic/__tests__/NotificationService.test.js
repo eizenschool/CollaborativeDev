@@ -3,6 +3,7 @@ import {
   countUnread,
   createNotificationService,
   mapNotificationRow,
+  PUSH_ONLY_EVENT_TYPES,
   urlBase64ToUint8Array,
 } from '../NotificationService.js';
 
@@ -23,7 +24,10 @@ function createRepository() {
   return {
     backend: 'test',
     calls,
-    listNotifications: async () => [rawNotification],
+    listNotifications: async (limit, options) => {
+      calls.push(['list', limit, options]);
+      return [rawNotification];
+    },
     markRead: async (id) => { calls.push(['read', id]); return true; },
     markAllRead: async () => { calls.push(['all-read']); return 1; },
     subscribe: (listener) => { calls.push(['subscribe', listener]); return () => calls.push(['unsubscribe']); },
@@ -90,8 +94,22 @@ describe('NotificationService', () => {
     await service.markRead(rawNotification.id);
     await service.markAllRead();
     expect(repository.calls).toEqual([
+      ['list', 50, { excludeEventTypes: PUSH_ONLY_EVENT_TYPES }],
       ['read', rawNotification.id],
       ['all-read'],
+    ]);
+  });
+
+  it('excludes user-message events before the repository applies its capped query', async () => {
+    const repository = createRepository();
+    const service = createNotificationService(repository);
+
+    await service.listNotifications(500);
+
+    expect(repository.calls[0]).toEqual([
+      'list',
+      50,
+      { excludeEventTypes: PUSH_ONLY_EVENT_TYPES },
     ]);
   });
 
