@@ -4,5 +4,11 @@ verify_jwt = false
 [functions.m3-message-translation]
 verify_jwt = true
 
+[functions.m3-turn-credentials]
+verify_jwt = true
+
+[functions.m3-turn-usage-monitor]
+verify_jwt = false
+
 [functions.m6-ingest]
 verify_jwt = false

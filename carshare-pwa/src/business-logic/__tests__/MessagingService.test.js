@@ -6,6 +6,7 @@ import {
   MAX_MEDIA_COUNT,
   MAX_MESSAGE_MEDIA_BYTES,
   MAX_VIDEO_BYTES,
+  countUnreadMessages,
   createMessagingService,
   getMessagingChangeConversationId,
   mapMessageRow,
@@ -39,6 +40,19 @@ function voiceRecording(overrides = {}) {
     ...overrides,
   };
 }
+
+describe('message unread totals', () => {
+  it('sums positive unread counts and ignores invalid values', () => {
+    expect(countUnreadMessages([
+      { id: 'one', unreadCount: 2 },
+      { id: 'two', unreadCount: 0 },
+      { id: 'three', unreadCount: 5 },
+      { id: 'negative', unreadCount: -2 },
+      { id: 'invalid', unreadCount: 'not-a-number' },
+      null,
+    ])).toBe(7);
+  });
+});
 
 function rawConversation(overrides = {}) {
   return {

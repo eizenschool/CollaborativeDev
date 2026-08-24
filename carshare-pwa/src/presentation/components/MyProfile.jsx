@@ -19,7 +19,7 @@ import {
   IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart,
   IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle,
   IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar,
-  IconLayers, IconShield, IconAlertTriangle, IconSettings, IconCamera, IconChart, IconUsers, IconLogOut, IconBell
+  IconLayers, IconShield, IconAlertTriangle, IconSettings, IconCamera, IconChart, IconUsers, IconLogOut
 } from './icons.jsx';
 // Module 5 owns its own entry card, so this file only has to place it.
 import ImpactEntryCard from './trip/ImpactEntryCard.jsx';
@@ -756,7 +756,6 @@ function ReputationImpactPanel({ user, summary, refresh }) {
 
 function AccountSettingsPanel({ user }) {
   const { signOut } = useAuth();
-  const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -783,13 +782,6 @@ function AccountSettingsPanel({ user }) {
       <div className="panel-head"><h2>Account Settings</h2></div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="settings-row">
-          <div>
-            <p className="card-title" style={{ marginBottom: 4 }}>Notifications</p>
-            <p className="card-subtitle" style={{ marginBottom: 0 }}>Review messages and updates from every module, or enable device alerts.</p>
-          </div>
-          <button className="btn-outline btn-outline-primary" type="button" onClick={() => navigate('/notifications')}><IconBell size={15} /> Notifications</button>
-        </div>
         <div className="settings-row settings-row-last">
           <div>
             <p className="card-title" style={{ marginBottom: 4 }}>Deactivate Account</p>

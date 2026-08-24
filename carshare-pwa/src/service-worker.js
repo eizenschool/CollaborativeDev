@@ -11,10 +11,11 @@ precacheAndRoute(self.__WB_MANIFEST);
 registerRoute(
   ({ url, request }) => url.hostname.endsWith('.supabase.co')
     && url.pathname.startsWith('/rest/v1/')
-    // Notification read state must always be fresh. Serving this private,
-    // user-scoped endpoint from a URL-only cache can hide new unread items
-    // after an account switch or a slow network response.
+    // Notification and incoming-call state must always be fresh. Serving these
+    // private, user-scoped endpoints from a URL-only cache can hide a ringing
+    // call or leak another account's state after an account switch.
     && !url.pathname.startsWith('/rest/v1/user_notifications')
+    && !url.pathname.startsWith('/rest/v1/call_sessions')
     && request.method === 'GET',
   new NetworkFirst({
     cacheName: 'supabase-read-cache',
@@ -33,34 +34,91 @@ function safePushPayload(event) {
         ? payload.actionPath
         : '/notifications',
       notificationId: typeof payload.notificationId === 'string' ? payload.notificationId : null,
+      eventType: typeof payload.eventType === 'string' ? payload.eventType : '',
+      callId: typeof payload.callId === 'string' ? payload.callId : null,
     };
   } catch {
-    return { title: "Let's Tumpang", body: 'You have a new notification.', actionPath: '/notifications', notificationId: null };
+    return {
+      title: "Let's Tumpang",
+      body: 'You have a new notification.',
+      actionPath: '/notifications',
+      notificationId: null,
+      eventType: '',
+      callId: null,
+    };
   }
 }
 
 self.addEventListener('push', (event) => {
   const payload = safePushPayload(event);
+  const isVoiceCall = payload.eventType === 'voice_call';
   event.waitUntil(self.registration.showNotification(payload.title, {
     body: payload.body,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    tag: payload.notificationId ? `notification-${payload.notificationId}` : undefined,
-    data: { actionPath: payload.actionPath },
+    tag: isVoiceCall && payload.callId
+      ? `voice-call-${payload.callId}`
+      : payload.notificationId ? `notification-${payload.notificationId}` : undefined,
+    requireInteraction: isVoiceCall,
+    vibrate: isVoiceCall ? [300, 150, 300, 150, 500] : undefined,
+    data: {
+      actionPath: payload.actionPath,
+      eventType: payload.eventType,
+      callId: payload.callId,
+    },
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const path = event.notification.data?.actionPath || '/notifications';
+  const eventType = event.notification.data?.eventType || '';
+  const callId = event.notification.data?.callId || null;
   event.waitUntil((async () => {
+    const target = new URL(path, self.location.origin);
+    if (eventType === 'voice_call' && callId) target.searchParams.set('incomingCall', callId);
+    const targetUrl = target.href;
     const matching = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     const existing = matching.find((client) => new URL(client.url).origin === self.location.origin);
     if (existing) {
+      if (eventType === 'voice_call') {
+        // Do not reload a live call client: unmounting its WebRTC provider can
+        // tear down media/signalling before the user has a chance to answer.
+        // Focusing also triggers the provider's authoritative pending-call
+        // resync; postMessage adds the exact call id and SPA destination.
+        await existing.focus();
+        existing.postMessage({
+          type: 'notification-click',
+          actionPath: `${target.pathname}${target.search}${target.hash}`,
+          eventType,
+          callId,
+        });
+        return;
+      }
+      // A suspended mobile PWA can miss a postMessage sent immediately after
+      // focus. Navigate the WindowClient itself so the conversation path
+      // survives process restoration and React has it on first render.
+      if (typeof existing.navigate === 'function') {
+        try {
+          const navigated = await existing.navigate(targetUrl);
+          if (navigated) {
+            await navigated.focus();
+            return;
+          }
+        } catch {
+          // Older/limited browsers keep the in-app message fallback below.
+        }
+      }
       await existing.focus();
-      existing.postMessage({ type: 'notification-click', actionPath: path });
+      existing.postMessage({
+        type: 'notification-click',
+        actionPath: `${target.pathname}${target.search}${target.hash}`,
+        eventType,
+        callId,
+      });
       return;
     }
-    await clients.openWindow(new URL(path, self.location.origin).href);
+    const opened = await clients.openWindow(targetUrl);
+    await opened?.focus();
   })());
 });

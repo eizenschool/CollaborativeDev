@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import {
+  countUnreadMessages,
   getMessagingChangeConversationId,
   MessagingService,
 } from '../business-logic/MessagingService.js';
@@ -176,7 +177,23 @@ export function MessagingSessionProvider({ children }) {
           };
         });
         if (markRead && activeUserIdRef.current === userId) {
-          await MessagingService.markConversationRead(conversationId).catch(() => {});
+          try {
+            await MessagingService.markConversationRead(conversationId);
+            commitSession((current) => {
+              if (current.userId !== userId) return current;
+              const currentConversation = current.conversations[conversationId];
+              if (!currentConversation?.unreadCount) return current;
+              const readConversation = { ...currentConversation, unreadCount: 0 };
+              return {
+                ...current,
+                conversations: { ...current.conversations, [conversationId]: readConversation },
+                folders: replaceConversationInFolders(current.folders, readConversation),
+              };
+            });
+          } catch {
+            // Realtime or the next explicit refresh will reconcile a failed
+            // read-cursor update without clearing the visible unread badge.
+          }
         }
         return conversation;
       } catch (error) {
@@ -232,6 +249,11 @@ export function MessagingSessionProvider({ children }) {
   }, [commitSession, userId]);
 
   useEffect(() => {
+    if (!userId) return;
+    void refreshConversations('active');
+  }, [refreshConversations, userId]);
+
+  useEffect(() => {
     if (!userId) return undefined;
     let timerId = null;
     let refreshAll = false;
@@ -264,6 +286,9 @@ export function MessagingSessionProvider({ children }) {
   const value = useMemo(() => ({
     folder: session.folder,
     folderState: session.folders[session.folder],
+    unreadMessageCount: session.folders.active.loaded && !session.folders.active.error
+      ? countUnreadMessages(session.folders.active.items)
+      : 0,
     getConversation: (conversationId) => session.conversations[conversationId] || null,
     getMessagesState: (conversationId) => session.messages[conversationId] || createMessageState(),
     setFolder,

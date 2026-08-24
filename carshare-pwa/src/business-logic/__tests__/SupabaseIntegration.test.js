@@ -197,6 +197,43 @@ describe('Supabase integration contracts', () => {
       'utf8'
     ));
     expect(serviceWorkerSource).toContain("!url.pathname.startsWith('/rest/v1/user_notifications')");
+    expect(serviceWorkerSource).toContain("!url.pathname.startsWith('/rest/v1/call_sessions')");
+  });
+
+  it('navigates a restored PWA window to the notification action before using postMessage fallback', async () => {
+    const serviceWorkerSource = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../service-worker.js', import.meta.url),
+      'utf8'
+    ));
+    const directNavigation = serviceWorkerSource.indexOf('await existing.navigate(targetUrl)');
+    const messageFallback = serviceWorkerSource.lastIndexOf('existing.postMessage({');
+    expect(directNavigation).toBeGreaterThan(-1);
+    expect(messageFallback).toBeGreaterThan(directNavigation);
+    expect(serviceWorkerSource).toContain('clients.openWindow(targetUrl)');
+    expect(serviceWorkerSource).toContain("target.searchParams.set('incomingCall', callId)");
+    expect(serviceWorkerSource).toContain("if (eventType === 'voice_call')");
+    expect(serviceWorkerSource).toContain('clientsClaim()');
+    expect(serviceWorkerSource).toContain('self.skipWaiting()');
+  });
+
+  it('clears stale production workers and caches while running localhost source', async () => {
+    const mainSource = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../main.jsx', import.meta.url),
+      'utf8'
+    ));
+    expect(mainSource).toContain('if (import.meta.env.DEV)');
+    expect(mainSource).toContain('registration.unregister()');
+    expect(mainSource).toContain('caches.delete(cacheName)');
+  });
+
+  it('falls back to sender initials when an external message avatar fails', async () => {
+    const messageBubbleSource = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../presentation/components/messaging/MessageBubble.jsx', import.meta.url),
+      'utf8'
+    ));
+    expect(messageBubbleSource).toContain('failedUrl !== message.senderAvatar');
+    expect(messageBubbleSource).toContain('onError={() => setFailedUrl(message.senderAvatar)}');
+    expect(messageBubbleSource).toContain('referrerPolicy="no-referrer"');
   });
 
   it('reports actual Web Push outcomes instead of counting every attempt as delivered', async () => {
@@ -206,6 +243,7 @@ describe('Supabase integration contracts', () => {
     ));
     expect(pushFunctionSource).toContain('return "delivered" as const');
     expect(pushFunctionSource).toContain('failed > 0 ? 502 : 200');
+    expect(pushFunctionSource).toContain('ttl: isVoiceCall ? 45 : 60 * 60 * 24');
   });
 
   it('allows current conversation members to sign private chat media without listing the bucket', async () => {

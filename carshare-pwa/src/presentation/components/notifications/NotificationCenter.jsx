@@ -104,7 +104,7 @@ export function NotificationPopover({ onClose }) {
   return (
     <section className="notification-popover" role="dialog" aria-label="Notifications">
       <div className="notification-popover-head">
-        <div><strong>Notifications</strong><span>Updates from every module</span></div>
+        <div><strong>Notifications</strong><span>Ride, request, and account updates</span></div>
         <button className="icon-btn" type="button" onClick={onClose} aria-label="Close notifications"><IconX size={17} /></button>
       </div>
       <PushControl compact />
@@ -121,7 +121,7 @@ export default function NotificationCenter() {
   return (
     <main className="notification-page">
       <div className="notification-page-head">
-        <div><h1>Notifications</h1><p>Messages and updates from every Let&apos;s Tumpang module.</p></div>
+        <div><h1>Notifications</h1><p>Ride, request, reminder, and account updates.</p></div>
         <PushControl />
       </div>
       <section className="notification-card">

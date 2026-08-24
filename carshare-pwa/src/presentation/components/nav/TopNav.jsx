@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
+import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { IconCar, IconHome, IconSearch, IconRoute, IconClock, IconMessage, IconHeart, IconUser, IconBell, IconLogOut } from '../icons.jsx';
 import { NotificationPopover } from '../notifications/NotificationCenter.jsx';
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
 export default function TopNav() {
   const { user, signOut } = useAuth();
   const { unreadCount } = useNotifications();
+  const { unreadMessageCount } = useMessagingSession();
   const navigate = useNavigate();
   const location = useLocation();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -59,63 +61,99 @@ export default function TopNav() {
   }, [notificationsOpen]);
 
   return (
-    <header className="topnav">
-      <div className="topnav-brand">
-        <div className="brand-icon"><IconCar size={18} /></div>
-        <span className="brand-title">Let's Tumpang</span>
-      </div>
-
-      <nav className="topnav-links">
-        {NAV_ITEMS.map(({ to, label, Icon, requiresAuth }) => {
-          const target = requiresAuth
-            ? getAuthNavigation(user, to, `Sign in to open ${label}.`)
-            : { to };
-          return (
-            <NavLink key={to} to={target.to} state={target.state} className={({ isActive }) => 'topnav-item' + (isActive ? ' active' : '')}>
-              <span className="topnav-icon"><Icon size={18} /></span>
-              <span className="nav-label">{label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-
-      <div className="topnav-actions">
-        {user ? <>
-          <div className="notification-nav-wrap" ref={notificationRef}>
-            <button
-              className="icon-btn notification-bell"
-              title="Notifications"
-              type="button"
-              aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
-              aria-expanded={notificationsOpen}
-              aria-haspopup="dialog"
-              onClick={() => setNotificationsOpen((open) => !open)}
-            >
-              <IconBell size={18} />
-              {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
-            </button>
-            {notificationsOpen && <NotificationPopover onClose={() => setNotificationsOpen(false)} />}
-          </div>
-          <div
-            className="topnav-avatar"
-            style={user.profilePhotoUrl ? { backgroundImage: `url(${user.profilePhotoUrl})` } : undefined}
-            title={user.fullName || 'Profile'}
+    <>
+      <header className="mobile-appbar">
+        <div className="mobile-appbar-brand">
+          <div className="brand-icon"><IconCar size={18} /></div>
+          <span className="brand-title">Let&apos;s Tumpang</span>
+        </div>
+        {user && (
+          <button
+            className="icon-btn notification-bell mobile-notification-bell"
+            type="button"
+            title="Notifications"
+            aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            aria-current={location.pathname === '/notifications' ? 'page' : undefined}
+            onClick={() => navigate('/notifications')}
           >
-            {!user.profilePhotoUrl && initials}
-          </div>
-          <button className="icon-btn" title="Sign out" aria-label="Sign out" onClick={handleSignOut} type="button">
-            <IconLogOut size={17} />
+            <IconBell size={20} />
+            {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
           </button>
-        </> : (
-          <NavLink
-            className="topnav-signin"
-            to="/auth"
-            state={{ from: `${location.pathname}${location.search}`, reason: 'Sign in to use member services.' }}
-          >
-            Sign in
-          </NavLink>
         )}
-      </div>
-    </header>
+      </header>
+
+      <header className="topnav">
+        <div className="topnav-brand">
+          <div className="brand-icon"><IconCar size={18} /></div>
+          <span className="brand-title">Let's Tumpang</span>
+        </div>
+
+        <nav className="topnav-links">
+          {NAV_ITEMS.map(({ to, label, Icon, requiresAuth }) => {
+            const target = requiresAuth
+              ? getAuthNavigation(user, to, `Sign in to open ${label}.`)
+              : { to };
+            const isMessageItem = to === '/message';
+            return (
+              <NavLink
+                key={to}
+                to={target.to}
+                state={target.state}
+                aria-label={isMessageItem && unreadMessageCount > 0 ? `${label}, ${unreadMessageCount} unread messages` : undefined}
+                className={({ isActive }) => 'topnav-item' + (isActive ? ' active' : '')}
+              >
+                <span className="topnav-icon">
+                  <Icon size={18} />
+                  {isMessageItem && unreadMessageCount > 0 && (
+                    <span className="nav-unread-badge" aria-hidden="true">
+                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                    </span>
+                  )}
+                </span>
+                <span className="nav-label">{label}</span>
+              </NavLink>
+            );
+          })}
+        </nav>
+
+        <div className="topnav-actions">
+          {user ? <>
+            <div className="notification-nav-wrap" ref={notificationRef}>
+              <button
+                className="icon-btn notification-bell"
+                title="Notifications"
+                type="button"
+                aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+                aria-expanded={notificationsOpen}
+                aria-haspopup="dialog"
+                onClick={() => setNotificationsOpen((open) => !open)}
+              >
+                <IconBell size={18} />
+                {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+              </button>
+              {notificationsOpen && <NotificationPopover onClose={() => setNotificationsOpen(false)} />}
+            </div>
+            <div
+              className="topnav-avatar"
+              style={user.profilePhotoUrl ? { backgroundImage: `url(${user.profilePhotoUrl})` } : undefined}
+              title={user.fullName || 'Profile'}
+            >
+              {!user.profilePhotoUrl && initials}
+            </div>
+            <button className="icon-btn" title="Sign out" aria-label="Sign out" onClick={handleSignOut} type="button">
+              <IconLogOut size={17} />
+            </button>
+          </> : (
+            <NavLink
+              className="topnav-signin"
+              to="/auth"
+              state={{ from: `${location.pathname}${location.search}`, reason: 'Sign in to use member services.' }}
+            >
+              Sign in
+            </NavLink>
+          )}
+        </div>
+      </header>
+    </>
   );
 }

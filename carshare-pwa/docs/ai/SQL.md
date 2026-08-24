@@ -12,18 +12,18 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 favourites/proximity
-Deployed SQL history: 001-026, 028, 033, 034, and 036_m3 as tracked Supabase
+Deployed SQL history: 001-026, 028, 033, 034, 036_m3, and 045_m3 as tracked Supabase
   migrations, plus tracked 035_m4 and 023, 027, 029, 030, 031, 032, and
   037_m2 applied through
   the Dashboard SQL Editor (see below)
-Repository SQL history: 001-042
+Repository SQL history: 001-045
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
-  033 deployed as project_notifications on 2026-08-20, and separately applied
-  to this environment on 2026-08-24 when found not actually live despite that
-  record; 034 and 035_m4 are deployed; 036_m3 is deployed as
-  m3_message_translation; 037_m2 was applied through the Dashboard SQL Editor;
-  038, 039, and 040 remain undeployed; 041 and 042 deployed and live-verified
-  2026-08-24)
+  033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
+  deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
+  through the Dashboard SQL Editor; 039 and 040 remain undeployed; Module 6's
+  `041_m6` and `042_m6` were deployed and live-verified on 2026-08-24; Module
+  3's `043_m3` and `044_m3` were applied outside tracked migration history on
+  2026-08-24; and `045_m3` is tracked as m3_reliable_voice_call_delivery.)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -215,7 +215,8 @@ missing covering index on `ride_favourites.ride_id`. The latter is addressed by
 `040_m4_favourites_advisor_followup.sql`, authored but not deployed so the
 deployed `034` remains immutable.
 
-`041_m6_ride_available_notification.sql` is **written but not yet deployed**
+`041_m6_ride_available_notification.sql` is **deployed and live-verified,
+2026-08-24**
 and must follow `033_project_notifications.sql`. FR-6.33/UC6.12: a trigger on
 `public.rides` that reuses `private.create_user_notification(...)` to notify
 every active `ride_notify_registration` matching a newly Published/Matched
@@ -247,17 +248,38 @@ before the cron job was unscheduled and the decay call removed from
 `supabase/functions/m6-ingest/index.ts` - `lifecycleDecay.ts` and its tests
 are untouched, kept for a future caller with a trustworthy per-place signal.
 The Edge Function needs redeploying with this fix, then the schedule
-re-enabled by re-running `042`'s closing `cron.schedule(...)` block - this SQL
+re-enabled by re-running `042_m6`'s closing `cron.schedule(...)` block - this SQL
 migration itself needed no changes. `docs/MODULE6-HANDOVER.md` §5/§8 has the
-full account. The next new migration starts at `043`.
+ full account. The next new migration starts at `046` because Module 3's
+ `045_m3_reliable_voice_call_delivery.sql` now occupies that shared number.
 
 `033_project_notifications.sql` and `041_m6_ride_available_notification.sql`
 required deployment to this environment specifically during this same session
 - `033` had never been applied here despite being recorded as deployed on the
-shared team project, discovered when `041` failed with `schema "private" does
+shared team project, discovered when `041_m6` failed with `schema "private" does
 not exist`. Both are now confirmed deployed and live-verified end to end
 (registration → ride publish → notification received → registration
 fulfilled).
+
+`043_m3_add_voice_calls.sql` was applied outside tracked migration history on
+2026-08-24. It adds participant-readable direct-call invitations, RPC-only call
+state transitions, simultaneous-call serialization, and private Realtime
+Broadcast authorization for WebRTC descriptions and ICE candidates. No call
+audio is stored or relayed through the database.
+
+`044_m3_turn_guard.sql` was applied outside tracked migration history on
+2026-08-24. It adds server-only TURN monthly-usage state, short-lived credential
+issuance metadata, an atomic 10-credentials-per-user hourly guard, and service-
+role-only cleanup for calls that exceed 60 minutes. Browser roles receive no
+grant or RLS policy on either TURN table.
+
+`045_m3_reliable_voice_call_delivery.sql` is deployed as the tracked migration
+`m3_reliable_voice_call_delivery`. Its private invoker trigger creates one
+deduplicated, Push-only incoming-call notification for the callee when a ringing
+call row is inserted. The notification action opens the direct conversation;
+the call row and participant RLS remain authoritative. The matching deployed
+`notification-push` version 10 gives call alerts a 45-second TTL. The next new
+migration starts at `046`.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -279,12 +301,14 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
 - `message_translations` (in deployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
+- `call_sessions` (in live `043`): direct-chat caller/callee invitation and lifecycle rows; participants receive SELECT only and mutate through authenticated RPCs.
+- `turn_usage_guard` and `turn_credential_issues` (in live `044`): service-only relay cutoff state and revocable temporary-username metadata; no TURN password or long-lived provider token is stored.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 
 - `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only. `anon` reads a column-restricted, lifecycle-filtered subset (`029`, `030`); `authenticated` reads every column and every lifecycle state, trusting the JS layer to hide Retired/Pending-Enrichment rows.
 - `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
-- `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration. Read (in undeployed `041`) by a `public.rides` trigger that dispatches through `private.create_user_notification(...)` and flips matched rows to `fulfilled`; a daily Cron job expires past-date rows still `active`.
+- `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration. Read (in deployed `041_m6`) by a `public.rides` trigger that dispatches through `private.create_user_notification(...)` and flips matched rows to `fulfilled`; a daily Cron job expires past-date rows still `active`.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
 Module 4 (deployed `034`; deployed `035` adds no table; `039` changes the two
@@ -312,7 +336,7 @@ classification columns above but is not deployed):
 - Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
 - Translation-cache browser access is SELECT-only and follows the same visible-conversation/tombstone boundary; the authenticated Edge Function rechecks access before using its server credential to cache a result.
 - Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
-- All four messaging tables are in the `supabase_realtime` publication.
+- All four messaging tables and `call_sessions` are in the `supabase_realtime` publication. Private call-signal Broadcast topics authorize only the active row's caller and callee.
 
 ### Indexes
 
@@ -372,7 +396,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `039_m4_vehicle_language_filters.sql` - not deployed pending separate review; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
 - `040_m4_favourites_advisor_followup.sql` - not deployed; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
 - `041_m6_ride_available_notification.sql` - deployed and live-verified 2026-08-24; FR-6.33/UC6.12 `public.rides` trigger dispatching through `private.create_user_notification(...)` to matching `ride_notify_registration` rows, plus a daily Cron job expiring past-date active registrations.
-- `042_m6_scheduled_ingestion.sql` - deployed and live-verified 2026-08-24; weekly pg_cron + pg_net sweep calling `m6-ingest` with `maxDetails: 0`. Its FR-6.3/6.4/6.5 auto-decay counterpart in the Edge Function was found unsafe and removed the same day - see this file's `042` entry above.
+- `042_m6_scheduled_ingestion.sql` - deployed and live-verified 2026-08-24; weekly pg_cron + pg_net sweep calling `m6-ingest` with `maxDetails: 0`. Its FR-6.3/6.4/6.5 auto-decay counterpart in the Edge Function was found unsafe and removed the same day - see this file's `042_m6` entry above.
+- `043_m3_add_voice_calls.sql` - applied outside tracked migration history on 2026-08-24; one-to-one call-session rows, locked participant RPCs, busy-call serialization, Realtime publication, and caller/callee-only private Broadcast signalling policies. WebRTC audio remains peer-to-peer.
+- `044_m3_turn_guard.sql` - applied outside tracked migration history on 2026-08-24; server-only 900 GB usage guard, temporary TURN username audit, atomic hourly issuance limit, and service cleanup for calls over 60 minutes.
+- `045_m3_reliable_voice_call_delivery.sql` - deployed as `m3_reliable_voice_call_delivery`; creates one private-triggered, deduplicated, Push-only incoming-call notification per ringing call without widening browser grants.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

@@ -18,11 +18,16 @@ function normalizeError(error, fallback) {
 export const supabaseNotificationRepository = {
   backend: isSupabaseConfigured ? 'supabase' : 'unconfigured',
 
-  async listNotifications(limit) {
+  async listNotifications(limit, { excludeEventType, excludeEventTypes = [] } = {}) {
     if (!isSupabaseConfigured || !supabase) return [];
-    const { data, error } = await supabase
+    let query = supabase
       .from('user_notifications')
-      .select(NOTIFICATION_SELECT)
+      .select(NOTIFICATION_SELECT);
+    const excluded = excludeEventTypes.length
+      ? excludeEventTypes
+      : excludeEventType ? [excludeEventType] : [];
+    excluded.forEach((eventType) => { query = query.neq('event_type', eventType); });
+    const { data, error } = await query
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw normalizeError(error, 'Unable to load notifications.');

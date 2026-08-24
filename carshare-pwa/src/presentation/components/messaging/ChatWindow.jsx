@@ -9,6 +9,7 @@ import {
   IconMicrophone,
   IconMoreVertical,
   IconPaperclip,
+  IconPhone,
   IconSend,
   IconStop,
   IconVideo,
@@ -20,6 +21,7 @@ import {
   validateMessageDraft,
 } from '../../../business-logic/MessagingService.js';
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
+import { useCallSession } from '../../../context/CallSessionContext.jsx';
 import MessageBubble from './MessageBubble.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
 import usePhotoCapture from './usePhotoCapture.js';
@@ -165,6 +167,7 @@ export default function ChatWindow({
     saveDraft,
     clearDraft,
   } = useMessagingSession();
+  const { isBusy: isCallBusy, startCall } = useCallSession();
   const initialDraft = getDraft(conversationId);
   const [text, setText] = useState(() => initialDraft?.text || '');
   const [mediaEntries, setMediaEntries] = useState(() => initialDraft?.mediaEntries || []);
@@ -685,6 +688,15 @@ export default function ChatWindow({
   const isVideoBusy = isVideoStarting || isVideoRecording || isVideoProcessing;
   const memberDescription = conversation.type === 'group' ? `${conversation.members.length} members` : 'Private ride chat';
 
+  async function beginVoiceCall() {
+    setErrorMessage('');
+    try {
+      await startCall(conversation);
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to start a voice call.');
+    }
+  }
+
   return (
     <section className="message-chat-window" aria-label={`Conversation with ${conversation.title}`}>
       <header className="message-chat-header">
@@ -702,6 +714,18 @@ export default function ChatWindow({
           </p>
         </div>
         <div className="message-chat-header-actions">
+          {conversation.type === 'direct' && (
+            <button
+              type="button"
+              className="message-chat-header-button"
+              onClick={() => { void beginVoiceCall(); }}
+              disabled={conversation.isReadOnly || isCallBusy}
+              aria-label="Start voice call"
+              title={conversation.isReadOnly ? 'Archived conversations cannot start calls' : isCallBusy ? 'Another call is already active' : 'Start voice call'}
+            >
+              <IconPhone size={19} />
+            </button>
+          )}
           <button type="button" className="message-chat-header-button" onClick={() => onOpenHistory(conversation.id)} aria-label="Open message history" title="Message history"><IconClock size={19} /></button>
           <button type="button" className="message-chat-header-button" onClick={() => onManage(conversation)} aria-label="Manage conversation" title="Manage conversation"><IconMoreVertical size={19} /></button>
         </div>

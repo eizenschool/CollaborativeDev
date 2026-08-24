@@ -180,16 +180,30 @@ The current route determines the active state.
   scene must not consume mobile viewport space.
 - Sign out must remain directly reachable at the bottom of Profile content on
   phone even though the desktop top-navigation action group is hidden there.
-- The six persistent destinations remain unchanged. On desktop, the authenticated
-  action group includes a badge-bearing notification bell that opens the shared
-  centre. On phone, notification access is in Profile → Account Settings and
-  opens the same protected `/notifications` page; never add a seventh tab.
+- The seven persistent destinations remain unchanged. On desktop, the
+  authenticated action group includes a badge-bearing notification bell that
+  opens the shared centre. On phone, a sticky top app bar shows the brand and a
+  badge-bearing bell that opens the protected `/notifications` page; the bottom
+  navigation remains seven destinations and gains no notification tab.
+- User-message events are not listed or counted in the general notification
+  bell. Their unread state comes from active conversations and appears on the
+  existing Message destination. Message notification records remain available
+  to the shared Web Push pipeline so opted-in devices can alert while the page
+  is closed.
+- A one-to-one voice call uses one global modal overlay so an incoming call is
+  reachable from every authenticated route. The overlay exposes only answer,
+  reject, mute, end, and blocked-autoplay recovery. When the paid relay is
+  unavailable it shows a non-blocking warning that the call is attempting a
+  direct STUN connection; the warning must not pretend the call has already
+  failed.
 - The desktop auth journey scene keeps the car animated on the complete KL
   Sentral-Genting-Ipoh route; the car must follow the SVG curve rather than use
   an unrelated screen position. Drive the car from the route's own SVG geometry
   so browser CSS/SMIL motion settings do not detach or unexpectedly stop it.
 
-- Phone: fixed bottom bar, icon plus label, safe-area padding, active green state.
+- Phone: sticky top app bar for brand/general notifications plus a fixed bottom
+  bar for the seven destinations, icon plus label, safe-area padding, and active
+  green state.
 - Compact width: top bar may show icons without labels; interactive items still
   need accessible names and tooltips where helpful.
 - Desktop: sticky top bar with brand, icon-and-label destinations, and actions.
