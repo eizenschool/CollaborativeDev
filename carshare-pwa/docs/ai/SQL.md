@@ -16,11 +16,14 @@ Deployed SQL history: 001-026, 028, 033, 034, and 036_m3 as tracked Supabase
   migrations, plus tracked 035_m4 and 023, 027, 029, 030, 031, 032, and
   037_m2 applied through
   the Dashboard SQL Editor (see below)
-Repository SQL history: 001-040
+Repository SQL history: 001-042
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
-  033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
-  deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
-  through the Dashboard SQL Editor; 038, 039, and 040 remain undeployed)
+  033 deployed as project_notifications on 2026-08-20, and separately applied
+  to this environment on 2026-08-24 when found not actually live despite that
+  record; 034 and 035_m4 are deployed; 036_m3 is deployed as
+  m3_message_translation; 037_m2 was applied through the Dashboard SQL Editor;
+  038, 039, and 040 remain undeployed; 041 and 042 deployed and live-verified
+  2026-08-24)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -210,7 +213,51 @@ The post-deployment advisors reported no Module 4 security findings. Performance
 reported the expected unused-index notice for the new favourites table and one
 missing covering index on `ride_favourites.ride_id`. The latter is addressed by
 `040_m4_favourites_advisor_followup.sql`, authored but not deployed so the
-deployed `034` remains immutable. The next new migration starts at `041`.
+deployed `034` remains immutable.
+
+`041_m6_ride_available_notification.sql` is **written but not yet deployed**
+and must follow `033_project_notifications.sql`. FR-6.33/UC6.12: a trigger on
+`public.rides` that reuses `private.create_user_notification(...)` to notify
+every active `ride_notify_registration` matching a newly Published/Matched
+ride's destination and date, then flips the registration to `fulfilled`. A
+daily Cron job expires stale `active` registrations whose travel date has
+passed. It creates no public table or client RPC and does not change
+`user_notifications`, Push subscriptions, Edge Functions, VAPID, service
+workers, or webhooks.
+
+`042_m6_scheduled_ingestion.sql` is **deployed and live-verified, 2026-08-24**:
+`pg_net` enabled, both Vault secrets stored, and `cron.job` confirmed
+`m6-catalogue-sweep` registered and active on schedule. Adds `pg_net` and a
+weekly pg_cron job that calls `m6-ingest` with `maxDetails: 0` (Nearby Search
+only, never Place Details). This is the first use of pg_net anywhere in this
+project; every earlier cron job (`014`, `033`, `038`) calls a Postgres
+function directly.
+
+**Caught during the same verification pass, before any real damage:**
+`m6-ingest`'s FR-6.3/6.4/6.5 auto-decay step (added alongside this migration)
+used "not returned by this sweep's Nearby Search" as its absence signal, which
+is untrustworthy for two independent reasons - the API hard-caps at 20 results
+per call with no pagination while some swept states hold far more catalogued
+places, and the sweep only searches a narrow default type list that several
+catalogued categories (mosque, beach, zoo, water park, hawker stall) fall
+outside of entirely. Both failures are systematically biased against quieter,
+less-reviewed places, not against genuinely closed ones. Confirmed live that
+no place had actually been mis-demoted (`absence_counter` was 0 everywhere)
+before the cron job was unscheduled and the decay call removed from
+`supabase/functions/m6-ingest/index.ts` - `lifecycleDecay.ts` and its tests
+are untouched, kept for a future caller with a trustworthy per-place signal.
+The Edge Function needs redeploying with this fix, then the schedule
+re-enabled by re-running `042`'s closing `cron.schedule(...)` block - this SQL
+migration itself needed no changes. `docs/MODULE6-HANDOVER.md` §5/§8 has the
+full account. The next new migration starts at `043`.
+
+`033_project_notifications.sql` and `041_m6_ride_available_notification.sql`
+required deployment to this environment specifically during this same session
+- `033` had never been applied here despite being recorded as deployed on the
+shared team project, discovered when `041` failed with `schema "private" does
+not exist`. Both are now confirmed deployed and live-verified end to end
+(registration → ride publish → notification received → registration
+fulfilled).
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -237,7 +284,7 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 
 - `places`: shared read-only catalogue; lifecycle state, absence counter, and the pre-demotion state that makes restoration possible. Writes belong to the service-role ingestion pipeline only. `anon` reads a column-restricted, lifecycle-filtered subset (`029`, `030`); `authenticated` reads every column and every lifecycle state, trusting the JS layer to hide Retired/Pending-Enrichment rows.
 - `place_interest`: owner-only rows, unique per (user, place, travel date). Aggregated across users by `place_latent_demand()`, which returns counts and never identities.
-- `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration.
+- `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration. Read (in undeployed `041`) by a `public.rides` trigger that dispatches through `private.create_user_notification(...)` and flips matched rows to `fulfilled`; a daily Cron job expires past-date rows still `active`.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
 Module 4 (deployed `034`; deployed `035` adds no table; `039` changes the two
@@ -324,6 +371,8 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `038_m2_ride_usability_notifications.sql` - not deployed; private Module 2 notification triggers and deduplicated minute-Cron reminders only.
 - `039_m4_vehicle_language_filters.sql` - not deployed pending separate review; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
 - `040_m4_favourites_advisor_followup.sql` - not deployed; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
+- `041_m6_ride_available_notification.sql` - deployed and live-verified 2026-08-24; FR-6.33/UC6.12 `public.rides` trigger dispatching through `private.create_user_notification(...)` to matching `ride_notify_registration` rows, plus a daily Cron job expiring past-date active registrations.
+- `042_m6_scheduled_ingestion.sql` - deployed and live-verified 2026-08-24; weekly pg_cron + pg_net sweep calling `m6-ingest` with `maxDetails: 0`. Its FR-6.3/6.4/6.5 auto-decay counterpart in the Edge Function was found unsafe and removed the same day - see this file's `042` entry above.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

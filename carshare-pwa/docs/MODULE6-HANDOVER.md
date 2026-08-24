@@ -29,8 +29,8 @@ Run the tests: `npm test`.
 | | |
 |---|---|
 | Branch | `Module6_Trust_And_Safety`, synced with `Development` |
-| Whole suite | **628 tests / 38 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
-| Module 6's own | **441 tests / 22 files** |
+| Whole suite | **801 tests / 58 files** — all passing **only with `.env.local` parked**; see the environment table below, this is not the same claim as it used to be |
+| Module 6's own | **475 tests / 26 files** |
 | Build | passes |
 | Backend | **live**, opt-in. With no `.env.local`, everything runs on the 22-place fixture catalogue — still the default, and what the automated suite always uses regardless of `.env.local`. With `.env.local` set (`VITE_SUPABASE_*` + `VITE_DISCOVERY_DATA_SOURCE=supabase`), `/discover` reads a real Supabase catalogue of **109 recommendable places across six states** — Penang 43, Melaka 21, Kuala Lumpur 20, Selangor 19, Kedah 4, Negeri Sembilan 2 — with real photos and reviews, plus 6 rows retired and withheld. See §7 and `docs/MODULE6-API-SETUP.md` §6. |
 
@@ -216,23 +216,51 @@ FR-6.3, 6.4, 6.5, 6.12 (lifecycle) · 6.13, 6.14 (carousel, attribution) · 6.15
 (rating suppression) · 6.17 (illustration) · 6.18, 6.19 (scoring, presentation) ·
 6.20, 6.21 (affinity, preferences) · 6.22, 6.23 (weather gate) · 6.24 (seasonal) ·
 6.25, 6.26 (chain detection) · 6.27, 6.28, 6.29 (seats from Module 2) · 6.30, 6.31
-(interest, latent demand) · 6.32 (group trip initiation) · 6.34 (unmet demand) ·
-6.35 (prefill) · 6.36, 6.37 (queries for M4 and M2) · 6.38 (weather service)
+(interest, latent demand) · 6.32 (group trip initiation) · 6.33 (notification
+dispatch — see below) · 6.34 (unmet demand) · 6.35 (prefill) · 6.36, 6.37
+(queries for M4 and M2) · 6.38 (weather service)
 
 **Implemented, with a real caveat**
 
 | FRs | What works | What is still missing |
 |---|---|---|
-| 6.1, 6.2, 6.6 — catalogue sweep and ingestion | `m6-ingest` runs against Google Places and has populated 20 real places (`docs/MODULE6-API-SETUP.md` §6) | **Not scheduled.** Every run so far has been triggered manually; there is no cron and no automatic recurring sweep |
+| 6.1, 6.2, 6.6 — catalogue sweep and ingestion | `m6-ingest` runs against Google Places and is now also swept weekly by `private.run_m6_ingest_sweep()` (`042_m6_scheduled_ingestion.sql`), Nearby Search only (`maxDetails: 0`). See §8's Vault/pg_net steps | The scheduled sweep never grows the catalogue (zero Place Details spend by design); a manual call with a non-zero `maxDetails` is still how new places are discovered, per `docs/MODULE6-API-SETUP.md` §8. **Automatic Stale/Retired decay (FR-6.3/6.4/6.5) is deliberately not wired into the sweep** — see the caveat right after this table |
 | 6.7 — classification | `categoryFor` uses Google's `primaryType` first, falling back to a scan of `types` — see the trap this replaced in §10 | — |
 | 6.8, 6.9, 6.10 — description generation | `PlaceDescription.js` composes four sentences per place from data already stored: what kind of place it is, what several reviewers independently single out, its rating, and its distance. `DESCRIPTION_MIN_REVIEWS` withholds generation below three reviews (FR-6.10) and `description_is_template` (FR-6.9) keeps a hand-authored sentence rather than overwriting it | Composed at read time rather than written into `places.description`, so the stored column is still the category template. Regenerating wording therefore needs no re-ingestion, but anything reading the database directly still sees the template |
 | 6.11 — enrichment-not-at-request-time | Holds: ingestion runs offline, scoring never calls Google | — |
 
-**Not implemented, and why**
+**Automatic decay (FR-6.3/6.4/6.5) was built for the scheduled sweep, then
+deliberately disabled the same day, 2026-08-24, before it ever ran on live
+data.** It would have used "not returned by this sweep's Nearby Search" as the
+absence signal, and that signal is untrustworthy in two independent ways:
+Nearby Search (New) hard-caps at 20 results per call with no pagination while
+Penang alone holds 43 catalogued places, so a single sweep structurally cannot
+see a whole region regardless of how many times it runs; and the sweep only
+ever searches a narrow default type list
+(`restaurant`/`tourist_attraction`/`museum`/`park`), so a catalogued mosque,
+beach, zoo, water park, or hawker stall would never appear in a sweep's
+results no matter how many cycles pass. Both failures are biased against the
+quieter, less-reviewed places this module's scoring already argues should be
+favoured — the opposite of what FR-6.3/6.4/6.5 is for, and a real risk caught
+during live testing before any place was actually mis-demoted (confirmed:
+every place's `absence_counter` was still 0 when checked). `supabase/functions/m6-ingest/lifecycleDecay.ts`
+and its tests are untouched and ready for a future caller with a trustworthy
+per-place signal — a Place Details `businessStatus` check by known place ID
+has no result-count or type-filter ceiling and is the likely candidate — but
+that caller does not exist yet. The scheduled sweep today only refreshes
+`last_seen_at` for places it happens to find; it does not decay anything.
 
-| FRs | Blocked on |
-|---|---|
-| 6.33 — notification dispatch | Module 3's notification pipeline; the registration and matching side is built |
+**6.33 — notification dispatch, done 2026-08-24.** Unblocked once D020 landed
+the shared notification centre. `041_m6_ride_available_notification.sql` adds
+a trigger on `public.rides` (`private.notify_m6_ride_available()`) that fires
+on the insert/update that publishes or matches a ride, joins
+`destination_place_id → places.source_place_id → ride_notify_registration`,
+calls the shared `private.create_user_notification(...)` for every active
+registration on that place and date, and flips the registration to
+`'fulfilled'`. A daily cron job expires stale `'active'` registrations. The
+`DestinationDetail.jsx` "Tell me when there is a ride" button is now gated
+through `getAuthNavigation` (D017) instead of silently recording `undefined`
+for a signed-out visitor.
 
 **6.15 — Street View moved out of this table on 2026-08-17, and went through
 three real architectures the same day.** A static-image proxy shipped first,
@@ -367,6 +395,22 @@ two-review stall, the Stale and Retired places all exist for that reason.
    caller, that took down anonymous browsing entirely (`permission denied for
    table places`) rather than just omitting one field. `030` fixed it. See the
    trap in §10 before writing another anon column grant for this table.
+5. ~~**Two Dashboard-only steps for scheduled ingestion.**~~ **Done and
+   confirmed live, 2026-08-24.** `pg_net` enabled, both Vault secrets
+   (`m6_ingest_function_url`, `m6_ingest_secret_key`) stored, `042` deployed,
+   and `select jobname, schedule, active from cron.job where jobname =
+   'm6-catalogue-sweep'` confirmed the job registered and active. During this
+   same verification pass the automatic-decay flaw above was caught and fixed
+   before any real damage — see the FR-6.3/6.4/6.5 caveat in §5 — and the job
+   was unscheduled while that fix landed, then needs re-scheduling: re-run the
+   `do $$ ... perform cron.schedule('m6-catalogue-sweep', ...)` block at the
+   end of `042_m6_scheduled_ingestion.sql` in the SQL Editor once the fixed
+   `m6-ingest` (with decay removed) is redeployed as the live Edge Function
+   version — the SQL migration itself needs no changes, only the Edge
+   Function code does.
+6. **Tell Yee, again.** `041_m6_ride_available_notification.sql` adds a
+   trigger on `public.rides` — a second reason he should know about this
+   module's touches, alongside item 3.
 
 ---
 
@@ -586,6 +630,23 @@ either matches the narrowest role reading it, or is deliberately different
 per role — mixing "narrow grant" with "one select list for everyone" breaks
 the wider role's access, not just the narrower one's.
 
+**A flex item with auto margins does not stretch, and `overflow-x: hidden`
+hides the proof.** `.dsc-page` is a flex item of `.app-shell` (`display: flex;
+flex-direction: column`, `theme.css`) and centres itself with
+`max-width: 1280px; margin: 0 auto`. An auto margin in the flex cross axis
+disables stretch and falls back to shrink-to-fit sizing instead — harmless
+while nothing inside had a large min-content demand, but converting
+`.dsc-filters`/`.dsc-audience` to the scrolling-chip idiom (`flex-wrap: nowrap`
++ `overflow-x: auto`) gave `.dsc-page` a genuinely large one, and it grew to
+444px in a 375px viewport to fit it. `theme.css`'s
+`html, body { overflow-x: hidden }` clipped the excess silently, so
+`document.documentElement.scrollWidth === clientWidth` reported no overflow
+at all — that equality is not proof of no overflow when any ancestor clips;
+it has to be checked with an actual element's own `getBoundingClientRect().width`
+against the viewport. Fixed with an explicit `width: 100%` on `.dsc-page`
+alongside its existing `max-width`/`margin: 0 auto` - the standard fix for a
+flex item that must never grow past its container on content's say-so.
+
 ---
 
 ## 11. Starter prompt for a new session
@@ -600,7 +661,7 @@ the wider role's access, not just the narrower one's.
 > messages use `[Module6] …` and must not credit any AI as author or co-author.
 > Tests must make zero real API calls, regardless of what `.env.local` contains.
 >
-> Verify with `npm test` (533 passing, all green) and by actually opening the
+> Verify with `npm test` (801 passing, all green) and by actually opening the
 > screens, not only by the build succeeding. `.env.local` exists and points the
 > app at live Supabase; park it to see the fixture path. Read §1's environment
 > table before running anything.
@@ -630,12 +691,39 @@ The open work, in rough order of value:
    `supabase/functions/m6-streetview` using the already-authorised
    `GOOGLE_PLACES_SERVER_KEY`; no browser key needed at all, superseding two
    earlier plans that would have needed one. See
-   `docs/MODULE6-API-SETUP.md` §3.4. **FR-6.33 notification dispatch** remains
-   unimplemented and waits on Module 3.
-5. **Scheduled ingestion.** Every run so far has been triggered by hand. FR-6.1
-   describes a recurring sweep and there is no cron.
-6. **Responsive layout.** Flagged 2026-08-17, not investigated or fixed:
-   the discover screens do not adapt across screen sizes. Scope (phone vs.
-   tablet breakpoints, which components are affected - cards, the carousel,
-   the Street View embed) has not been assessed yet. Read `docs/ai/UI.md`
-   before starting, per AGENTS.md's rule for any responsive/layout work.
+   `docs/MODULE6-API-SETUP.md` §3.4.
+5. ~~**FR-6.33 notification dispatch.**~~ **Done, 2026-08-24.** Unblocked once
+   D020 (shared notification centre) landed. `041_m6_ride_available_notification.sql`
+   adds a `public.rides` trigger that dispatches through the shared
+   `private.create_user_notification(...)` and expires stale registrations
+   daily. See §5 and §8 item 6 (tell Yee).
+6. ~~**Scheduled ingestion.**~~ **Done, 2026-08-24** for the sweep itself: the
+   SQL, the region list, and the weekly pg_cron + pg_net job all exist and are
+   tested (`042_m6_scheduled_ingestion.sql`), live-deployed and confirmed
+   working (`cron.job` shows `m6-catalogue-sweep` active on the correct
+   schedule). **Automatic decay is written but deliberately not wired in** —
+   see the caveat in §5; `lifecycleDecay.ts` and its tests exist for a future,
+   trustworthy per-place signal, not this one.
+7. ~~**Responsive layout.**~~ **Done, 2026-08-24.** Flagged 2026-08-17 as
+   uninvestigated; the audit found `discover.css` already had nine mobile-first
+   media queries on the correct 700/1100 family - "does not adapt" was not an
+   accurate description. Eight real, narrow gaps were found and fixed: no
+   `env(safe-area-inset-bottom)` on `.dsc-page`; `.dsc-controls` and
+   `.dsc-audience` had no phone layout (both now use the scrolling-chip idiom
+   from `search.css`); `.dsc-card-media`'s fixed height is now `aspect-ratio:
+   16 / 10`; `.dsc-carousel-frame` was missing its 1101px step; `.dsc-detail-aside`
+   (the only call-to-action) used to sit below the carousel, description,
+   reviews and score breakdown on phone - `order: -1` reorders it first without
+   changing DOM/tab order; `.dsc-actions` buttons now go full-width on phone;
+   `.dsc-list`'s grid uses `minmax(0, 1fr)` instead of bare `1fr`. One real
+   regression was caught and fixed during this same work, not before it
+   shipped: `.dsc-page` is a flex item of `.app-shell` (`display: flex;
+   flex-direction: column`) with `margin: 0 auto` for centring, and an auto
+   cross-axis margin disables flex stretch - falling back to shrink-to-fit
+   sizing, which grew to fit `.dsc-filters`'/`.dsc-audience`'s new nowrap
+   content instead of respecting the viewport. `theme.css`'s
+   `html, body { overflow-x: hidden }` clipped it silently; `document.documentElement.scrollWidth`
+   equalling `clientWidth` is not proof of no overflow when an ancestor clips.
+   Fixed with an explicit `width: 100%` on `.dsc-page` alongside its
+   `max-width`/`margin: 0 auto`, the standard fix for a flex item that must
+   never grow past its container on content's say-so.

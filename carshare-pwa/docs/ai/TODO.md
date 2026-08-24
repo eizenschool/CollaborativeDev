@@ -64,6 +64,21 @@ easier to change now than after you have built against it.
   performance advisor to clear the favourite ride foreign-key notice. The
   unused-index notice may remain until normal favourite traffic exercises the
   new table.
+- [x] Deploy `041_m6_ride_available_notification.sql` (Module 6 becomes D020's
+  second notification producer, after Message) and
+  `042_m6_scheduled_ingestion.sql`, both live-verified 2026-08-24. Deploying
+  `041` also surfaced that `033_project_notifications.sql` had never actually
+  been applied to this environment despite being recorded as deployed - it was
+  applied first, then `041`.
+- [ ] Redeploy the `m6-ingest` Edge Function. `042`'s scheduled sweep found a
+  real bug the same day: its FR-6.3/6.4/6.5 auto-decay step used an
+  untrustworthy absence signal (Nearby Search's 20-result cap and narrow
+  default type list would falsely demote real, quieter places), caught before
+  any place was actually mis-demoted and removed from
+  `supabase/functions/m6-ingest/index.ts`. The weekly cron job was unscheduled
+  as a precaution and needs the fixed function redeployed, then
+  re-scheduled by re-running `042`'s closing `cron.schedule(...)` block - see
+  `docs/MODULE6-HANDOVER.md` §5/§8.
 
 ## BLOCKED / NEEDS TEAM CONFIRMATION
 - Long-lived Module1–Module6 branches vs gradually moving to short-lived feature branches.

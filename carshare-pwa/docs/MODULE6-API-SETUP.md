@@ -410,7 +410,21 @@ notifications rather than as a stop.
 mode and expects the Supabase secret key in the `apikey` header, not as a
 `Bearer` token. The platform JWT check is disabled for this function because
 modern `sb_secret_...` keys are not JWTs; the function's Supabase auth wrapper
-validates the key before the handler runs.
+validates the key before the handler runs. `supabase/config.toml` now records
+this explicitly (`[functions.m6-ingest] verify_jwt = false`) rather than only
+as CLI/dashboard state.
+
+**Changed 2026-08-24: a call that omits `regions` now sweeps all four ingested
+states, not just Kuala Lumpur.** Every region previously lived only as prose in
+this file's ingestion log (below); `supabase/functions/m6-ingest/regions.ts`
+makes the four-region list (`SWEEP_REGIONS`) explicit and tested, and also
+fixes a real bug in the old single hardcoded default -
+`id: "kuala-lumpur"` was paired with `state: "Selangor"`. The coordinates in
+that file are each state's own recognised hub, not a reconstruction of
+whatever undocumented circle first found these places - the exact historical
+centres for Penang/Melaka/Selangor were never recorded anywhere machine-readable.
+An explicit `regions` array in the request body still overrides this default
+exactly as before.
 
 Run one small test only after setting `GOOGLE_PLACES_SERVER_KEY`:
 
@@ -544,6 +558,38 @@ Kedah 4, Negeri Sembilan 2.
 Classes | Spice Store` classifies as `event` rather than `nature` — its Google
 listing name advertises an events venue and it carries `event_venue` to match.
 Arguable either way and left alone.
+
+### 6.1 Scheduled sweep — UC6.8/UC6.9, added 2026-08-24
+
+`042_m6_scheduled_ingestion.sql` runs `private.run_m6_ingest_sweep()` weekly
+via pg_cron, which calls `m6-ingest` through pg_net with `{"maxDetails": 0}` -
+Nearby Search only, across all four `SWEEP_REGIONS`, never Place Details. It
+exists to keep `last_seen_at` and the FR-6.3/6.4/6.5 lifecycle honest on a
+schedule (a catalogue place outside every region this sweep found gets one
+absent cycle, demoting to Stale at three and Retired at ten), not to grow the
+catalogue - growing it is still the manual, non-zero-`maxDetails` call
+documented above.
+
+This needs two Dashboard-only steps neither the migration nor this file can
+perform: the `pg_net` extension enabled (Database → Extensions, if the
+migration's own `create extension` is rejected by the hosted project's
+permissions), and two secrets stored in Vault (Project Settings → Vault) -
+`m6_ingest_function_url` (the full `.../functions/v1/m6-ingest` URL) and
+`m6_ingest_secret_key` (the same secret key used for the manual call above,
+sent the same way: as `apikey`, never as a Bearer token). See
+`docs/MODULE6-HANDOVER.md` §8 for the checklist. Until both exist, the cron job
+queues a request every week that silently fails - there is no error surfaced
+anywhere in the app; the only symptom is `last_seen_at` never advancing.
+
+**What a schedule cannot do that a human still must.** §8 below lists manual
+verification steps for expanding into a new region - checking counters moved
+only for the expected SKU, spot-checking classification against a region's
+real type mix. None of that can run unattended. The scheduled sweep is
+deliberately restricted to the cheap, already-proven case (Nearby Search on
+known regions) specifically so it never needs that judgement; it is not a
+substitute for the manual discipline §8 describes, and growing the catalogue
+into a new region still requires a human to do it by hand and check the
+result.
 
 ## 7. Terms of service — accepted risk
 

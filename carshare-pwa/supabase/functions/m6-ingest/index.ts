@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "npm:@supabase/server";
 import { classifyPlace, resolveCategory } from "./classification.ts";
 import { stateFromAddress } from "./address.ts";
+import { SWEEP_REGIONS, type Region } from "./regions.ts";
 
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1";
 const GOOGLE_FIELD_MASK = "places.id,places.types,places.location,places.photos";
@@ -18,21 +19,6 @@ const DETAILS_FIELD_MASK =
   "displayName,rating,userRatingCount,reviews,photos,types,primaryType,location," +
   "addressComponents";
 const DEFAULT_INCLUDED_TYPES = ["restaurant", "tourist_attraction", "museum", "park"];
-const DEFAULT_REGION = {
-  id: "kuala-lumpur",
-  state: "Selangor",
-  latitude: 3.139,
-  longitude: 101.6869,
-  radiusMeters: 50_000,
-};
-
-type Region = {
-  id: string;
-  state: string;
-  latitude: number;
-  longitude: number;
-  radiusMeters: number;
-};
 
 type NearbyPlace = {
   id?: string;
@@ -340,7 +326,11 @@ async function runIngestion(request: Request) {
     return json({ error: "Request body must be valid JSON" }, 400);
   }
 
-  const rawRegions = Array.isArray(input.regions) ? input.regions : [DEFAULT_REGION];
+  // A manual call that omits `regions` used to sweep only Kuala Lumpur; it now
+  // sweeps every region the catalogue actually holds. See regions.ts for why
+  // these coordinates are each state's hub rather than a reconstruction of
+  // whatever undocumented circle first found these places.
+  const rawRegions = Array.isArray(input.regions) ? input.regions : SWEEP_REGIONS;
   const regions = rawRegions.map(normalizeRegion).filter((region): region is Region => Boolean(region));
   if (!regions.length) return json({ error: "At least one valid region is required" }, 400);
 
@@ -485,6 +475,29 @@ async function runIngestion(request: Request) {
   }
 
   if (!dryRun) await upsertPlaces(baseUrl, databaseKey, upserts);
+
+  // FR-6.3/6.4/6.5 automatic decay is disabled for now, not merely unused -
+  // do not re-enable this without fixing the reason it was turned off.
+  // "Not found in this sweep's Nearby Search" is not a trustworthy absence
+  // signal: (a) Nearby Search (New) hard-caps at maxResultCount<=20 results
+  // per call with no pagination, while Penang alone already holds 43
+  // catalogued places, so a single sweep structurally cannot see the whole
+  // region regardless of how many times it runs; (b) it only ever searches
+  // `includedTypes` (default restaurant/tourist_attraction/museum/park), so a
+  // catalogued mosque, beach, zoo, water park, or hawker stall would never
+  // appear in `discovered` no matter how many times this ran, guaranteeing a
+  // false absence rather than an occasional one. Both failures are biased
+  // against exactly the quieter, less-reviewed places this module argues
+  // should be favoured, not against ones that genuinely disappeared - the
+  // opposite of what FR-6.3/6.4/6.5 is for. regions.ts's isWithinSweptRegions
+  // and lifecycleDecay.ts's applyAbsentCycle are left in place, tested, and
+  // ready for a caller with a trustworthy per-place signal (e.g. a Place
+  // Details businessStatus check by known place ID, which has no result-count
+  // or type-filter ceiling) - that caller does not exist yet.
+  const absent = 0;
+  const demoted = 0;
+  const retired = 0;
+
   return json({
     dryRun,
     refreshDetails,
@@ -495,6 +508,9 @@ async function runIngestion(request: Request) {
     detailsSpent,
     skipped,
     retained,
+    absent,
+    demoted,
+    retired,
     upserted: dryRun ? 0 : upserts.length,
     failures,
   });

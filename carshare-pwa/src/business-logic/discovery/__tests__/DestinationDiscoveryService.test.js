@@ -234,6 +234,18 @@ describe('FR-6.33 / UC6.6 A1 - notification registration', () => {
 
     expect(cancelled.status).toBe('cancelled');
   });
+
+  it('requires a user, a place and a window, matching recordInterest rather than reaching the adapter', async () => {
+    // A signed-out visitor's user?.id is undefined; without this guard the
+    // fixture would silently record it and the live adapter would throw on
+    // ride_notify_registration's user_id foreign key.
+    expect((await DestinationDiscoveryService.registerForNotification(null, 'p_cameron', RIDE_DATE)))
+      .toEqual({ registration: null, alreadyExisted: false });
+    expect((await DestinationDiscoveryService.registerForNotification('u_demo_1', null, RIDE_DATE)))
+      .toEqual({ registration: null, alreadyExisted: false });
+    expect((await DestinationDiscoveryService.registerForNotification('u_demo_1', 'p_cameron', null)))
+      .toEqual({ registration: null, alreadyExisted: false });
+  });
 });
 
 describe('UC6.4 - stated preferences', () => {

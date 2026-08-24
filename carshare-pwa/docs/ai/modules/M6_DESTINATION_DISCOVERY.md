@@ -88,7 +88,7 @@ it runs entirely offline on a 22-place fixture catalogue: recommendations, the
 two-section presentation, destination detail with reviews and the score
 breakdown, first-use preferences, interest recording, notification
 registration, the host-facing unmet demand view, and the weather gate. This is
-still the default and what the automated suite always exercises - 628 tests
+still the default and what the automated suite always exercises - 801 tests
 pass and make zero external calls, regardless of what `.env.local` contains.
 
 With `VITE_DISCOVERY_DATA_SOURCE=supabase` set, the same screens run against a
@@ -98,11 +98,24 @@ reviews, and a category assigned from Google's own `primaryType` rather than
 scanning an unordered type bag. `docs/MODULE6-API-SETUP.md` §6 has the
 ingestion log.
 
-Not built yet: a *scheduled* ingestion cycle (ingestion today is triggered
-manually, not on a cron - UC6.8/UC6.9's automation), notification dispatch
-(UC6.12 — needs Module 3), and the implementation of the prefill handoff into
-Modules 2 and 4 (FR-6.35 — its shared contract is accepted, but the form
-wiring remains).
+2026-08-24: all three of this paragraph's former gaps are closed, with one
+honest caveat on the first. **Scheduled ingestion** (UC6.8/6.9) -
+`042_m6_scheduled_ingestion.sql` adds a weekly pg_cron + pg_net job calling
+`m6-ingest` with `maxDetails: 0` (Nearby Search only, so a scheduled run never
+spends Place Details). It still needs two Dashboard-only steps (`pg_net`
+enabled, two Vault secrets stored) before the schedule can actually reach the
+function - see `docs/MODULE6-HANDOVER.md` §8. FR-6.3/6.4/6.5's automatic
+Stale/Retired decay was built for this sweep but is **not wired in** - Nearby
+Search (New) hard-caps at 20 results per call with no pagination while some
+swept states hold far more catalogued places, and only searches a narrow
+default type list, so "not found this cycle" would falsely demote real,
+quieter places rather than genuinely closed ones. `lifecycleDecay.ts` and its
+tests are ready for a caller with a trustworthy per-place signal; none exists
+yet. **Notification dispatch** (FR-6.33/UC6.12) - `041_m6_ride_available_notification.sql`
+triggers on `public.rides` and dispatches through Module 3's shared
+`private.create_user_notification(...)` (D020); the registration and matching
+side was already built. **The FR-6.35 prefill handoff** into Modules 2 and 4 is
+wired - Module 4's Search URL and Module 2's publish form both consume it.
 
 FR-6.15 Street View is done and deployed as an **interactive embed**, not a
 static image. `supabase/functions/m6-streetview` checks coverage only (JSON,
@@ -147,7 +160,11 @@ under test).
 Schema: `database/sql/024_m6_destination_discovery.sql` (deployed as
 `m6_destination_discovery`), `027_m6_place_reviews.sql` (reviews column),
 `029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql` (anon
-read, confirmed working). Live catalogue is populated —
+read, confirmed working), `041_m6_ride_available_notification.sql` (FR-6.33
+dispatch trigger + registration expiry cron), `042_m6_scheduled_ingestion.sql`
+(weekly pg_cron + pg_net sweep — written and tested, awaiting the two
+Dashboard-only Vault/pg_net steps in `docs/MODULE6-HANDOVER.md` §8 before it
+is actually live). Live catalogue is populated —
 see `docs/MODULE6-API-SETUP.md` §6 for what has actually been ingested.
 API: `docs/MODULE6-API-SETUP.md`.
 
@@ -210,4 +227,4 @@ completion rather than breaking it.
 Server-side API key provisioning (the two existing keys are website-restricted
 browser keys and cannot be used from an Edge Function); which SKUs are enabled;
 travel window as a single date vs a range; whether the weather gate uses a free
-no-key service; Module 3 notification dispatch contract.
+no-key service.

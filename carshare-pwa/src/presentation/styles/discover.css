@@ -8,9 +8,30 @@
    reason for a module-local palette is documented. */
 
 .dsc-page {
-  padding: 16px;
+  /* theme.css reserves a flat 64px under .app-shell for the fixed phone tab
+     bar, but the bar itself is calc(64px + env(safe-area-inset-bottom)) - the
+     one module page with no bottom safe-area compensation of its own let
+     content sit under the home indicator on a notched phone. Matches
+     search.css's calc(96px + env(safe-area-inset-bottom)) page padding. */
+  padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
   max-width: 1280px;
+  /* .app-shell is display:flex; flex-direction:column (theme.css), and
+     .dsc-page is a direct flex item with margin-left/right: auto for
+     centring under max-width. A flex item with an auto cross-axis margin
+     does not stretch - it falls back to shrink-to-fit sizing instead, which
+     can grow as large as its content's min-content width. That was latent
+     and harmless while .dsc-filters/.dsc-audience wrapped (min-content was
+     just their widest single chip); switching those to a scrolling nowrap
+     row gave this page a genuinely large min-content contributor and
+     exposed it - .dsc-page grew wider than the viewport, silently clipped
+     rather than shown as a scrollbar by theme.css's
+     html, body { overflow-x: hidden }. An explicit width, the standard fix
+     for a flex item that must never grow past its own container on
+     content's say-so, restores ordinary "100% up to max-width" sizing. */
+  width: 100%;
+  min-width: 0;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 @media (min-width: 701px) {
@@ -107,12 +128,24 @@
   font-size: 14px;
 }
 
+/* Phone-first: a column stacks the date field, the filter chips and the
+   media toggle onto their own rows instead of the two-column squeeze that
+   used to result from flex-wrap alone (the chips wrapped into a cramped
+   column beside the date field, and the toggle was left orphaned on its own
+   line regardless). align-items: flex-start deliberately does not stretch
+   .dsc-field to the container width - UnmetDemandView.jsx reuses
+   .dsc-controls with only the date field inside it, and that lone field
+   should keep its own natural width rather than always filling the row. */
 .dsc-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 16px;
-  align-items: flex-end;
   margin-bottom: 24px;
+}
+
+@media (min-width: 701px) {
+  .dsc-controls { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
 }
 
 .dsc-field {
@@ -135,10 +168,25 @@
   min-height: 44px;
 }
 
+/* The sanctioned scrolling-chip idiom (search.css's
+   .search-recommendation-categories): nowrap + overflow-x + flex: 0 0 auto on
+   each chip, rather than wrapping five chips into a column narrower than any
+   one of them. align-self: stretch so the row spans .dsc-controls's full
+   width - the flex column above deliberately does not stretch children by
+   default, since the lone-field case must not be forced full width, but the
+   chip strip needs a bounded width for its own overflow to make sense. */
 .dsc-filters {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 8px;
+  align-self: stretch;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 701px) {
+  .dsc-filters { flex-wrap: wrap; overflow-x: visible; align-self: auto; padding-bottom: 0; }
 }
 
 .dsc-filter {
@@ -150,6 +198,7 @@
   font-size: 14px;
   font-family: inherit;
   text-transform: capitalize;
+  flex: 0 0 auto;
   cursor: pointer;
   min-height: 44px;
 }
@@ -198,11 +247,14 @@
 .dsc-list {
   display: grid;
   gap: 16px;
-  grid-template-columns: 1fr;
+  /* minmax(0, 1fr), not bare 1fr: cards contain white-space: nowrap
+     descendants (.dsc-chip, .dsc-count), and an unbroken chip can otherwise
+     push a bare 1fr track wider than its even share of the grid. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
-@media (min-width: 701px) { .dsc-list { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1101px) { .dsc-list { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 701px) { .dsc-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1101px) { .dsc-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 .dsc-empty,
 .dsc-notice,
@@ -351,7 +403,21 @@
 /* The always-visible global toggle in .dsc-controls. Built on .dsc-filter's
    chip so it reads as part of the same control row rather than a separate
    settings widget. */
-.dsc-media-toggle { display: inline-flex; align-items: center; gap: 6px; }
+/* align-self: stretch, matching .dsc-filters above - on the phone column
+   layout this gives the toggle its own full-width row instead of the
+   orphaned content-width pill it used to be left as beside a wrapped chip
+   column. justify-content centres its icon+label within that width. */
+.dsc-media-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: stretch;
+}
+
+@media (min-width: 701px) {
+  .dsc-media-toggle { align-self: auto; justify-content: flex-start; }
+}
 
 /* --- card --------------------------------------------------------------- */
 
@@ -377,7 +443,12 @@
 
 .dsc-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 
-.dsc-card-media { display: block; position: relative; height: 140px; }
+/* aspect-ratio rather than a flat height - the card is ~343px wide on a
+   phone-width grid and ~400px in the 3-column desktop grid, so a fixed
+   140px let the image ratio drift from 2.45:1 to 2.9:1 across breakpoints,
+   the one image slot in this file that never adapted. display: block is
+   still required for the same <button>-interior reason as .dsc-hero-media. */
+.dsc-card-media { display: block; position: relative; aspect-ratio: 16 / 10; }
 
 .dsc-card-body {
   padding: 16px;
@@ -486,8 +557,33 @@
 
 .dsc-actions {
   display: flex;
-  flex-wrap: wrap;
+  /* Phone-first, matching the house pattern repeated in theme.css, ride.css
+     and search.css for the same shape: a call-to-action row stacks and its
+     buttons go full-width on a narrow screen rather than wrapping into
+     content-width buttons side by side. */
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
+}
+
+@media (min-width: 701px) {
+  .dsc-actions { flex-direction: row; flex-wrap: wrap; align-items: normal; }
+}
+
+/* Scoped to .dsc-actions's own children rather than every .dsc-btn - this
+   class is also used standalone (PreferencePrompt, DemoControls, the "no
+   longer available" fallback), where stretching to full width was never
+   part of the ask. */
+.dsc-actions > .dsc-btn { width: 100%; }
+@media (min-width: 701px) { .dsc-actions > .dsc-btn { width: auto; } }
+
+/* Inside the detail aside, .dsc-actions and .dsc-notice sit in a plain
+   .dsc-panel with no flex gap of their own (unlike .dsc-card-body's cards,
+   where the 8px column gap already separates them) - this replaces what used
+   to be an inline marginTop on both elements. */
+.dsc-panel .dsc-availability + .dsc-actions,
+.dsc-panel .dsc-actions + .dsc-notice {
+  margin-top: 16px;
 }
 
 .dsc-btn {
@@ -585,15 +681,32 @@
 
 .dsc-detail-layout { display: grid; gap: 24px; }
 
+/* .dsc-detail-aside is the only container holding a call to action ("Find a
+   ride" / "I will drive" / "Tell me when there is a ride") and it is second
+   in the JSX, so on a single-column phone layout it used to render below the
+   carousel, the full description, every review and the score breakdown -
+   UI.md L79's "keep the primary action easy to reach" reachable only after a
+   long scroll. `order` is a grid auto-placement property, not a DOM change:
+   assistive tech and keyboard tab order still follow the markup, only the
+   painted position moves, which is what actually fixes the "easy to reach"
+   problem without turning the aside into a new fixed-position bar that would
+   also need to carry its "N rides going" status line, not just the buttons. */
+.dsc-detail-aside { order: -1; }
+
 @media (min-width: 1101px) {
   .dsc-detail-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
-  .dsc-detail-aside { position: sticky; top: 88px; }
+  .dsc-detail-aside { position: sticky; top: 88px; order: 0; }
 }
 
 .dsc-carousel { position: relative; border-radius: var(--radius-card); overflow: hidden; }
 .dsc-carousel-frame { position: relative; height: 220px; }
 
 @media (min-width: 701px) { .dsc-carousel-frame { height: 300px; } }
+/* Missing before - the frame stayed 300px inside a ~780px-wide desktop detail
+   column (1.6fr of .dsc-detail-layout's grid), a 2.6:1 letterbox for the
+   primary imagery. Steps once more here, matching the hero's own two-step
+   ladder rather than stopping after one. */
+@media (min-width: 1101px) { .dsc-carousel-frame { height: 380px; } }
 
 .dsc-carousel-nav {
   position: absolute;
@@ -700,11 +813,22 @@
 
 /* --- audience switch ---------------------------------------------------- */
 
+/* The two tab labels ("Where should I go?" / "Where do people want to go?")
+   are long enough that wrapping into a two-line-tall bar was the default on
+   a phone. The same nowrap + overflow-x idiom as .dsc-filters, rather than
+   letting either label wrap internally. */
 .dsc-audience {
   display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 8px;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 701px) {
+  .dsc-audience { overflow-x: visible; }
 }
 
 .dsc-audience-tab {
@@ -720,6 +844,8 @@
   align-items: center;
   gap: 8px;
   min-height: 44px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .dsc-audience-tab.active {

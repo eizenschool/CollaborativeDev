@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
@@ -202,11 +203,22 @@ export default function DestinationDetail() {
   const described = buildPlaceDescription(place, { distanceKm });
 
   const notifyMe = async () => {
-    const { alreadyExisted } = await DestinationDiscoveryService
-      .registerForNotification(user?.id, place.id, travelDate);
-    setNotice(alreadyExisted
-      ? 'You are already registered for this destination.'
-      : 'We will tell you when a ride to this destination is published.');
+    if (!user) {
+      const target = getAuthNavigation(
+        null, `/discover/${place.id}`, 'Sign in to be notified when a ride is published.'
+      );
+      navigate(target.to, { state: target.state });
+      return;
+    }
+    try {
+      const { alreadyExisted } = await DestinationDiscoveryService
+        .registerForNotification(user.id, place.id, travelDate);
+      setNotice(alreadyExisted
+        ? 'You are already registered for this destination.'
+        : 'We will tell you when a ride to this destination is published.');
+    } catch {
+      setNotice('Could not register right now. Please try again.');
+    }
   };
 
   return (
@@ -216,7 +228,7 @@ export default function DestinationDetail() {
       </button>
 
       <div className="dsc-detail-layout">
-        <div>
+        <div className="dsc-detail-main">
           <Carousel place={place} />
 
           <h1>{place.name}</h1>
@@ -292,7 +304,7 @@ export default function DestinationDetail() {
                     {' · '}<strong>{seatsLeft}</strong> seat{seatsLeft === 1 ? '' : 's'} left
                   </span>
                 </div>
-                <div className="dsc-actions" style={{ marginTop: 16 }}>
+                <div className="dsc-actions">
                   <button
                     className="dsc-btn dsc-btn-primary"
                     type="button"
@@ -314,7 +326,7 @@ export default function DestinationDetail() {
                       : 'Nobody is driving here yet'}
                   </span>
                 </div>
-                <div className="dsc-actions" style={{ marginTop: 16 }}>
+                <div className="dsc-actions">
                   <button
                     className="dsc-btn dsc-btn-primary"
                     type="button"
@@ -331,7 +343,7 @@ export default function DestinationDetail() {
               </>
             )}
 
-            {notice && <p className="dsc-notice" style={{ marginTop: 16 }}>{notice}</p>}
+            {notice && <p className="dsc-notice">{notice}</p>}
           </section>
         </aside>
       </div>

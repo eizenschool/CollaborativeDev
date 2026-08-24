@@ -249,6 +249,7 @@ export const DestinationDiscoveryService = {
 
   /** FR-6.33 - intent, the strong signal. */
   async registerForNotification(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return { registration: null, alreadyExisted: false };
     return discoveryDb.registerForNotification(userId, placeId, travelDate);
   },
 
