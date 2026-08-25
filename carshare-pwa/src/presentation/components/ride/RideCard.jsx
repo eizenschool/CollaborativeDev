@@ -49,6 +49,7 @@ export default function RideCard({ ride, statusChip, roleLabel, journeyState, co
             <span className="pin pin-pickup"><IconMapPin size={13} /></span>
             <span className="ride-route-text">{ride.pickup}</span>
           </div>
+          <span className="ride-route-connector" aria-hidden="true" />
           <div className="ride-route-line">
             <span className="pin pin-destination"><IconMapPin size={13} /></span>
             <span className="ride-route-text muted">{ride.destination}</span>

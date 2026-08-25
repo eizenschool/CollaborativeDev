@@ -37,7 +37,7 @@ describe('Module 2 waypoint and Ride photo contracts', () => {
     const [sql, uploadReturnSql, edge] = await Promise.all([
       readFile(migration, 'utf8'), readFile(uploadReturnMigration, 'utf8'), readFile(edgeFunction, 'utf8'),
     ]);
-    expect(sql).toContain("'ride-pickup-photos',\n  false,\n  2097152");
+    expect(sql).toMatch(/'ride-pickup-photos',\r?\n\s+false,\r?\n\s+2097152/);
     expect(sql).toContain('create or replace function public.set_ride_pickup_photo');
     expect(sql).toContain('cardinality(p_ride_ids) > 100');
     expect(sql).toContain("r.status = 'Published' and p.status = 'active'");
@@ -64,7 +64,7 @@ describe('Module 2 waypoint and Ride photo contracts', () => {
     expect(publish).toContain('setRouteQuote(null)');
     expect(workspace).toContain('<DestinationRidePhoto');
     expect(workspace).toContain('className="pin pin-destination"');
-    expect(workspace).not.toContain('className="ride-route-connector"');
+    expect(workspace).toContain('className="ride-route-connector" aria-hidden="true"');
     expect(search).toContain('<DestinationRidePhoto');
     expect(workspace).not.toContain('PickupPhotoPreview');
     expect(search).not.toContain('PickupPhotoPreview');

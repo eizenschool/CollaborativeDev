@@ -119,6 +119,13 @@ html:has(.trip-mode-page), body:has(.trip-mode-page) { overflow-x: clip; }
 .pin { display: inline-flex; flex-shrink: 0; }
 .pin-pickup { color: var(--teal); }
 .pin-destination { color: var(--danger); }
+.ride-route-connector {
+  width: 1px;
+  height: 12px;
+  display: block;
+  margin: 2px 0 2px 6px;
+  background: var(--border);
+}
 
 .scale-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; flex-shrink: 0; }
 .scale-urban { background: #f3f4f6; color: var(--muted); }
@@ -2971,6 +2978,7 @@ button.ride-card {
 .ride-card.has-destination-photo .ride-host-name,
 .ride-card.has-destination-photo .ride-host-rating { color: #fff; }
 .ride-card.has-destination-photo .ride-meta-row { border-color: rgba(255, 255, 255, .25); }
+.ride-card.has-destination-photo .ride-route-connector { background: rgba(255, 255, 255, .58); }
 .ride-card.has-destination-photo .contribution-tag {
   padding: 5px 8px;
   border-radius: 8px;

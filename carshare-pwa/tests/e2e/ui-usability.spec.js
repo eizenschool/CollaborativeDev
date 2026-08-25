@@ -287,7 +287,22 @@ test('Ride cards use lazy destination photos while pickup photos stay on Publish
   await expect(workspacePhotoCard.locator('.ride-card-primary-action')).toHaveCount(1);
   await expect(workspacePhotoCard.locator('.pin-pickup')).toBeVisible();
   await expect(workspacePhotoCard.locator('.pin-destination')).toBeVisible();
-  await expect(workspacePhotoCard.locator('.ride-route-connector')).toHaveCount(0);
+  await expect(workspacePhotoCard.locator('.ride-route-connector')).toBeVisible();
+  const routeAxisAligned = await workspacePhotoCard.evaluate((card) => {
+    const pickup = card.querySelector('.pin-pickup')?.getBoundingClientRect();
+    const connector = card.querySelector('.ride-route-connector')?.getBoundingClientRect();
+    const destination = card.querySelector('.pin-destination')?.getBoundingClientRect();
+    if (!pickup || !connector || !destination) return false;
+    const pickupX = pickup.left + pickup.width / 2;
+    const connectorX = connector.left + connector.width / 2;
+    const destinationX = destination.left + destination.width / 2;
+    const connectorY = connector.top + connector.height / 2;
+    return Math.abs(pickupX - connectorX) <= 1
+      && Math.abs(destinationX - connectorX) <= 1
+      && connectorY > pickup.top + pickup.height / 2
+      && connectorY < destination.top + destination.height / 2;
+  });
+  expect(routeAxisAligned).toBe(true);
   await expect(workspacePhotoCard.locator('.destination-photo-credit')).toContainText('Google Maps');
 
   await page.evaluate((storageKey) => {
