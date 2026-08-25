@@ -4,7 +4,7 @@
 // hero card + section rail) plus a content panel, matching the approved UX
 // reference. All five screens are Module 1 data about the same user, so this
 // is one read/write surface instead of five.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ProfileService } from '../../business-logic/ProfileService.js';
@@ -23,6 +23,8 @@ import {
 } from './icons.jsx';
 // Module 5 owns its own entry card, so this file only has to place it.
 import ImpactEntryCard from './trip/ImpactEntryCard.jsx';
+import AdaptiveDialog from './ui/AdaptiveDialog.jsx';
+import { Button } from './ui/Button.jsx';
 
 const REPUTATION_THRESHOLD = 60; // minimum reputation score required to publish rides (admin-configurable)
 
@@ -86,6 +88,7 @@ export default function MyProfile() {
 
   return (
     <div className="profile-page">
+      <h1 className="sr-only">My profile</h1>
       <aside className="profile-sidebar">
         <div className="hero-card">
           <div className="hero-card-avatar-wrap">
@@ -95,8 +98,8 @@ export default function MyProfile() {
             >
               {!user.profilePhotoUrl && initials}
             </div>
-            <button className="hero-card-camera" onClick={() => setPanel('info')} title="Change photo" type="button">
-              <IconCamera size={13} />
+            <button className="hero-card-camera" onClick={() => setPanel('info')} title="Change photo" aria-label="Change profile photo" type="button">
+              <IconCamera size={13} aria-hidden="true" />
             </button>
           </div>
           <div className="hero-card-name">{user.fullName}</div>
@@ -114,10 +117,10 @@ export default function MyProfile() {
           )}
         </div>
 
-        <nav className="rail-card">
+        <nav className="rail-card" aria-label="Profile sections">
           {RAIL_ITEMS.map(({ id, label, Icon }) => (
-            <button key={id} className={'rail-item' + (panel === id ? ' active' : '')} onClick={() => setPanel(id)}>
-              <span className="rail-icon"><Icon size={14} /></span> {label}
+            <button key={id} className={'rail-item' + (panel === id ? ' active' : '')} onClick={() => setPanel(id)} aria-current={panel === id ? 'page' : undefined}>
+              <span className="rail-icon"><Icon size={14} aria-hidden="true" /></span> {label}
             </button>
           ))}
         </nav>
@@ -759,6 +762,7 @@ function AccountSettingsPanel({ user }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const deactivateTriggerRef = useRef(null);
 
   function openConfirm() {
     setError('');
@@ -787,32 +791,31 @@ function AccountSettingsPanel({ user }) {
             <p className="card-title" style={{ marginBottom: 4 }}>Deactivate Account</p>
             <p className="card-subtitle" style={{ marginBottom: 0 }}>Temporarily hides your profile and pauses ride hosting. You can reactivate by logging back in.</p>
           </div>
-          <button className="btn-outline btn-outline-warning" onClick={openConfirm}>Deactivate</button>
+          <button ref={deactivateTriggerRef} className="btn-outline btn-outline-warning" onClick={openConfirm}>Deactivate</button>
         </div>
       </div>
 
       <p className="settings-help">Need help? Contact <a href="mailto:support@letstumpang.my">support@letstumpang.my</a></p>
 
-      {confirm && (
-        <div className="modal-backdrop" onClick={() => !busy && setConfirm(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-icon"><IconAlertTriangle size={20} /></div>
-            <p className="modal-title">Deactivate your account?</p>
-            <p className="modal-text">Your profile will be hidden and ride hosting paused until you log back in.</p>
-            {error && <div className="alert alert-error" style={{ textAlign: 'left' }}>{error}</div>}
-            <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setConfirm(null)} disabled={busy}>Go Back</button>
-              <button
-                className="btn-danger-solid"
-                onClick={handleDeactivate}
-                disabled={busy}
-              >
-                {busy ? 'Please wait…' : 'Deactivate'}
-              </button>
-            </div>
-          </div>
+      <AdaptiveDialog
+        open={confirm}
+        onClose={() => { if (!busy) setConfirm(false); }}
+        title="Deactivate your account?"
+        description="This is reversible the next time you sign in."
+        triggerRef={deactivateTriggerRef}
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => setConfirm(false)} disabled={busy}>Go back</Button>
+            <Button variant="danger" onClick={handleDeactivate} loading={busy} loadingLabel="Deactivating">Deactivate</Button>
+          </>
+        )}
+      >
+        <div className="profile-deactivate-warning">
+          <IconAlertTriangle size={22} aria-hidden="true" />
+          <p>Your profile will be hidden and ride hosting paused until you sign in again.</p>
         </div>
-      )}
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
+      </AdaptiveDialog>
     </>
   );
 }

@@ -22,6 +22,10 @@ Module 6 trust/verification outcomes; Module 5/other trip data for some impact m
 
 ## Current Status
 `Development` already contains a substantial Module 1 prototype and services. Do not restart from scratch.
+Auth and Profile now consume the shared semantic UI runtime: visible labels,
+inline live feedback, pending submission states, accessible account actions,
+adaptive deactivation confirmation, and the phone Sign out path are preserved
+without adding profile fields or changing authentication/service contracts.
 Module 1 is connected to the shared Supabase project. The deployed history is
 `database/sql/001-012`; security corrections for Module 1 are in `008-009`.
 Public-safe profile fields are separate from owner-only phone/emergency data,

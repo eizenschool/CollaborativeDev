@@ -21,6 +21,9 @@ Module 2 authoritative lifecycle/ride data; Module 1 Host Impact.
 Module 5 UI is in `Development` and its logic layer now reads Module 2's real data
 through `RideService` / `RideRequestService`, so FR-5.1/5.2/5.3 (history,
 lifecycle filtering, trip detail) work against Supabase as well as the mock.
+Trip detail now reflows from a single column to a purposeful wider grid and
+uses shared route loading and status presentation. History, carbon, impact,
+route-replay fallback, and participant-access rules remain unchanged.
 
 Resolved:
 - Authoritative trip source is Module 2, reached through its services rather

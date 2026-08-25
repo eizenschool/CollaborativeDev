@@ -188,6 +188,8 @@ export default function ChatWindow({
   const messageBottomRef = useRef(null);
   const photoPreviewRef = useRef(null);
   const videoPreviewRef = useRef(null);
+  const photoDialogRef = useRef(null);
+  const videoDialogRef = useRef(null);
   const captureButtonRef = useRef(null);
   const captureMenuRef = useRef(null);
   const captureFirstActionRef = useRef(null);
@@ -279,6 +281,9 @@ export default function ChatWindow({
     onRecordingReady: (file) => addFiles([file]),
     onError: (error) => setErrorMessage(error.message || 'Unable to record video.'),
   });
+
+  const isPhotoBusy = Boolean(isPhotoStarting || isPhotoCapturing || photoPreviewStream);
+  const isVideoBusy = Boolean(isVideoStarting || isVideoRecording || isVideoProcessing);
 
   const resetComposer = useCallback(() => {
     setMediaEntries((current) => {
@@ -438,6 +443,36 @@ export default function ChatWindow({
     document.addEventListener('keydown', handleVideoKeyDown);
     return () => document.removeEventListener('keydown', handleVideoKeyDown);
   }, [cancelPhotoCapture, cancelVideoRecording, isPhotoCapturing, isPhotoStarting, isVideoProcessing, isVideoRecording, isVideoStarting]);
+
+  useEffect(() => {
+    if (!isPhotoBusy && !isVideoBusy) return undefined;
+    const dialog = isPhotoBusy ? photoDialogRef.current : videoDialogRef.current;
+    const frame = window.requestAnimationFrame(() => dialog?.querySelector('button:not(:disabled)')?.focus());
+    function handleTab(event) {
+      if (event.key !== 'Tab') return;
+      const buttons = [...(dialog?.querySelectorAll('button:not(:disabled)') || [])];
+      if (!buttons.length) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener('keydown', handleTab);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handleTab);
+      captureButtonRef.current?.focus();
+    };
+  }, [isPhotoBusy, isVideoBusy]);
 
   useEffect(() => {
     if (highlightedMessageId) {
@@ -684,8 +719,6 @@ export default function ChatWindow({
   const hasNormalDraft = Boolean(text.trim() || mediaEntries.length || location);
   const hasDraft = Boolean(hasNormalDraft || voiceRecording);
   const isVoiceBusy = isVoiceStarting || isVoiceRecording || isVoiceProcessing;
-  const isPhotoBusy = isPhotoStarting || isPhotoCapturing || photoPreviewStream;
-  const isVideoBusy = isVideoStarting || isVideoRecording || isVideoProcessing;
   const memberDescription = conversation.type === 'group' ? `${conversation.members.length} members` : 'Private ride chat';
 
   async function beginVoiceCall() {
@@ -864,7 +897,7 @@ export default function ChatWindow({
 
       {isPhotoBusy && (
         <div className="message-video-recorder-backdrop" role="presentation">
-          <section className="message-video-recorder" role="dialog" aria-modal="true" aria-labelledby="photo-capture-title">
+          <section ref={photoDialogRef} className="message-video-recorder" role="dialog" aria-modal="true" aria-labelledby="photo-capture-title" tabIndex={-1}>
             <div className="message-video-recorder-header">
               <div>
                 <strong id="photo-capture-title">Take photo</strong>
@@ -895,7 +928,7 @@ export default function ChatWindow({
 
       {isVideoBusy && (
         <div className="message-video-recorder-backdrop" role="presentation">
-          <section className="message-video-recorder" role="dialog" aria-modal="true" aria-labelledby="video-recorder-title">
+          <section ref={videoDialogRef} className="message-video-recorder" role="dialog" aria-modal="true" aria-labelledby="video-recorder-title" tabIndex={-1}>
             <div className="message-video-recorder-header">
               <div>
                 <strong id="video-recorder-title">Record video</strong>

@@ -67,6 +67,16 @@ export default function PublishRide() {
   const [draftLoading, setDraftLoading] = useState(Boolean(draftRideId));
   const [draftLoadError, setDraftLoadError] = useState('');
   const locationRequested = useRef(false);
+  const stepHeadingRef = useRef(null);
+  const errorRef = useRef(null);
+
+  useEffect(() => {
+    stepHeadingRef.current?.focus({ preventScroll: true });
+  }, [step]);
+
+  useEffect(() => {
+    if (error) errorRef.current?.focus({ preventScroll: true });
+  }, [error]);
 
   useEffect(() => {
     if (!draftRideId) return undefined;
@@ -292,10 +302,10 @@ export default function PublishRide() {
 
       <div className="publish-right">
         <p className="step-eyebrow">Step {step + 1} of {STEPS.length}</p>
-        <h2 className="step-title">{STEPS[step]}</h2>
+        <h2 ref={stepHeadingRef} className="step-title" tabIndex={-1}>{STEPS[step]}</h2>
         <p className="step-description">{STEP_DESCRIPTIONS[step]}</p>
 
-        {error && <div className="alert alert-error publish-error" role="alert"><span>{error}</span>{/In Transit/i.test(error) && <button type="button" className="btn-link" onClick={() => navigate('/ride')}>Open My rides to complete it</button>}</div>}
+        {error && <div ref={errorRef} className="alert alert-error publish-error" role="alert" tabIndex={-1}><span>{error}</span>{/In Transit/i.test(error) && <button type="button" className="btn-link" onClick={() => navigate('/ride')}>Open My rides to complete it</button>}</div>}
 
         {step === 0 && <RouteStep form={form} patch={patch} previewLocation={previewLocation} previewStatus={previewStatus} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}

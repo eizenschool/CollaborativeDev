@@ -7,7 +7,9 @@ import { RideRequestService } from '../../../business-logic/RideRequestService.j
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
 import { compareJourneyStates, formatJourneyCountdown, getRideJourneyState, journeyGroup } from '../../../business-logic/rideJourneyState.js';
 import RideCard from './RideCard.jsx';
-import { IconPlus, IconSearch, IconTrash, IconUsers, IconX } from '../icons.jsx';
+import { IconPlus, IconSearch, IconTrash, IconUsers } from '../icons.jsx';
+import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
+import { Button } from '../ui/Button.jsx';
 import '../../styles/ride.css';
 
 const HISTORY_PHASES = new Set(['completed', 'terminal']);
@@ -126,13 +128,26 @@ export default function RideHub() {
         {error && <div className="alert alert-error ride-management-error" role="alert"><span>{error}</span><button type="button" className="btn-link" onClick={loadWorkspace}>Retry</button></div>}
         {loading && <div className="ride-page-loading compact" role="status">Loading your ride workspace…</div>}
         {!loading && !error && workspace && <>
-          {nextItem ? <section className={`ride-next-action urgency-${nextItem.state.urgency}`} aria-labelledby="ride-next-action-title"><div><p className="eyebrow">YOUR NEXT STEP · {nextItem.state.role.toUpperCase()}</p><h2 id="ride-next-action-title">{nextItem.state.title}</h2><p>{nextItem.state.description}</p>{nextItem.state.countdownAt && <strong>{formatJourneyCountdown(nextItem.state.countdownAt, clock, nextItem.state.countdownKind)}</strong>}</div><button type="button" className="btn-primary" onClick={() => openItem(nextItem)}>{nextItem.state.nextAction.label}</button></section>
+          {nextItem ? <section className={`ride-next-action urgency-${nextItem.state.urgency}`} aria-labelledby="ride-next-action-title"><div><p className="eyebrow">YOUR NEXT STEP</p><h2 id="ride-next-action-title">{nextItem.state.title}</h2><p>{nextItem.state.description}</p><div className="ride-next-action-meta"><span><small>Your role</small><b>{nextItem.state.role === 'driver' ? 'Driver' : 'Passenger'}</b></span><span><small>Timing</small><b>{nextItem.state.countdownAt ? formatJourneyCountdown(nextItem.state.countdownAt, clock, nextItem.state.countdownKind) : 'When you are ready'}</b></span><span><small>Responsible</small><b>You</b></span></div></div><button type="button" className="btn-primary" onClick={() => openItem(nextItem)}>{nextItem.state.nextAction.label}</button></section>
             : <section className="ride-empty-state compact"><IconSearch size={24} /><h3>No rides yet</h3><p>Publish a ride or use Search to request your first journey.</p><button className="btn-secondary" type="button" onClick={() => navigate('/search')}>Find rides</button></section>}
           {items.length > 0 && <div className="ride-inbox-groups"><WorkspaceGroup groupKey="attention" eyebrow="Next actions" title="Needs attention" items={groupedItems.attention} now={clock} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="upcoming" eyebrow="Upcoming" title="Scheduled rides" items={groupedItems.upcoming} now={clock} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="drafts" eyebrow="Drafts" title="Finish publishing" items={groupedItems.drafts} now={clock} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="history" eyebrow="History" title="Past rides and requests" items={groupedItems.history} now={clock} collapsible onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /></div>}
         </>}
       </section>
 
-      {draftToDelete && <div className="sheet-backdrop" onMouseDown={() => !deletingDraft && setDraftToDelete(null)}><section className="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-draft-title" onMouseDown={(event) => event.stopPropagation()}><span className="sheet-handle" /><div className="sheet-title-row"><h2 id="delete-draft-title">Delete this draft?</h2><button type="button" aria-label="Close delete draft dialog" disabled={deletingDraft} onClick={() => setDraftToDelete(null)}><IconX size={19} /></button></div><p>This unpublished ride cannot be recovered after deletion.</p><button type="button" className="danger-button" disabled={deletingDraft} onClick={deleteDraft}>{deletingDraft ? 'Deleting…' : 'Delete draft'}</button></section></div>}
+      <AdaptiveDialog
+        open={Boolean(draftToDelete)}
+        onClose={() => { if (!deletingDraft) setDraftToDelete(null); }}
+        title="Delete this draft?"
+        description="This unpublished ride cannot be recovered after deletion."
+        footer={(
+          <>
+            <Button variant="secondary" disabled={deletingDraft} onClick={() => setDraftToDelete(null)}>Keep draft</Button>
+            <Button variant="danger" loading={deletingDraft} loadingLabel="Deleting" onClick={deleteDraft}>Delete draft</Button>
+          </>
+        )}
+      >
+        <p className="ride-dialog-note">Only this draft will be removed. Your published and completed rides are not affected.</p>
+      </AdaptiveDialog>
     </main>
   );
 }

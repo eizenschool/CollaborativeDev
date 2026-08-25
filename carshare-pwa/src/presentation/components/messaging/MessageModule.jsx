@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
   MessagingService,
 } from '../../../business-logic/MessagingService.js';
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
-import { IconArchive, IconMessage, IconTrash, IconX } from '../icons.jsx';
+import { IconArchive, IconMessage, IconTrash } from '../icons.jsx';
 import ConversationList from './ConversationList.jsx';
 import ChatWindow from './ChatWindow.jsx';
 import MessageHistory from './MessageHistory.jsx';
 import TripInfoSidebar from './TripInfoSidebar.jsx';
+import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
+import { Button } from '../ui/Button.jsx';
 import '../../styles/message.css';
 
 const DESKTOP_BREAKPOINT = 900;
@@ -28,32 +30,7 @@ function EmptyChatSelection() {
   );
 }
 
-function ManageConversationDialog({ conversation, currentUserId, pending, error, onClose, onConfirm }) {
-  const closeButtonRef = useRef(null);
-  const modalRef = useRef(null);
-
-  useEffect(() => {
-    if (!conversation) return undefined;
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && !pending) onClose();
-      if (event.key !== 'Tab') return;
-      const focusable = [...(modalRef.current?.querySelectorAll('button:not(:disabled)') || [])];
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    closeButtonRef.current?.focus();
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [conversation, onClose, pending]);
-
+function ManageConversationDialog({ conversation, currentUserId, pending, error, onClose, onConfirm, triggerRef }) {
   if (!conversation) return null;
   const membership = conversation.members.find((member) => member.id === currentUserId);
   const isCompleted = conversation.rideStatus === 'Completed';
@@ -66,20 +43,24 @@ function ManageConversationDialog({ conversation, currentUserId, pending, error,
   else if (isCompleted && conversation.type === 'group') note = 'The Host cannot leave a trip group.';
 
   return (
-    <div className="message-options-backdrop" onMouseDown={() => !pending && onClose()}>
-      <section ref={modalRef} className="message-options-modal" role="dialog" aria-modal="true" aria-labelledby="manage-conversation-title" onMouseDown={(event) => event.stopPropagation()}>
-        <span className="message-options-handle" />
-        <div className="message-options-header">
-          <div><span id="manage-conversation-title">Manage {conversation.title}</span><p>{conversation.tripRoute}</p></div>
-          <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close conversation management"><IconX size={18} /></button>
-        </div>
-        <p className="message-options-note">{note}</p>
-        {!isCompleted && <p className="message-composer-error" role="alert">This conversation cannot be managed until the trip is completed.</p>}
-        {error && <p className="message-composer-error" role="alert">{error}</p>}
-        {canArchive && <button type="button" className="message-manage-action" onClick={() => onConfirm('archive')} disabled={pending}><IconArchive size={16} /> {pending ? 'Archiving…' : 'Archive conversation'}</button>}
-        {canLeave && <button type="button" className="message-options-delete" onClick={() => onConfirm('leave')} disabled={pending}><IconTrash size={16} /> {pending ? 'Leaving…' : 'Leave group'}</button>}
-      </section>
-    </div>
+    <AdaptiveDialog
+      open={Boolean(conversation)}
+      onClose={() => { if (!pending) onClose(); }}
+      title={`Manage ${conversation.title}`}
+      description={conversation.tripRoute}
+      triggerRef={triggerRef}
+      footer={(
+        <>
+          <Button variant="secondary" disabled={pending} onClick={onClose}>Close</Button>
+          {canArchive && <Button loading={pending} loadingLabel="Archiving" onClick={() => onConfirm('archive')}><IconArchive size={16} aria-hidden="true" /> Archive conversation</Button>}
+          {canLeave && <Button variant="danger" loading={pending} loadingLabel="Leaving" onClick={() => onConfirm('leave')}><IconTrash size={16} aria-hidden="true" /> Leave group</Button>}
+        </>
+      )}
+    >
+      <p className="message-options-note">{note}</p>
+      {!isCompleted && <p className="message-composer-error" role="alert">This conversation cannot be managed until the trip is completed.</p>}
+      {error && <p className="message-composer-error" role="alert">{error}</p>}
+    </AdaptiveDialog>
   );
 }
 
@@ -135,10 +116,9 @@ export default function MessageModule() {
     setManageConversation(conversation);
   }
 
-  const closeManage = useCallback(() => {
+  function closeManage() {
     setManageConversation(null);
-    window.setTimeout(() => manageReturnFocusRef.current?.focus(), 0);
-  }, []);
+  }
 
   async function confirmManage(action) {
     setManageError('');
@@ -221,6 +201,7 @@ export default function MessageModule() {
         error={manageError}
         onClose={closeManage}
         onConfirm={confirmManage}
+        triggerRef={manageReturnFocusRef}
       />
     </>
   );

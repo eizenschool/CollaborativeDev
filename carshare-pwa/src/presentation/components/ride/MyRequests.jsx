@@ -4,7 +4,9 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
 import { compareJourneyStates, formatJourneyCountdown, getRideJourneyState, isTripModeEligible } from '../../../business-logic/rideJourneyState.js';
-import { IconArrowLeft, IconCalendar, IconMapPin, IconX } from '../icons.jsx';
+import { IconArrowLeft, IconCalendar, IconMapPin } from '../icons.jsx';
+import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
+import { Button } from '../ui/Button.jsx';
 import '../../styles/ride.css';
 
 const reasons = ['Change of plans', 'Found another ride', 'Emergency', 'Scheduling conflict', 'Other'];
@@ -110,7 +112,21 @@ export default function MyRequests() {
           </article>;
         }) : <section className="empty-request-state"><span className="empty-car">🚗</span><strong>No requests yet</strong><p>Find a ride and submit your first request.</p><button className="primary-action" onClick={() => navigate('/search')}>Find rides</button></section>}
       </div>
-      {cancelling && <div className="sheet-backdrop" onMouseDown={() => setCancelling(null)}><section className="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-request-title" onKeyDown={(event) => event.key === 'Escape' && setCancelling(null)} onMouseDown={(event) => event.stopPropagation()}><span className="sheet-handle" /><div className="sheet-title-row"><h2 id="cancel-request-title">Cancel this request?</h2><button type="button" autoFocus aria-label="Close cancellation dialog" onClick={() => setCancelling(null)}><IconX size={19} /></button></div><p>Cancellation takes effect immediately. The Driver will be notified and does not need to approve it.</p><div className="reason-list" role="group" aria-label="Cancellation reason">{reasons.map((item) => <button type="button" aria-pressed={reason === item} key={item} className={reason === item ? 'selected' : ''} onClick={() => setReason(item)}><i aria-hidden="true" />{item}</button>)}</div>{reason === 'Other' && <textarea aria-label="Cancellation reason" value={otherReason} onChange={(event) => setOtherReason(event.target.value)} placeholder="Describe your reason…" />}<button type="button" className="danger-button" disabled={!reason || (reason === 'Other' && !otherReason.trim())} onClick={cancel}>Confirm cancellation</button></section></div>}
+      <AdaptiveDialog
+        open={Boolean(cancelling)}
+        onClose={() => setCancelling(null)}
+        title="Cancel this request?"
+        description="Cancellation takes effect immediately. The Driver will be notified and does not need to approve it."
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => setCancelling(null)}>Keep request</Button>
+            <Button variant="danger" disabled={!reason || (reason === 'Other' && !otherReason.trim())} onClick={cancel}>Confirm cancellation</Button>
+          </>
+        )}
+      >
+        <div className="reason-list" role="group" aria-label="Cancellation reason">{reasons.map((item) => <button type="button" aria-pressed={reason === item} key={item} className={reason === item ? 'selected' : ''} onClick={() => setReason(item)}><i aria-hidden="true" />{item}</button>)}</div>
+        {reason === 'Other' && <textarea className="request-cancellation-reason" aria-label="Cancellation reason" value={otherReason} onChange={(event) => setOtherReason(event.target.value)} placeholder="Describe your reason…" />}
+      </AdaptiveDialog>
     </main>
   );
 }

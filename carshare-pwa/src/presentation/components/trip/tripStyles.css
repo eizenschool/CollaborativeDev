@@ -1621,3 +1621,71 @@
   .m5-place-crown { animation: none; }
   .m5-place.gold .m5-place-block::after { display: none; }
 }
+/* Shared responsive detail layout. Lifecycle data stays in TripHistoryEngine;
+   these classes replace per-render viewport and typography styles. */
+.m5-detail-title {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font: 600 20px/1.2 var(--font-display);
+}
+
+.m5-detail-state {
+  width: min(100%, 680px);
+  margin-inline: auto;
+  padding: 24px;
+}
+
+.m5-detail-layout {
+  width: min(100%, 1100px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(260px, 1fr);
+  gap: 24px;
+  margin-inline: auto;
+  padding: 24px;
+}
+
+.m5-detail-info-card { padding: 20px; margin-bottom: 16px; }
+.m5-detail-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+.m5-detail-participants { padding: 20px; }
+.m5-detail-participants h3 { margin: 0 0 10px; color: var(--ink); font: 600 16px var(--font-display); }
+.m5-participant-row { padding: 8px 4px; margin-bottom: 0; }
+.m5-participant-avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font: 600 13px var(--font-display);
+}
+.m5-participant-name { flex: 1; color: var(--ink); font-size: 14px; }
+.m5-participant-role { color: var(--muted); font-size: 12px; font-weight: 600; }
+.m5-detail-info-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 0; }
+.m5-detail-info-row > span { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.m5-detail-info-row > strong { color: var(--ink); font-size: 14px; text-align: right; overflow-wrap: anywhere; }
+.m5-carbon-pending { padding: 20px; }
+.m5-carbon-pending p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.m5-carbon-card {
+  padding: 24px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius-card);
+  background: linear-gradient(160deg, var(--teal-tint), #fff);
+  text-align: center;
+}
+.m5-carbon-icon { width: 52px; height: 52px; background: var(--teal); color: #fff; }
+.m5-carbon-value { margin: 4px 0 0; color: var(--teal-dark); font: 700 34px var(--font-display); }
+.m5-carbon-caption { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+@media (max-width: 900px) {
+  .m5-detail-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 700px) {
+  .m5-detail-state, .m5-detail-layout { padding: 16px; }
+  .m5-detail-info-row { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .m5-detail-info-row > strong { text-align: left; }
+}

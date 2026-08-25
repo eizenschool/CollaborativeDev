@@ -5,14 +5,17 @@
 // surface; Ride is the authenticated hosting and joining workspace; Trips is the
 // record of what already happened, which every ride app of this kind promotes to
 // the bar rather than burying in a profile.
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { IconCar, IconHome, IconSearch, IconRoute, IconClock, IconMessage, IconHeart, IconUser, IconBell, IconLogOut } from '../icons.jsx';
-import { NotificationPopover } from '../notifications/NotificationCenter.jsx';
+import { IconButton } from '../ui/Button.jsx';
+
+const NotificationPopover = lazy(() => import('../notifications/NotificationCenter.jsx')
+  .then((module) => ({ default: module.NotificationPopover })));
 
 const NAV_ITEMS = [
   { to: '/home', label: 'Home', Icon: IconHome },
@@ -32,6 +35,7 @@ export default function TopNav() {
   const location = useLocation();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationRef = useRef(null);
+  const notificationButtonRef = useRef(null);
   const initials = (user?.fullName || user?.user_metadata?.full_name || user?.email || '?')
     .split(' ')
     .map((p) => p[0])
@@ -46,15 +50,22 @@ export default function TopNav() {
 
   useEffect(() => {
     if (!notificationsOpen) return undefined;
+    const focusFrame = window.requestAnimationFrame(() => {
+      notificationRef.current?.querySelector('.notification-popover button')?.focus();
+    });
     const handlePointerDown = (event) => {
       if (!notificationRef.current?.contains(event.target)) setNotificationsOpen(false);
     };
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') setNotificationsOpen(false);
+      if (event.key === 'Escape') {
+        setNotificationsOpen(false);
+        notificationButtonRef.current?.focus();
+      }
     };
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
@@ -63,32 +74,30 @@ export default function TopNav() {
   return (
     <>
       <header className="mobile-appbar">
-        <div className="mobile-appbar-brand">
+        <NavLink className="mobile-appbar-brand" to="/home" aria-label="Let's Tumpang home">
           <div className="brand-icon"><IconCar size={18} /></div>
           <span className="brand-title">Let&apos;s Tumpang</span>
-        </div>
+        </NavLink>
         {user && (
-          <button
+          <IconButton
             className="icon-btn notification-bell mobile-notification-bell"
-            type="button"
-            title="Notifications"
-            aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
             aria-current={location.pathname === '/notifications' ? 'page' : undefined}
             onClick={() => navigate('/notifications')}
           >
-            <IconBell size={20} />
+            <IconBell size={20} aria-hidden="true" />
             {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
-          </button>
+          </IconButton>
         )}
       </header>
 
       <header className="topnav">
-        <div className="topnav-brand">
+        <NavLink className="topnav-brand" to="/home" aria-label="Let's Tumpang home">
           <div className="brand-icon"><IconCar size={18} /></div>
           <span className="brand-title">Let's Tumpang</span>
-        </div>
+        </NavLink>
 
-        <nav className="topnav-links">
+        <nav className="topnav-links" aria-label="Primary navigation">
           {NAV_ITEMS.map(({ to, label, Icon, requiresAuth }) => {
             const target = requiresAuth
               ? getAuthNavigation(user, to, `Sign in to open ${label}.`)
@@ -99,11 +108,11 @@ export default function TopNav() {
                 key={to}
                 to={target.to}
                 state={target.state}
-                aria-label={isMessageItem && unreadMessageCount > 0 ? `${label}, ${unreadMessageCount} unread messages` : undefined}
+                aria-label={isMessageItem && unreadMessageCount > 0 ? `${label}, ${unreadMessageCount} unread messages` : label}
                 className={({ isActive }) => 'topnav-item' + (isActive ? ' active' : '')}
               >
                 <span className="topnav-icon">
-                  <Icon size={18} />
+                  <Icon size={18} aria-hidden="true" />
                   {isMessageItem && unreadMessageCount > 0 && (
                     <span className="nav-unread-badge" aria-hidden="true">
                       {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
@@ -119,19 +128,28 @@ export default function TopNav() {
         <div className="topnav-actions">
           {user ? <>
             <div className="notification-nav-wrap" ref={notificationRef}>
-              <button
+              <IconButton
+                ref={notificationButtonRef}
                 className="icon-btn notification-bell"
-                title="Notifications"
-                type="button"
-                aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+                label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
                 aria-expanded={notificationsOpen}
                 aria-haspopup="dialog"
+                aria-controls="notification-popover"
                 onClick={() => setNotificationsOpen((open) => !open)}
               >
-                <IconBell size={18} />
+                <IconBell size={18} aria-hidden="true" />
                 {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
-              </button>
-              {notificationsOpen && <NotificationPopover onClose={() => setNotificationsOpen(false)} />}
+              </IconButton>
+              {notificationsOpen && (
+                <Suspense fallback={<div className="notification-popover notification-popover-loading" role="status">Loading notifications…</div>}>
+                  <NotificationPopover
+                    onClose={() => {
+                      setNotificationsOpen(false);
+                      notificationButtonRef.current?.focus();
+                    }}
+                  />
+                </Suspense>
+              )}
             </div>
             <div
               className="topnav-avatar"
@@ -140,9 +158,9 @@ export default function TopNav() {
             >
               {!user.profilePhotoUrl && initials}
             </div>
-            <button className="icon-btn" title="Sign out" aria-label="Sign out" onClick={handleSignOut} type="button">
-              <IconLogOut size={17} />
-            </button>
+            <IconButton className="icon-btn" label="Sign out" onClick={handleSignOut}>
+              <IconLogOut size={17} aria-hidden="true" />
+            </IconButton>
           </> : (
             <NavLink
               className="topnav-signin"

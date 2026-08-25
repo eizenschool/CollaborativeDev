@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { IconBell, IconCheck, IconX } from '../icons.jsx';
+import { PageShell } from '../ui/Primitives.jsx';
 
 function relativeTime(value) {
   const milliseconds = Date.now() - new Date(value).getTime();
@@ -101,11 +102,32 @@ function NotificationRows({ compact = false, onNavigate }) {
 
 export function NotificationPopover({ onClose }) {
   const navigate = useNavigate();
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key !== 'Tab') return;
+      const buttons = [...(popoverRef.current?.querySelectorAll('button:not(:disabled)') || [])];
+      if (!buttons.length) return;
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
-    <section className="notification-popover" role="dialog" aria-label="Notifications">
+    <section ref={popoverRef} id="notification-popover" className="notification-popover" role="dialog" aria-label="Notifications">
       <div className="notification-popover-head">
         <div><strong>Notifications</strong><span>Ride, request, and account updates</span></div>
-        <button className="icon-btn" type="button" onClick={onClose} aria-label="Close notifications"><IconX size={17} /></button>
+        <button className="icon-btn" type="button" onClick={onClose} aria-label="Close notifications" autoFocus><IconX size={17} /></button>
       </div>
       <PushControl compact />
       <NotificationRows compact onNavigate={(path) => { onClose(); navigate(path); }} />
@@ -119,7 +141,7 @@ export function NotificationPopover({ onClose }) {
 export default function NotificationCenter() {
   const navigate = useNavigate();
   return (
-    <main className="notification-page">
+    <PageShell as="main" className="notification-page" size="narrow">
       <div className="notification-page-head">
         <div><h1>Notifications</h1><p>Ride, request, reminder, and account updates.</p></div>
         <PushControl />
@@ -127,6 +149,6 @@ export default function NotificationCenter() {
       <section className="notification-card">
         <NotificationRows onNavigate={navigate} />
       </section>
-    </main>
+    </PageShell>
   );
 }

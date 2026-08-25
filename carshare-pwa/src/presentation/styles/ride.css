@@ -311,7 +311,21 @@ html:has(.trip-mode-page), body:has(.trip-mode-page) { overflow-x: clip; }
 .trip-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px 12px; margin-top: 16px; }.trip-detail-grid div { min-width: 0; }.trip-detail-grid span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }.trip-detail-grid span svg { color: var(--teal); }.trip-detail-grid .destination-icon svg { color: var(--danger); }.trip-detail-grid strong { display: block; overflow: hidden; margin-top: 3px; color: var(--ink); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }.seats-left { display: flex; align-items: center; gap: 6px; margin: 16px 0 0; color: var(--teal); font-size: 13px; font-weight: 800; }
 .fixed-route-note, .eco-review-note { display: flex; gap: 10px; align-items: flex-start; padding: 13px; border: 1px solid #fde68a; border-radius: 14px; background: var(--warning-tint); color: #92400e; font-size: 12px; line-height: 1.45; }.fixed-route-note svg { flex: 0 0 auto; color: var(--warning); }
 .ride-preferences { display: grid; gap: 15px; }.ride-tag-list { display: flex; flex-wrap: wrap; gap: 7px; }.ride-tag-list span { padding: 5px 10px; border-radius: 999px; background: #f3f4f6; color: #374151; font-size: 11px; font-weight: 700; }.ride-tag-list small { color: #9ca3af; font-size: 12px; }.contribution { border-top: 1px solid #f3f4f6; padding-top: 14px; }.contribution strong { display: inline-flex; padding: 8px 10px; border: 1px solid #bbf7d0; border-radius: 10px; background: var(--teal-tint); color: var(--teal-dark); font-size: 13px; }
-.waypoints-section h2 { margin: 0 0 10px 4px; color: var(--ink); font: 600 14px var(--font-display); }.waypoint-scroller { display: flex; gap: 11px; overflow-x: auto; padding: 0 0 3px; }.waypoint-scroller article { width: 155px; flex: 0 0 155px; overflow: hidden; border: 1px solid var(--border); border-radius: 15px; background: #fff; box-shadow: 0 2px 8px rgba(17,24,39,.05); }.waypoint-art { height: 72px; display: grid; place-items: center; background: linear-gradient(135deg,#99f6e4,#bfdbfe); color: #fff; font-size: 28px; }.waypoint-scroller strong { display: block; padding: 9px 9px 1px; font-size: 12px; }.waypoint-scroller p { min-height: 35px; margin: 2px 9px 9px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.waypoints-section { min-width: 0; }
+.waypoints-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-bottom: 14px; }
+.waypoints-heading-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--teal-tint); color: var(--teal-dark); }
+.waypoints-heading .eyebrow { margin-bottom: 2px; }
+.waypoints-section .waypoints-heading h2 { margin: 0; color: var(--ink); font: 600 17px/1.25 var(--font-display); }
+.waypoints-count { padding: 6px 10px; border-radius: 999px; background: #fff; color: var(--muted); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.waypoint-scroller { display: flex; gap: 14px; max-width: 100%; overflow-x: auto; padding: 2px 2px 8px; scroll-padding-inline: 2px; scroll-snap-type: x proximity; scrollbar-width: none; }
+.waypoint-scroller::-webkit-scrollbar { display: none; }
+.waypoint-card { width: min(292px, calc(100vw - 52px)); min-width: 0; flex: 0 0 min(292px, calc(100vw - 52px)); overflow: hidden; border: 1px solid var(--ride-line); border-radius: 20px; background: #fff; box-shadow: var(--shadow-sm); scroll-snap-align: start; }
+.waypoint-art { height: 150px; display: grid; place-items: center; background: linear-gradient(135deg, var(--teal-tint), #dbeafe); color: var(--teal); }
+.waypoint-card-body { display: grid; min-width: 0; gap: 8px; padding: 14px 16px 16px; }
+.waypoint-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--teal-dark); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.waypoint-duration { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 999px; background: var(--teal-tint); color: var(--teal-dark); letter-spacing: 0; text-transform: none; }
+.waypoint-card h3 { margin: 0; color: var(--ink); font: 600 16px/1.35 var(--font-display); overflow-wrap: anywhere; }
+.waypoint-card-body > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .host-card-mobile { margin-bottom: 5px; }.host-profile-row { display: flex; align-items: center; gap: 11px; }.host-avatar-large, .request-avatar { width: 48px; height: 48px; display: grid; place-items: center; flex: 0 0 auto; border: 2px solid var(--teal-tint); border-radius: 50%; background: var(--teal); background-size: cover; background-position: center; color: #fff; font-size: 14px; font-weight: 800; }.host-profile-text { display: grid; gap: 4px; flex: 1; }.host-profile-text strong { color: var(--ink); font: 600 15px var(--font-display); }.host-profile-text span { display: flex; align-items: center; gap: 4px; color: #374151; font-size: 12px; }.host-profile-text svg { color: var(--warning); fill: var(--warning); }.tier-badge { display: inline-flex; align-items: center; margin-left: 3px; padding: 2px 7px; border-radius: 99px; background: #fef3c7; color: #92400e; font-size: 10px; }.chevron { color: #d1d5db; font-size: 24px; }
 .request-sent { min-height: 45px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 12px; background: var(--teal-tint); color: var(--teal); font-size: 13px; font-weight: 800; }
 .request-status-message { min-height: 50px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--ride-line); border-radius: 13px; background: #f8fafc; color: #475569; font-size: 13px; font-weight: 800; text-align: center; }
@@ -1495,7 +1509,7 @@ button.ride-card {
 
 .verification-row {
   display: grid;
-  grid-template-columns: minmax(110px, .6fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(120px, .6fr) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 12px;
@@ -1513,6 +1527,21 @@ button.ride-card {
 .verification-row strong {
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.verification-value {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.verification-value small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .verification-row button {
@@ -1551,34 +1580,14 @@ button.ride-card {
   border-radius: 12px;
 }
 
-.waypoints-section h2 {
-  margin: 0 0 12px;
-  font-size: 16px;
-}
-
 .waypoint-scroller {
   gap: 14px;
   padding: 2px 2px 8px;
-  scrollbar-width: thin;
 }
 
-.waypoint-scroller article {
-  width: 176px;
-  flex-basis: 176px;
+.waypoint-card {
   border-color: var(--ride-line);
-  border-radius: 18px;
-}
-
-.waypoint-art {
-  height: 84px;
-}
-
-.waypoint-scroller strong {
-  font-size: 13px;
-}
-
-.waypoint-scroller p {
-  font-size: 11px;
+  border-radius: 20px;
 }
 
 .host-avatar-large,
@@ -2636,6 +2645,44 @@ button.ride-card {
   min-width: 168px;
 }
 
+.ride-next-action-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ride-next-action-meta span {
+  min-width: 112px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(21, 128, 61, .16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .74);
+}
+
+.ride-next-action-meta small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ride-next-action-meta b {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.ride-dialog-note { margin: 0; color: var(--muted); }
+.ui-dialog .reason-list button { min-height: 44px; }
+.request-cancellation-reason {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+
 .ride-inbox-groups {
   display: grid;
   gap: 27px;
@@ -2767,6 +2814,9 @@ button.ride-card {
     max-width: none;
   }
 
+  .ride-next-action-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ride-next-action-meta span { min-width: 0; }
+
   .ride-inbox-groups {
     gap: 23px;
   }
@@ -2784,15 +2834,24 @@ button.ride-card {
 .live-location-list { display: grid; gap: .55rem; margin-top: .8rem; }
 .live-location-list > div { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; border: 1px solid rgba(15, 118, 110, .16); border-radius: .7rem; }
 .live-location-list span { display: grid; gap: .15rem; }
-.live-location-list small, .waypoint-photo-wrap small { color: var(--muted, #64748b); font-size: .75rem; }
+.live-location-list small { color: var(--muted, #64748b); font-size: .75rem; }
 .family-share-result { display: grid; gap: .35rem; margin-top: .75rem; }
 .family-share-result input { width: 100%; min-width: 0; }
 .live-ride-map { position: relative; min-height: 240px; margin: .85rem 0; border-radius: .85rem; overflow: hidden; background: #e2e8f0; display: grid; place-items: center; color: #475569; }
 .live-ride-map-canvas { position: absolute; inset: 0; }
 .live-map-loading { position: relative; z-index: 1; pointer-events: none; }
 .live-map-fallback { display: grid; gap: .25rem; padding: .75rem; margin: .75rem 0; border-radius: .7rem; background: #f1f5f9; color: #475569; font-size: .82rem; }
-.waypoint-photo-wrap { display: grid; gap: .2rem; }
-.waypoint-photo-wrap img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: .7rem; }
+.waypoint-photo-wrap { position: relative; min-height: 150px; overflow: hidden; background: var(--teal-tint); }
+.waypoint-photo-wrap img { width: 100%; height: 150px; display: block; object-fit: cover; }
+.waypoint-photo-attribution { position: absolute; right: 0; bottom: 0; left: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; padding: 22px 10px 8px; background: linear-gradient(transparent, rgba(5, 20, 17, .78)); color: #fff; font-size: 10px; line-height: 1.25; }
+.waypoint-photo-attribution span { min-width: 0; overflow-wrap: anywhere; }
+.waypoint-photo-attribution a { color: #fff; font-weight: 700; text-underline-offset: 2px; }
+.waypoint-photo-attribution > a { flex: 0 0 auto; }
+
+@media (min-width: 900px) {
+  .waypoint-scroller { flex-wrap: wrap; overflow: visible; }
+  .waypoint-card { width: 320px; flex-basis: 320px; }
+}
 .location-distance { display: block; color: var(--muted, #64748b); font-size: .75rem; }
 .waypoint-recommendation-list { display: grid; gap: .45rem; margin: .5rem 0 .65rem; }
 .waypoint-recommendation { display: flex; align-items: center; justify-content: space-between; gap: .5rem; width: 100%; padding: .65rem .75rem; text-align: left; border: 1px solid rgba(15, 118, 110, .18); border-radius: .7rem; background: #fff; cursor: pointer; }

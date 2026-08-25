@@ -177,8 +177,8 @@
    chip strip needs a bounded width for its own overflow to make sense. */
 .dsc-filters {
   display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow-x: visible;
   gap: 8px;
   align-self: stretch;
   padding-bottom: 2px;
@@ -818,9 +818,9 @@
    a phone. The same nowrap + overflow-x idiom as .dsc-filters, rather than
    letting either label wrap internally. */
 .dsc-audience {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow-x: visible;
   gap: 8px;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--border);
@@ -828,7 +828,7 @@
 }
 
 @media (min-width: 701px) {
-  .dsc-audience { overflow-x: visible; }
+  .dsc-audience { display: flex; overflow-x: visible; }
 }
 
 .dsc-audience-tab {
@@ -844,8 +844,10 @@
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  flex: 0 0 auto;
-  white-space: nowrap;
+  min-width: 0;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
 }
 
 .dsc-audience-tab.active {
@@ -979,6 +981,20 @@
 
 .dsc-working-toggle:hover { color: var(--teal-dark); }
 .dsc-working-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-show-more {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--teal-dark);
+  font: 700 14px var(--font);
+  cursor: pointer;
+}
+.dsc-show-more:hover { border-color: var(--teal); background: var(--teal-tint); }
+.dsc-show-more span { color: var(--muted); font-weight: 500; }
 
 .dsc-caret-open { transform: rotate(90deg); }
 

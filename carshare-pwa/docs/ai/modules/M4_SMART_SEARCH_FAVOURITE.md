@@ -37,7 +37,11 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
 - The old `search/` mock was rebuilt with repository-native icons and tokens,
   accessible states, a phone filter sheet, desktop filter panel, and real ride
   detail navigation. Result cards include an estimated arrival when Module 2
-  provides one. Tailwind and Lucide are not required.
+  provides one. Applied filters are removable wrapping chips; the phone sheet
+  uses the shared adaptive focus/return contract. Tailwind and Lucide are not
+  required.
+- Favourite now uses the shared loading, empty, error, and action primitives
+  while keeping refresh, removal, and alternative-search service behaviour.
 - Saved rides refresh when Favourite opens. Unavailable rides remain removable
   and offer a prefilled alternative search; background notifications are
   deferred.

@@ -42,12 +42,12 @@ export default function AuthPage() {
       const progress = linearProgress * linearProgress * (3 - 2 * linearProgress);
       const distance = routeLength * progress;
       const point = route.getPointAtLength(distance);
-      const direction = travellingForward ? 1 : -1;
-      const tangentDistance = Math.max(0, Math.min(routeLength, distance + direction));
-      const tangent = route.getPointAtLength(tangentDistance);
-      const angle = Math.atan2(tangent.y - point.y, tangent.x - point.x) * 180 / Math.PI;
+      const tangentStart = route.getPointAtLength(Math.max(0, distance - 1));
+      const tangentEnd = route.getPointAtLength(Math.min(routeLength, distance + 1));
+      const angle = Math.atan2(tangentEnd.y - tangentStart.y, tangentEnd.x - tangentStart.x) * 180 / Math.PI;
 
       car.setAttribute('transform', `translate(${point.x} ${point.y}) rotate(${angle})`);
+      car.dataset.direction = travellingForward ? 'outbound' : 'return';
       animationFrame = requestAnimationFrame(animateCar);
     }
 
@@ -185,14 +185,15 @@ export default function AuthPage() {
             </button>
           </div>
 
-          {error && <div className="auth-error">{error}</div>}
-          {verificationMessage && <div className="alert alert-success">{verificationMessage}</div>}
+          {error && <div className="auth-error" id="auth-form-error" role="alert">{error}</div>}
+          {verificationMessage && <div className="alert alert-success" role="status" aria-live="polite">{verificationMessage}</div>}
 
           <button
             type="button"
             className="google-btn"
             onClick={handleGoogle}
             disabled={googleLoading || loading}
+            aria-busy={googleLoading || undefined}
           >
             <IconGoogle size={18} />
             {googleLoading ? 'Redirecting to Google…' : mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
@@ -200,7 +201,7 @@ export default function AuthPage() {
 
           <div className="auth-divider"><span>or {mode === 'signup' ? 'sign up' : 'sign in'} with email</span></div>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} aria-describedby={error ? 'auth-form-error' : undefined}>
             {mode === 'signup' && (
               <div className="auth-field">
                 <label htmlFor="auth-full-name">Full Name</label>
@@ -257,7 +258,7 @@ export default function AuthPage() {
               </div>
             </div>
 
-            <button className="auth-submit" type="submit" disabled={loading}>
+            <button className="auth-submit" type="submit" disabled={loading || googleLoading} aria-busy={loading || undefined}>
               {loading ? 'Please wait…' : mode === 'signup' ? 'Create Account' : 'Sign In'}
               {!loading && <IconArrowRight size={16} />}
             </button>
@@ -271,7 +272,6 @@ export default function AuthPage() {
             )}
           </p>
 
-          {mode === 'signup' && <p className="auth-demo-hint">Demo: use test@example.com to trigger a duplicate-account error</p>}
         </div>
       </div>
     </div>

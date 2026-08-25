@@ -6,9 +6,13 @@
   "description": "Let's Tumpang - Module 1 (User Profile & Reputation) PWA prototype",
   "scripts": {
     "dev": "vite",
+    "dev:fixture": "vite --mode fixture",
     "build": "vite build",
+    "build:fixture": "vite build --mode fixture",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -17,6 +21,8 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.6",
     "vite-plugin-pwa": "^0.20.5",

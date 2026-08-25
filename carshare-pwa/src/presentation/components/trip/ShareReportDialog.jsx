@@ -36,7 +36,11 @@ function useObjectUrl() {
 export default function ShareReportDialog({ content, onClose }) {
   const canvasRef = useRef(null);
   const closeRef = useRef(null);
+  const dialogRef = useRef(null);
+  const returnFocusRef = useRef(null);
+  const onCloseRef = useRef(onClose);
   const trackUrl = useObjectUrl();
+  onCloseRef.current = onClose;
 
   const [themeId, setThemeId] = useState(DEFAULT_THEME_ID);
   const [formatId, setFormatId] = useState(DEFAULT_FORMAT_ID);
@@ -66,13 +70,32 @@ export default function ShareReportDialog({ content, onClose }) {
   }, [content, themeId, formatId, trackUrl]);
 
   useEffect(() => {
+    returnFocusRef.current = document.activeElement;
     closeRef.current?.focus();
     function onKey(event) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialogRef.current?.querySelectorAll('button:not(:disabled), a[href]') || [])];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      returnFocusRef.current?.focus?.();
+    };
+  }, []);
 
   async function copyImage() {
     if (!blob) return false;
@@ -139,7 +162,7 @@ export default function ShareReportDialog({ content, onClose }) {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="m5-share-dialog" role="dialog" aria-modal="true" aria-label="Share your monthly impact">
+      <div ref={dialogRef} className="m5-share-dialog" role="dialog" aria-modal="true" aria-label="Share your monthly impact">
         <div className="m5-share-head">
           <h3>Share your impact</h3>
           <button ref={closeRef} className="m5-icon-btn" onClick={onClose} aria-label="Close">✕</button>

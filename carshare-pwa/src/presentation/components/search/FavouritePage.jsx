@@ -5,6 +5,9 @@ import { FavouriteService } from '../../../business-logic/FavouriteService.js';
 import { buildSimilarSearchCriteria, smartSearchCriteriaToParams } from '../../../business-logic/SmartSearchService.js';
 import { IconHeart, IconSearch } from '../icons.jsx';
 import { SearchRideCard } from './RideCards.jsx';
+import { AsyncState } from '../ui/Primitives.jsx';
+import { Button } from '../ui/Button.jsx';
+import { RouteLoading } from '../ui/RouteState.jsx';
 import '../../styles/search.css';
 
 export default function FavouritePage() {
@@ -54,16 +57,25 @@ export default function FavouritePage() {
         <div><p>YOUR SHORTLIST</p><h1>Favourite rides</h1><small>Saved journeys stay here even when their availability changes.</small></div>
       </header>
 
-      {error && <div className="search-feedback error" role="alert">{error}<button type="button" onClick={load}>Retry</button></div>}
-      {loading && <div className="favourite-loading" role="status">Refreshing saved rides…</div>}
+      {error && (
+        <AsyncState title="Favourite rides could not be loaded" tone="error" action={<Button onClick={load}>Try again</Button>}>
+          <p>{error}</p>
+        </AsyncState>
+      )}
+      {loading && <RouteLoading label="Refreshing saved rides" />}
 
-      {!loading && rides.length === 0 && (
-        <section className="search-empty-state favourite-empty">
-          <IconHeart size={30} /><h2>No favourite rides yet</h2><p>Save a promising ride from Smart Search and it will appear here.</p><button type="button" onClick={() => navigate('/search')}><IconSearch size={15} /> Browse rides</button>
-        </section>
+      {!loading && !error && rides.length === 0 && (
+        <AsyncState
+          className="favourite-empty"
+          icon={<IconHeart size={30} />}
+          title="No favourite rides yet"
+          action={<Button onClick={() => navigate('/search')}><IconSearch size={15} aria-hidden="true" /> Browse rides</Button>}
+        >
+          <p>Save a promising ride from Smart Search and it will appear here.</p>
+        </AsyncState>
       )}
 
-      <section className="favourite-grid" aria-label="Saved rides">
+      <section className="favourite-grid" aria-label="Saved rides" aria-busy={loading}>
         {rides.map((ride) => (
           <SearchRideCard
             key={ride.id}

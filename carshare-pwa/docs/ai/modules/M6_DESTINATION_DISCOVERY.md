@@ -39,6 +39,13 @@ ride already serves and destinations no ride serves; recorded interest
 aggregated into latent demand; group formation and ride-availability
 notification; a place query interface served to Modules 2 and 4.
 
+## Current UI Status
+
+Discover preserves the accepted ranking and two-section contract. Each section
+shows at most six cards initially and `Show more` adds six while stating the
+remaining count. Category/audience controls wrap or expose a clear scroll cue,
+and the existing FR-6.35 handoff into Search is unchanged.
+
 ## Core Design Decisions
 
 **The recommendation unit is the (Place, User, Travel Window) triple**, not the

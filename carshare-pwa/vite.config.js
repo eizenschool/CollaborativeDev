@@ -6,6 +6,22 @@ import { VitePWA } from 'vite-plugin-pwa';
 // network iframe and intentionally falls back to the local route illustration
 // when unavailable; third-party map responses are not copied into the PWA cache.
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('@supabase') || id.includes('@realtime') || id.includes('phoenix')) {
+            return 'vendor-supabase';
+          }
+          if (id.includes('react') || id.includes('scheduler')) {
+            return 'vendor-react';
+          }
+          return 'vendor';
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

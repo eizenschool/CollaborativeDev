@@ -9,3 +9,5 @@ npm-debug.log*
 .agents
 # Supabase CLI local project link cache - carries the linked account's email
 supabase/.temp/
+playwright-report/
+test-results/

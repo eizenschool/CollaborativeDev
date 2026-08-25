@@ -21,9 +21,10 @@ import { IconFilter, IconMapPin, IconSearch, IconStar, IconX } from '../icons.js
 import SearchForm from './SearchForm.jsx';
 import { SearchRideCard } from './RideCards.jsx';
 import DestinationRecommendationPicker from './DestinationRecommendationPicker.jsx';
+import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
 import '../../styles/search.css';
 
-function FilterPanel({ criteria, onChange, onClear, onChooseRecommendation, mobile, onClose, onApply }) {
+function FilterPanel({ criteria, onChange, onClear, onChooseRecommendation, mobile, onApply }) {
   const patch = (values) => onChange({ ...criteria, ...values });
   const toggleTag = (tag) => patch({
     tags: criteria.tags.includes(tag)
@@ -32,11 +33,10 @@ function FilterPanel({ criteria, onChange, onClear, onChooseRecommendation, mobi
   });
 
   return (
-    <div className={mobile ? 'search-filter-sheet' : 'search-filter-panel'} role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-label="Search filters">
-      <div className="search-filter-heading">
+    <div className={mobile ? 'search-filter-sheet' : 'search-filter-panel'}>
+      {!mobile && <div className="search-filter-heading">
         <div><p>REFINE RESULTS</p><h2>Filters and sorting</h2></div>
-        {mobile && <button type="button" autoFocus onClick={onClose} aria-label="Close filters"><IconX size={20} /></button>}
-      </div>
+      </div>}
 
       <fieldset>
         <legend>Journey scale</legend>
@@ -178,18 +178,8 @@ export default function SearchModule() {
     return () => { active = false; };
   }, [user]);
 
-  useEffect(() => {
-    if (!filtersOpen) return undefined;
-    const closeOnEscape = (event) => {
-      if (event.key === 'Escape') closeFilters();
-    };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [filtersOpen]);
-
   function closeFilters() {
     setFiltersOpen(false);
-    window.setTimeout(() => filterTriggerRef.current?.focus(), 0);
   }
 
   function openRecommendations(event) {
@@ -280,6 +270,12 @@ export default function SearchModule() {
     setSearchParams(smartSearchCriteriaToParams(normalized));
   }
 
+  function removeAppliedFilter(values) {
+    const normalized = normalizeSmartSearchCriteria({ ...appliedCriteria, ...values });
+    setCriteria(normalized);
+    setSearchParams(smartSearchCriteriaToParams(normalized));
+  }
+
   const activeFilterCount = [
     criteria.destinationPlaceId,
     criteria.journeyScale,
@@ -290,6 +286,49 @@ export default function SearchModule() {
     criteria.contribution,
     ...criteria.tags
   ].filter(Boolean).length;
+
+  const appliedFilterChips = [
+    appliedCriteria.destinationPlaceId && {
+      key: 'destination-radius',
+      label: `Within ${appliedCriteria.proximityKm} km of ${appliedCriteria.destination}`,
+      remove: () => removeAppliedFilter({ destinationPlaceId: '', proximityKm: 0 })
+    },
+    appliedCriteria.journeyScale && {
+      key: 'journey-scale',
+      label: appliedCriteria.journeyScale,
+      remove: () => removeAppliedFilter({ journeyScale: '' })
+    },
+    appliedCriteria.minSeats > 1 && {
+      key: 'minimum-seats',
+      label: `${appliedCriteria.minSeats}+ seats`,
+      remove: () => removeAppliedFilter({ minSeats: 1 })
+    },
+    appliedCriteria.minRating > 0 && {
+      key: 'host-rating',
+      label: `${appliedCriteria.minRating}+ host rating`,
+      remove: () => removeAppliedFilter({ minRating: 0 })
+    },
+    appliedCriteria.vehicleType && {
+      key: 'vehicle-type',
+      label: SEARCH_VEHICLE_TYPE_OPTIONS.find((item) => item.value === appliedCriteria.vehicleType)?.label || appliedCriteria.vehicleType,
+      remove: () => removeAppliedFilter({ vehicleType: '' })
+    },
+    appliedCriteria.language && {
+      key: 'language',
+      label: SEARCH_LANGUAGE_OPTIONS.find((item) => item.value === appliedCriteria.language)?.label || appliedCriteria.language,
+      remove: () => removeAppliedFilter({ language: '' })
+    },
+    appliedCriteria.contribution && {
+      key: 'contribution',
+      label: `Contribution: ${appliedCriteria.contribution}`,
+      remove: () => removeAppliedFilter({ contribution: '' })
+    },
+    ...appliedCriteria.tags.map((tag) => ({
+      key: `tag-${tag}`,
+      label: tag,
+      remove: () => removeAppliedFilter({ tags: appliedCriteria.tags.filter((item) => item !== tag) })
+    }))
+  ].filter(Boolean);
 
   return (
     <main className="smart-search-page">
@@ -321,6 +360,19 @@ export default function SearchModule() {
           <IconFilter size={17} aria-hidden="true" /> Filters {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
         </button>
       </section>
+
+      {appliedFilterChips.length > 0 && (
+        <section className="search-active-filters" aria-label="Active search filters">
+          <strong>Active filters</strong>
+          <div>
+            {appliedFilterChips.map((chip) => (
+              <button key={chip.key} type="button" onClick={chip.remove} aria-label={`Remove ${chip.label} filter`}>
+                <span>{chip.label}</span><IconX size={14} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {error && <div className="search-feedback error" role="alert">{error}<button type="button" onClick={submitSearch}>Retry</button></div>}
       {notice && <div className="search-feedback success" role="status">{notice}</div>}
@@ -373,11 +425,15 @@ export default function SearchModule() {
         </section>
       </div>
 
-      {filtersOpen && (
-        <div className="search-filter-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closeFilters()}>
-          <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} onChooseRecommendation={openRecommendations} mobile onClose={closeFilters} onApply={submitSearch} />
-        </div>
-      )}
+      <AdaptiveDialog
+        open={filtersOpen}
+        onClose={closeFilters}
+        title="Filters and sorting"
+        description="Refine available rides without losing your route and date."
+        triggerRef={filterTriggerRef}
+      >
+        <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} onChooseRecommendation={openRecommendations} mobile onApply={submitSearch} />
+      </AdaptiveDialog>
 
       {recommendationsOpen && (
         <DestinationRecommendationPicker

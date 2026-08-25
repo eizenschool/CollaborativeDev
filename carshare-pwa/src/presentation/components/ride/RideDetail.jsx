@@ -17,8 +17,10 @@ import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import LiveRideMap from '../maps/LiveRideMap.jsx';
 import {
   IconAlertTriangle, IconArrowLeft, IconCalendar, IconCheck, IconEdit,
-  IconMapPin, IconMessage, IconRoute, IconStar, IconUsers, IconX
+  IconClock, IconMapPin, IconMessage, IconRoute, IconStar, IconUsers, IconX
 } from '../icons.jsx';
+import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
+import { Button } from '../ui/Button.jsx';
 import '../../styles/ride.css';
 
 const LIFECYCLE = ['Draft', 'Published', 'Matched', 'In Transit', 'Completed'];
@@ -149,16 +151,16 @@ function WaypointPhoto({ waypoint }) {
     return () => { active = false; freshLoaderRef.current = null; };
   }, [inView, waypoint.placeId]);
 
-  if (failed || !photo?.url) return <div className="waypoint-art" ref={containerRef} aria-hidden="true">✦</div>;
+  if (failed || !photo?.url) return <div className="waypoint-art" ref={containerRef} aria-hidden="true"><IconMapPin size={30} /></div>;
   const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(waypoint.name || 'Waypoint')}&query_place_id=${encodeURIComponent(waypoint.placeId || '')}`;
   const attributionName = typeof photo.attribution === 'string' ? photo.attribution : photo.attribution?.displayName;
   const attributionUri = typeof photo.attribution === 'object' ? photo.attribution?.uri : null;
-  return <div className="waypoint-photo-wrap" ref={containerRef}><img src={photo.url} alt="" loading="lazy" onError={() => {
+  return <div className="waypoint-photo-wrap" ref={containerRef}><img src={photo.url} alt={`View of ${waypoint.name || 'this waypoint'}`} loading="lazy" onError={() => {
     if (photo.cached && freshLoaderRef.current) {
       setPhoto(null);
       freshLoaderRef.current().catch(() => setFailed(true));
     } else setFailed(true);
-  }} />{attributionName && <small>{attributionUri ? <a href={attributionUri} target="_blank" rel="noreferrer">{attributionName}</a> : attributionName}</small>}<small><a href={sourceUrl} target="_blank" rel="noreferrer">Google Maps</a></small></div>;
+  }} /><small className="waypoint-photo-attribution"><span>{attributionName && <>Photo by {attributionUri ? <a href={attributionUri} target="_blank" rel="noreferrer">{attributionName}</a> : attributionName}</>}</span><a href={sourceUrl} target="_blank" rel="noreferrer">Google Maps</a></small></div>;
 }
 
 function LiveTrackingPanel({ ride, isHost, userId }) {
@@ -326,17 +328,17 @@ function CancelSheet({ onDismiss, onConfirm }) {
   const [reason, setReason] = useState('');
   const reasons = ['Change of plans', 'Vehicle issue', 'Emergency', 'Other'];
   return (
-    <div className="sheet-backdrop" onMouseDown={onDismiss}>
-      <section className="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-ride-title" onKeyDown={(event) => event.key === 'Escape' && onDismiss()} onMouseDown={(event) => event.stopPropagation()}>
-        <span className="sheet-handle" />
-        <div className="sheet-title-row"><h2 id="cancel-ride-title">Cancel this ride?</h2><button type="button" autoFocus onClick={onDismiss} aria-label="Close cancellation dialog"><IconX size={19} /></button></div>
-        <p>Let passengers know why this ride is no longer available.</p>
-        <div className="reason-list">
-          {reasons.map((item) => <button type="button" aria-pressed={reason === item} className={reason === item ? 'selected' : ''} key={item} onClick={() => setReason(item)}><i />{item}</button>)}
-        </div>
-        <button type="button" className="danger-button" disabled={!reason} onClick={() => onConfirm(reason)}>Confirm cancellation</button>
-      </section>
-    </div>
+    <AdaptiveDialog
+      open
+      onClose={onDismiss}
+      title="Cancel this ride?"
+      description="Let passengers know why this ride is no longer available."
+      footer={<Button variant="danger" disabled={!reason} onClick={() => onConfirm(reason)}>Confirm cancellation</Button>}
+    >
+      <div className="reason-list" aria-label="Cancellation reason">
+        {reasons.map((item) => <button type="button" aria-pressed={reason === item} className={reason === item ? 'selected' : ''} key={item} onClick={() => setReason(item)}><i aria-hidden="true" />{item}</button>)}
+      </div>
+    </AdaptiveDialog>
   );
 }
 
@@ -349,17 +351,17 @@ function RequestSheet({ ride, onDismiss, onSubmit, saving, error }) {
     setCompanionNames((names) => Array.from({ length: next - 1 }, (_, index) => names[index] || ''));
   }
   return (
-    <div className="sheet-backdrop" onMouseDown={onDismiss}>
-      <section className="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="request-ride-title" onKeyDown={(event) => event.key === 'Escape' && onDismiss()} onMouseDown={(event) => event.stopPropagation()}>
-        <span className="sheet-handle" />
-        <div className="sheet-title-row"><h2 id="request-ride-title">Request to join</h2><button type="button" autoFocus onClick={onDismiss} aria-label="Close request dialog"><IconX size={19} /></button></div>
-        <p>Seats include you. Pending requests do not reserve seats until the Host accepts them.</p>
-        <div className="field"><label>Seats requested</label><div className="seat-stepper" aria-label="Seats requested"><button type="button" aria-label="Decrease requested seats" onClick={() => setSeats(seatsRequested - 1)}>−</button><output aria-live="polite">{seatsRequested}</output><button type="button" aria-label="Increase requested seats" onClick={() => setSeats(seatsRequested + 1)}>+</button></div></div>
-        {companionNames.map((name, index) => <div className="field" key={index}><label htmlFor={`companion-${index}`}>Companion {index + 1} name</label><input id={`companion-${index}`} value={name} onChange={(event) => setCompanionNames((names) => names.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /></div>)}
-        {error && <div className="alert alert-error sheet-error" role="alert">{error}</div>}
-        <button className="primary-action full" disabled={saving || companionNames.some((name) => !name.trim())} onClick={() => onSubmit({ seatsRequested, companionNames })}>{saving ? 'Sending…' : `Request ${seatsRequested} seat${seatsRequested === 1 ? '' : 's'}`}</button>
-      </section>
-    </div>
+    <AdaptiveDialog
+      open
+      onClose={onDismiss}
+      title="Request to join"
+      description="Seats include you. Pending requests do not reserve seats until the Host accepts them."
+      footer={<Button loading={saving} loadingLabel="Sending request" disabled={companionNames.some((name) => !name.trim())} onClick={() => onSubmit({ seatsRequested, companionNames })}>{`Request ${seatsRequested} seat${seatsRequested === 1 ? '' : 's'}`}</Button>}
+    >
+      <div className="field"><label>Seats requested</label><div className="seat-stepper" aria-label="Seats requested"><button type="button" aria-label="Decrease requested seats" onClick={() => setSeats(seatsRequested - 1)}>−</button><output aria-live="polite">{seatsRequested}</output><button type="button" aria-label="Increase requested seats" onClick={() => setSeats(seatsRequested + 1)}>+</button></div></div>
+      {companionNames.map((name, index) => <div className="field" key={index}><label htmlFor={`companion-${index}`}>Companion {index + 1} name</label><input id={`companion-${index}`} value={name} onChange={(event) => setCompanionNames((names) => names.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /></div>)}
+      {error && <div className="alert alert-error sheet-error" role="alert">{error}</div>}
+    </AdaptiveDialog>
   );
 }
 
@@ -585,7 +587,7 @@ export default function RideDetail() {
           <p className="eyebrow">TRIP LIFECYCLE</p>
           <div className="verification-row"><span>Current step</span><strong>{journeyState.title}</strong></div>
           {activeRequest?.status === 'Accepted' && <div className="verification-row"><span>Passenger check-in</span><strong>{activeRequest.boardingStatus}</strong></div>}
-          {lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Driver arrived</span><strong>{formatDateTime(lifecycleContext.driverArrivedAt)}</strong>{lifecycleContext.passengerConfirmationDueAt && <small>Auto-completes by {formatDateTime(lifecycleContext.passengerConfirmationDueAt)} if confirmations remain.</small>}</div>}
+          {lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Driver arrived</span><div className="verification-value"><strong><time dateTime={lifecycleContext.driverArrivedAt}>{formatDateTime(lifecycleContext.driverArrivedAt)}</time></strong>{lifecycleContext.passengerConfirmationDueAt && <small>Auto-completes by <time dateTime={lifecycleContext.passengerConfirmationDueAt}>{formatDateTime(lifecycleContext.passengerConfirmationDueAt)}</time> if confirmations remain.</small>}</div></div>}
           {activeRequest?.arrivalConfirmedAt && <div className="request-sent"><IconCheck size={15} /> Arrival confirmed</div>}
           {tripModeEligible && <button type="button" className="primary-action full" onClick={() => setSearchParams({ view: 'trip' })}>Open Trip Mode</button>}
         </section>}
@@ -595,7 +597,29 @@ export default function RideDetail() {
           <div className="contribution"><p className="eyebrow">NON-MONETARY CONTRIBUTION</p><strong>🤝 {ride.contribution || 'No contribution needed'}</strong></div>
         </section>
 
-        {waypoints.length > 0 && <section className="waypoints-section"><h2>🗺️ Culinary & cultural waypoints</h2><div className="waypoint-scroller">{waypoints.map((waypoint) => <article key={waypoint.placeId || waypoint.name}><WaypointPhoto waypoint={waypoint} /><strong>{waypoint.name}</strong><p>{waypoint.description || `${waypoint.stopMinutes || 0} minute stop`}</p></article>)}</div></section>}
+        {waypoints.length > 0 && <section className="waypoints-section" aria-labelledby="ride-waypoints-heading">
+          <div className="waypoints-heading">
+            <span className="waypoints-heading-icon" aria-hidden="true"><IconMapPin size={20} /></span>
+            <div>
+              <p className="eyebrow">PLANNED STOPS</p>
+              <h2 id="ride-waypoints-heading">Culinary &amp; cultural waypoints</h2>
+            </div>
+            <span className="waypoints-count">{waypoints.length} stop{waypoints.length === 1 ? '' : 's'}</span>
+          </div>
+          <div className="waypoint-scroller" aria-label="Planned route stops">
+            {waypoints.map((waypoint, index) => <article className="waypoint-card" key={waypoint.placeId || waypoint.name}>
+              <WaypointPhoto waypoint={waypoint} />
+              <div className="waypoint-card-body">
+                <div className="waypoint-card-meta">
+                  <span>Stop {index + 1}</span>
+                  <span className="waypoint-duration"><IconClock size={14} aria-hidden="true" /> {waypoint.stopMinutes || 0} min</span>
+                </div>
+                <h3>{waypoint.name}</h3>
+                {waypoint.description && <p>{waypoint.description}</p>}
+              </div>
+            </article>)}
+          </div>
+        </section>}
         <HostIdentity ride={ride} />
         <section className="ride-info-card"><p className="eyebrow">HOST REVIEWS</p>{reviews.length ? reviews.slice(0, 3).map((review) => <div className="review-row" key={review.id}><span>{review.reviewer?.fullName || 'Member'} · {review.rating}/5</span><strong>{review.comment || 'No written comment'}</strong></div>) : <p className="empty-waypoints">No reviews yet</p>}</section>
       </div>

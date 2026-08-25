@@ -52,8 +52,54 @@ export default function CallOverlay() {
     dismissEndedCall,
   } = useCallSession();
   const audioRef = useRef(null);
+  const dialogRef = useRef(null);
+  const returnFocusRef = useRef(null);
+  const phaseRef = useRef(callState.phase);
+  const dismissRef = useRef(dismissEndedCall);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [needsAudioTap, setNeedsAudioTap] = useState(false);
+  const isOpen = callState.phase !== 'idle' && Boolean(callState.call);
+  phaseRef.current = callState.phase;
+  dismissRef.current = dismissEndedCall;
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    returnFocusRef.current = document.activeElement;
+    function handleKeyDown(event) {
+      if (event.key === 'Escape' && phaseRef.current === 'ended') {
+        dismissRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const buttons = [...(dialogRef.current?.querySelectorAll('button:not(:disabled)') || [])];
+      if (!buttons.length) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      returnFocusRef.current?.focus?.();
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    window.requestAnimationFrame(() => {
+      (dialogRef.current?.querySelector('[data-call-autofocus]') || dialogRef.current)?.focus();
+    });
+  }, [callState.phase, isOpen]);
 
   useEffect(() => {
     if (callState.phase !== 'connected' || !callState.connectedAt) {
@@ -87,11 +133,13 @@ export default function CallOverlay() {
   return (
     <div className={`call-overlay-backdrop call-overlay-${callState.phase}`} role="presentation">
       <section
+        ref={dialogRef}
         className="call-overlay-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="call-overlay-title"
         aria-describedby="call-overlay-status"
+        tabIndex={-1}
       >
         {isEnded && (
           <button type="button" className="call-overlay-close" onClick={dismissEndedCall} aria-label="Dismiss call status">
@@ -131,13 +179,13 @@ export default function CallOverlay() {
               <span><IconPhone size={23} /></span>
               Reject
             </button>
-            <button type="button" className="call-control call-control-accept" onClick={() => { void acceptCall(); }} disabled={callState.isPending}>
+            <button type="button" className="call-control call-control-accept" data-call-autofocus onClick={() => { void acceptCall(); }} disabled={callState.isPending}>
               <span><IconPhone size={23} /></span>
               {callState.isPending ? 'Opening mic…' : 'Answer'}
             </button>
           </div>
         ) : isEnded ? (
-          <button type="button" className="call-overlay-done" onClick={dismissEndedCall}>Done</button>
+          <button type="button" className="call-overlay-done" data-call-autofocus onClick={dismissEndedCall}>Done</button>
         ) : (
           <div className="call-overlay-actions">
             {showMute && (
@@ -146,7 +194,7 @@ export default function CallOverlay() {
                 {callState.isMuted ? 'Unmute' : 'Mute'}
               </button>
             )}
-            <button type="button" className="call-control call-control-decline" onClick={() => { void hangUp(); }}>
+            <button type="button" className="call-control call-control-decline" data-call-autofocus onClick={() => { void hangUp(); }}>
               <span><IconPhone size={23} /></span>
               End
             </button>

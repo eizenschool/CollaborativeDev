@@ -8,6 +8,11 @@ Supabase-backed ride communication for UC3.4, UC3.7, and UC3.8.
 
 ## Implemented Contract
 
+- Phone list/conversation navigation remains split while wider layouts use the
+  existing master-detail surface. Conversation management uses the shared
+  adaptive dialog; camera/video/share-report and global call overlays trap and
+  restore focus, support safe Escape behaviour, and retain honest permission
+  recovery without changing draft, translation, call, or retention contracts.
 - A signed-in non-Host can create or reuse one direct chat for a Published ride from Ride Detail; acceptance is not required.
 - Accepting the first ride request creates the ride's one group chat in the same transaction and adds the Host plus accepted account holder. Later accepted account holders join that group. Companion names never become members.
 - A normal user message is one atomic bundle containing any non-empty combination of up to 1,000 text characters, 10 mixed images/videos, and one current GPS location.

@@ -5,20 +5,28 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
-import { COLORS, STATUS_COLORS } from './tripTheme.js';
-import { useIsDesktop } from './useIsDesktop.js';
+import { COLORS } from './tripTheme.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import { IconArrowLeftSmall, IconLeafSmall, IconMapPinSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState, NotFoundState } from './tripStates.jsx';
 import TripTimelineCard from './TripTimelineCard.jsx';
 import TripRouteReplay from './TripRouteReplay.jsx';
+import { StatusBadge } from '../ui/Primitives.jsx';
+import { RouteLoading } from '../ui/RouteState.jsx';
 import './tripStyles.css';
+
+function statusTone(status) {
+  if (status === 'Completed') return 'success';
+  if (['Cancelled', 'Expired'].includes(status)) return 'danger';
+  if (status === 'In Transit') return 'info';
+  if (status === 'Matched') return 'warning';
+  return 'neutral';
+}
 
 export default function TripDetail() {
   const { tripId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const isDesktop = useIsDesktop();
   // 'loading' and 'not found' used to be the same value, so UC5.3's A1 branch
   // could never render - a missing or forbidden trip sat on "Loading trip…"
   // forever. They are separate phases now.
@@ -49,13 +57,11 @@ export default function TripDetail() {
           <button className="m5-back-btn" onClick={() => navigate('/trip')} aria-label="Back to my trips">
             <IconArrowLeftSmall size={18} />
           </button>
-          <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 18, margin: 0, flex: 1, color: COLORS.textPrimary }}>
-            Trip Details
-          </h1>
+          <h1 className="m5-detail-title">Trip details</h1>
         </div>
-        <div style={{ padding: 24, maxWidth: 680, margin: '0 auto' }}>
+        <div className="m5-detail-state">
           {state.phase === 'loading' && (
-            <p style={{ fontFamily: 'Inter, sans-serif', color: COLORS.textSecondary }}>Loading trip…</p>
+            <RouteLoading label="Loading trip" />
           )}
           {state.phase === 'error' && (
             <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
@@ -67,28 +73,23 @@ export default function TripDetail() {
   }
 
   const trip = state.trip;
-  const palette = STATUS_COLORS[trip.status] || STATUS_COLORS.Published;
 
   return (
     <div className="m5-root">
       <div className="m5-header">
-        <button className="m5-back-btn" onClick={() => navigate('/trip')}>
+        <button className="m5-back-btn" onClick={() => navigate('/trip')} aria-label="Back to my trips">
           <IconArrowLeftSmall size={18} />
         </button>
-        <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 18, margin: 0, flex: 1, color: COLORS.textPrimary }}>
-          Trip Details
-        </h1>
-        <span style={{ padding: '5px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700, color: palette.text, background: palette.bg }}>
-          {trip.status}
-        </span>
+        <h1 className="m5-detail-title">Trip details</h1>
+        <StatusBadge tone={statusTone(trip.status)}>{trip.status}</StatusBadge>
       </div>
 
-      <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto', display: isDesktop ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '65% 1fr' : undefined, gap: 24 }}>
+      <div className="m5-detail-layout">
         <div>
           <MapPreview trip={trip} />
           {['Completed', 'Cancelled', 'Expired'].includes(trip.status) && <TripRouteReplay trip={trip} />}
 
-          <div className="m5-card" style={{ padding: 20, marginBottom: 16 }}>
+          <div className="m5-card m5-detail-info-card">
             <InfoRow icon={<IconMapPinSmall size={16} />} label="Pickup" value={trip.pickup} />
             <InfoRow icon={<IconMapPinSmall size={16} />} label="Destination" value={trip.destination} />
             <InfoRow label="Departure" value={`${trip.date} · ${trip.time}`} />
@@ -100,7 +101,7 @@ export default function TripDetail() {
             />
             {trip.contribution && <InfoRow label="Contribution" value={trip.contribution} />}
             {trip.restrictionTags?.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+              <div className="m5-detail-tags">
                 {trip.restrictionTags.map((tag) => (
                   <span key={tag} className="m5-chip" style={{ cursor: 'default' }}>
                     {tag}
@@ -110,32 +111,17 @@ export default function TripDetail() {
             )}
           </div>
 
-          <div className="m5-card" style={{ padding: 20 }}>
-            <h3 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: 15, margin: '0 0 10px', color: COLORS.textPrimary }}>
+          <div className="m5-card m5-detail-participants">
+            <h3>
               Participants
             </h3>
             {trip.participants.map((p) => (
-              <div key={p.id} className="m5-row" style={{ padding: '8px 4px', marginBottom: 0 }}>
-                <span
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    background: COLORS.primaryTint,
-                    color: COLORS.primaryDark,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontFamily: 'Poppins, sans-serif',
-                    fontWeight: 600,
-                    fontSize: 13,
-                    flexShrink: 0
-                  }}
-                >
+              <div key={p.id} className="m5-row m5-participant-row">
+                <span className="m5-participant-avatar">
                   {p.name?.[0] || '?'}
                 </span>
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, flex: 1, color: COLORS.textPrimary }}>{p.name}</span>
-                <span style={{ fontSize: 12, color: COLORS.textSecondary, fontWeight: 500 }}>{p.role}</span>
+                <span className="m5-participant-name">{p.name}</span>
+                <span className="m5-participant-role">{p.role}</span>
               </div>
             ))}
           </div>
@@ -186,12 +172,12 @@ function MapPreview({ trip }) {
 
 function InfoRow({ icon, label, value }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', fontFamily: 'Inter, sans-serif' }}>
-      <span style={{ fontSize: 13, color: COLORS.textSecondary, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div className="m5-detail-info-row">
+      <span>
         {icon}
         {label}
       </span>
-      <span style={{ fontSize: 14, color: COLORS.textPrimary, fontWeight: 600 }}>{value}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -199,22 +185,22 @@ function InfoRow({ icon, label, value }) {
 function CarbonCard({ trip }) {
   if (trip.status !== 'Completed') {
     return (
-      <div className="m5-card" style={{ padding: 20 }}>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, margin: 0, lineHeight: 1.5 }}>
+      <div className="m5-card m5-carbon-pending">
+        <p>
           Carbon savings will be calculated once this trip is completed.
         </p>
       </div>
     );
   }
   return (
-    <div style={{ background: `linear-gradient(160deg, ${COLORS.tealTint} 0%, #FFFFFF 100%)`, border: `1px solid ${COLORS.teal}`, borderRadius: 16, padding: 24, textAlign: 'center' }}>
-      <span className="m5-icon-circle" style={{ background: COLORS.teal, color: '#FFFFFF', width: 52, height: 52 }}>
+    <div className="m5-carbon-card">
+      <span className="m5-icon-circle m5-carbon-icon">
         <IconLeafSmall size={24} />
       </span>
-      <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 34, color: COLORS.teal, margin: '4px 0 0' }}>
+      <p className="m5-carbon-value">
         {trip.carbonSavedKg} kg CO₂
       </p>
-      <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: COLORS.textSecondary, margin: '6px 0 0', lineHeight: 1.5 }}>
+      <p className="m5-carbon-caption">
         Estimated saved on this trip, based on distance and passengers carried.
       </p>
     </div>

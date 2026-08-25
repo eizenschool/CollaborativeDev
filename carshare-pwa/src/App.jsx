@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, useEffect, useState } from 'react';
 import {
   Navigate,
   Route,
@@ -10,25 +10,31 @@ import { useAuth } from './context/AuthContext.jsx';
 import { resolveAuthReturnPath } from './business-logic/authAccess.js';
 import { legacyRideSearchUrlFromParams } from './business-logic/SmartSearchService.js';
 import TopNav from './presentation/components/nav/TopNav.jsx';
-import AuthPage from './presentation/components/AuthPage.jsx';
-import HomeScreen from './presentation/components/HomeScreen.jsx';
-import MyProfile from './presentation/components/MyProfile.jsx';
-import RideHub from './presentation/components/ride/RideHub.jsx';
-import PublishRide from './presentation/components/ride/PublishRide.jsx';
-import SafetyRoutes from './presentation/components/safety/SafetyRoutes.jsx';
-import DiscoverRoutes from './presentation/components/discover/DiscoverRoutes.jsx';
-import RideDetail from './presentation/components/ride/RideDetail.jsx';
-import ManageRequests from './presentation/components/ride/ManageRequests.jsx';
-import MyRequests from './presentation/components/ride/MyRequests.jsx';
-import EditRide from './presentation/components/ride/EditRide.jsx';
-import RateReview from './presentation/components/ride/RateReview.jsx';
-import MessageModule from './presentation/components/messaging/MessageModule.jsx';
-import TripModule from './presentation/components/trip/TripModule.jsx';
-import TripDetail from './presentation/components/trip/TripDetail.jsx';
-import NotificationCenter from './presentation/components/notifications/NotificationCenter.jsx';
-import SearchModule from './presentation/components/search/SearchModule.jsx';
-import FavouritePage from './presentation/components/search/FavouritePage.jsx';
-import FamilyLocationShare from './presentation/components/ride/FamilyLocationShare.jsx';
+import {
+  RouteBoundary,
+  RouteFocusManager,
+  RouteLoading,
+} from './presentation/components/ui/RouteState.jsx';
+
+const AuthPage = lazy(() => import('./presentation/components/AuthPage.jsx'));
+const HomeScreen = lazy(() => import('./presentation/components/HomeScreen.jsx'));
+const MyProfile = lazy(() => import('./presentation/components/MyProfile.jsx'));
+const RideHub = lazy(() => import('./presentation/components/ride/RideHub.jsx'));
+const PublishRide = lazy(() => import('./presentation/components/ride/PublishRide.jsx'));
+const SafetyRoutes = lazy(() => import('./presentation/components/safety/SafetyRoutes.jsx'));
+const DiscoverRoutes = lazy(() => import('./presentation/components/discover/DiscoverRoutes.jsx'));
+const RideDetail = lazy(() => import('./presentation/components/ride/RideDetail.jsx'));
+const ManageRequests = lazy(() => import('./presentation/components/ride/ManageRequests.jsx'));
+const MyRequests = lazy(() => import('./presentation/components/ride/MyRequests.jsx'));
+const EditRide = lazy(() => import('./presentation/components/ride/EditRide.jsx'));
+const RateReview = lazy(() => import('./presentation/components/ride/RateReview.jsx'));
+const MessageModule = lazy(() => import('./presentation/components/messaging/MessageModule.jsx'));
+const TripModule = lazy(() => import('./presentation/components/trip/TripModule.jsx'));
+const TripDetail = lazy(() => import('./presentation/components/trip/TripDetail.jsx'));
+const NotificationCenter = lazy(() => import('./presentation/components/notifications/NotificationCenter.jsx'));
+const SearchModule = lazy(() => import('./presentation/components/search/SearchModule.jsx'));
+const FavouritePage = lazy(() => import('./presentation/components/search/FavouritePage.jsx'));
+const FamilyLocationShare = lazy(() => import('./presentation/components/ride/FamilyLocationShare.jsx'));
 
 function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
   const { user } = useAuth();
@@ -85,9 +91,10 @@ function AppShell() {
   return (
     <div className="app-shell">
       <TopNav />
-      <ServiceWorkerNotificationNavigation />
-
-      <Routes>
+      <div id="main-content" className="app-main" tabIndex={-1}>
+        <ServiceWorkerNotificationNavigation />
+        <RouteBoundary>
+          <Routes>
         {/* Profile Settings, My Vehicles, Reputation, Host Dashboard, and Account
             Settings are consolidated into one "My Profile" page (hero + in-page
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
@@ -133,7 +140,9 @@ function AppShell() {
         <Route path="/discover/*" element={<DiscoverRoutes />} />
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
-      </Routes>
+          </Routes>
+        </RouteBoundary>
+      </div>
     </div>
   );
 }
@@ -196,35 +205,31 @@ export default function App() {
   const online = useOnlineStatus();
 
   if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        Loading…
-      </div>
-    );
+    return <RouteLoading label="Preparing Let's Tumpang" />;
   }
 
   return (
     <>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <OAuthErrorRedirect />
+      <RouteFocusManager />
       {!online && (
-        <div className="offline-banner">
+        <div className="offline-banner" role="status" aria-live="polite">
           You&apos;re offline — viewing cached screens.
           Anything you change here will sync once
           you&apos;re back online.
         </div>
       )}
 
-      <Routes>
-        <Route path="/auth" element={<AuthEntry />} />
-        <Route path="*" element={<AppShell />} />
-      </Routes>
+      <RouteBoundary>
+        <Routes>
+          <Route
+            path="/auth"
+            element={<div id="main-content" className="auth-main" tabIndex={-1}><AuthEntry /></div>}
+          />
+          <Route path="*" element={<AppShell />} />
+        </Routes>
+      </RouteBoundary>
     </>
   );
 }

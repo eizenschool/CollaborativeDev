@@ -14,8 +14,13 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 ## Shared Presentation
 - `docs/ai/UI.md` — shared mobile-first UI/UX, responsive, component, and accessibility contract.
 - `src/presentation/components/nav/` — shared navigation.
+- `src/presentation/components/ui/` — presentation-only buttons, page/card/
+  field/status/async primitives, adaptive dialog, and route state boundaries.
 - `src/presentation/components/icons.jsx` — shared icons.
 - `src/presentation/styles/` — shared and module style files.
+- `playwright.config.js`, `.env.fixture`, and `tests/e2e/` — deterministic
+  no-key UI acceptance at the four required viewports, including axe and
+  stable screenshot checks.
 
 ## Shared Integration Contracts
 - `docs/ai/FR-6.35_PREFILL_CONTRACT.md` — accepted URL-based Module 6 destination handoff consumed by Modules 2 and 4.

@@ -31,6 +31,12 @@ automatic departure-time lifecycle processing, and mutual Completed-ride
 reviews. The same interfaces and state rules exist in the offline mock adapter;
 its automatic lifecycle processing is deterministic and lazy.
 
+The Ride UI now foregrounds the existing `rideJourneyState` next action with
+role, timing, and responsible party. Publish keeps its five-step unlock,
+location confirmation, quote invalidation, and Draft contracts while adding
+focused validation recovery and responsive actions. Ride/request confirmations
+use the shared adaptive dialog; no lifecycle or service contract changed.
+
 Accepted decision D025 and authored, undeployed migration
 `056_m2_lifecycle_expiry_and_validation.sql` make the database the only status
 authority. Published rides without an Accepted request expire at departure;

@@ -169,13 +169,12 @@ export default function ConversationList({
           </div>
         </div>
 
-        <div className="message-folder-tabs" role="tablist" aria-label="Conversation folders">
+        <div className="message-folder-tabs" role="group" aria-label="Conversation folders">
           {['active', 'archived'].map((item) => (
             <button
               key={item}
               type="button"
-              role="tab"
-              aria-selected={folder === item}
+              aria-pressed={folder === item}
               className={folder === item ? 'message-folder-tab-active' : ''}
               onClick={() => onFolderChange(item)}
             >

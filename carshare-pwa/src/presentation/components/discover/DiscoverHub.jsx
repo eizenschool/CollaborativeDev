@@ -29,6 +29,17 @@ import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
 const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
 
 const today = todayIso;
+const RESULT_PAGE_SIZE = 6;
+
+function ShowMore({ onClick, remaining }) {
+  if (remaining <= 0) return null;
+  const nextCount = Math.min(RESULT_PAGE_SIZE, remaining);
+  return (
+    <button type="button" className="dsc-show-more" onClick={onClick}>
+      Show {nextCount} more <span>({remaining} remaining)</span>
+    </button>
+  );
+}
 
 // Candidates below both thresholds are withheld from the default view, and the
 // presentation rule has always allowed reaching them by category instead.
@@ -78,6 +89,10 @@ export default function DiscoverHub() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateAdjusted, setDateAdjusted] = useState(false);
   const [showAllWithheld, setShowAllWithheld] = useState(false);
+  const [primaryLimit, setPrimaryLimit] = useState(RESULT_PAGE_SIZE);
+  const [unservedLimit, setUnservedLimit] = useState(RESULT_PAGE_SIZE);
+  const [categoryLimit, setCategoryLimit] = useState(RESULT_PAGE_SIZE);
+  const [withheldLimit, setWithheldLimit] = useState(RESULT_PAGE_SIZE);
   const mediaEnabled = useMediaEnabled();
 
   const load = useCallback(async (date) => {
@@ -177,7 +192,13 @@ export default function DiscoverHub() {
 
   // Leaving "All" and coming back should not carry over an expanded state from
   // a previous visit - the reader chose to look, once, at a specific moment.
-  useEffect(() => { setShowAllWithheld(false); }, [categoryFilter]);
+  useEffect(() => {
+    setShowAllWithheld(false);
+    setPrimaryLimit(RESULT_PAGE_SIZE);
+    setUnservedLimit(RESULT_PAGE_SIZE);
+    setCategoryLimit(RESULT_PAGE_SIZE);
+    setWithheldLimit(RESULT_PAGE_SIZE);
+  }, [categoryFilter, result]);
 
   // The hero is the strongest served candidate; the grid below then starts from
   // the second, so the same place is never shown twice on one screen.
@@ -305,11 +326,15 @@ export default function DiscoverHub() {
               </p>
             ) : (
               <div className="dsc-list">
-                {gridPrimary.map((candidate) => (
+                {gridPrimary.slice(0, primaryLimit).map((candidate) => (
                   <DestinationCard key={candidate.placeId} candidate={candidate} onOpen={openDestination} />
                 ))}
               </div>
             )}
+            <ShowMore
+              remaining={Math.max(0, gridPrimary.length - primaryLimit)}
+              onClick={() => setPrimaryLimit((limit) => limit + RESULT_PAGE_SIZE)}
+            />
           </section>
 
           <section className="dsc-section">
@@ -333,11 +358,15 @@ export default function DiscoverHub() {
               <p className="dsc-empty">Every destination people want is already covered.</p>
             ) : (
               <div className="dsc-list">
-                {unserved.map((candidate) => (
+                {unserved.slice(0, unservedLimit).map((candidate) => (
                   <DestinationCard key={candidate.placeId} candidate={candidate} onOpen={openDestination} />
                 ))}
               </div>
             )}
+            <ShowMore
+              remaining={Math.max(0, unserved.length - unservedLimit)}
+              onClick={() => setUnservedLimit((limit) => limit + RESULT_PAGE_SIZE)}
+            />
           </section>
 
           {/* FR-6.19: reachable by category, withheld from the default view.
@@ -354,10 +383,14 @@ export default function DiscoverHub() {
                 nobody has asked to go yet. Open one to register interest.
               </p>
               <div className="dsc-list">
-                {moreInCategory.map((candidate) => (
+                {moreInCategory.slice(0, categoryLimit).map((candidate) => (
                   <DestinationCard key={candidate.placeId} candidate={candidate} onOpen={openDestination} />
                 ))}
               </div>
+              <ShowMore
+                remaining={Math.max(0, moreInCategory.length - categoryLimit)}
+                onClick={() => setCategoryLimit((limit) => limit + RESULT_PAGE_SIZE)}
+              />
             </section>
           )}
 
@@ -390,10 +423,16 @@ export default function DiscoverHub() {
 
               {showAllWithheld && (
                 <div className="dsc-list">
-                  {allWithheld.map((candidate) => (
+                  {allWithheld.slice(0, withheldLimit).map((candidate) => (
                     <DestinationCard key={candidate.placeId} candidate={candidate} onOpen={openDestination} />
                   ))}
                 </div>
+              )}
+              {showAllWithheld && (
+                <ShowMore
+                  remaining={Math.max(0, allWithheld.length - withheldLimit)}
+                  onClick={() => setWithheldLimit((limit) => limit + RESULT_PAGE_SIZE)}
+                />
               )}
             </section>
           )}

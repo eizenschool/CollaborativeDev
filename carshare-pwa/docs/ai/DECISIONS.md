@@ -361,6 +361,25 @@ never infer `In Transit` or `Completed` from the clock. Migration
 `056_m2_lifecycle_expiry_and_validation.sql` implements this append-only
 contract without changing an Edge Function RPC signature.
 
+## D026 — Shared Semantic UI Runtime and Deterministic Accessibility Gate
+**Status:** Accepted
+
+`src/presentation/styles/theme.css` remains the only runtime design-token
+authority. Cross-module presentation uses the small primitive set under
+`src/presentation/components/ui/`; these components remain independent of
+Supabase and business services. Existing green identity, Poppins/Inter type,
+seven navigation destinations, URLs, English flows, and service contracts are
+preserved. `AdaptiveDialog` standardizes phone sheets and wider dialogs with a
+focus trap, Escape handling, and trigger-focus restoration.
+
+`App.jsx` lazy-loads route pages behind one shared loading/error/focus boundary,
+and Vite separates React and Supabase vendor code so no generated JavaScript
+chunk exceeds 500 KB. UI acceptance uses the no-key `.env.fixture` mode with
+Playwright at 375x812, 768x1024, 1024x768, and 1440x1024, stable Chromium
+screenshots, horizontal-overflow/touch-target checks, and WCAG A/AA axe scans.
+This automated gate does not replace Chrome PWA or physical-device permission,
+rotation, keyboard, map, media, and safe-area acceptance.
+
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;

@@ -33,6 +33,10 @@ Shared implementation locations:
 
 - `src/presentation/styles/theme.css` - global tokens, app shell, navigation,
   and shared presentation primitives.
+- `src/presentation/components/ui/` - shared `Button`, `IconButton`, page,
+  card, field, status, async-state, adaptive-dialog, route-loading, and route
+  error/focus primitives. These components are presentation-only and never
+  read Supabase or business data directly.
 - `src/presentation/components/nav/TopNav.jsx` - the shared responsive
   navigation component.
 - `src/presentation/components/notifications/NotificationCenter.jsx` - shared
@@ -95,7 +99,7 @@ use `700px`, `900px`, or `1100px` without harming its layout, align it then.
 
 ### Desktop: above 1100px
 
-- Use the 72px shared top navigation with the same six destinations and active
+- Use the 72px shared top navigation with the same seven destinations and active
   state as mobile.
 - Use the available width with a centred content maximum around 1280-1440px and
   24-32px page gutters.
@@ -258,6 +262,9 @@ the on-screen keyboard, and device safe areas.
 ### Sheets, dialogs, and feedback
 
 - Use a bottom sheet for short phone tasks closely related to the current view.
+- Use `AdaptiveDialog` for shared confirmations and short modal tasks: it is a
+  bottom sheet on phone and centred dialog on wider layouts, with initial
+  focus, focus containment, Escape handling, and trigger-focus return.
 - Present the equivalent desktop interaction as a centred dialog or inline
   detail panel when that better uses the space.
 - Move initial focus into a dialog, keep keyboard focus inside it, support Escape
@@ -336,6 +343,19 @@ application is visually complete:
 
 A successful build is not visual verification. Report any viewport, browser, or
 device check that could not be completed.
+
+The repository's deterministic UI acceptance path is `npm run test:e2e`.
+`playwright.config.js` runs Chromium at the four viewports above using
+`.env.fixture`, which intentionally clears Supabase, Maps, Push, TURN, and live
+tracking configuration and uses only the existing local fixture adapter.
+Stable Home screenshots and `@axe-core/playwright` WCAG A/AA checks are part of
+this suite. `npm run build:fixture` verifies the same no-key configuration.
+
+`App.jsx` owns the skip link, route-change focus, route Suspense/error boundary,
+and route-level lazy loading. Route URLs, auth return state, notification action
+paths, and FR-6.35 query parameters must remain unchanged. Vite chunking must
+keep every single generated JavaScript chunk below 500 KB and keep route-only
+page code out of the Home entry path.
 
 ## Change Discipline
 
