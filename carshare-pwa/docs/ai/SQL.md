@@ -12,11 +12,11 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 favourites/proximity
-Deployed SQL history: 001-026, 028, 033, 034, 036_m3, and 045_m3 as tracked Supabase
+Deployed SQL history: 001-026, 028, 033, 034, 036_m3, 045_m3, and 060_m2 as tracked Supabase
   migrations, plus tracked 035_m4 and 023, 027, 029, 030, 031, 032, and
   037_m2 applied through
   the Dashboard SQL Editor (see below)
-Repository SQL history: 001-052
+Repository SQL history: 001-060
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -25,7 +25,9 @@ Repository SQL history: 001-052
   Module 6's `041_m6`-`042_m6` and Module 3's `043_m3`-`045_m3` retain their
   deployed numbering; Module 2's `041_m2`-`052_m2` sequence was renumbered to
   `046_m2`-`057_m2` during this merge to keep the shared history unambiguous.
-  The final `056_m2`-`058_m2` files are authored locally but not deployed.)
+  `056_m2`-`058_m2` remain authored locally and undeployed. The `059_m2`
+  schema is live without a tracked migration entry; tracked `060_m2` adds the
+  missing owner-scoped Storage SELECT policy required by upload RETURNING.)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -371,7 +373,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
 - `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner; nullable `vehicle_type` is authored in undeployed `039`.
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
-- `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, public pickup instructions, authenticated browsing, and RPC-only mutation.
+- `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, pickup instructions, one nullable private pickup-photo path after undeployed `059`, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
 - `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
 - `conversations`: one ride/traveller direct chat and one ride group, lifecycle snapshot, last-message pointer, and terminal retention.
@@ -513,6 +515,15 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `058_m2_widen_checkin_tolerance.sql` - authored, not deployed; slightly
   widens passenger-only adaptive Check-in distance while retaining the GPS
   accuracy, privacy, historical compatibility, and RPC authorization boundary.
+- `059_m2_ride_pickup_destination_photos.sql` - live without a tracked
+  migration-history entry; one
+  private Host-owned pickup photo per Ride, controlled bind/remove RPC, narrow
+  Published pickup context, and a maximum-100 Ride destination Place ID batch
+  RPC for attributed on-demand card photography.
+- `060_m2_allow_pickup_photo_upload_return.sql` - deployed as tracked migration
+  `m2_allow_pickup_photo_upload_return` on 2026-08-26; adds the missing
+  owner/path/Ride-scoped `SELECT` policy used when Storage returns metadata for
+  a successful Host upload.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

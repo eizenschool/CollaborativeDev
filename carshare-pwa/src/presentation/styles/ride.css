@@ -118,8 +118,7 @@ html:has(.trip-mode-page), body:has(.trip-mode-page) { overflow-x: clip; }
 .ride-route-text.muted { color: var(--muted); font-weight: 500; font-size: 13px; }
 .pin { display: inline-flex; flex-shrink: 0; }
 .pin-pickup { color: var(--teal); }
-.ride-route-connector { width: 13px; display: inline-flex; justify-content: center; }
-.ride-route-connector::before { content: ''; width: 1.5px; height: 12px; background: var(--border); display: block; }
+.pin-destination { color: var(--danger); }
 
 .scale-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; flex-shrink: 0; }
 .scale-urban { background: #f3f4f6; color: var(--muted); }
@@ -594,15 +593,6 @@ button.ride-card {
 
 .ride-route-text.muted {
   font-size: 13px;
-}
-
-.ride-route-connector {
-  width: 14px;
-}
-
-.ride-route-connector::before {
-  height: 15px;
-  background: #cfe0d4;
 }
 
 .scale-badge,
@@ -2056,7 +2046,9 @@ button.ride-card {
   .ride-detail-content > .lifecycle-card,
   .ride-detail-content > .trip-info-mobile,
   .ride-detail-content > .fixed-route-note,
-  .ride-detail-content > .waypoints-section {
+  .ride-detail-content > .waypoints-section,
+  .ride-detail-content > .ride-destination-photo,
+  .ride-detail-content > .ride-destination-photo-loading {
     grid-column: 1 / -1;
   }
 
@@ -2930,3 +2922,216 @@ button.ride-card {
 .waypoint-recommendation span:first-child { display: grid; gap: .15rem; }
 .waypoint-recommendation small { color: var(--muted, #64748b); }
 .waypoint-recommendation > svg { flex: 0 0 auto; color: var(--teal-dark); }
+
+/* Destination photography remains decorative; the card content is the accessible label. */
+.ride-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.ride-card-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: inherit;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.ride-card-primary-action {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ride-card-primary-action:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: -4px;
+}
+
+.ride-card .destination-photo-credit { z-index: 3; }
+
+.ride-card.has-destination-photo {
+  border-color: rgba(255, 255, 255, .3);
+  color: #fff;
+  background: #061a13;
+  box-shadow: 0 14px 34px rgba(3, 18, 13, .24);
+}
+
+.ride-card.has-destination-photo .ride-card-content { padding-bottom: 32px; }
+.ride-card.has-destination-photo .ride-route-text,
+.ride-card.has-destination-photo .ride-route-text.muted,
+.ride-card.has-destination-photo .ride-meta,
+.ride-card.has-destination-photo .ride-seats,
+.ride-card.has-destination-photo .ride-host-name,
+.ride-card.has-destination-photo .ride-host-rating { color: #fff; }
+.ride-card.has-destination-photo .ride-meta-row { border-color: rgba(255, 255, 255, .25); }
+.ride-card.has-destination-photo .contribution-tag {
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(3, 18, 13, .72);
+}
+
+.pickup-photo-field {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ride-line, #dbe7df);
+}
+
+.pickup-photo-heading { display: grid; gap: 6px; }
+.pickup-photo-heading > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.pickup-photo-heading strong { font-size: 13px; }
+.pickup-photo-heading span,
+.pickup-photo-heading small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.pickup-photo-file-input {
+  position: absolute;
+  width: 1px !important;
+  height: 1px !important;
+  inset: 0 auto auto 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  opacity: 0;
+  pointer-events: none;
+}
+.pickup-photo-preview,
+.pickup-photo-public { display: grid; gap: 7px; }
+.pickup-photo-preview-image {
+  width: 100%;
+  max-height: 330px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--ride-line, #dbe7df);
+  border-radius: 14px;
+  object-fit: cover;
+}
+.pickup-photo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pickup-photo-actions button,
+.pickup-photo-remove { min-height: 44px; }
+.pickup-photo-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #b91c1c;
+  background: #fff;
+  font-weight: 700;
+}
+.pickup-photo-public { margin-top: 12px; }
+.pickup-photo-public small { color: var(--muted); line-height: 1.45; }
+.pickup-instructions-card > p:not(.eyebrow) {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.pickup-camera-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(3, 18, 13, .76);
+}
+.pickup-camera-dialog {
+  width: min(620px, 100%);
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .3);
+}
+.pickup-camera-dialog header,
+.pickup-camera-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.pickup-camera-dialog header > div { display: grid; gap: 3px; }
+.pickup-camera-dialog header span { color: var(--muted); font-size: 11px; }
+.pickup-camera-dialog header > button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: #f1f5f2; }
+.pickup-camera-preview { position: relative; min-height: 220px; display: grid; place-items: center; color: #fff; background: #08120e; }
+.pickup-camera-preview video { width: 100%; max-height: 68vh; aspect-ratio: 16 / 9; object-fit: cover; }
+.pickup-camera-preview > span { position: absolute; padding: 8px 11px; border-radius: 8px; background: rgba(0, 0, 0, .66); }
+.pickup-camera-dialog footer { justify-content: flex-end; }
+.pickup-photo-recovery { align-items: center; flex-wrap: wrap; }
+.pickup-photo-recovery > div { min-width: 220px; display: grid; flex: 1; gap: 3px; }
+
+.waypoint-recommendation {
+  display: block;
+  padding: 0;
+  cursor: default;
+}
+.waypoint-recommendation-open {
+  min-height: 54px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .65rem .75rem;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.waypoint-recommendation-open span { display: grid; gap: .15rem; }
+.waypoint-recommendation-open > svg { flex: 0 0 auto; color: var(--teal-dark); }
+.waypoint-recommendation.expanded { border-color: var(--teal); background: var(--teal-tint); }
+.waypoint-recommendation-duration { display: grid; gap: 8px; padding: 0 .75rem .75rem; border-top: 1px solid rgba(15, 118, 110, .16); }
+.waypoint-recommendation-duration > label { padding-top: 10px; font-size: 12px; font-weight: 750; }
+.waypoint-recommendation-duration > div:not(.waypoint-recommendation-actions) { display: flex; align-items: center; gap: 8px; }
+.waypoint-recommendation-duration input,
+.waypoint-selected-duration input { width: 92px; min-height: 44px; }
+.waypoint-recommendation-duration .error { color: #b91c1c; }
+.waypoint-recommendation-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.waypoint-recommendation-actions button { min-height: 44px; }
+.waypoint-selected-duration { display: grid; gap: 3px; justify-items: start; font-size: 10px; color: var(--muted); }
+.waypoint-selected-duration small { font-size: 10px; }
+
+.waypoint-lines > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 124px 44px;
+  align-items: center;
+  gap: 12px;
+}
+
+.waypoint-selected-duration {
+  width: 124px;
+  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-areas:
+    "label label"
+    "input unit";
+  align-items: center;
+  column-gap: 7px;
+  justify-self: start;
+}
+
+.waypoint-selected-duration > span { grid-area: label; }
+.waypoint-selected-duration > input { grid-area: input; }
+.waypoint-selected-duration > small { grid-area: unit; white-space: nowrap; }
+
+.review-pickup-photo {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: start;
+}
+
+.review-pickup-photo-media { min-width: 0; }
+.review-pickup-photo .pickup-photo-preview-image { width: 100%; max-height: 300px; display: block; }
+
+@media (max-width: 520px) {
+  .pickup-photo-actions > button { width: 100%; justify-content: center; }
+  .waypoint-lines > div { grid-template-columns: minmax(0, 1fr) 100px 44px; align-items: start; gap: 8px; }
+  .waypoint-selected-duration { width: 100px; grid-template-columns: 76px minmax(0, 1fr); }
+  .waypoint-selected-duration input { width: 76px; }
+  .review-pickup-photo { grid-template-columns: 1fr; gap: 8px; }
+}

@@ -33,6 +33,8 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/business-logic/verification/` — trip verification logic from the former Trust & Safety scope; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 - `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.
 - `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, reverse geocoding, and explicit current-location-triggered Google Nearby pickup boundary.
+- `src/business-logic/PlacePhotoService.js` — shared Module 6 catalogue-reference and fresh Google Place photo resolver; photo URIs are never persisted.
+- `src/business-logic/RidePickupPhotoService.js` — validates, resizes, uploads, binds, replaces, removes, and signs the single private Ride pickup photo.
 - `src/business-logic/CompatibilityOptions.js` — shared validated vehicle-category and Host-language values used by Module 1 owner editors and Module 4 Search.
 - `src/business-logic/SmartSearchService.js` — Module 4 criteria normalization, URL state, filtering, sorting, and Module 2 ride-search delegation.
 - `src/business-logic/FavouriteService.js` — Module 4 owner-scoped favourite adapter and safe unavailable-card mapping.
@@ -42,6 +44,8 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 ## Shared Mapping
 - `src/presentation/components/maps/GoogleRouteMap.jsx` — shared route iframe with an offline/unconfigured fallback.
 - `src/presentation/components/maps/ConfirmedLocationInput.jsx` — reusable confirmed-location combobox; Pickup can atomically select an accurate device position and disclose five Google Nearby alternatives only after an explicit current-location action.
+- `src/presentation/components/ride/DestinationRidePhoto.jsx` — shared lazy Google destination photo resolver: decorative attributed backgrounds for Ride cards and a labelled attributed figure on standard Ride Detail, with fallback on failure.
+- `src/presentation/components/ride/PickupPhotoField.jsx` and `src/presentation/hooks/usePhotoCapture.js` — shared one-photo meeting-point field and camera lifecycle used by Ride and Messaging presentation.
 - `docs/GOOGLE-MAPS-SETUP.md` — Cloud project, restricted-key, environment, and cost-safety setup.
 
 ## Data Access / Backend Adapters
@@ -54,6 +58,8 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `supabase/functions/notification-subscriptions/` and
   `supabase/functions/notification-push/` — authenticated device registration
   and webhook-authenticated VAPID delivery; secrets remain server-only.
+- `supabase/functions/m2-ride-pickup-photo/` — visibility-checked five-minute
+  signed URL for the private `ride-pickup-photos` bucket.
 - `database/sql/` — numbered schema/RLS/trigger SQL files; see `docs/ai/SQL.md` for the current file map before reading these directly.
 
 ## Module Context

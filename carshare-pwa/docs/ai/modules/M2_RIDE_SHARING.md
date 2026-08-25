@@ -95,6 +95,9 @@ minute Cron completes immediately after all confirmations or after the Driver's
 
 New Publish Ride drafts require at least one registered Host vehicle and
 confirmed Malaysia-only Google location suggestions for pickup and destination.
+When a Host resumes a Draft, publishing merges the current form values before
+validation and route submission, so an edited departure date/time replaces the
+stale persisted Draft timestamp and is checked against the same fresh quote.
 The entry gate checks vehicles before requesting location permission. Eligible
 Hosts receive one automatic device-location request that shows a current-position
 pin in the Embed preview; it is neither persisted nor treated as pickup. Once a
@@ -276,9 +279,11 @@ recorded in `docs/GOOGLE-MAPS-SETUP.md`.
 `recommendationRoute` returned by `m2-route-quote`, asks Module 6's
 `PlaceQueryService` for a 5 km corridor, filters culinary/heritage places,
 sorts by route progress, removes selected Place IDs, and caps the panel at six
-items. Selecting one creates the existing confirmed waypoint with a 30-minute
-default stop. A failed recommendation request falls back to manual waypoint
-entry; adding or editing a waypoint requires a fresh final route quote.
+items. Selecting one first expands a 0-180 minute integer editor with a
+30-minute default; Add/Cancel completes the choice, and an added waypoint's
+duration remains editable. A failed recommendation request falls back to
+manual waypoint entry; adding, removing, or editing a waypoint invalidates the
+quote and requires a fresh final route quote.
 Publish now renders those suggestions inside the existing Culinary & cultural
 waypoints builder, above an explicit “Or add your own stop” path, instead of as
 a separate Review card. The preserved recommendation route lets the Driver add
@@ -293,6 +298,22 @@ fall back to a fresh Google Maps JavaScript `Place` photo. Bytes, fresh URIs and
 new resource names are never persisted. This is the documented D018 prototype
 limitation: Google permits indefinite Place ID storage, but photo references
 and URIs can expire and are not a production cache contract.
+
+The live `059_m2_ride_pickup_destination_photos.sql` contract
+adds one private pickup meeting photo per Ride. Create/Edit keeps the selected
+JPEG/PNG/WebP locally, corrects orientation, limits the longest edge to 1600px,
+prefers WebP, and uploads only after the Ride save succeeds. A failed photo
+operation never republishes the Ride: the Driver can retry or continue without
+the photo. Published Ride Detail exposes the instructions and signed photo to
+visitors through a narrow RPC plus `m2-ride-pickup-photo`; Trip Mode and every
+Ride Card omit this pickup photo. Search, Favourite, and `/ride` cards instead
+use an attributed, lazy Google destination photo when available and keep their
+existing non-photo design as the fallback. Standard Ride Detail also shows the
+same on-demand, attributed destination photo; Trip Mode remains photo-free.
+Tracked migration `060_m2_allow_pickup_photo_upload_return.sql` is deployed and
+adds the narrowly owner/path/Ride-scoped Storage `SELECT` required for upload
+metadata to be returned without weakening the private bucket. The
+`m2-ride-pickup-photo` Edge Function is active as version 1.
 
 The deployed `042` contract provides explicit opt-in foreground live tracking,
 latest points, sampled history, filtered Driver/passenger visibility and

@@ -1,7 +1,9 @@
 // ===== PRESENTATION LAYER (RideCard) =====
+import { useState } from 'react';
 import { IconMapPin, IconCalendar, IconUsers, IconStar, IconMedal } from '../icons.jsx';
 import { getBadgeForStats } from '../../../business-logic/HostImpactEngine.js';
 import { formatJourneyCountdown } from '../../../business-logic/rideJourneyState.js';
+import DestinationRidePhoto from './DestinationRidePhoto.jsx';
 
 // Bronze/Silver/Gold/Platinum pill colours - same tier names/thresholds as
 // HostImpactEngine.badgeTiers, just a display-only colour map for this module.
@@ -34,11 +36,13 @@ export default function RideCard({ ride, statusChip, roleLabel, journeyState, co
   const badge = ride.host ? getBadgeForStats(ride.host) : null;
   const tier = badge ? badge.name.replace(' Host', '') : null;
   const tierStyle = tier ? TIER_COLORS[tier] : null;
-
-  const CardElement = onClick ? 'button' : 'article';
+  const [hasDestinationPhoto, setHasDestinationPhoto] = useState(false);
+  const destinationPhotoPlaceId = ride.destinationPhotoPlaceId || ride.destinationLocation?.placeId;
 
   return (
-    <CardElement type={onClick ? 'button' : undefined} className={'ride-card' + (onClick ? ' ride-card-clickable' : '') + (compact ? ' ride-card-compact' : '')} onClick={onClick}>
+    <article className={'ride-card' + (onClick ? ' ride-card-clickable' : '') + (compact ? ' ride-card-compact' : '') + (hasDestinationPhoto ? ' has-destination-photo' : '')}>
+      <DestinationRidePhoto placeId={destinationPhotoPlaceId} label={ride.destination} onReadyChange={setHasDestinationPhoto} />
+      <div className="ride-card-content">
       <div className="ride-card-top">
         <div className="ride-route">
           <div className="ride-route-line">
@@ -46,7 +50,7 @@ export default function RideCard({ ride, statusChip, roleLabel, journeyState, co
             <span className="ride-route-text">{ride.pickup}</span>
           </div>
           <div className="ride-route-line">
-            <span className="ride-route-connector" />
+            <span className="pin pin-destination"><IconMapPin size={13} /></span>
             <span className="ride-route-text muted">{ride.destination}</span>
           </div>
         </div>
@@ -96,6 +100,8 @@ export default function RideCard({ ride, statusChip, roleLabel, journeyState, co
           <span className="contribution-tag">{ride.contribution || 'No contribution needed'}</span>
         )}
       </div>}
-    </CardElement>
+      </div>
+      {onClick && <button type="button" className="ride-card-primary-action" onClick={onClick} aria-label={`Open ride from ${ride.pickup} to ${ride.destination}`} />}
+    </article>
   );
 }

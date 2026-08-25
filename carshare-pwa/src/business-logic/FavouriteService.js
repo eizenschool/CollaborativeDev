@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
-import { mapRideRow } from './RideService.js';
+import { attachDestinationPhotoPlaceIds, mapRideRow } from './RideService.js';
 
 function favouriteError(error) {
   if (!error) return null;
@@ -54,9 +54,9 @@ export const FavouriteService = {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase.rpc('list_my_favourite_rides');
       if (error) throw favouriteError(error);
-      return (data || []).map(mapFavouriteRideRow);
+      return attachDestinationPhotoPlaceIds((data || []).map(mapFavouriteRideRow));
     }
-    return mockDb.listFavouriteRides(userId);
+    return attachDestinationPhotoPlaceIds(await mockDb.listFavouriteRides(userId));
   },
 
   async add(userId, rideId) {

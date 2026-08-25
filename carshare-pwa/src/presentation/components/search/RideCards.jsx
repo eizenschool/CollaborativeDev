@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { calculateCompositeHostImpact, getBadgeForStats } from '../../../business-logic/HostImpactEngine.js';
 import {
   spokenLanguageLabel,
@@ -13,6 +14,7 @@ import {
   IconStar,
   IconUsers
 } from '../icons.jsx';
+import DestinationRidePhoto from '../ride/DestinationRidePhoto.jsx';
 
 function formatDeparture(ride) {
   if (!ride?.departureAt && !ride?.date) return 'Schedule unavailable';
@@ -74,9 +76,12 @@ export function SearchRideCard({
   const tier = ride.host ? getBadgeForStats(ride.host).name : null;
   const vehicleLabel = vehicleTypeLabel(ride.vehicleType);
   const languageLabels = (ride.host?.spokenLanguages || []).map(spokenLanguageLabel).filter(Boolean);
+  const [hasDestinationPhoto, setHasDestinationPhoto] = useState(false);
+  const destinationPhotoPlaceId = ride.destinationPhotoPlaceId || ride.destinationLocation?.placeId;
 
   return (
-    <article className={`search-ride-card${unavailable ? ' unavailable' : ''}`}>
+    <article className={`search-ride-card${unavailable ? ' unavailable' : ''}${hasDestinationPhoto ? ' has-destination-photo' : ''}`}>
+      <DestinationRidePhoto placeId={destinationPhotoPlaceId} label={ride.destination} onReadyChange={setHasDestinationPhoto} />
       {unavailable && (
         <div className="search-unavailable-banner" role="status">
           <IconAlertTriangle size={16} aria-hidden="true" />

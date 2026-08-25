@@ -5,9 +5,7 @@ import { getAuthNavigation, normaliseInternalReturnPath } from '../../../busines
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
-import { PlaceQueryService } from '../../../business-logic/discovery/PlaceQueryService.js';
-import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
-import { loadGoogleMapsLibraries } from '../../../business-logic/GooglePlacesService.js';
+import { PlacePhotoService } from '../../../business-logic/PlacePhotoService.js';
 import { RideLiveTrackingService, isPointStale, isPointUnavailable } from '../../../business-logic/RideLiveTrackingService.js';
 import { isAtLeastHoursAway, isBeforeRideExpiry, REQUEST_CUTOFF_HOURS } from '../../../business-logic/rideDateTime.js';
 import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedService.js';
@@ -21,6 +19,8 @@ import {
 } from '../icons.jsx';
 import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
 import { Button } from '../ui/Button.jsx';
+import { PickupPhotoPreview } from './PickupPhotoField.jsx';
+import DestinationRidePhoto from './DestinationRidePhoto.jsx';
 import '../../styles/ride.css';
 
 const LIFECYCLE = ['Draft', 'Published', 'Matched', 'In Transit', 'Completed'];
@@ -126,24 +126,14 @@ function WaypointPhoto({ waypoint }) {
     (async () => {
       try {
         const loadFreshPhoto = async () => {
-          const { places } = await loadGoogleMapsLibraries(['places']);
-          const place = new places.Place({ id: waypoint.placeId });
-          await place.fetchFields({ fields: ['photos'] });
-          const first = place.photos?.[0];
-          const url = first?.getURI?.({ maxWidth: 600 });
-          if (!url) throw new Error('No waypoint photo');
-          const attribution = first?.authorAttributions?.[0];
-          if (active) setPhoto({ url, attribution, cached: false });
+          const fresh = await PlacePhotoService.resolveFresh(waypoint.placeId, { label: waypoint.name, maxWidth: 600 });
+          if (!fresh?.url) throw new Error('No waypoint photo');
+          if (active) setPhoto(fresh);
         };
         freshLoaderRef.current = loadFreshPhoto;
-        const cataloguePlace = await PlaceQueryService.getPlaceBySourcePlaceId(waypoint.placeId);
-        const cachedReference = cataloguePlace?.photoReference;
-        const cachedUrl = buildPlacePhotoUrl(cachedReference, { maxWidthPx: 600 });
-        if (cachedUrl) {
-          if (active) setPhoto({ url: cachedUrl, attribution: cataloguePlace?.photoAttribution || 'Google Maps', cached: true });
-          return;
-        }
-        await loadFreshPhoto();
+        const resolved = await PlacePhotoService.resolve(waypoint.placeId, { label: waypoint.name, maxWidth: 600 });
+        if (!resolved?.url) throw new Error('No waypoint photo');
+        if (active) setPhoto(resolved);
       } catch {
         if (active) setFailed(true);
       }
@@ -579,7 +569,14 @@ export default function RideDetail() {
           <p className="request-date">Request deadline: {requestDeadline.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' })}</p>
         </section>
 
-        {ride.pickupInstructions && <section className="ride-info-card pickup-instructions-card"><p className="eyebrow">PICKUP INSTRUCTIONS</p><p><IconMapPin size={15} /> {ride.pickupInstructions}</p></section>}
+        <DestinationRidePhoto
+          variant="detail"
+          placeId={ride.destinationPhotoPlaceId || ride.destinationLocation?.placeId}
+          label={ride.destination}
+          maxWidth={1200}
+        />
+
+        {(ride.pickupInstructions || ride.hasPickupPhoto) && <section className="ride-info-card pickup-instructions-card"><p className="eyebrow">PICKUP INSTRUCTIONS</p>{ride.pickupInstructions && <p><IconMapPin size={15} /> {ride.pickupInstructions}</p>}{ride.hasPickupPhoto && <div className="pickup-photo-public"><PickupPhotoPreview rideId={ride.id} hasExisting /><small>Photo provided by the Driver to help identify the meeting point.</small></div>}</section>}
 
         <section className="fixed-route-note"><IconAlertTriangle size={16} /><span>This ride follows a <strong>fixed route</strong>. Route-deviation automation is not enabled yet.</span></section>
 

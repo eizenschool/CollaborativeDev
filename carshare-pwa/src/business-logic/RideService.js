@@ -166,9 +166,12 @@ export function mapRideRow(row) {
     hostId: row.host_id ?? row.hostId,
     pickup: row.pickup,
     destination: row.destination,
+    destinationPhotoPlaceId: row.destination_photo_place_id ?? row.destinationPhotoPlaceId ?? row.destination_place_id ?? null,
     pickupLocation: rowLocation(row, 'pickup'),
     destinationLocation: rowLocation(row, 'destination'),
     pickupInstructions: row.pickup_instructions ?? row.pickupInstructions ?? '',
+    pickupPhotoPath: row.pickup_photo_path ?? row.pickupPhotoPath ?? null,
+    hasPickupPhoto: row.has_pickup_photo ?? row.hasPickupPhoto ?? Boolean(row.pickup_photo_path ?? row.pickupPhotoPath),
     departureAt,
     date: legacyParts.date,
     time: legacyParts.time,
@@ -211,6 +214,25 @@ export function mapRideRow(row) {
         }
       : row.host ?? null
   };
+}
+
+export async function attachDestinationPhotoPlaceIds(rides = []) {
+  if (!rides.length) return rides;
+  if (!isSupabaseConfigured) {
+    return rides.map((ride) => ({
+      ...ride,
+      destinationPhotoPlaceId: ride.destinationPhotoPlaceId || ride.destinationLocation?.placeId || null,
+    }));
+  }
+  const rideIds = [...new Set(rides.map((ride) => ride?.id).filter(Boolean))].slice(0, 100);
+  if (!rideIds.length) return rides;
+  const { data, error } = await supabase.rpc('get_ride_destination_photo_place_ids', { p_ride_ids: rideIds });
+  if (error) return rides;
+  const placeByRide = new Map((data || []).map((item) => [item.ride_id, item.destination_place_id]));
+  return rides.map((ride) => ({
+    ...ride,
+    destinationPhotoPlaceId: placeByRide.get(ride.id) || ride.destinationPhotoPlaceId || ride.destinationLocation?.placeId || null,
+  }));
 }
 
 function mapProximityRideRow(row) {
@@ -361,7 +383,7 @@ export const RideService = {
           p_language: compatibility?.language || null
         }
       );
-      if (!compatibilityError) return (compatibleData || []).map(mapProximityRideRow);
+      if (!compatibilityError) return attachDestinationPhotoPlaceIds((compatibleData || []).map(mapProximityRideRow));
       if (!isUndeployedCompatibilitySearch(compatibilityError)) throw rpcError(compatibilityError);
       if (compatibility) {
         throw new Error('Vehicle and language filters are not available in this environment yet.');
@@ -381,7 +403,7 @@ export const RideService = {
           }
           throw rpcError(error);
         }
-        return (data || []).map(mapProximityRideRow);
+        return attachDestinationPhotoPlaceIds((data || []).map(mapProximityRideRow));
       }
 
       const run = (select) => {
@@ -397,9 +419,9 @@ export const RideService = {
       let { data, error } = await run(PUBLIC_RIDE_SELECT);
       if (error && isUndeployedModule2Upgrade(error)) ({ data, error } = await run(LEGACY_PUBLIC_RIDE_SELECT));
       if (error) throw rpcError(error);
-      return data.map(mapRideRow);
+      return attachDestinationPhotoPlaceIds(data.map(mapRideRow));
     }
-    return mockDb.listRides({ from, to, date });
+    return attachDestinationPhotoPlaceIds(await mockDb.listRides({ from, to, date }));
   },
 
   async listMyRides(userId) {
@@ -409,9 +431,13 @@ export const RideService = {
       let { data, error } = await run(PUBLIC_RIDE_SELECT);
       if (error && isUndeployedModule2Upgrade(error)) ({ data, error } = await run(LEGACY_PUBLIC_RIDE_SELECT));
       if (error) throw rpcError(error);
-      return { hosting: data.map(mapRideRow), joining: [] };
+      return { hosting: await attachDestinationPhotoPlaceIds(data.map(mapRideRow)), joining: [] };
     }
-    return mockDb.listMyRides(userId);
+    const result = await mockDb.listMyRides(userId);
+    return {
+      hosting: await attachDestinationPhotoPlaceIds(result.hosting || []),
+      joining: await attachDestinationPhotoPlaceIds(result.joining || []),
+    };
   },
 
   async getRide(rideId) {
@@ -432,7 +458,15 @@ export const RideService = {
           if (legacyHostData) return mapRideRow(legacyHostData);
         }
       }
-      return mapRideRow(data);
+      const mapped = mapRideRow(data);
+      const { data: publicContext } = await supabase.rpc('get_public_ride_pickup_context', { p_ride_id: rideId });
+      const context = Array.isArray(publicContext) ? publicContext[0] : publicContext;
+      const publicRide = context ? {
+        ...mapped,
+        pickupInstructions: context.pickup_instructions || '',
+        hasPickupPhoto: Boolean(context.has_photo),
+      } : mapped;
+      return (await attachDestinationPhotoPlaceIds([publicRide]))[0] || publicRide;
     }
     return mockDb.getRide(rideId);
   },
@@ -509,18 +543,24 @@ export const RideService = {
     return mockDb.quoteRide(rideData, { rideId });
   },
 
-  async publishDraft(rideId, routeQuote = null) {
+  async publishDraft(rideId, draftChanges, routeQuote = null) {
+    const ride = await this.getRide(rideId);
+    if (!ride || ride.status !== 'Draft') throw new Error('Only a Draft ride can be published.');
+    const merged = mergeRideUpdate(ride, draftChanges || {});
+    validateRideDraft(merged, {
+      publishing: true,
+      requireConfirmedLocations: true,
+      requireConfirmedWaypoints: true,
+    });
     if (isSupabaseConfigured) {
-      const ride = await this.getRide(rideId);
-      if (!ride || ride.status !== 'Draft') throw new Error('Only a Draft ride can be published.');
       if (!routeQuote?.token) throw new Error('Calculate a fresh route before publishing.');
       const result = await invokeRouteFunction({
         action: 'publish', mode: 'publish_draft', rideId,
-        ride: buildRoutePayload(ride), quoteToken: routeQuote.token
+        ride: buildRoutePayload(merged), quoteToken: routeQuote.token
       });
       return this.getRide(result.rideId);
     }
-    return mockDb.publishDraft(rideId, routeQuote);
+    return mockDb.publishDraft(rideId, draftChanges || {}, routeQuote);
   },
 
   async deleteDraft(rideId) {

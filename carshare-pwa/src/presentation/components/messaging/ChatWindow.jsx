@@ -24,7 +24,7 @@ import { useMessagingSession } from '../../../context/MessagingSessionContext.js
 import { useCallSession } from '../../../context/CallSessionContext.jsx';
 import MessageBubble from './MessageBubble.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
-import usePhotoCapture from './usePhotoCapture.js';
+import usePhotoCapture from '../../hooks/usePhotoCapture.js';
 import useVideoRecorder from './useVideoRecorder.js';
 import useVoiceRecorder from './useVoiceRecorder.js';
 

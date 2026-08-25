@@ -36,13 +36,17 @@ Restart `npm run dev` after changing environment values.
 - `profile_private`: owner-only phone and emergency contact; email remains in Auth.
 - `vehicles`: owner-only CRUD with a driver-licence field and one active vehicle per user.
 - `host_impact_stats`: authenticated read-only until a trusted update pipeline exists.
-- `rides`: authenticated search, RPC-only host mutation, confirmed route references, pickup instructions, waypoints, seat constraints, and a mandatory host-owned vehicle.
+- `rides`: authenticated search, RPC-only host mutation, confirmed route references, pickup instructions, waypoints, seat constraints, a mandatory host-owned vehicle, and one private pickup-photo path after live `059`.
 - `ride_requests` and `ride_reviews`: RPC-only participation and mutual review lifecycle.
 - `conversations`, `conversation_members`, `messages`, and `message_attachments`: member-readable, RPC-mutated messaging with seven-day terminal retention.
 - `message_translations` (after deploying `036`): member-readable, Edge-Function-written shared text/voice translation cache.
 - `user_notifications`: recipient-owned cross-module inbox, with Message as its first producer; browser-device subscriptions are Edge-Function-only and never client-readable.
 - `avatars`: public reads, owner-folder writes, common image MIME types, 5 MB maximum.
 - `message-media`: private, no listing, approved media only, 50 MB object maximum, and attachment-bound signed downloads.
+- `ride-pickup-photos` (after live `059` plus tracked `060`): private,
+  Host-only write/delete and owner-scoped upload-metadata reads,
+  one bound JPEG/PNG/WebP object per Ride, 2 MB stored maximum, and five-minute
+  visibility-checked signed downloads through `m2-ride-pickup-photo`.
 
 Phone OTP, hard account deletion, email notifications, and Modules
 4-6 are not part of this connection. The notification centre is implemented
@@ -200,7 +204,10 @@ RLS and Postgres privileges are separate layers and both are configured:
 
 - `anon` receives only the approved active-profile/Host-impact and Published
   Ride columns; after local `027`, ETA is added while waypoint JSON is removed
-  because its upgraded contract contains private Place IDs.
+  because its upgraded contract contains private Place IDs. Local `059` does
+  not grant either photo path or direct Place ID columns: its two bounded RPCs
+  expose only Published pickup instructions/photo presence and card-safe
+  destination Place IDs under D027.
 - `authenticated` receives explicit table/column grants only for supported actions.
 - Owner policies use both `USING` and `WITH CHECK` for updates.
 - The Auth trigger uses an empty `search_path`, schema-qualified objects, and no client execute permission.
@@ -225,7 +232,10 @@ For live acceptance, use two real email accounts and verify:
 2. User B cannot read User A's `profile_private` row or change A's vehicle/ride.
 3. Avatar upload, profile updates, deactivate/sign-in reactivation.
 4. Vehicle create/edit/active/delete, driver-licence persistence, and the single-active constraint.
-5. Ride draft/publish/search/edit-waypoints/cancel, confirmed Place IDs, current-location pickup, and pickup instructions.
+5. Ride draft/publish/search/edit-waypoints/cancel, confirmed Place IDs,
+   current-location pickup, custom waypoint duration, pickup-photo
+   upload/replace/remove/retry, and public Published Ride Detail signed-photo
+   visibility. Confirm pickup photos never appear on cards.
 6. An unauthenticated client cannot access any business table.
 7. With two accounts, verify Published `Message host`, Accepted group backfill/Realtime, mixed media/location upload retry, unread edit race, delete, History jump, Archive/Leave, expired access denial, four-language text/voice translation and shared caching after completing Message translation setup, recipient-only notifications, and VAPID click-through after completing the Notification delivery setup.
 8. Modules 4-6 local demo functions still operate.

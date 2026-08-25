@@ -1004,6 +1004,53 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .search-ride-card,
+.search-ride-card,
   .smart-input-wrap { transition: none; }
+}
+
+/* Destination photo cards retain the existing content and controls above a fixed scrim. */
+.search-ride-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.search-ride-card-body,
+.search-ride-card-footer,
+.search-unavailable-banner {
+  position: relative;
+  z-index: 1;
+}
+
+.search-ride-card .destination-photo-credit { z-index: 3; }
+
+.search-ride-card.has-destination-photo {
+  border-color: rgba(255, 255, 255, .3);
+  color: #fff;
+  background: #061a13;
+  box-shadow: 0 14px 34px rgba(3, 18, 13, .24);
+}
+
+.search-ride-card.has-destination-photo .search-route strong,
+.search-ride-card.has-destination-photo .search-ride-facts,
+.search-ride-card.has-destination-photo .search-host-copy strong,
+.search-ride-card.has-destination-photo .search-host-copy small,
+.search-ride-card.has-destination-photo .search-ride-card-footer > span,
+.search-ride-card.has-destination-photo .search-ride-card-footer button { color: #fff; }
+.search-ride-card.has-destination-photo .search-route i,
+.search-ride-card.has-destination-photo .search-host-row { border-color: rgba(255, 255, 255, .27); }
+.search-ride-card.has-destination-photo .search-route i { background: rgba(255, 255, 255, .58); }
+.search-ride-card.has-destination-photo .search-ride-card-footer {
+  padding-bottom: 41px;
+  border-color: rgba(255, 255, 255, .25);
+  background: rgba(3, 18, 13, .68);
+}
+.search-ride-card.has-destination-photo .search-favourite-button {
+  border-color: rgba(255, 255, 255, .42);
+  color: #fff;
+  background: rgba(3, 18, 13, .68);
+}
+.search-ride-card.has-destination-photo .search-favourite-button.saved {
+  border-color: #fecdd3;
+  color: #e11d48;
+  background: #fff1f2;
 }

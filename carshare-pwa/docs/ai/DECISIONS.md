@@ -380,6 +380,22 @@ screenshots, horizontal-overflow/touch-target checks, and WCAG A/AA axe scans.
 This automated gate does not replace Chrome PWA or physical-device permission,
 rotation, keyboard, map, media, and safe-area acceptance.
 
+## D027 — Narrow Public Ride Photo Context
+**Status:** Accepted
+
+This decision revises D017 and D021 only for two presentation-safe cases.
+Anyone may read the pickup instructions and presence of a pickup photo for an
+active Host's Published Ride through `get_public_ride_pickup_context`; the
+private object path is never returned, and a five-minute signed URL is issued
+only by `m2-ride-pickup-photo` after the same visibility check. A card list may
+also obtain only the destination Google Place ID for a Published Ride, or for a
+Ride accessible to its Host or Accepted participant, through the bounded batch
+RPC `get_ride_destination_photo_place_ids`.
+
+Pickup Place IDs, coordinates, waypoint data, route geometry, Storage paths,
+and non-Published pickup context remain private. Google photo URIs are fetched
+on demand, attributed, and never stored in the database.
+
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;

@@ -11,8 +11,9 @@ Module 2 uses two separate website-restricted browser keys:
   geocoding, and the five nearest pickup-friendly Google places disclosed only
   after the Driver selects `Use current location`. Nearby Search requests
   `displayName`, `formattedAddress`, and `location`, so Google bills them under
-  the Nearby Search Pro SKU. The app does not request Place Details or create a
-  Dynamic Maps instance.
+  the Nearby Search Pro SKU. Destination Ride cards additionally request the
+  first Place photo on demand when Module 6 has no usable cached reference.
+  The app does not create a Dynamic Maps instance for these cards.
 
 Google currently lists separate monthly 10,000-event free usage caps for
 Autocomplete Requests and Geocoding. Free usage is calculated per SKU, not as
@@ -68,7 +69,8 @@ The owning Google account is intentionally not recorded in the repository.
    does not expose an enforceable hard limit, keep the feature out of the
    production environment until a separately approved cost boundary exists.
 9. Configure 50%, 75%, and 90% usage alerts for all three request paths and a
-   low project-level billing budget alert that includes Nearby Search Pro.
+   low project-level billing budget alert that includes Nearby Search Pro and
+   the destination card Place photo request path.
    Alerts are notifications and do not stop requests; the hard quota is the
    production cost boundary.
 10. Put both keys in the ignored `.env.local` file:
@@ -134,6 +136,12 @@ but does not replace, the required Google Cloud hard quota.
   most five results. No Nearby Search runs before this explicit button action.
 - Automated tests mock Google and browser geolocation. They must make zero real
   API calls.
+- Search, Favourite, and `/ride` destination photos are requested only after a
+  card enters the viewport margin. Module 6's current photo reference is tried
+  first; a missing or failed reference uses `Place.fetchFields(['photos'])`.
+  Returned photo URIs are not persisted, decorative images use empty alt text,
+  and photographer/Google Maps attribution remains visible on the card. Missing
+  key, offline, quota, and no-photo failures preserve the original card style.
 - If the location key is absent, offline, or over quota, existing Ride text and
   Embed previews remain readable, but a new unconfirmed location cannot be
   saved. If the Embed key is absent, the local route illustration remains.

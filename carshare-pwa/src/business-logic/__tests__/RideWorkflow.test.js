@@ -3,6 +3,7 @@ import {
   buildRoutePayload,
   isRouteQuoteFresh,
   mergeRideUpdate,
+  RideService,
   routeChangeRequiresConfirmation,
   validateConfirmedRoute,
   validateConfirmedWaypoints,
@@ -166,6 +167,38 @@ describe('Module 2 ride workflow contracts', () => {
     });
     expect(published.status).toBe('Published');
     expect(published.estimatedArrivalAt).toBe('2026-08-25T03:00:00.000Z');
+  });
+
+  it('publishes a stale-time Draft with the newly edited schedule used for its quote', async () => {
+    const draft = await mockDb.createRide('u_demo_1', {
+      pickup: 'KL Sentral', destination: 'Ipoh',
+      date: '2026-08-14', time: '08:30', departureAt: '2026-08-14T00:30:00.000Z',
+      journeyScale: 'Intercity', vehicleId: 'v_1', seatsTotal: 2,
+      pickupLocation: { placeId: 'pickup-id' }, destinationLocation: { placeId: 'destination-id' },
+      waypoints: []
+    }, 'Draft');
+    const edited = {
+      pickup: draft.pickup, destination: draft.destination,
+      pickupLocation: draft.pickupLocation, destinationLocation: draft.destinationLocation,
+      pickupInstructions: '', date: '2026-08-27', time: '14:45',
+      journeyScale: draft.journeyScale, vehicleId: draft.vehicleId, seatsTotal: 2,
+      contribution: '', restrictionTags: [], waypoints: []
+    };
+    const stored = JSON.parse(memory.get(STORAGE_KEY));
+    stored.rides.r_5.estimatedArrivalAt = '2026-08-20T03:00:00.000Z';
+    stored.rides.r_5.scheduleBufferUntil = '2026-08-20T03:30:00.000Z';
+    memory.set(STORAGE_KEY, JSON.stringify(stored));
+    const published = await RideService.publishDraft(draft.id, edited, {
+      distanceMeters: 200000, routeDurationSeconds: 7200, stopoverSeconds: 0,
+      estimatedArrivalAt: '2026-08-27T08:45:00.000Z', expiresAt: '2026-08-14T00:10:00.000Z',
+      pickupAnchor: { latitude: 3.134, longitude: 101.686 },
+      destinationAnchor: { latitude: 4.597, longitude: 101.09 }
+    });
+
+    expect(published.status).toBe('Published');
+    expect(published.date).toBe('2026-08-27');
+    expect(published.time).toBe('14:45');
+    expect(published.departureAt).toBe('2026-08-27T06:45:00.000Z');
   });
 
   it('deletes an owned Draft and rejects another account', async () => {

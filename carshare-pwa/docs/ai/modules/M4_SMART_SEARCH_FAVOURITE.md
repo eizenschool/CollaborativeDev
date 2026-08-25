@@ -76,6 +76,13 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
 Business logic: `src/business-logic/SmartSearchService.js` and
 `src/business-logic/FavouriteService.js`.
 
+Search and Favourite hydrate destination Place IDs with Module 2's bounded
+batch RPC, then share `DestinationRidePhoto` with the `/ride` workspace. Photos
+load only near the viewport, retain all existing route/Host/status text over a
+fixed contrast scrim, include Google/photographer attribution, and fall back to
+the original white-green card when unavailable. Pickup meeting photos never
+appear on cards.
+
 Presentation: `src/presentation/components/search/` and
 `src/presentation/styles/search.css`.
 

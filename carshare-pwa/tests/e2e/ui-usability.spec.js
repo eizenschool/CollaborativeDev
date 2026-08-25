@@ -20,8 +20,13 @@ async function expectNoPageOverflow(page) {
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
+    offenders: [...document.querySelectorAll('body *')]
+      .map((element) => ({ selector: `${element.tagName.toLowerCase()}.${String(element.className || '').trim().replaceAll(' ', '.')}`, right: Math.round(element.getBoundingClientRect().right), width: Math.round(element.getBoundingClientRect().width) }))
+      .filter((item) => item.right > document.documentElement.clientWidth + 1)
+      .sort((left, right) => right.right - left.right)
+      .slice(0, 4),
   }));
-  expect(dimensions.scrollWidth, `page width ${dimensions.scrollWidth}px exceeds viewport ${dimensions.clientWidth}px`).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+  expect(dimensions.scrollWidth, `page width ${dimensions.scrollWidth}px exceeds viewport ${dimensions.clientWidth}px; offenders ${JSON.stringify(dimensions.offenders)}`).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 }
 
 async function mockGooglePickupServices(page, { nearbyFails = false } = {}) {
@@ -246,6 +251,150 @@ test('Create Ride skips Google for very inaccurate GPS and preserves manual reco
   await pickup.fill('K');
   await expect(pickup).toHaveValue('K');
   await expect(page.locator('.location-field-message.error')).not.toContainText('accurate to about 650 m');
+});
+
+test('Ride cards use lazy destination photos while pickup photos stay on Published detail', async ({ page }) => {
+  await openPage(page, '/home', 'Hi, Jamie');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    const future = { date: '2026-09-15', time: '07:00', departureAt: '2026-09-14T23:00:00.000Z', status: 'Published', expiredAt: null };
+    Object.assign(database.rides.r_1, future, {
+      pickupInstructions: 'Wait beside the station information counter.',
+      pickupPhotoPath: 'mock/r_1/meeting.webp',
+      pickupPhotoDataUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="450"%3E%3Crect width="800" height="450" fill="%230f766e"/%3E%3C/svg%3E',
+      hasPickupPhoto: true,
+    });
+    Object.assign(database.rides.r_5, future, {
+      destinationLocation: { source: 'google', placeId: 'fixture_jonker' },
+    });
+    database.favourites.u_demo_1 = [{ rideId: 'r_1', createdAt: new Date().toISOString() }];
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+
+  await openPage(page, '/search', 'Find the right ride');
+  const searchPhotoCard = page.locator('.search-ride-card.has-destination-photo').first();
+  await expect(searchPhotoCard).toBeVisible();
+  await expect(searchPhotoCard.locator('.destination-ride-photo img')).toHaveAttribute('alt', '');
+  await expect(searchPhotoCard.locator('.destination-photo-credit')).toContainText('Google Maps');
+  await expect(searchPhotoCard.locator('.pickup-photo-preview-image')).toHaveCount(0);
+
+  await openPage(page, '/favourite', 'Favourite rides');
+  await expect(page.locator('.search-ride-card.has-destination-photo')).toHaveCount(1);
+
+  await openPage(page, '/ride', 'My rides');
+  const workspacePhotoCard = page.locator('.ride-card.has-destination-photo').first();
+  await expect(workspacePhotoCard).toBeVisible();
+  await expect(workspacePhotoCard.locator('.ride-card-primary-action')).toHaveCount(1);
+  await expect(workspacePhotoCard.locator('.pin-pickup')).toBeVisible();
+  await expect(workspacePhotoCard.locator('.pin-destination')).toBeVisible();
+  await expect(workspacePhotoCard.locator('.ride-route-connector')).toHaveCount(0);
+  await expect(workspacePhotoCard.locator('.destination-photo-credit')).toContainText('Google Maps');
+
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = null;
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+  await page.goto('/ride/r_1');
+  await expect(page.locator('.pickup-photo-public')).toContainText('Photo provided by the Driver');
+  await expect(page.locator('.pickup-photo-public img')).toBeVisible();
+  await expect(page.locator('.ride-destination-photo img')).toHaveAttribute('alt', 'Georgetown, Penang destination');
+  await expect(page.locator('.ride-destination-photo-credit')).toContainText('Google Maps');
+  await expect(page.getByText('Wait beside the station information counter.')).toBeVisible();
+  await expectNoPageOverflow(page);
+});
+
+test('Draft review aligns waypoint durations and keeps the pickup photo inside its summary', async ({ page }) => {
+  await openPage(page, '/home', 'Hi, Jamie');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    Object.assign(database.rides.r_5, {
+      status: 'Draft',
+      date: '2026-09-15',
+      time: '07:00',
+      departureAt: '2026-09-14T23:00:00.000Z',
+      pickupLocation: { source: 'google', placeId: 'pickup-fixture' },
+      destinationLocation: { source: 'google', placeId: 'fixture_jonker' },
+      waypoints: [
+        { name: 'Menara Kuala Lumpur', placeId: 'fixture_chain_a', stopMinutes: 30 },
+        { name: 'Hai Kah Lang 海脚人 · TRX', placeId: 'fixture_chulia', stopMinutes: 30 },
+      ],
+      pickupPhotoPath: 'mock/r_5/meeting.webp',
+      pickupPhotoDataUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="450"%3E%3Crect width="800" height="450" fill="%230f766e"/%3E%3C/svg%3E',
+      hasPickupPhoto: true,
+    });
+    Object.values(database.rideRequests).forEach((request) => {
+      if (request.rideId === 'r_5') delete database.rideRequests[request.id];
+    });
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+
+  await page.goto('/ride/r_5/publish');
+  await expect(page.getByRole('heading', { name: 'Route', exact: true }).first()).toBeVisible();
+  await page.locator('.step-item').filter({ hasText: 'Trip Details' }).evaluate((button) => button.click());
+  await expect(page.getByRole('heading', { name: 'Trip Details', exact: true }).first()).toBeVisible();
+
+  const durationLefts = await page.locator('.waypoint-selected-duration input').evaluateAll((inputs) => inputs.map((input) => Math.round(input.getBoundingClientRect().left)));
+  expect(durationLefts).toHaveLength(2);
+  expect(Math.max(...durationLefts) - Math.min(...durationLefts)).toBeLessThanOrEqual(1);
+
+  await page.locator('.step-item').filter({ hasText: 'Review & Publish' }).evaluate((button) => button.click());
+  await expect(page.getByRole('heading', { name: 'Review & Publish', exact: true }).first()).toBeVisible();
+
+  const pickupRow = page.locator('.review-pickup-photo');
+  await expect(pickupRow).not.toContainText('Included');
+  await expect(pickupRow.locator('.pickup-photo-preview-image')).toBeVisible();
+  const contained = await pickupRow.evaluate((row) => {
+    const image = row.querySelector('img')?.getBoundingClientRect();
+    const summary = row.closest('.card')?.getBoundingClientRect();
+    return Boolean(image && summary && image.left >= summary.left && image.right <= summary.right);
+  });
+  expect(contained).toBe(true);
+  await expectNoPageOverflow(page);
+});
+
+test('Pickup photo recovers from camera denial with upload, preview, and remove', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: async () => {
+          const error = new Error('Fixture permission denial');
+          error.name = 'NotAllowedError';
+          throw error;
+        },
+      },
+    });
+  });
+  await openPage(page, '/home', 'Hi, Jamie');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    Object.assign(database.rides.r_5, {
+      date: '2026-09-15',
+      time: '07:00',
+      departureAt: '2026-09-14T23:00:00.000Z',
+      status: 'Published',
+      expiredAt: null,
+      seatsAvailable: 3,
+    });
+    Object.values(database.rideRequests).forEach((request) => {
+      if (request.rideId === 'r_5') delete database.rideRequests[request.id];
+    });
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+  await page.goto('/ride/r_5/edit');
+  await expect(page.getByRole('heading', { name: 'Edit ride' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Take photo' }).click();
+  await expect(page.getByRole('alert')).toContainText('Camera permission was denied');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+  await page.locator('.pickup-photo-file-input').setInputFiles({ name: 'meeting-point.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('.pickup-photo-preview-image')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Replace from files' })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove' }).click();
+  await expect(page.locator('.pickup-photo-preview-image')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Upload photo' })).toBeVisible();
+  await expectNoPageOverflow(page);
 });
 
 test('Trip lifecycle timestamps reflow without overlapping their explanation', async ({ page }) => {

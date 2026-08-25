@@ -655,6 +655,28 @@ export const mockDb = {
     return db.rides[rideId] ? enrichRide(db, db.rides[rideId]) : null;
   },
 
+  async setRidePickupPhoto(rideId, path, dataUrl) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride || ride.hostId !== db.currentUserId) throw new Error('Ride not found or permission denied.');
+    ride.pickupPhotoPath = path || null;
+    ride.pickupPhotoDataUrl = dataUrl || null;
+    ride.hasPickupPhoto = Boolean(path);
+    ride.updatedAt = new Date().toISOString();
+    save(db);
+    return true;
+  },
+
+  async getRidePickupPhotoUrl(rideId) {
+    await delay();
+    const db = load();
+    const ride = db.rides[rideId];
+    if (!ride) return '';
+    if (ride.status !== 'Published' && ride.hostId !== db.currentUserId) return '';
+    return ride.pickupPhotoDataUrl || '';
+  },
+
   async updateRide(rideId, patch) {
     await delay();
     const db = load();
@@ -740,19 +762,28 @@ export const mockDb = {
     throw new Error('Live route calculation requires Supabase and Google Routes. Save as Draft while offline.');
   },
 
-  async publishDraft(rideId, routeQuote) {
+  async publishDraft(rideId, draftChangesOrQuote, maybeRouteQuote) {
     await delay();
     const db = load();
     const ride = db.rides[rideId];
     if (!ride || ride.hostId !== db.currentUserId || ride.status !== 'Draft') throw new Error('Only your Draft rides can be published.');
-    if (new Date(ride.departureAt).getTime() - Date.now() < 60 * 60 * 1000) throw new Error('Published rides must depart at least 1 hour from now.');
-    applyMockRouteQuote(ride, routeQuote);
-    assertMockScheduleAvailable(db, ride.hostId, ride, rideId);
-    ride.status = 'Published';
-    ride.publishedAt = new Date().toISOString();
-    ride.updatedAt = ride.publishedAt;
+    const hasDraftChanges = maybeRouteQuote !== undefined;
+    const draftChanges = hasDraftChanges ? draftChangesOrQuote : {};
+    const routeQuote = hasDraftChanges ? maybeRouteQuote : draftChangesOrQuote;
+    const next = { ...ride, ...draftChanges };
+    if (draftChanges.departureAt === undefined && (draftChanges.date !== undefined || draftChanges.time !== undefined)) {
+      next.departureAt = toMockDepartureAt(next.date, next.time);
+    }
+    if (new Date(next.departureAt).getTime() - Date.now() < 60 * 60 * 1000) throw new Error('Published rides must depart at least 1 hour from now.');
+    applyMockRouteQuote(next, routeQuote);
+    assertMockScheduleAvailable(db, next.hostId, next, rideId);
+    next.status = 'Published';
+    next.seatsAvailable = Number(next.seatsTotal);
+    next.publishedAt = new Date().toISOString();
+    next.updatedAt = next.publishedAt;
+    db.rides[rideId] = next;
     save(db);
-    return enrichRide(db, ride);
+    return enrichRide(db, next);
   },
 
   async deleteDraft(rideId) {

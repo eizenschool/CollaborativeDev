@@ -16,6 +16,8 @@ import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck, IconPlus
 import RideVehicleSelector from './RideVehicleSelector.jsx';
 import { canNavigateToPublishStep, getPublishStepError } from './publishRideSteps.js';
 import { M2WaypointRecommendationService } from '../../../business-logic/M2WaypointRecommendationService.js';
+import { RidePickupPhotoService } from '../../../business-logic/RidePickupPhotoService.js';
+import PickupPhotoField, { PickupPhotoPreview } from './PickupPhotoField.jsx';
 import '../../styles/ride.css';
 
 const STEPS = ['Route', 'Schedule', 'Vehicle', 'Trip Details', 'Review & Publish'];
@@ -27,6 +29,12 @@ const STEP_DESCRIPTIONS = [
   'Check every detail before your ride becomes visible.'
 ];
 const RESTRICTION_OPTIONS = ['Pet-friendly', 'No smoking', 'Women-only', 'Child seat available', 'Luggage-friendly', 'Toll contribution', 'Music OK', 'Quiet ride'];
+
+export function validWaypointStopMinutes(value) {
+  if (String(value ?? '').trim() === '') return null;
+  const minutes = Number(value);
+  return Number.isInteger(minutes) && minutes >= 0 && minutes <= 180 ? minutes : null;
+}
 
 const emptyForm = {
   pickup: '', pickupLocation: null,
@@ -67,6 +75,10 @@ export default function PublishRide() {
   const [quoteStatus, setQuoteStatus] = useState({ state: 'idle', message: '' });
   const [draftLoading, setDraftLoading] = useState(Boolean(draftRideId));
   const [draftLoadError, setDraftLoadError] = useState('');
+  const [pickupPhotoFile, setPickupPhotoFile] = useState(null);
+  const [pickupPhotoRemoved, setPickupPhotoRemoved] = useState(false);
+  const [pickupPhotoHasExisting, setPickupPhotoHasExisting] = useState(false);
+  const [photoRecovery, setPhotoRecovery] = useState(null);
   const locationRequested = useRef(false);
   const stepHeadingRef = useRef(null);
   const errorRef = useRef(null);
@@ -96,6 +108,8 @@ export default function PublishRide() {
         contribution: draft.contribution || '', restrictionTags: draft.restrictionTags || [],
         waypoints: draft.waypoints || []
       });
+      setPickupPhotoHasExisting(Boolean(draft.pickupPhotoPath || draft.hasPickupPhoto));
+      setPickupPhotoRemoved(false);
       setFurthestStep(STEPS.length - 1);
     }).catch((loadError) => active && setDraftLoadError(loadError.message)).finally(() => active && setDraftLoading(false));
     return () => { active = false; };
@@ -201,13 +215,49 @@ export default function PublishRide() {
     setStep(targetStep);
   }
 
+  async function syncPickupPhoto(rideId) {
+    if (pickupPhotoFile) {
+      await RidePickupPhotoService.replace(rideId, pickupPhotoFile);
+      setPickupPhotoFile(null);
+      setPickupPhotoHasExisting(true);
+      setPickupPhotoRemoved(false);
+    } else if (pickupPhotoRemoved && pickupPhotoHasExisting) {
+      await RidePickupPhotoService.remove(rideId);
+      setPickupPhotoHasExisting(false);
+      setPickupPhotoRemoved(false);
+    }
+  }
+
+  async function finishSavedRide(savedRide, navigation) {
+    try {
+      await syncPickupPhoto(savedRide.id);
+      navigate(navigation.path, navigation.options);
+    } catch (photoError) {
+      setPhotoRecovery({ savedRide, navigation, message: photoError.message });
+    }
+  }
+
+  async function retryPickupPhoto() {
+    if (!photoRecovery) return;
+    setSaving(true);
+    try {
+      await syncPickupPhoto(photoRecovery.savedRide.id);
+      navigate(photoRecovery.navigation.path, photoRecovery.navigation.options);
+    } catch (photoError) {
+      setPhotoRecovery((current) => ({ ...current, message: photoError.message }));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveAsDraft() {
     setSaving(true);
     setError('');
     try {
-      if (draftRideId) await RideService.updateRide(draftRideId, form);
-      else await RideService.publishRide(user.id, form, 'Draft');
-      navigate('/ride', { state: { notice: 'Draft saved.' } });
+      const saved = draftRideId
+        ? await RideService.updateRide(draftRideId, form)
+        : await RideService.publishRide(user.id, form, 'Draft');
+      await finishSavedRide(saved, { path: '/ride', options: { state: { notice: 'Draft saved.' } } });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -227,9 +277,12 @@ export default function PublishRide() {
     try {
       const quote = isRouteQuoteFresh(routeQuote) ? routeQuote : await calculateRouteQuote();
       const published = draftRideId
-        ? await RideService.publishDraft(draftRideId, quote)
+        ? await RideService.publishDraft(draftRideId, form, quote)
         : await RideService.publishRide(user.id, { ...form, routeQuote: quote }, 'Published');
-      navigate(`/ride/${published.id}`, { replace: true, state: { returnTo: '/ride', notice: 'Ride published.' } });
+      await finishSavedRide(published, {
+        path: `/ride/${published.id}`,
+        options: { replace: true, state: { returnTo: '/ride', notice: 'Ride published.' } },
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -282,7 +335,7 @@ export default function PublishRide() {
       <header className="publish-mobile-header">
         <button className="round-icon-button" onClick={step === 0 ? () => navigate('/ride') : back} aria-label="Go back"><IconArrowLeft size={18} /></button>
         <div><p>{draftRideId ? 'Resume Draft · ' : ''}Step {step + 1} of {STEPS.length}</p><h1>{STEPS[step]}</h1></div>
-        {step === STEPS.length - 1 && <button className="save-draft-mobile" onClick={saveAsDraft} disabled={saving}>Save draft</button>}
+        {step === STEPS.length - 1 && <button className="save-draft-mobile" onClick={saveAsDraft} disabled={saving || Boolean(photoRecovery)}>Save draft</button>}
         <div className="publish-progress-dots" role="progressbar" aria-label="Publish ride progress" aria-valuemin="1" aria-valuemax={STEPS.length} aria-valuenow={step + 1}>{STEPS.map((label, index) => <i key={label} className={index <= step ? 'active' : ''} />)}</div>
       </header>
       <div className="publish-left">
@@ -303,7 +356,7 @@ export default function PublishRide() {
           ))}
         </div>
         <div className="rail-divider" />
-        {step === STEPS.length - 1 && <button className="btn-link" onClick={saveAsDraft} disabled={saving}>Save as draft</button>}
+        {step === STEPS.length - 1 && <button className="btn-link" onClick={saveAsDraft} disabled={saving || Boolean(photoRecovery)}>Save as draft</button>}
       </div>
 
       <div className="publish-right">
@@ -312,12 +365,13 @@ export default function PublishRide() {
         <p className="step-description">{STEP_DESCRIPTIONS[step]}</p>
 
         {error && <div ref={errorRef} className="alert alert-error publish-error" role="alert" tabIndex={-1}><span>{error}</span>{/In Transit/i.test(error) && <button type="button" className="btn-link" onClick={() => navigate('/ride')}>Open My rides to complete it</button>}</div>}
+        {photoRecovery && <div className="alert alert-error pickup-photo-recovery" role="alert"><div><strong>Ride saved, but the pickup photo was not uploaded.</strong><span>{photoRecovery.message}</span></div><button type="button" className="btn-secondary" disabled={saving} onClick={retryPickupPhoto}>Retry photo</button><button type="button" className="btn-link" onClick={() => navigate(photoRecovery.navigation.path, photoRecovery.navigation.options)}>Continue without photo</button></div>}
 
         {step === 0 && <RouteStep form={form} patch={patch} previewLocation={previewLocation} previewStatus={previewStatus} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}
         {step === 2 && <RideVehicleSelector vehicles={vehicles} vehicleId={form.vehicleId} onSelect={(vehicle) => patch({ vehicleId: vehicle.id, vehicleCapacity: vehicle.seats, seatsTotal: Math.min(form.seatsTotal, vehicle.seats) })} />}
-        {step === 3 && <TripDetailsStep form={form} patch={patch} previewLocation={previewLocation} recommendationRoute={waypointRecommendationRoute} quoteStatus={quoteStatus} />}
-        {step === 4 && <ReviewStep form={form} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
+        {step === 3 && <TripDetailsStep form={form} patch={patch} previewLocation={previewLocation} recommendationRoute={waypointRecommendationRoute} quoteStatus={quoteStatus} pickupPhoto={{ file: pickupPhotoFile, hasExisting: pickupPhotoHasExisting, removed: pickupPhotoRemoved, rideId: draftRideId || null }} onPickupPhoto={(file) => { setPickupPhotoFile(file); setPickupPhotoRemoved(false); }} onRemovePickupPhoto={() => { setPickupPhotoFile(null); setPickupPhotoRemoved(pickupPhotoHasExisting); }} />}
+        {step === 4 && <ReviewStep form={form} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving || Boolean(photoRecovery)} pickupPhoto={{ file: pickupPhotoFile, hasExisting: pickupPhotoHasExisting, removed: pickupPhotoRemoved, rideId: draftRideId || null }} />}
 
         {step < STEPS.length - 1 && (
           <div className="step-actions">
@@ -432,7 +486,7 @@ function ScheduleStep({ form, patch }) {
 }
 
 // ---------- STEP 4: TRIP DETAILS ----------
-function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, quoteStatus }) {
+function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, quoteStatus, pickupPhoto, onPickupPhoto, onRemovePickupPhoto }) {
   const [waypoint, setWaypoint] = useState('');
   const [waypointLocation, setWaypointLocation] = useState(null);
   const [stopMinutes, setStopMinutes] = useState(10);
@@ -459,7 +513,7 @@ function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, qu
     setWaypointError('');
   }
 
-  function addRecommendedWaypoint(recommendation) {
+  function addRecommendedWaypoint(recommendation, customMinutes) {
     if (form.waypoints.length >= 10) {
       setWaypointError('A ride can have at most 10 waypoints.');
       return;
@@ -469,7 +523,7 @@ function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, qu
         name: recommendation.name,
         description: recommendation.description,
         placeId: recommendation.placeId,
-        stopMinutes: recommendation.stopMinutes,
+        stopMinutes: customMinutes,
       }],
     });
     setWaypointError('');
@@ -499,6 +553,14 @@ function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, qu
           onChange={(event) => patch({ pickupInstructions: event.target.value })}
         />
         <small>{form.pickupInstructions.length}/300</small>
+        <PickupPhotoField
+          rideId={pickupPhoto.rideId}
+          file={pickupPhoto.file}
+          hasExisting={pickupPhoto.hasExisting}
+          removed={pickupPhoto.removed}
+          onFileChange={onPickupPhoto}
+          onRemove={onRemovePickupPhoto}
+        />
       </div>
 
       <p className="field-label-standalone">Trip restriction tags</p>
@@ -542,21 +604,23 @@ function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, qu
           <button type="button" className="btn-secondary waypoint-confirm-add" onClick={addWaypoint}><IconPlus size={16} /> Add confirmed stop</button>
         </div>
         {waypointError && <p className="location-field-message error" role="alert">{waypointError}</p>}
-        {form.waypoints.length > 0 && <div className="waypoint-lines">{form.waypoints.map((item, index) => <div key={`${item.placeId || item.name}-${index}`}><span><IconMapPin size={14} />{item.name}<small>{item.stopMinutes} min stop</small></span><button type="button" onClick={() => patch({ waypoints: form.waypoints.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remove ${item.name}`}><IconX size={15} /></button></div>)}</div>}
+        {form.waypoints.length > 0 && <div className="waypoint-lines">{form.waypoints.map((item, index) => <div key={`${item.placeId || item.name}-${index}`}><span><IconMapPin size={14} />{item.name}<small>{item.placeId ? 'Confirmed Google stop' : 'Reconfirm before publishing'}</small></span><label className="waypoint-selected-duration"><span>Stop duration</span><input type="number" min="0" max="180" step="5" value={item.stopMinutes} disabled={!item.placeId} aria-label={`${item.name} stop duration in minutes`} onChange={(event) => { const minutes = validWaypointStopMinutes(event.target.value); if (minutes === null) { setWaypointError('Stop duration must be a whole number from 0 to 180 minutes.'); return; } patch({ waypoints: form.waypoints.map((waypointItem, itemIndex) => itemIndex === index ? { ...waypointItem, stopMinutes: minutes } : waypointItem) }); setWaypointError(''); }} /><small>minutes</small></label><button type="button" onClick={() => patch({ waypoints: form.waypoints.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remove ${item.name}`}><IconX size={15} /></button></div>)}</div>}
       </div>
     </>
   );
 }
 
 // ---------- STEP 5: REVIEW & PUBLISH ----------
-function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onPublish, onDraft, saving }) {
+function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onPublish, onDraft, saving, pickupPhoto }) {
   const fresh = isRouteQuoteFresh(routeQuote);
+  const hasPickupPhoto = Boolean(pickupPhoto.file || (pickupPhoto.hasExisting && !pickupPhoto.removed));
   return (
     <>
       <div className="card">
         <p className="card-title">Trip summary</p>
         <div className="review-row"><span>Route</span><strong>{form.pickup || '—'} → {form.destination || '—'}</strong></div>
         <div className="review-row"><span>Pickup instructions</span><strong>{form.pickupInstructions || 'None'}</strong></div>
+        <div className="review-row review-pickup-photo"><span>Pickup photo</span>{hasPickupPhoto ? <div className="review-pickup-photo-media"><PickupPhotoPreview file={pickupPhoto.file} rideId={pickupPhoto.rideId} hasExisting={pickupPhoto.hasExisting} removed={pickupPhoto.removed} /></div> : <strong>None</strong>}</div>
         <div className="review-row"><span>Journey scale</span><strong>{form.journeyScale}</strong></div>
         <div className="review-row"><span>Departure</span><strong>{formatMalaysiaDeparture(form.date, form.time)}</strong></div>
         <div className="review-row"><span>Seats available</span><strong>{form.seatsTotal}</strong></div>
@@ -588,6 +652,9 @@ function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onP
 function WaypointRecommendationPanel({ recommendationRoute, quoteStatus, selectedWaypoints, onAdd }) {
   const [items, setItems] = useState([]);
   const [state, setState] = useState('idle');
+  const [expandedPlaceId, setExpandedPlaceId] = useState('');
+  const [minutes, setMinutes] = useState('30');
+  const [durationError, setDurationError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -616,7 +683,10 @@ function WaypointRecommendationPanel({ recommendationRoute, quoteStatus, selecte
   if (state === 'loading') return <p className="waypoint-recommendation-state" role="status">Finding culinary and cultural stops along your route…</p>;
   if (state === 'ready' && !items.length) return <p className="waypoint-recommendation-state">No culinary or cultural suggestions were found along this route. Add your own stop below.</p>;
   if (!items.length) return null;
-  return <div className="waypoint-recommendations"><p className="waypoint-option-label">Suggested along your route</p><div className="waypoint-recommendation-list">{items.map((item) => <button type="button" className="waypoint-recommendation" key={item.placeId} onClick={() => onAdd(item)} disabled={selectedWaypoints.length >= 10}><span><strong>{item.name}</strong><small>{item.category === 'culinary' ? 'Culinary' : 'Cultural'} · {item.stopMinutes} min default stop</small></span><IconPlus size={17} aria-hidden="true" /></button>)}</div><small>Choose a suggestion or add your own. Any stop change requires a fresh route quote.</small></div>;
+  return <div className="waypoint-recommendations"><p className="waypoint-option-label">Suggested along your route</p><div className="waypoint-recommendation-list">{items.map((item) => {
+    const expanded = expandedPlaceId === item.placeId;
+    return <article className={`waypoint-recommendation${expanded ? ' expanded' : ''}`} key={item.placeId}><button type="button" className="waypoint-recommendation-open" aria-expanded={expanded} onClick={() => { setExpandedPlaceId(expanded ? '' : item.placeId); setMinutes(String(item.stopMinutes)); setDurationError(''); }} disabled={selectedWaypoints.length >= 10}><span><strong>{item.name}</strong><small>{item.category === 'culinary' ? 'Culinary' : 'Cultural'} · {item.stopMinutes} min default stop</small></span><IconPlus size={17} aria-hidden="true" /></button>{expanded && <div className="waypoint-recommendation-duration"><label htmlFor={`recommended-stop-${item.placeId}`}>Stop duration</label><div><input id={`recommended-stop-${item.placeId}`} type="number" min="0" max="180" step="5" value={minutes} aria-describedby={durationError ? `recommended-stop-error-${item.placeId}` : undefined} onChange={(event) => { setMinutes(event.target.value); setDurationError(''); }} /><span>minutes</span></div>{durationError && <small id={`recommended-stop-error-${item.placeId}`} className="error" role="alert">{durationError}</small>}<div className="waypoint-recommendation-actions"><button type="button" className="btn-link" onClick={() => { setExpandedPlaceId(''); setDurationError(''); }}>Cancel</button><button type="button" className="btn-secondary" onClick={() => { const parsed = validWaypointStopMinutes(minutes); if (parsed === null) { setDurationError('Enter a whole number from 0 to 180.'); return; } onAdd(item, parsed); setExpandedPlaceId(''); setDurationError(''); }}>Add stop</button></div></div>}</article>;
+  })}</div><small>Choose a suggestion or add your own. Any stop change requires a fresh route quote.</small></div>;
 }
 
 function formatDistance(metres) {
