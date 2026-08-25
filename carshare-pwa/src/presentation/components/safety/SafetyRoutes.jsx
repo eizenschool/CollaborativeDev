@@ -7,16 +7,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { TripConfirmationService } from '../../../business-logic/verification/TripConfirmationService.js';
 import { TripContractAdapter } from '../../../business-logic/verification/TripContractAdapter.js';
-import { DISPUTE_STATUS } from '../../../business-logic/verification/constants.js';
 import TripVerificationPanel from './TripVerificationPanel.jsx';
-import AdminDisputeConsole from './AdminDisputeConsole.jsx';
 import VerificationDemoConsole from './VerificationDemoConsole.jsx';
 import { IconShield, IconMapPin } from '../icons.jsx';
 import '../../styles/safety.css';
 
 function SafetyHub() {
   const [rows, setRows] = useState(null);
-  const [pendingCount, setPendingCount] = useState(0);
 
   const load = useCallback(async () => {
     const verifications = await TripConfirmationService.listAllVerifications();
@@ -24,7 +21,6 @@ function SafetyHub() {
       verifications.map(async (v) => ({ verification: v, ride: await TripContractAdapter.getRideSnapshot(v.rideId) }))
     );
     setRows(withRides);
-    setPendingCount(withRides.filter((r) => r.verification.dispute?.status === DISPUTE_STATUS.PENDING_REVIEW).length);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -36,9 +32,6 @@ function SafetyHub() {
           <h2><IconShield size={18} style={{ verticalAlign: -3, marginRight: 6 }} />Safety Centre</h2>
           <p>Trip verification, exchange settlement and dispute resolution (Module 6).</p>
         </div>
-        {pendingCount > 0 && (
-          <Link to="/safety/admin" className="admin-link-chip">{pendingCount} awaiting review</Link>
-        )}
       </div>
 
       <VerificationDemoConsole onAdvanced={load} />
@@ -70,7 +63,6 @@ export default function SafetyRoutes() {
     <Routes>
       <Route index element={<SafetyHub />} />
       <Route path="trip/:rideId" element={<TripVerificationPanel />} />
-      <Route path="admin" element={<AdminDisputeConsole />} />
       <Route path="*" element={<Navigate to="/safety" replace />} />
     </Routes>
   );

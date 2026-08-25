@@ -37,14 +37,15 @@ describe('Module 2 ride workspace UI contract', () => {
     expect(styles).toContain('.ride-history-group[open] > summary');
   });
 
-  it('requires every accepted passenger for early start and labels the refreshed traffic ETA', () => {
-    expect(requests).toContain("const allCheckedIn = accepted.length > 0 && checkedIn.length === accepted.length");
-    expect(requests).toContain('All ${accepted.length} accepted passenger');
-    expect(requests).toContain('Start trip early');
-    expect(requests).toContain('will be marked No-show');
+  it('keeps day-of execution in Trip Mode and labels the refreshed traffic ETA', () => {
+    expect(requests).toContain('Check-in, No-show and Start are handled in Trip Mode.');
+    expect(requests).toContain('Open Trip Mode');
+    expect(requests).not.toContain('async function startRide');
+    expect(requests).not.toContain('async function markNoShow');
     expect(detail).toContain('Updated traffic ETA');
     expect(detail).toContain("journeyState.nextAction.id === RIDE_ACTION.START_RIDE");
-    expect(detail).toContain('error, onLifecycle');
+    expect(detail).toContain('error, clock, onLifecycle');
+    expect(detail).toContain('TRIP LIFECYCLE');
     expect(detail).toContain('Trip started. The traffic-aware ETA has been updated.');
   });
 });

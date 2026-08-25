@@ -333,6 +333,14 @@ export function buildRideRpcArgs(rideData) {
   };
 }
 
+export function mergeRideUpdate(current, patch) {
+  const merged = { ...current, ...patch };
+  if (patch.departureAt === undefined && (patch.date !== undefined || patch.time !== undefined)) {
+    merged.departureAt = toDepartureAt(merged.date, merged.time);
+  }
+  return merged;
+}
+
 export const RideService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
   journeyScales: JOURNEY_SCALES,
@@ -432,7 +440,7 @@ export const RideService = {
   async updateRide(rideId, patch) {
     const current = await this.getRide(rideId);
     if (!current) throw new Error('Ride not found.');
-    const merged = { ...current, ...patch };
+    const merged = mergeRideUpdate(current, patch);
     validateRideDraft(merged, {
       publishing: current.status === 'Published',
       requireConfirmedLocations: routeChangeRequiresConfirmation(current, patch),

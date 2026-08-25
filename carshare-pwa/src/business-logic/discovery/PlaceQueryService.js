@@ -34,6 +34,7 @@ function toContract(place, extra = {}) {
     rating: place.rating ?? null,
     reviewCount: place.reviewCount ?? 0,
     photoReference: place.photoReferences?.[0]?.reference ?? null,
+    photoAttribution: place.photoReferences?.[0]?.attribution ?? null,
     ...extra
   };
 }

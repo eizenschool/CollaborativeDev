@@ -66,8 +66,8 @@ describe('queryPlacesNearPoint - FR-6.36', () => {
     const [first] = await PlaceQueryService.queryPlacesNearPoint({ ...KL, radiusKm: 400 });
 
     expect(Object.keys(first).sort()).toEqual([
-      'category', 'distanceKm', 'lat', 'lng', 'name', 'photoReference',
-      'placeId', 'rating', 'reviewCount', 'sourcePlaceId', 'state'
+      'category', 'distanceKm', 'lat', 'lng', 'name', 'photoAttribution',
+      'photoReference', 'placeId', 'rating', 'reviewCount', 'sourcePlaceId', 'state'
     ]);
     expect(first.lifecycleState).toBeUndefined();
     expect(first.reviews).toBeUndefined();

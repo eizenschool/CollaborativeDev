@@ -10,6 +10,19 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
+    // Unit tests are fixture/offline by default even when a developer has a
+    // live .env.local. Backend-specific tests opt in with vi.mock(), so a local
+    // credential can never redirect ordinary unit tests to the shared project.
+    env: {
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_PUBLISHABLE_KEY: '',
+      VITE_SUPABASE_ANON_KEY: '',
+      VITE_GOOGLE_MAPS_EMBED_API_KEY: '',
+      VITE_GOOGLE_MAPS_PLACES_API_KEY: '',
+      VITE_WEB_PUSH_PUBLIC_KEY: '',
+      VITE_DISCOVERY_DATA_SOURCE: 'fixture',
+      VITE_M2_LIVE_TRACKING_ENABLED: 'false'
+    },
     include: [
       'src/business-logic/verification/__tests__/**/*.test.js',
       'src/business-logic/discovery/__tests__/**/*.test.js',

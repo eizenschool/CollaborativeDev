@@ -11,6 +11,9 @@ const configuredApiKey = import.meta.env.VITE_GOOGLE_MAPS_PLACES_API_KEY?.trim()
 export const MIN_LOCATION_QUERY_LENGTH = 1;
 export const LOCATION_SEARCH_DEBOUNCE_MS = 1000;
 export const MAX_GPS_ACCURACY_METRES = 100;
+export const MAX_CHECK_IN_ACCURACY_METRES = 150;
+export const MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES = 500;
+const MAP_DIAGNOSTIC_TEXT_LIMIT = 160;
 
 let googleMapsPromise = null;
 
@@ -102,6 +105,31 @@ async function resolveMaps(maps) {
   return maps || loadGoogleMaps();
 }
 
+function safeDiagnosticText(value, fallback) {
+  const text = String(value || fallback)
+    .replace(/AIza[0-9A-Za-z_-]+/g, '[redacted-key]')
+    .replace(/https?:\/\/\S+/g, '[redacted-url]')
+    .replace(/-?\d{1,3}\.\d{4,}/g, '[redacted-number]')
+    .slice(0, MAP_DIAGNOSTIC_TEXT_LIMIT);
+  return text || fallback;
+}
+
+export function createMapDiagnostic(stage, error = null, fallbackCode = 'MAP_UNAVAILABLE') {
+  return {
+    stage: safeDiagnosticText(stage, 'unknown'),
+    code: safeDiagnosticText(error?.code, fallbackCode),
+    name: safeDiagnosticText(error?.name, 'Error'),
+    message: safeDiagnosticText(error?.message, 'Interactive map is temporarily unavailable.')
+  };
+}
+
+export async function loadGoogleMapsLibraries(libraries = []) {
+  const maps = await loadGoogleMaps();
+  const loaded = {};
+  for (const library of libraries) loaded[library] = await maps.importLibrary(library);
+  return { maps, ...loaded };
+}
+
 export function isConfirmedLocation(location) {
   if (!location || typeof location !== 'object') return false;
   if (typeof location.placeId === 'string' && location.placeId.trim()) return true;
@@ -113,16 +141,29 @@ export function isConfirmedLocation(location) {
     && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
 }
 
-export function buildAutocompleteRequest(input) {
+export function buildAutocompleteRequest(input, { origin = null } = {}) {
+  const latitude = Number(origin?.latitude ?? origin?.lat);
+  const longitude = Number(origin?.longitude ?? origin?.lng);
+  const accuracy = Number(origin?.accuracy);
+  const canBias = Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
+    && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
+    && Number.isFinite(accuracy) && accuracy <= MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES;
   return {
     input: input.trim(),
     includedRegionCodes: ['my'],
     language: 'en',
-    region: 'my'
+    region: 'my',
+    ...(canBias ? {
+      locationBias: {
+        center: { lat: latitude, lng: longitude },
+        radius: 5000
+      },
+      origin: { lat: latitude, lng: longitude }
+    } : {})
   };
 }
 
-export async function searchLocations(input, { maps, navigatorObject = globalThis.navigator } = {}) {
+export async function searchLocations(input, { maps, navigatorObject = globalThis.navigator, origin = null } = {}) {
   const query = typeof input === 'string' ? input.trim() : '';
   if (query.length < MIN_LOCATION_QUERY_LENGTH) return [];
   if (navigatorObject?.onLine === false) {
@@ -132,12 +173,16 @@ export async function searchLocations(input, { maps, navigatorObject = globalThi
   try {
     const mapsApi = await resolveMaps(maps);
     const { AutocompleteSuggestion } = await mapsApi.importLibrary('places');
-    const { suggestions = [] } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(buildAutocompleteRequest(query));
+    const { suggestions = [] } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(buildAutocompleteRequest(query, { origin }));
     return suggestions
-      .map(({ placePrediction }) => ({
-        placeId: placePrediction?.placeId?.trim() || '',
-        label: placePrediction?.text?.toString().trim() || ''
-      }))
+      .map(({ placePrediction }) => {
+        const distanceMeters = Number(placePrediction?.distanceMeters);
+        return {
+          placeId: placePrediction?.placeId?.trim() || '',
+          label: placePrediction?.text?.toString().trim() || '',
+          ...(Number.isFinite(distanceMeters) ? { distanceMeters } : {})
+        };
+      })
       .filter((suggestion) => suggestion.placeId && suggestion.label)
       .slice(0, 5);
   } catch (error) {
@@ -225,6 +270,9 @@ export const GooglePlacesService = {
   backend: 'google-places',
   isConfigured: Boolean(configuredApiKey),
   searchLocations,
+  buildAutocompleteRequest,
+  createMapDiagnostic,
+  loadGoogleMapsLibraries,
   getCurrentLocationPreview,
   resolveCurrentLocation,
   isConfirmedLocation

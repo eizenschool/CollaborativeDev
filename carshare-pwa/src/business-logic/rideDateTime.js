@@ -1,5 +1,6 @@
 export const APP_TIME_ZONE = 'Asia/Kuala_Lumpur';
 export const REQUEST_CUTOFF_HOURS = 1;
+export const DEPARTURE_GRACE_MINUTES = 30;
 
 export function toDepartureAt(date, time) {
   if (!date || !time) return null;
@@ -53,6 +54,17 @@ export function formatMalaysiaDeparture(date, time) {
 
 export function isBeforeDeparture(departureAt, now = new Date()) {
   return now.getTime() < new Date(departureAt).getTime();
+}
+
+export function rideExpiryAt(departureAt) {
+  const departure = new Date(departureAt).getTime();
+  if (!Number.isFinite(departure)) return null;
+  return new Date(departure + DEPARTURE_GRACE_MINUTES * 60 * 1000).toISOString();
+}
+
+export function isBeforeRideExpiry(departureAt, now = new Date()) {
+  const expiryAt = rideExpiryAt(departureAt);
+  return expiryAt ? new Date(now).getTime() < new Date(expiryAt).getTime() : false;
 }
 
 export function rideIntervalsOverlap(startA, endA, startB, endB) {

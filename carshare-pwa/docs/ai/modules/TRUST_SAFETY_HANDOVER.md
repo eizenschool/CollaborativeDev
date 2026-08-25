@@ -28,12 +28,16 @@ src/business-logic/verification/       PinService, GeoVerification,
                                        TripContractAdapter,
                                        VerificationEventFeed, DemoClockService
 src/presentation/components/safety/    SafetyRoutes, TripVerificationPanel,
-                                       AdminDisputeConsole, DisputeEvidenceCard,
-                                       VerificationDemoConsole
+                                       DisputeEvidenceCard, VerificationDemoConsole
 src/data-access/module6Store.js        browser-local prototype store
 src/App.jsx                            the /safety route
 docs/MODULE6-SCHEMA.md                 draft schema for this scope
 ```
+
+D024 keeps this browser-local verification demo but removes the later production
+Trust Admin/ride-dispute/GPS-evidence experiment. `/safety/admin` and its Admin
+Edge Functions are not part of the accepted Module 2 scope; any future shared
+Trust & Safety administration requires a new team decision.
 
 Unit tests live in `src/business-logic/verification/__tests__/` and cover the
 numeric thresholds by Boundary Value Analysis (100 m GPS tolerance, 0.75

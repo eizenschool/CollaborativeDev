@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
+import { isBeforeRideExpiry } from '../../../business-logic/rideDateTime.js';
 import { IconArrowLeft, IconCheck, IconStar, IconUsers } from '../icons.jsx';
 import '../../styles/ride.css';
 
@@ -22,7 +23,7 @@ export default function ManageRequests() {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
   const [showHistory, setShowHistory] = useState(false);
-  const [starting, setStarting] = useState(false);
+  const [clock, setClock] = useState(() => new Date());
 
   const load = useCallback(async () => {
     setError('');
@@ -38,6 +39,15 @@ export default function ManageRequests() {
   }, [rideId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const tick = () => setClock(new Date());
+    const timer = window.setInterval(tick, 1000);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', tick);
+    };
+  }, []);
 
   async function decide(request, decision) {
     setBusyId(request.id);
@@ -50,37 +60,14 @@ export default function ManageRequests() {
     finally { setBusyId(null); }
   }
 
-  async function markNoShow(request) {
-    setBusyId(request.id);
-    setError('');
-    try {
-      await RideRequestService.markNoShow(request.id);
-      await load();
-    } catch (err) { setError(err.message); }
-    finally { setBusyId(null); }
-  }
-
-  async function startRide() {
-    setStarting(true);
-    setError('');
-    try {
-      await RideService.startRide(rideId);
-      navigate(`/ride/${rideId}?view=trip`, { replace: true });
-    } catch (err) { setError(err.message); }
-    finally { setStarting(false); }
-  }
-
   if (loading) return <div className="ride-page-loading">Loading requests…</div>;
 
   const pending = requests.filter((request) => request.status === 'Pending');
   const accepted = requests.filter((request) => request.status === 'Accepted');
   const history = requests.filter((request) => !['Pending', 'Accepted'].includes(request.status));
-  const departureReached = ride && new Date(ride.departureAt) <= new Date();
-  const unresolved = accepted.filter((request) => request.boardingStatus === 'Pending');
+  const departureReached = ride && new Date(ride.departureAt) <= clock;
+  const beforeExpiry = ride && isBeforeRideExpiry(ride.departureAt, clock);
   const checkedIn = accepted.filter((request) => request.boardingStatus === 'Checked In');
-  const allCheckedIn = accepted.length > 0 && checkedIn.length === accepted.length;
-  const readyToStart = ['Published', 'Matched'].includes(ride?.status)
-    && (allCheckedIn || (departureReached && checkedIn.length > 0));
 
   function RequestCard({ request, actions = false, muted = false }) {
     const person = request.requester || { fullName: 'Member', reputationScore: 0, rating: null };
@@ -95,7 +82,6 @@ export default function ManageRequests() {
           {request.status === 'Accepted' && <small className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>Boarding: {request.boardingStatus}{request.checkInDistanceMeters != null ? ` · ${request.checkInDistanceMeters} m from pickup` : ''}</small>}
         </div>
         {actions && <div className="request-actions"><button type="button" disabled={busyId === request.id} onClick={() => decide(request, 'Rejected')}>{busyId === request.id ? 'Working…' : 'Reject'}</button><button type="button" disabled={busyId === request.id || request.seatsRequested > (ride?.seatsAvailable ?? 0)} onClick={() => decide(request, 'Accepted')}>{busyId === request.id ? 'Working…' : 'Accept'}</button></div>}
-        {request.status === 'Accepted' && request.boardingStatus === 'Pending' && <div className="request-actions no-show-action"><button type="button" disabled={!departureReached || busyId === request.id} onClick={() => markNoShow(request)}>{busyId === request.id ? 'Working…' : departureReached ? 'Mark No-show' : 'No-show at departure'}</button></div>}
       </article>
     );
   }
@@ -115,11 +101,11 @@ export default function ManageRequests() {
         </section>
 
         {accepted.length > 0 && <section className="request-group"><h2 className="accepted-heading"><IconCheck size={13} /> Accepted ({accepted.length})</h2>{accepted.map((request) => <RequestCard request={request} key={request.id} />)}</section>}
-        {pending.length > 0 ? <section className="request-group"><h2 className="pending-heading">Pending ({pending.length})</h2>{pending.map((request) => <RequestCard request={request} actions key={request.id} />)}</section>
+        {pending.length > 0 ? <section className="request-group"><h2 className="pending-heading">Pending ({pending.length})</h2>{departureReached && <p className="request-date">Departure has been reached. These requests are read-only while expiry processing catches up.</p>}{pending.map((request) => <RequestCard request={request} actions={!departureReached && ride?.status === 'Published'} key={request.id} />)}</section>
           : <section className="empty-request-state"><IconUsers size={34} /><strong>No pending requests</strong><p>New passenger requests will appear here.</p></section>}
 
         {history.length > 0 && <section className="request-group rejected-group"><button type="button" className="rejected-toggle" aria-expanded={showHistory} onClick={() => setShowHistory((show) => !show)}>History ({history.length})</button>{showHistory && history.map((request) => <RequestCard request={request} muted key={request.id} />)}</section>}
-        {accepted.length > 0 && <section className="request-start-card" aria-live="polite"><div><strong>{allCheckedIn ? `${checkedIn.length} passenger${checkedIn.length === 1 ? '' : 's'} ready to leave` : `${checkedIn.length} of ${accepted.length} passengers checked in`}</strong><p>{allCheckedIn ? 'Starting now recalculates ETA using current traffic.' : departureReached && checkedIn.length > 0 ? `Start ride is available after departure; ${accepted.length - checkedIn.length} passenger${accepted.length - checkedIn.length === 1 ? '' : 's'} will be marked No-show.` : `All ${accepted.length} accepted passenger${accepted.length === 1 ? '' : 's'} must Check in before the Driver can start early.`}</p></div><button type="button" className="primary-action" disabled={!readyToStart || starting} onClick={startRide}>{starting ? 'Recalculating ETA…' : !departureReached ? 'Start trip early' : 'Start ride'}</button></section>}
+        {accepted.length > 0 && <section className="request-start-card" aria-live="polite"><div><strong>{checkedIn.length} of {accepted.length} passengers checked in</strong><p>{beforeExpiry ? 'Check-in, No-show and Start are handled in Trip Mode.' : 'The departure grace deadline has passed. Trip actions are closed.'}</p></div>{beforeExpiry && <button type="button" className="primary-action" onClick={() => navigate(`/ride/${rideId}?view=trip`)}>Open Trip Mode</button>}</section>}
       </div>
     </main>
   );

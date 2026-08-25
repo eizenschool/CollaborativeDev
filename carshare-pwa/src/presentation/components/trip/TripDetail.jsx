@@ -11,6 +11,7 @@ import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import { IconArrowLeftSmall, IconLeafSmall, IconMapPinSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState, NotFoundState } from './tripStates.jsx';
 import TripTimelineCard from './TripTimelineCard.jsx';
+import TripRouteReplay from './TripRouteReplay.jsx';
 import './tripStyles.css';
 
 export default function TripDetail() {
@@ -85,6 +86,7 @@ export default function TripDetail() {
       <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto', display: isDesktop ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '65% 1fr' : undefined, gap: 24 }}>
         <div>
           <MapPreview trip={trip} />
+          {['Completed', 'Cancelled', 'Expired'].includes(trip.status) && <TripRouteReplay trip={trip} />}
 
           <div className="m5-card" style={{ padding: 20, marginBottom: 16 }}>
             <InfoRow icon={<IconMapPinSmall size={16} />} label="Pickup" value={trip.pickup} />

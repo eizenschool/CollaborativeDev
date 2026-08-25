@@ -7,6 +7,7 @@ import { departureParts, formatMalaysiaDeparture } from '../../../business-logic
 import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
 import {
   GooglePlacesService,
+  MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES,
   MAX_GPS_ACCURACY_METRES
 } from '../../../business-logic/GooglePlacesService.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
@@ -14,6 +15,7 @@ import ConfirmedLocationInput from '../maps/ConfirmedLocationInput.jsx';
 import { IconArrowLeft, IconArrowRight, IconMapPin, IconCar, IconCheck, IconPlus, IconX } from '../icons.jsx';
 import RideVehicleSelector from './RideVehicleSelector.jsx';
 import { canNavigateToPublishStep, getPublishStepError } from './publishRideSteps.js';
+import { M2WaypointRecommendationService } from '../../../business-logic/M2WaypointRecommendationService.js';
 import '../../styles/ride.css';
 
 const STEPS = ['Route', 'Schedule', 'Vehicle', 'Trip Details', 'Review & Publish'];
@@ -150,10 +152,13 @@ export default function PublishRide() {
   }
 
   useEffect(() => {
-    if (step !== STEPS.length - 1 || routeQuote || quoteStatus.state === 'loading') return;
+    // Obtain the host-only base quote as soon as route, departure and vehicle
+    // are complete (Trip Details entry). Review reuses it until a waypoint or
+    // other route-affecting field invalidates the fingerprint.
+    if (step < 3 || routeQuote || quoteStatus.state === 'loading') return;
     calculateRouteQuote().catch(() => {});
   // The form is intentionally excluded: patch() invalidates the quote before
-  // the review step can request a new one.
+  // the next step can request a new one.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -295,8 +300,8 @@ export default function PublishRide() {
         {step === 0 && <RouteStep form={form} patch={patch} previewLocation={previewLocation} previewStatus={previewStatus} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}
         {step === 2 && <RideVehicleSelector vehicles={vehicles} vehicleId={form.vehicleId} onSelect={(vehicle) => patch({ vehicleId: vehicle.id, vehicleCapacity: vehicle.seats, seatsTotal: Math.min(form.seatsTotal, vehicle.seats) })} />}
-        {step === 3 && <TripDetailsStep form={form} patch={patch} />}
-        {step === 4 && <ReviewStep form={form} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
+        {step === 3 && <TripDetailsStep form={form} patch={patch} previewLocation={previewLocation} />}
+        {step === 4 && <ReviewStep form={form} patch={patch} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
 
         {step < STEPS.length - 1 && (
           <div className="step-actions">
@@ -316,6 +321,9 @@ export default function PublishRide() {
 
 // ---------- STEP 1: ROUTE ----------
 function RouteStep({ form, patch, previewLocation, previewStatus }) {
+  const autocompleteOrigin = previewLocation?.accuracy <= MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES
+    ? previewLocation
+    : null;
   return (
     <>
       <div className="route-inputs">
@@ -327,7 +335,7 @@ function RouteStep({ form, patch, previewLocation, previewStatus }) {
           location={form.pickupLocation}
           onChange={(pickup, pickupLocation) => patch({ pickup, pickupLocation })}
           allowCurrentLocation
-          currentLocationPreview={previewLocation?.accuracy <= MAX_GPS_ACCURACY_METRES ? previewLocation : null}
+          currentLocationPreview={autocompleteOrigin}
         />
         <ConfirmedLocationInput
           id="ride-destination"
@@ -336,6 +344,7 @@ function RouteStep({ form, patch, previewLocation, previewStatus }) {
           value={form.destination}
           location={form.destinationLocation}
           onChange={(destination, destinationLocation) => patch({ destination, destinationLocation })}
+          currentLocationPreview={autocompleteOrigin}
         />
       </div>
 
@@ -406,7 +415,7 @@ function ScheduleStep({ form, patch }) {
 }
 
 // ---------- STEP 4: TRIP DETAILS ----------
-function TripDetailsStep({ form, patch }) {
+function TripDetailsStep({ form, patch, previewLocation }) {
   const [waypoint, setWaypoint] = useState('');
   const [waypointLocation, setWaypointLocation] = useState(null);
   const [stopMinutes, setStopMinutes] = useState(10);
@@ -484,6 +493,7 @@ function TripDetailsStep({ form, patch }) {
             value={waypoint}
             location={waypointLocation}
             onChange={(name, location) => { setWaypoint(name); setWaypointLocation(location); setWaypointError(''); }}
+            currentLocationPreview={previewLocation?.accuracy <= MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES ? previewLocation : null}
           />
           <div className="waypoint-stop-row">
             <label htmlFor="waypoint-stop-minutes">Stop duration</label>
@@ -499,7 +509,7 @@ function TripDetailsStep({ form, patch }) {
 }
 
 // ---------- STEP 5: REVIEW & PUBLISH ----------
-function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onPublish, onDraft, saving }) {
+function ReviewStep({ form, patch, routeQuote, quoteStatus, onRefreshQuote, onBack, onPublish, onDraft, saving }) {
   const fresh = isRouteQuoteFresh(routeQuote);
   return (
     <>
@@ -514,6 +524,18 @@ function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onP
         <div className="review-row"><span>Restriction tags</span><strong>{form.restrictionTags.length ? form.restrictionTags.join(', ') : 'None'}</strong></div>
         <div className="review-row"><span>Waypoints</span><strong>{form.waypoints.length ? form.waypoints.map((item) => `${item.name} (${item.stopMinutes} min)`).join(', ') : 'None'}</strong></div>
       </div>
+      <WaypointRecommendationPanel
+        routeQuote={routeQuote}
+        selectedWaypoints={form.waypoints}
+        onAdd={(recommendation) => patch({
+          waypoints: [...form.waypoints, {
+            name: recommendation.name,
+            description: recommendation.description,
+            placeId: recommendation.placeId,
+            stopMinutes: recommendation.stopMinutes
+          }]
+        })}
+      />
       <section className={`route-quote-card ${quoteStatus.state === 'error' ? 'error' : ''}`} aria-live="polite">
         <div><p className="card-title">Traffic-aware route</p><span>{quoteStatus.message || 'A server route quote is required before publishing.'}</span></div>
         {routeQuote && <div className="route-quote-grid">
@@ -533,6 +555,36 @@ function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onP
       </div>
     </>
   );
+}
+
+function WaypointRecommendationPanel({ routeQuote, selectedWaypoints, onAdd }) {
+  const [items, setItems] = useState([]);
+  const [state, setState] = useState('idle');
+
+  useEffect(() => {
+    let active = true;
+    if (!routeQuote?.recommendationRoute || selectedWaypoints.length >= 10) {
+      setItems([]);
+      setState('idle');
+      return undefined;
+    }
+    setState('loading');
+    M2WaypointRecommendationService.queryWaypointRecommendations(routeQuote, selectedWaypoints)
+      .then((recommendations) => {
+        if (!active) return;
+        setItems(recommendations);
+        setState('ready');
+      })
+      .catch(() => {
+        if (active) { setItems([]); setState('error'); }
+      });
+    return () => { active = false; };
+  }, [routeQuote, selectedWaypoints]);
+
+  if (state === 'error') return <p className="location-field-message">Waypoint recommendations are unavailable. You can add a confirmed stop manually.</p>;
+  if (state === 'loading') return <section className="card waypoint-recommendations"><p className="card-title">Culinary &amp; cultural waypoints</p><span>Finding places along your route…</span></section>;
+  if (!items.length) return null;
+  return <section className="card waypoint-recommendations"><p className="card-title">Suggested stops along your route</p><div className="waypoint-recommendation-list">{items.map((item) => <button type="button" className="waypoint-recommendation" key={item.placeId} onClick={() => onAdd(item)} disabled={selectedWaypoints.length >= 10}><span><strong>{item.name}</strong><small>{item.category === 'culinary' ? 'Culinary' : 'Cultural'} · {item.stopMinutes} min default stop</small></span><span>＋</span></button>)}</div><small>Adding a stop will require a fresh route quote before publishing.</small></section>;
 }
 
 function formatDistance(metres) {

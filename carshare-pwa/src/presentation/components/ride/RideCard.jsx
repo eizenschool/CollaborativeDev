@@ -30,7 +30,7 @@ function formatEta(value) {
   });
 }
 
-export default function RideCard({ ride, statusChip, roleLabel, journeyState, compact = false, onClick }) {
+export default function RideCard({ ride, statusChip, roleLabel, journeyState, compact = false, now = new Date(), onClick }) {
   const badge = ride.host ? getBadgeForStats(ride.host) : null;
   const tier = badge ? badge.name.replace(' Host', '') : null;
   const tierStyle = tier ? TIER_COLORS[tier] : null;
@@ -61,7 +61,7 @@ export default function RideCard({ ride, statusChip, roleLabel, journeyState, co
         {!['Completed', 'Cancelled', 'Expired'].includes(ride.status) && <span className="ride-seats"><IconUsers size={13} /> {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} left</span>}
       </div>
 
-      {journeyState && <div className={`ride-card-next urgency-${journeyState.urgency}`}><span>{compact ? journeyState.nextAction.label : journeyState.title}</span>{journeyState.countdownAt && <strong>{formatJourneyCountdown(journeyState.countdownAt)}</strong>}</div>}
+      {journeyState && <div className={`ride-card-next urgency-${journeyState.urgency}`}><span>{compact ? journeyState.nextAction.label : journeyState.title}</span>{journeyState.countdownAt && <strong>{formatJourneyCountdown(journeyState.countdownAt, now, journeyState.countdownKind)}</strong>}</div>}
 
       {!compact && ride.estimatedArrivalAt && <p className="ride-card-eta"><span>Estimated arrival</span><strong>{formatEta(ride.estimatedArrivalAt)}</strong></p>}
 

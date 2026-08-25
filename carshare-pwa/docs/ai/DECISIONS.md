@@ -101,7 +101,7 @@ D015. Module 3 uses Supabase Database, Realtime, and private Storage under D016;
 Modules 4-6 retain local adapters.
 
 ## D012 — Module 2 Lifecycle and Participation Contract
-**Status:** Accepted
+**Status:** Superseded by D025
 `departure_at` is the authoritative UTC ride instant and the application displays
 it in `Asia/Kuala_Lumpur`. A request can include its account holder plus named
 companions; only the account holder participates in access and reviews. Pending
@@ -125,7 +125,13 @@ driver confirms it. Place IDs are the canonical Google references; device coordi
 are persisted only for confirmed current-location pickups. Autocomplete and
 Geocoding each require a 250-request daily hard quota before production enablement,
 plus quota and billing alerts. Alerts alone are not an accepted spending stop.
-Routes, Dynamic Maps, distance/time, and traffic remain outside this phase.
+Routes, distance/time, and traffic remain outside this original phase. The
+Module 2 live-tracking slice now enables one Dynamic Maps instance per
+Trip Mode page, with a `VITE_GOOGLE_MAP_ID`, Advanced Markers, accuracy circles,
+an application soft gate of 250 authenticated map permits per Malaysia day,
+and location-card/Open-in-Google-Maps fallback when the permit or map fails.
+The Embed route preview remains separate. Google Cloud billing alerts and
+provider quotas remain mandatory operational controls.
 
 ## D014 — Shared Mobile-First UI Contract
 **Status:** Accepted
@@ -274,6 +280,86 @@ coordinates, and private profile information remain excluded. The privileged
 database implementation lives in the non-exposed `private` schema and a narrow
 public invoker RPC is the only browser search entry point. Migration `039`
 remains undeployed until its separate review.
+
+## D022 — Explicit Live Location Consent and Participant/Family Visibility
+**Status:** Accepted
+
+Live location sharing is an explicit per-session action by the Driver or an
+Accepted passenger; it never starts automatically from check-in or trip start.
+The Driver sees self plus opted-in passengers, a passenger sees self plus an
+opted-in Driver, and passengers never see one another. A passenger may create
+one revocable, ride-expiring secret family link. The link is fragment-only,
+uses a high-entropy token hash, has no history or pickup-instruction access,
+and returns generic responses for invalid, expired, and revoked tokens. The
+foreground PWA is the supported contract; hidden/locked-screen tracking is
+best effort and is labelled as such.
+
+Latest points are kept separately from sampled history. History is available to
+accepted participants after a terminal ride, while family links never receive
+history. “Hide my route” hides only the owner’s playback and schedules the
+owner track for the 180-day purge policy; other participants retain access.
+There is no dispute-based retention hold. Unhidden history follows the academic
+prototype's current long-term policy; both policies must be replaced by bounded
+production retention before release under Malaysia PDPA.
+
+## D023 — Narrow Module 2 Trust Admin and GPS Evidence Boundary
+**Status:** Superseded by D024
+
+Module 2 disputes use a private role/audit model with a bootstrap-only
+`role_admin` and assigned `trust_admin` accounts. The role admin can manage
+Trust Admin membership and case assignment but cannot read GPS evidence unless
+also assigned as Trust Admin. Only the assigned Trust Admin can perform the
+explicit, reason-required evidence action; every access, role change, case
+reassignment, claim and resolution is audited. This is not a replacement for Module 1’s broader
+enforcement or appeal system.
+
+## D024 — Module 2 Live Tracking Without a Production Admin System
+**Status:** Accepted
+
+Module 2 keeps explicit participant live sharing, privacy-filtered Realtime,
+revocable family links, Dynamic Map fallback and Module 5 sampled-history
+replay. Viewing an opted-in Driver never requires a passenger to share their
+own location. Family payloads use anonymous marker identifiers and never expose
+account UUIDs, pickup instructions or history.
+
+The Trust Admin, ride-dispute and GPS-evidence rollout is removed by the
+append-only `055_m2_remove_trust_admin.sql` compensation migration. Deployed
+`043-049` files remain immutable history. The original browser-local `/safety`
+verification demo remains, but `/safety/admin`, project roles, dispute tables,
+evidence holds and the two Admin Edge Functions are not part of the accepted
+Module 2 assignment scope.
+
+Deployment completed on 2026-08-24: migration `m2_remove_trust_admin` is live,
+`m2-live-share` version 4 is active, and the two Admin Edge Functions are deleted.
+
+## D025 — Authoritative Module 2 Departure Grace and Terminal History
+**Status:** Accepted; implementation authored, migration pending deployment approval
+
+The database is the sole Ride lifecycle authority. A Published Ride with no
+Accepted request expires at departure. A Published Ride with an Accepted
+request becomes Matched at departure and may Check in, resolve No-show, or
+Start only until the exclusive `departure_at + 30 minutes` deadline. At that
+deadline every unstarted Published/Matched Ride and its remaining Pending or
+Accepted requests become `Expired`. Boarding/check-in facts are retained and
+expiry does not imply No-show. A Matched Ride must always have at least one
+Accepted request; cancelling the final Accepted request before departure
+restores the Ride to Published without bypassing the one-hour request cutoff.
+
+`ride_requests.accepted_at` is the stable proof of prior acceptance;
+`processed_at` remains the most recent status-processing instant. Live
+location, Check-in, family sharing, and in-progress operations continue to
+require request status `Accepted`. Terminal history additionally permits only
+an `Expired` Ride whose viewer has an `Expired` request with non-null
+`accepted_at`. Expired participation never creates a review, Completed trip,
+carbon saving, monthly impact, achievement, or leaderboard credit.
+
+Trip Mode is the only UI execution surface for Check-in, No-show, Start, and
+arrival confirmation. Ride Detail is a read-only lifecycle summary with an
+Open Trip Mode entry; Manage Requests handles pre-departure Accept/Reject and
+history only. Module 5 must render stored database states verbatim and may
+never infer `In Transit` or `Completed` from the clock. Migration
+`056_m2_lifecycle_expiry_and_validation.sql` implements this append-only
+contract without changing an Edge Function RPC signature.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);

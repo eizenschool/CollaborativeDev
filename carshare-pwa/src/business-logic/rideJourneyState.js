@@ -1,4 +1,4 @@
-import { REQUEST_CUTOFF_HOURS } from './rideDateTime.js';
+import { DEPARTURE_GRACE_MINUTES, REQUEST_CUTOFF_HOURS } from './rideDateTime.js';
 
 export const RIDE_ACTION = Object.freeze({
   CONTINUE_DRAFT: 'continue_draft',
@@ -21,6 +21,7 @@ export const RIDE_ACTION = Object.freeze({
 const TERMINAL_RIDE_STATUSES = new Set(['Cancelled', 'Expired']);
 const TERMINAL_REQUEST_STATUSES = new Set(['Rejected', 'Cancelled', 'Expired']);
 const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
 
 function departureTime(ride) {
   const value = new Date(ride?.departureAt || `${ride?.date || ''}T${ride?.time || '00:00'}`).getTime();
@@ -31,8 +32,8 @@ function action(id, label, path = null) {
   return { id, label, path };
 }
 
-function result({ role, phase, urgency = 'normal', priority, title, description, nextAction, countdownAt = null, blockers = [], meta = {} }) {
-  return { role, phase, urgency, priority, title, description, nextAction, countdownAt, blockers, meta };
+function result({ role, phase, urgency = 'normal', priority, title, description, nextAction, countdownAt = null, countdownKind = 'departure', blockers = [], meta = {} }) {
+  return { role, phase, urgency, priority, title, description, nextAction, countdownAt, countdownKind, blockers, meta };
 }
 
 export function getRideJourneyState({ ride, role, request = null, requests = [], lifecycleContext = null, reviewEligibility = null, now = new Date() }) {
@@ -42,8 +43,13 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
   const departureAt = departureTime(ride);
   const nowTime = new Date(now).getTime();
   const millisecondsToDeparture = departureAt - nowTime;
-  const withinCheckInWindow = millisecondsToDeparture <= REQUEST_CUTOFF_HOURS * HOUR_MS;
   const departureReached = millisecondsToDeparture <= 0;
+  const graceDeadline = departureAt + DEPARTURE_GRACE_MINUTES * MINUTE_MS;
+  const graceExpired = nowTime >= graceDeadline;
+  const withinCheckInWindow = millisecondsToDeparture <= REQUEST_CUTOFF_HOURS * HOUR_MS && !graceExpired;
+  const graceCountdown = departureReached && Number.isFinite(graceDeadline)
+    ? { countdownAt: new Date(graceDeadline).toISOString(), countdownKind: 'expiry' }
+    : { countdownAt: ride?.departureAt || null, countdownKind: 'departure' };
   const status = ride?.status;
   const reviewDataLoaded = Array.isArray(reviewEligibility);
   const hasReviewTargets = reviewDataLoaded && reviewEligibility.length > 0;
@@ -74,6 +80,14 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
 
   if (role === 'driver') {
     if (status === 'Draft') {
+      if (departureReached) {
+        return result({
+          role, phase: 'draft', urgency: 'soon', priority: 5,
+          title: 'Reschedule this draft',
+          description: 'The planned departure has passed. Choose a new date and time before publishing.',
+          nextAction: action(RIDE_ACTION.CONTINUE_DRAFT, 'Reschedule draft', `/ride/${rideId}/publish`)
+        });
+      }
       return result({
         role, phase: 'draft', priority: 50,
         title: 'Finish your draft',
@@ -101,6 +115,15 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
     const allCheckedIn = accepted.length > 0 && notCheckedIn.length === 0;
     const readiness = { accepted: accepted.length, checkedIn: checkedIn.length, unresolved: unresolved.length, notCheckedIn: notCheckedIn.length, pendingRequests: pendingRequests.length };
 
+    if (['Published', 'Matched'].includes(status) && (graceExpired || (departureReached && accepted.length === 0))) {
+      return result({
+        role, phase: 'terminal', priority: 80,
+        title: 'Ride expired',
+        description: graceExpired ? 'The ride did not start within 30 minutes of departure.' : 'Departure was reached without an accepted passenger.',
+        nextAction: action(RIDE_ACTION.VIEW_RIDE, 'View details', ridePath)
+      });
+    }
+
     if (status === 'In Transit') {
       if (lifecycleContext?.driverArrivedAt) {
         return result({
@@ -126,7 +149,7 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
         title: early ? 'Early start is available' : 'Ready to start',
         description: `All ${checkedIn.length} accepted passenger${checkedIn.length === 1 ? '' : 's'} checked in. Starting refreshes the traffic ETA.`,
         nextAction: action(RIDE_ACTION.START_RIDE, early ? 'Start trip early' : 'Start ride', tripPath),
-        countdownAt: ride?.departureAt || null, meta: readiness
+        ...graceCountdown, meta: readiness
       });
     }
 
@@ -138,7 +161,7 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
           ? `${checkedIn.length} checked in. Starting now marks ${unresolved.length} passenger${unresolved.length === 1 ? '' : 's'} who did not check in as No-show and refreshes the traffic ETA.`
           : `${checkedIn.length} passenger${checkedIn.length === 1 ? '' : 's'} checked in. Starting refreshes the traffic ETA.`,
         nextAction: action(RIDE_ACTION.START_RIDE, 'Start ride', tripPath),
-        countdownAt: ride?.departureAt || null, meta: readiness
+        ...graceCountdown, meta: readiness
       });
     }
 
@@ -148,7 +171,7 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
         title: 'No passenger is ready',
         description: 'Wait for an accepted passenger to Check in, contact the group, or cancel the shared ride.',
         nextAction: action(RIDE_ACTION.RESOLVE_BOARDING, 'Open trip mode', tripPath),
-        countdownAt: ride?.departureAt || null, blockers: ['At least one checked-in passenger is required'], meta: readiness
+        ...graceCountdown, blockers: ['At least one checked-in passenger is required'], meta: readiness
       });
     }
 
@@ -191,6 +214,13 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
       nextAction: action(RIDE_ACTION.VIEW_RIDE, 'View details', ridePath)
     });
   }
+  if (request?.status === 'Pending' && departureReached) {
+    return result({
+      role: 'passenger', phase: 'terminal', priority: 80,
+      title: 'Request expired', description: 'The departure time was reached before this request was accepted.',
+      nextAction: action(RIDE_ACTION.VIEW_RIDE, 'View details', ridePath)
+    });
+  }
   if (request?.status === 'Pending') {
     return result({
       role: 'passenger', phase: 'upcoming', urgency: 'soon', priority: 4,
@@ -202,6 +232,14 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
     return result({
       role: 'passenger', phase: 'terminal', priority: 80,
       title: 'No active request', description: 'There is no active passenger action for this ride.',
+      nextAction: action(RIDE_ACTION.VIEW_RIDE, 'View details', ridePath)
+    });
+  }
+
+  if (['Published', 'Matched'].includes(status) && graceExpired) {
+    return result({
+      role: 'passenger', phase: 'terminal', priority: 80,
+      title: 'Ride expired', description: 'The ride did not start within 30 minutes of departure.',
       nextAction: action(RIDE_ACTION.VIEW_RIDE, 'View details', ridePath)
     });
   }
@@ -232,7 +270,7 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
     return result({
       role: 'passenger', phase: 'departure', urgency: withinCheckInWindow ? 'soon' : 'normal', priority: withinCheckInWindow ? 2 : 10,
       title: 'You are checked in', description: departureReached ? 'Wait for the Driver to start the ride.' : 'Be ready at the pickup point before departure.',
-      nextAction: action(RIDE_ACTION.WAIT_FOR_DRIVER, 'View trip', tripPath), countdownAt: ride?.departureAt || null
+      nextAction: action(RIDE_ACTION.WAIT_FOR_DRIVER, 'View trip', tripPath), ...graceCountdown
     });
   }
 
@@ -240,7 +278,7 @@ export function getRideJourneyState({ ride, role, request = null, requests = [],
     return result({
       role: 'passenger', phase: 'check_in', urgency: departureReached ? 'now' : 'soon', priority: 2,
       title: 'Check in near pickup', description: 'Use GPS within 200 m of the pickup point. Accuracy must be 100 m or better.',
-      nextAction: action(RIDE_ACTION.CHECK_IN, 'Check in', tripPath), countdownAt: ride?.departureAt || null
+      nextAction: action(RIDE_ACTION.CHECK_IN, 'Check in', tripPath), ...graceCountdown
     });
   }
 
@@ -267,12 +305,19 @@ export function isTripModeEligible(state) {
   return ['check_in', 'departure', 'in_transit', 'arrival'].includes(state?.phase);
 }
 
-export function formatJourneyCountdown(target, now = new Date()) {
+export function formatJourneyCountdown(target, now = new Date(), kind = 'departure') {
   if (!target) return '';
   const difference = new Date(target).getTime() - new Date(now).getTime();
   if (!Number.isFinite(difference)) return '';
   const absoluteMinutes = Math.round(Math.abs(difference) / 60000);
-  if (difference <= 0) return absoluteMinutes < 1 ? 'Departure time' : `${absoluteMinutes} min overdue`;
+  if (kind === 'expiry') {
+    if (difference <= 0) return 'Expired';
+    if (absoluteMinutes < 60) return `Expires in ${Math.max(1, absoluteMinutes)} min`;
+    const hours = Math.floor(absoluteMinutes / 60);
+    const minutes = absoluteMinutes % 60;
+    return `Expires in ${hours}h${minutes ? ` ${minutes}m` : ''}`;
+  }
+  if (difference <= 0) return 'Departure time';
   if (absoluteMinutes < 60) return `Leaves in ${Math.max(1, absoluteMinutes)} min`;
   const hours = Math.floor(absoluteMinutes / 60);
   const minutes = absoluteMinutes % 60;

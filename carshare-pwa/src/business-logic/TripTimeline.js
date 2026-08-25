@@ -40,7 +40,7 @@ export function buildTripTimeline({ ride, requests = [], lifecycle = null, now =
 
   const instant = now instanceof Date ? now : new Date(now);
   const departed = ride.departureAt ? new Date(ride.departureAt) <= instant : false;
-  const accepted = requests.filter((request) => request.status === 'Accepted');
+  const accepted = requests.filter((request) => request.status === 'Accepted' || (request.status === 'Expired' && request.acceptedAt));
 
   const completedAt = lifecycle?.completedAt || ride.completedAt || null;
   const driverArrivedAt = lifecycle?.driverArrivedAt || ride.driverArrivedAt || null;
@@ -69,7 +69,7 @@ export function buildTripTimeline({ ride, requests = [], lifecycle = null, now =
     steps.push(step('requested', 'Waiting for passengers', null, STEP_STATE.UPCOMING));
   }
 
-  const firstAcceptedAt = earliest(accepted.map((request) => request.processedAt || request.updatedAt));
+  const firstAcceptedAt = earliest(accepted.map((request) => request.acceptedAt || request.processedAt || request.updatedAt));
   if (accepted.length > 0) {
     const seats = accepted.reduce((sum, request) => sum + (request.seatsRequested || 1), 0);
     steps.push(step(
@@ -88,7 +88,7 @@ export function buildTripTimeline({ ride, requests = [], lifecycle = null, now =
   // user knew about in advance.
   steps.push(step(
     'departure',
-    departed ? 'Departed' : 'Scheduled departure',
+    ride.status === 'Expired' && departed ? 'Scheduled departure reached' : departed ? 'Departed' : 'Scheduled departure',
     ride.departureAt || null,
     departed ? STEP_STATE.DONE : STEP_STATE.UPCOMING
   ));
@@ -97,7 +97,12 @@ export function buildTripTimeline({ ride, requests = [], lifecycle = null, now =
     if (ride.status === 'Cancelled') {
       steps.push(step('cancelled', 'Trip cancelled', ride.cancelledAt || ride.updatedAt || null, STEP_STATE.DONE, ride.cancelReason || null));
     } else {
-      steps.push(step('expired', 'Expired - nobody joined', ride.expiredAt || null, STEP_STATE.DONE));
+      steps.push(step(
+        'expired',
+        accepted.length > 0 ? 'Expired - ride did not start within 30 minutes' : 'Expired - nobody joined',
+        ride.expiredAt || null,
+        STEP_STATE.DONE
+      ));
     }
     return inChronologicalOrder(steps);
   }

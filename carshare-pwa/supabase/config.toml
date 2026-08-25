@@ -1,6 +1,10 @@
 [functions.notification-push]
 verify_jwt = false
 
+[functions.m2-live-share]
+verify_jwt = false
+
+
 [functions.m3-message-translation]
 verify_jwt = true
 

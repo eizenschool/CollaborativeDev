@@ -108,6 +108,19 @@ describe('Module 5 trip timeline', () => {
     });
     expect(idsOf(steps)).toContain('expired');
     expect(idsOf(steps)).not.toContain('arrived');
+    expect(byId(steps).expired.label).toBe('Expired - nobody joined');
+    expect(byId(steps).departure.label).toBe('Scheduled departure reached');
+  });
+
+  it('distinguishes an accepted ride that failed to start during grace', () => {
+    const steps = buildTripTimeline({
+      ride: ride({ status: 'Expired', expiredAt: '2026-08-20T00:30:00.000Z' }),
+      requests: [request({ status: 'Expired', acceptedAt: '2026-08-19T02:00:00.000Z', processedAt: '2026-08-20T00:30:00.000Z' })],
+      now: NOW
+    });
+
+    expect(byId(steps).accepted.at).toBe('2026-08-19T02:00:00.000Z');
+    expect(byId(steps).expired.label).toBe('Expired - ride did not start within 30 minutes');
   });
 
   it('counts confirmed seats rather than requests', () => {
