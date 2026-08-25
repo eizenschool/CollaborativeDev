@@ -32,7 +32,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/business-logic/discovery/PlaceQueryService.js` — public source-hint lookup plus radius and route-corridor place queries served to Modules 2 and 4; callable now against the fixture catalogue with no API key.
 - `src/business-logic/verification/` — trip verification logic from the former Trust & Safety scope; see `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`.
 - `src/business-logic/GoogleMapsEmbedService.js` — shared Embed URL builder for Place ID, coordinate, and legacy-text route references.
-- `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, and reverse-geocoding boundary.
+- `src/business-logic/GooglePlacesService.js` — Places Autocomplete, one-shot browser geolocation, reverse geocoding, and explicit current-location-triggered Google Nearby pickup boundary.
 - `src/business-logic/CompatibilityOptions.js` — shared validated vehicle-category and Host-language values used by Module 1 owner editors and Module 4 Search.
 - `src/business-logic/SmartSearchService.js` — Module 4 criteria normalization, URL state, filtering, sorting, and Module 2 ride-search delegation.
 - `src/business-logic/FavouriteService.js` — Module 4 owner-scoped favourite adapter and safe unavailable-card mapping.
@@ -41,7 +41,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 
 ## Shared Mapping
 - `src/presentation/components/maps/GoogleRouteMap.jsx` — shared route iframe with an offline/unconfigured fallback.
-- `src/presentation/components/maps/ConfirmedLocationInput.jsx` — reusable confirmed-location combobox and current-pickup confirmation UI.
+- `src/presentation/components/maps/ConfirmedLocationInput.jsx` — reusable confirmed-location combobox; Pickup can atomically select an accurate device position and disclose five Google Nearby alternatives only after an explicit current-location action.
 - `docs/GOOGLE-MAPS-SETUP.md` — Cloud project, restricted-key, environment, and cost-safety setup.
 
 ## Data Access / Backend Adapters

@@ -24,6 +24,53 @@ async function expectNoPageOverflow(page) {
   expect(dimensions.scrollWidth, `page width ${dimensions.scrollWidth}px exceeds viewport ${dimensions.clientWidth}px`).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 }
 
+async function mockGooglePickupServices(page, { nearbyFails = false } = {}) {
+  await page.addInitScript(({ shouldFailNearby }) => {
+    const nearbyPlaces = [
+      ['near-1', 'KL Sentral', 'Brickfields, Kuala Lumpur', 3.1391, 101.6869],
+      ['near-2', 'NU Sentral', 'Jalan Tun Sambanthan, Kuala Lumpur', 3.1395, 101.6871],
+      ['near-3', 'Muzium Negara', 'Damansara Road, Kuala Lumpur', 3.1377, 101.6870],
+      ['near-4', 'Central Market', 'Jalan Hang Kasturi, Kuala Lumpur', 3.1458, 101.6953],
+      ['near-5', 'Pasar Seni Station', 'City Centre, Kuala Lumpur', 3.1424, 101.6955],
+    ];
+    window.__nearbyRequests = [];
+    window.__geocodeRequests = [];
+    window.google = {
+      maps: {
+        importLibrary: async (library) => {
+          if (library === 'geocoding') {
+            return {
+              Geocoder: class {
+                async geocode(request) {
+                  window.__geocodeRequests.push(request);
+                  return { results: [{ place_id: 'current-gps-place', formatted_address: 'Current location, Kuala Lumpur' }] };
+                }
+              }
+            };
+          }
+          if (library === 'places') {
+            return {
+              Place: {
+                searchNearby: async (request) => {
+                  window.__nearbyRequests.push(request);
+                  if (shouldFailNearby) throw new Error('Nearby service unavailable');
+                  return {
+                    places: nearbyPlaces.map(([id, displayName, formattedAddress, lat, lng]) => ({
+                      id, displayName, formattedAddress, location: { lat: () => lat, lng: () => lng }
+                    }))
+                  };
+                }
+              },
+              SearchNearbyRankPreference: { DISTANCE: 'DISTANCE' }
+            };
+          }
+          return {};
+        }
+      }
+    };
+  }, { shouldFailNearby: nearbyFails });
+}
+
 test('public browsing preserves Discover to Search hand-off', async ({ page }) => {
   await openPage(page, '/home', 'Hi, Jamie');
   await page.getByRole('link', { name: 'Search' }).click();
@@ -118,6 +165,87 @@ test('Ride workspace foregrounds responsibility and publishing recovery', async 
   await page.getByRole('button', { name: /Continue/i }).first().click();
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Route', exact: true }).first()).toBeVisible();
+});
+
+test('Create Ride offers nearby confirmed places without requiring typed search', async ({ page, context }) => {
+  await mockGooglePickupServices(page);
+  await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
+  await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 35 });
+  await openPage(page, '/ride/publish', 'Route');
+
+  const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
+  await pickup.focus();
+  await expect(page.getByText('Nearby pickup alternatives', { exact: true })).not.toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__nearbyRequests.length)).toBe(0);
+  await page.getByRole('button', { name: 'Use current location' }).click();
+  await expect(pickup).toHaveValue('Current location, Kuala Lumpur');
+  await expect(page.getByText('Current location selected · ±35 m')).toBeVisible();
+  await expect(page.getByText('Nearby pickup alternatives', { exact: true })).toBeVisible();
+  await expect(page.getByRole('option')).toHaveCount(5);
+  await expect.poll(() => page.evaluate(() => ({
+    nearby: window.__nearbyRequests[0]?.locationRestriction?.center,
+    geocode: window.__geocodeRequests[0]?.location,
+  }))).toEqual({
+    nearby: { lat: 3.139, lng: 101.6869 },
+    geocode: { lat: 3.139, lng: 101.6869 },
+  });
+  const inputBox = await pickup.boundingBox();
+  const suggestionBox = await page.locator('.location-suggestions-panel').boundingBox();
+  expect(inputBox).not.toBeNull();
+  expect(suggestionBox).not.toBeNull();
+  expect(suggestionBox.y - (inputBox.y + inputBox.height)).toBeGreaterThanOrEqual(0);
+  expect(suggestionBox.y - (inputBox.y + inputBox.height)).toBeLessThanOrEqual(8);
+  await pickup.press('ArrowDown');
+  await pickup.press('ArrowUp');
+  await expect(page.getByRole('option', { name: /KL Sentral/ })).toHaveAttribute('aria-selected', 'true');
+  await pickup.press('Enter');
+  await expect(pickup).toHaveValue('KL Sentral, Brickfields, Kuala Lumpur');
+  await expectNoPageOverflow(page);
+});
+
+test('Create Ride offers nearby alternatives without selecting an inaccurate GPS point', async ({ page, context }) => {
+  await mockGooglePickupServices(page);
+  await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
+  await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 250 });
+  await openPage(page, '/ride/publish', 'Route');
+
+  const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
+  await page.getByRole('button', { name: 'Use current location' }).click();
+  await expect(pickup).toHaveValue('');
+  await expect(page.getByText(/GPS point was not accurate enough/)).toBeVisible();
+  await expect(page.getByRole('option')).toHaveCount(5);
+  await expect.poll(() => page.evaluate(() => window.__geocodeRequests.length)).toBe(0);
+});
+
+test('Create Ride keeps an accurate GPS pickup when Google Nearby fails', async ({ page, context }) => {
+  await mockGooglePickupServices(page, { nearbyFails: true });
+  await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
+  await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 35 });
+  await openPage(page, '/ride/publish', 'Route');
+
+  const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
+  await page.getByRole('button', { name: 'Use current location' }).click();
+  await expect(pickup).toHaveValue('Current location, Kuala Lumpur');
+  await expect(page.locator('.location-field-message')).toContainText('Nearby pickup alternatives are unavailable');
+  await expect(page.getByText('Nearby pickup alternatives', { exact: true })).not.toBeVisible();
+});
+
+test('Create Ride skips Google for very inaccurate GPS and preserves manual recovery', async ({ page, context }) => {
+  await mockGooglePickupServices(page);
+  await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
+  await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 650 });
+  await openPage(page, '/ride/publish', 'Route');
+
+  const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
+  await page.getByRole('button', { name: 'Use current location' }).click();
+  await expect(page.locator('.location-field-message.error')).toContainText('accurate to about 650 m');
+  await expect.poll(() => page.evaluate(() => ({
+    nearby: window.__nearbyRequests.length,
+    geocode: window.__geocodeRequests.length,
+  }))).toEqual({ nearby: 0, geocode: 0 });
+  await pickup.fill('K');
+  await expect(pickup).toHaveValue('K');
+  await expect(page.locator('.location-field-message.error')).not.toContainText('accurate to about 650 m');
 });
 
 test('Trip lifecycle timestamps reflow without overlapping their explanation', async ({ page }) => {
@@ -292,6 +420,11 @@ test('publishing recovers when location permission is denied', async ({ page, co
   await openPage(page, '/ride/publish', 'Route');
   await expect(page.locator('.map-location-status')).toContainText('Location permission was denied');
   await expect(page.getByLabel('Pickup point')).toBeEnabled();
+  await page.getByRole('button', { name: 'Use current location' }).click();
+  await expect(page.locator('.location-field-message.error')).toContainText('Location permission was denied');
+  await page.getByLabel('Pickup point').fill('K');
+  await expect(page.getByLabel('Pickup point')).toHaveValue('K');
+  await expect(page.locator('.location-field-message.error')).not.toContainText('Location permission was denied');
 });
 
 test('critical pages have no WCAG A or AA axe violations', async ({ page }) => {

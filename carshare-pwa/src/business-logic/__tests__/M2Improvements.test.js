@@ -11,10 +11,12 @@ const trackingMigration = new URL('../../../database/sql/047_m2_live_location_tr
 const correctnessMigration = new URL('../../../database/sql/054_m2_tracking_correctness_fixes.sql', import.meta.url);
 const adminRemovalMigration = new URL('../../../database/sql/055_m2_remove_trust_admin.sql', import.meta.url);
 const familyCryptoMigration = new URL('../../../database/sql/057_m2_fix_family_link_crypto_schema.sql', import.meta.url);
+const widenedCheckInMigration = new URL('../../../database/sql/058_m2_widen_checkin_tolerance.sql', import.meta.url);
 const familyShareFunction = new URL('../../../supabase/functions/m2-live-share/index.ts', import.meta.url);
 const rideDetailComponent = new URL('../../presentation/components/ride/RideDetail.jsx', import.meta.url);
 const safetyRoutesComponent = new URL('../../presentation/components/safety/SafetyRoutes.jsx', import.meta.url);
 const publishRideComponent = new URL('../../presentation/components/ride/PublishRide.jsx', import.meta.url);
+const mockStore = new URL('../../data-access/mockDataStore.js', import.meta.url);
 const replayComponent = new URL('../../presentation/components/trip/TripRouteReplay.jsx', import.meta.url);
 const liveMapComponent = new URL('../../presentation/components/maps/LiveRideMap.jsx', import.meta.url);
 
@@ -76,14 +78,22 @@ describe('Module 2 improvement contracts', () => {
   });
 
   it('keeps adaptive check-in, private live tracking, family links, and history replay', async () => {
-    const [checkIn, tracking, removal] = await Promise.all([
+    const [checkIn, widenedCheckIn, mockDataStore, tracking, removal] = await Promise.all([
       readFile(migration, 'utf8'),
+      readFile(widenedCheckInMigration, 'utf8'),
+      readFile(mockStore, 'utf8'),
       readFile(trackingMigration, 'utf8'),
       readFile(adminRemovalMigration, 'utf8')
     ]);
     expect(checkIn).toContain('p_accuracy_meters > 150');
     expect(checkIn).toContain('least(350::double precision, 200 + p_accuracy_meters)');
     expect(checkIn).toContain('check_in_accuracy_meters');
+    expect(widenedCheckIn).toContain('p_accuracy_meters > 150');
+    expect(widenedCheckIn).toContain('least(400::double precision, 250 + p_accuracy_meters)');
+    expect(widenedCheckIn).toContain('check_in_distance_meters between 0 and 400');
+    expect(widenedCheckIn).toContain('(check_in_accuracy_meters is null or check_in_accuracy_meters between 0 and 150)');
+    expect(widenedCheckIn).not.toContain('confirm_driver_arrival');
+    expect(mockDataStore).toContain('Math.min(400, 250 + position.accuracy)');
     expect(tracking).toContain('create table if not exists private.m2_live_locations');
     expect(tracking).toContain('create table if not exists private.m2_location_history');
     expect(tracking).toContain('realtime.broadcast_changes');
@@ -258,5 +268,19 @@ describe('Module 2 improvement contracts', () => {
     expect(rideDetail).not.toContain('ProjectAdminService');
     expect(safetyRoutes).not.toContain('AdminDisputeConsole');
     expect((publishRide.match(/currentLocationPreview=/g) || [])).toHaveLength(3);
+    expect((publishRide.match(/loadNearbySuggestions=\{GooglePlacesService\.searchNearbyPickupLocations\}/g) || [])).toHaveLength(1);
+    expect(publishRide).not.toContain('M2NearbyLocationService');
+    expect(publishRide).not.toContain('nearbySuggestions={nearbyLocations}');
+    const tripDetails = publishRide.slice(
+      publishRide.indexOf('function TripDetailsStep'),
+      publishRide.indexOf('// ---------- STEP 5: REVIEW & PUBLISH ----------'),
+    );
+    const review = publishRide.slice(
+      publishRide.indexOf('function ReviewStep'),
+      publishRide.indexOf('function WaypointRecommendationPanel'),
+    );
+    expect(tripDetails).toContain('<WaypointRecommendationPanel');
+    expect(tripDetails).toContain('Or add your own stop');
+    expect(review).not.toContain('<WaypointRecommendationPanel');
   });
 });

@@ -488,7 +488,7 @@ html:has(.trip-mode-page), body:has(.trip-mode-page) { overflow-x: clip; }
 }
 
 .publish-right .field label,
-.route-field > span {
+.route-field > label {
   display: block;
   margin-bottom: 7px;
   color: #374151;
@@ -923,6 +923,39 @@ button.ride-card {
   box-shadow: 0 14px 35px rgba(17, 24, 39, .16);
 }
 
+.location-current-selection-status,
+.location-current-selection-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 10px 12px 7px;
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.location-current-selection-status svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.location-current-selection-note {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.location-suggestions-heading {
+  margin: 0;
+  padding: 9px 12px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
 .location-suggestions-panel ul {
   max-height: 252px;
   overflow-y: auto;
@@ -1206,6 +1239,42 @@ button.ride-card {
   border: 1px solid var(--ride-line);
   border-radius: 15px;
   background: #f8fbf9;
+}
+
+.waypoint-recommendations {
+  min-width: 0;
+}
+
+.waypoint-option-label {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.waypoint-recommendation-state {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.waypoint-manual-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.waypoint-manual-divider::before,
+.waypoint-manual-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--ride-line);
+  content: '';
 }
 
 .waypoint-stop-row {
@@ -2854,6 +2923,10 @@ button.ride-card {
 }
 .location-distance { display: block; color: var(--muted, #64748b); font-size: .75rem; }
 .waypoint-recommendation-list { display: grid; gap: .45rem; margin: .5rem 0 .65rem; }
-.waypoint-recommendation { display: flex; align-items: center; justify-content: space-between; gap: .5rem; width: 100%; padding: .65rem .75rem; text-align: left; border: 1px solid rgba(15, 118, 110, .18); border-radius: .7rem; background: #fff; cursor: pointer; }
+.waypoint-recommendation { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: .5rem; width: 100%; padding: .65rem .75rem; text-align: left; border: 1px solid rgba(15, 118, 110, .18); border-radius: .7rem; background: #fff; color: var(--ink); cursor: pointer; }
+.waypoint-recommendation:hover,
+.waypoint-recommendation:focus-visible { border-color: var(--teal); background: var(--teal-tint); }
+.waypoint-recommendation:disabled { opacity: .55; cursor: not-allowed; }
 .waypoint-recommendation span:first-child { display: grid; gap: .15rem; }
 .waypoint-recommendation small { color: var(--muted, #64748b); }
+.waypoint-recommendation > svg { flex: 0 0 auto; color: var(--teal-dark); }

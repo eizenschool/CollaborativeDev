@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   LOCATION_SEARCH_DEBOUNCE_MS,
+  NEARBY_PICKUP_RADIUS_METRES,
+  NEARBY_PICKUP_RESULT_LIMIT,
+  NEARBY_PICKUP_TYPES,
   MIN_LOCATION_QUERY_LENGTH,
   buildAutocompleteRequest,
   getCurrentLocationPreview,
   getCurrentPosition,
   isConfirmedLocation,
   resolveCurrentLocation,
+  searchNearbyPickupLocations,
   searchLocations
 } from '../GooglePlacesService.js';
 
@@ -143,6 +147,84 @@ describe('Google Places location boundary', () => {
       }))
     };
     await expect(searchLocations('Sentral', { maps })).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+  });
+
+  it('requests five pickup-friendly places within 5 km ordered by distance', async () => {
+    const searchNearby = vi.fn(async () => ({ places: [] }));
+    const maps = {
+      importLibrary: vi.fn(async (library) => {
+        expect(library).toBe('places');
+        return {
+          Place: { searchNearby },
+          SearchNearbyRankPreference: { DISTANCE: 'DISTANCE' }
+        };
+      })
+    };
+
+    await expect(searchNearbyPickupLocations({
+      latitude: 3.139,
+      longitude: 101.6869,
+      accuracy: 35
+    }, { maps })).resolves.toEqual([]);
+
+    expect(searchNearby).toHaveBeenCalledWith({
+      fields: ['id', 'displayName', 'formattedAddress', 'location'],
+      locationRestriction: {
+        center: { lat: 3.139, lng: 101.6869 },
+        radius: NEARBY_PICKUP_RADIUS_METRES
+      },
+      includedTypes: [...NEARBY_PICKUP_TYPES],
+      maxResultCount: NEARBY_PICKUP_RESULT_LIMIT,
+      rankPreference: 'DISTANCE',
+      language: 'en',
+      region: 'MY'
+    });
+    expect(NEARBY_PICKUP_TYPES).toEqual(expect.arrayContaining([
+      'transit_station', 'parking', 'shopping_mall', 'restaurant', 'university', 'park', 'cultural_landmark'
+    ]));
+  });
+
+  it('maps nearby places in Google distance order and filters incomplete or duplicate rows', async () => {
+    const searchNearby = vi.fn(async () => ({
+      places: [
+        { id: 'near-1', displayName: 'KL Sentral', formattedAddress: 'Brickfields, Kuala Lumpur', location: { lat: () => 3.1391, lng: () => 101.6869 } },
+        { id: 'near-1', displayName: 'Duplicate', formattedAddress: 'Duplicate address', location: { lat: 3.1392, lng: 101.6869 } },
+        { id: '', displayName: 'Missing ID', formattedAddress: 'Somewhere', location: { lat: 3.1393, lng: 101.6869 } },
+        { id: 'near-2', displayName: { text: 'Central Market' }, formattedAddress: '', location: { lat: 3.140, lng: 101.6869 } },
+        { id: 'no-location', displayName: 'No coordinates', formattedAddress: 'Kuala Lumpur' }
+      ]
+    }));
+    const maps = { importLibrary: vi.fn(async () => ({
+      Place: { searchNearby },
+      SearchNearbyRankPreference: { DISTANCE: 'DISTANCE' }
+    })) };
+
+    const results = await searchNearbyPickupLocations({ latitude: 3.139, longitude: 101.6869, accuracy: 40 }, { maps });
+
+    expect(results).toHaveLength(2);
+    expect(results.map((result) => result.placeId)).toEqual(['near-1', 'near-2']);
+    expect(results[0]).toMatchObject({ label: 'KL Sentral, Brickfields, Kuala Lumpur' });
+    expect(results[0].distanceMeters).toBeLessThan(results[1].distanceMeters);
+  });
+
+  it('rejects inaccurate nearby origins and maps Google quota failures', async () => {
+    const importLibrary = vi.fn();
+    await expect(searchNearbyPickupLocations({
+      latitude: 3.139,
+      longitude: 101.6869,
+      accuracy: 500.1
+    }, { maps: { importLibrary } })).rejects.toMatchObject({ code: 'INACCURATE' });
+    expect(importLibrary).not.toHaveBeenCalled();
+
+    const maps = { importLibrary: vi.fn(async () => ({
+      Place: { searchNearby: vi.fn(async () => { throw Object.assign(new Error('Resource exhausted'), { code: 'OVER_QUERY_LIMIT' }); }) },
+      SearchNearbyRankPreference: { DISTANCE: 'DISTANCE' }
+    })) };
+    await expect(searchNearbyPickupLocations({
+      latitude: 3.139,
+      longitude: 101.6869,
+      accuracy: 20
+    }, { maps })).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
   });
 
   it('requests one high-accuracy position and maps permission and timeout failures', async () => {

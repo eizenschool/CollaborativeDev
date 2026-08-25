@@ -928,7 +928,7 @@ export const mockDb = {
     if (!Number.isFinite(position.accuracy) || position.accuracy > 150) throw new Error('GPS accuracy must be 150 metres or better for passenger check-in.');
     if (!ride.pickupAnchor) throw new Error('This Ride needs a confirmed route before check-in.');
     const distance = distanceMetres(position.latitude, position.longitude, ride.pickupAnchor.latitude, ride.pickupAnchor.longitude);
-    if (distance > Math.min(350, 200 + position.accuracy)) throw new Error('You are outside the pickup tolerance for this GPS accuracy.');
+    if (distance > Math.min(400, 250 + position.accuracy)) throw new Error('You are outside the pickup tolerance for this GPS accuracy.');
     request.boardingStatus = 'Checked In';
     request.checkedInAt = new Date().toISOString();
     request.checkInDistanceMeters = distance;

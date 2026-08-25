@@ -13,6 +13,14 @@ export const LOCATION_SEARCH_DEBOUNCE_MS = 1000;
 export const MAX_GPS_ACCURACY_METRES = 100;
 export const MAX_CHECK_IN_ACCURACY_METRES = 150;
 export const MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES = 500;
+export const NEARBY_PICKUP_RADIUS_METRES = 5000;
+export const NEARBY_PICKUP_RESULT_LIMIT = 5;
+export const NEARBY_PICKUP_TYPES = Object.freeze([
+  'transit_station', 'bus_station', 'train_station', 'subway_station', 'light_rail_station',
+  'parking', 'gas_station', 'shopping_mall', 'market', 'supermarket',
+  'restaurant', 'cafe', 'university', 'park', 'plaza',
+  'tourist_attraction', 'cultural_landmark', 'historical_landmark'
+]);
 const MAP_DIAGNOSTIC_TEXT_LIMIT = 160;
 
 let googleMapsPromise = null;
@@ -190,6 +198,77 @@ export async function searchLocations(input, { maps, navigatorObject = globalThi
   }
 }
 
+function placeCoordinate(location, key) {
+  const value = typeof location?.[key] === 'function' ? location[key]() : location?.[key];
+  return Number(value);
+}
+
+function straightLineDistanceMetres(origin, location) {
+  const latitude = placeCoordinate(location, 'lat');
+  const longitude = placeCoordinate(location, 'lng');
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  const radians = (degrees) => degrees * Math.PI / 180;
+  const latitudeDelta = radians(latitude - origin.latitude);
+  const longitudeDelta = radians(longitude - origin.longitude);
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(radians(origin.latitude)) * Math.cos(radians(latitude))
+    * Math.sin(longitudeDelta / 2) ** 2;
+  return Math.round(6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function nearbyPlaceLabel(place) {
+  const name = typeof place?.displayName === 'string'
+    ? place.displayName.trim()
+    : String(place?.displayName?.text || '').trim();
+  const address = String(place?.formattedAddress || '').trim();
+  if (name && address && !address.toLocaleLowerCase('en').includes(name.toLocaleLowerCase('en'))) {
+    return `${name}, ${address}`;
+  }
+  return address || name;
+}
+
+export async function searchNearbyPickupLocations(origin, { maps } = {}) {
+  const normalisedOrigin = normaliseCurrentPosition(origin);
+  if (normalisedOrigin.accuracy > MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES) {
+    throw new LocationServiceError(
+      'INACCURATE',
+      `Your location is only accurate to about ${Math.round(normalisedOrigin.accuracy)} m. Move to an open area and retry, or search for a pickup point.`
+    );
+  }
+
+  try {
+    const mapsApi = await resolveMaps(maps);
+    const { Place, SearchNearbyRankPreference } = await mapsApi.importLibrary('places');
+    const { places = [] } = await Place.searchNearby({
+      fields: ['id', 'displayName', 'formattedAddress', 'location'],
+      locationRestriction: {
+        center: { lat: normalisedOrigin.latitude, lng: normalisedOrigin.longitude },
+        radius: NEARBY_PICKUP_RADIUS_METRES
+      },
+      includedTypes: [...NEARBY_PICKUP_TYPES],
+      maxResultCount: NEARBY_PICKUP_RESULT_LIMIT,
+      rankPreference: SearchNearbyRankPreference.DISTANCE,
+      language: 'en',
+      region: 'MY'
+    });
+    const seenPlaceIds = new Set();
+    return places
+      .map((place) => ({
+        placeId: String(place?.id || '').trim(),
+        label: nearbyPlaceLabel(place),
+        distanceMeters: straightLineDistanceMetres(normalisedOrigin, place?.location)
+      }))
+      .filter((place) => {
+        if (!place.placeId || !place.label || place.distanceMeters === null || seenPlaceIds.has(place.placeId)) return false;
+        seenPlaceIds.add(place.placeId);
+        return true;
+      })
+      .slice(0, NEARBY_PICKUP_RESULT_LIMIT);
+  } catch (error) {
+    throw serviceError(error, 'Nearby pickup alternatives are unavailable. Your selected pickup has not been changed.');
+  }
+}
+
 export function getCurrentPosition({ geolocation = globalThis.navigator?.geolocation } = {}) {
   if (!geolocation?.getCurrentPosition) {
     return Promise.reject(new LocationServiceError('UNSUPPORTED', 'This browser cannot provide your current location.'));
@@ -275,5 +354,6 @@ export const GooglePlacesService = {
   loadGoogleMapsLibraries,
   getCurrentLocationPreview,
   resolveCurrentLocation,
+  searchNearbyPickupLocations,
   isConfirmedLocation
 };

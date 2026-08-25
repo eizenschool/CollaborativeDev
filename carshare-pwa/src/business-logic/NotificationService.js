@@ -34,12 +34,20 @@ export function countUnread(notifications) {
   return notifications.reduce((count, notification) => count + (notification.isRead ? 0 : 1), 0);
 }
 
+export function getPushCapability({
+  windowObject = globalThis.window,
+  navigatorObject = globalThis.navigator,
+} = {}) {
+  if (!windowObject || !navigatorObject) return 'unsupported';
+  if (!windowObject.isSecureContext) return 'insecure';
+  if (!('Notification' in windowObject)
+    || !('PushManager' in windowObject)
+    || !('serviceWorker' in navigatorObject)) return 'unsupported';
+  return 'supported';
+}
+
 export function isPushSupported() {
-  return typeof window !== 'undefined'
-    && window.isSecureContext
-    && 'Notification' in window
-    && 'PushManager' in window
-    && 'serviceWorker' in navigator;
+  return getPushCapability() === 'supported';
 }
 
 export function urlBase64ToUint8Array(value) {
@@ -80,7 +88,8 @@ export function createNotificationService(repository = supabaseNotificationRepos
     },
 
     async getPushStatus() {
-      if (!isPushSupported()) return 'unsupported';
+      const capability = getPushCapability();
+      if (capability !== 'supported') return capability;
       if (!vapidPublicKey) return 'unconfigured';
       if (Notification.permission === 'denied') return 'denied';
       const registration = await navigator.serviceWorker.ready;
@@ -89,7 +98,8 @@ export function createNotificationService(repository = supabaseNotificationRepos
     },
 
     async syncPushSubscription() {
-      if (!isPushSupported()) return 'unsupported';
+      const capability = getPushCapability();
+      if (capability !== 'supported') return capability;
       if (!vapidPublicKey) return 'unconfigured';
       if (Notification.permission === 'denied') return 'denied';
       const registration = await navigator.serviceWorker.ready;
@@ -100,9 +110,11 @@ export function createNotificationService(repository = supabaseNotificationRepos
     },
 
     async enablePush() {
-      if (!isPushSupported()) {
-        throw new Error('This browser does not support device notifications over this connection.');
+      const capability = getPushCapability();
+      if (capability === 'insecure') {
+        throw new Error('Device notifications require HTTPS. Open the deployed HTTPS app, or use localhost on this device.');
       }
+      if (capability !== 'supported') throw new Error('This browser does not support device notifications.');
       const publicKey = vapidPublicKey;
       if (!publicKey) throw new Error('Device notifications are not configured for this deployment.');
 
@@ -133,7 +145,8 @@ export function createNotificationService(repository = supabaseNotificationRepos
     },
 
     async disablePush() {
-      if (!isPushSupported()) return 'unsupported';
+      const capability = getPushCapability();
+      if (capability !== 'supported') return capability;
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
       if (!subscription) return 'available';

@@ -63,6 +63,7 @@ export default function PublishRide() {
   const [previewLocation, setPreviewLocation] = useState(null);
   const [previewStatus, setPreviewStatus] = useState({ state: 'idle', message: '' });
   const [routeQuote, setRouteQuote] = useState(null);
+  const [waypointRecommendationRoute, setWaypointRecommendationRoute] = useState(null);
   const [quoteStatus, setQuoteStatus] = useState({ state: 'idle', message: '' });
   const [draftLoading, setDraftLoading] = useState(Boolean(draftRideId));
   const [draftLoadError, setDraftLoadError] = useState('');
@@ -145,6 +146,10 @@ export default function PublishRide() {
     setForm((f) => ({ ...f, ...fields }));
     setRouteQuote(null);
     setQuoteStatus({ state: 'idle', message: '' });
+    if (['pickup', 'pickupLocation', 'destination', 'destinationLocation']
+      .some((field) => Object.prototype.hasOwnProperty.call(fields, field))) {
+      setWaypointRecommendationRoute(null);
+    }
   }
 
   async function calculateRouteQuote() {
@@ -152,6 +157,7 @@ export default function PublishRide() {
     try {
       const quote = await RideService.quoteRide(form, { rideId: draftRideId || null });
       setRouteQuote(quote);
+      setWaypointRecommendationRoute(quote?.recommendationRoute || null);
       setQuoteStatus({ state: 'ready', message: 'Route verified. Your Driver schedule is locked and rechecked when you publish.' });
       return quote;
     } catch (err) {
@@ -310,8 +316,8 @@ export default function PublishRide() {
         {step === 0 && <RouteStep form={form} patch={patch} previewLocation={previewLocation} previewStatus={previewStatus} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}
         {step === 2 && <RideVehicleSelector vehicles={vehicles} vehicleId={form.vehicleId} onSelect={(vehicle) => patch({ vehicleId: vehicle.id, vehicleCapacity: vehicle.seats, seatsTotal: Math.min(form.seatsTotal, vehicle.seats) })} />}
-        {step === 3 && <TripDetailsStep form={form} patch={patch} previewLocation={previewLocation} />}
-        {step === 4 && <ReviewStep form={form} patch={patch} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
+        {step === 3 && <TripDetailsStep form={form} patch={patch} previewLocation={previewLocation} recommendationRoute={waypointRecommendationRoute} quoteStatus={quoteStatus} />}
+        {step === 4 && <ReviewStep form={form} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving} />}
 
         {step < STEPS.length - 1 && (
           <div className="step-actions">
@@ -346,6 +352,7 @@ function RouteStep({ form, patch, previewLocation, previewStatus }) {
           onChange={(pickup, pickupLocation) => patch({ pickup, pickupLocation })}
           allowCurrentLocation
           currentLocationPreview={autocompleteOrigin}
+          loadNearbySuggestions={GooglePlacesService.searchNearbyPickupLocations}
         />
         <ConfirmedLocationInput
           id="ride-destination"
@@ -425,7 +432,7 @@ function ScheduleStep({ form, patch }) {
 }
 
 // ---------- STEP 4: TRIP DETAILS ----------
-function TripDetailsStep({ form, patch, previewLocation }) {
+function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, quoteStatus }) {
   const [waypoint, setWaypoint] = useState('');
   const [waypointLocation, setWaypointLocation] = useState(null);
   const [stopMinutes, setStopMinutes] = useState(10);
@@ -449,6 +456,22 @@ function TripDetailsStep({ form, patch, previewLocation }) {
     setWaypoint('');
     setWaypointLocation(null);
     setStopMinutes(10);
+    setWaypointError('');
+  }
+
+  function addRecommendedWaypoint(recommendation) {
+    if (form.waypoints.length >= 10) {
+      setWaypointError('A ride can have at most 10 waypoints.');
+      return;
+    }
+    patch({
+      waypoints: [...form.waypoints, {
+        name: recommendation.name,
+        description: recommendation.description,
+        placeId: recommendation.placeId,
+        stopMinutes: recommendation.stopMinutes,
+      }],
+    });
     setWaypointError('');
   }
 
@@ -496,6 +519,13 @@ function TripDetailsStep({ form, patch, previewLocation }) {
       <div className="field" style={{ marginTop: 18 }}>
         <label>Culinary &amp; cultural waypoints</label>
         <div className="waypoint-builder">
+          <WaypointRecommendationPanel
+            recommendationRoute={recommendationRoute}
+            quoteStatus={quoteStatus}
+            selectedWaypoints={form.waypoints}
+            onAdd={addRecommendedWaypoint}
+          />
+          <div className="waypoint-manual-divider"><span>Or add your own stop</span></div>
           <ConfirmedLocationInput
             id="ride-waypoint"
             label="Confirmed stop"
@@ -519,7 +549,7 @@ function TripDetailsStep({ form, patch, previewLocation }) {
 }
 
 // ---------- STEP 5: REVIEW & PUBLISH ----------
-function ReviewStep({ form, patch, routeQuote, quoteStatus, onRefreshQuote, onBack, onPublish, onDraft, saving }) {
+function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onPublish, onDraft, saving }) {
   const fresh = isRouteQuoteFresh(routeQuote);
   return (
     <>
@@ -534,18 +564,6 @@ function ReviewStep({ form, patch, routeQuote, quoteStatus, onRefreshQuote, onBa
         <div className="review-row"><span>Restriction tags</span><strong>{form.restrictionTags.length ? form.restrictionTags.join(', ') : 'None'}</strong></div>
         <div className="review-row"><span>Waypoints</span><strong>{form.waypoints.length ? form.waypoints.map((item) => `${item.name} (${item.stopMinutes} min)`).join(', ') : 'None'}</strong></div>
       </div>
-      <WaypointRecommendationPanel
-        routeQuote={routeQuote}
-        selectedWaypoints={form.waypoints}
-        onAdd={(recommendation) => patch({
-          waypoints: [...form.waypoints, {
-            name: recommendation.name,
-            description: recommendation.description,
-            placeId: recommendation.placeId,
-            stopMinutes: recommendation.stopMinutes
-          }]
-        })}
-      />
       <section className={`route-quote-card ${quoteStatus.state === 'error' ? 'error' : ''}`} aria-live="polite">
         <div><p className="card-title">Traffic-aware route</p><span>{quoteStatus.message || 'A server route quote is required before publishing.'}</span></div>
         {routeQuote && <div className="route-quote-grid">
@@ -567,19 +585,19 @@ function ReviewStep({ form, patch, routeQuote, quoteStatus, onRefreshQuote, onBa
   );
 }
 
-function WaypointRecommendationPanel({ routeQuote, selectedWaypoints, onAdd }) {
+function WaypointRecommendationPanel({ recommendationRoute, quoteStatus, selectedWaypoints, onAdd }) {
   const [items, setItems] = useState([]);
   const [state, setState] = useState('idle');
 
   useEffect(() => {
     let active = true;
-    if (!routeQuote?.recommendationRoute || selectedWaypoints.length >= 10) {
+    if (!recommendationRoute || selectedWaypoints.length >= 10) {
       setItems([]);
       setState('idle');
       return undefined;
     }
     setState('loading');
-    M2WaypointRecommendationService.queryWaypointRecommendations(routeQuote, selectedWaypoints)
+    M2WaypointRecommendationService.queryWaypointRecommendations({ recommendationRoute }, selectedWaypoints)
       .then((recommendations) => {
         if (!active) return;
         setItems(recommendations);
@@ -589,12 +607,16 @@ function WaypointRecommendationPanel({ routeQuote, selectedWaypoints, onAdd }) {
         if (active) { setItems([]); setState('error'); }
       });
     return () => { active = false; };
-  }, [routeQuote, selectedWaypoints]);
+  }, [recommendationRoute, selectedWaypoints]);
 
-  if (state === 'error') return <p className="location-field-message">Waypoint recommendations are unavailable. You can add a confirmed stop manually.</p>;
-  if (state === 'loading') return <section className="card waypoint-recommendations"><p className="card-title">Culinary &amp; cultural waypoints</p><span>Finding places along your route…</span></section>;
+  if (selectedWaypoints.length >= 10) return <p className="waypoint-recommendation-state">The 10-stop limit has been reached.</p>;
+  if (!recommendationRoute && quoteStatus?.state === 'loading') return <p className="waypoint-recommendation-state" role="status">Finding culinary and cultural stops along your route…</p>;
+  if (!recommendationRoute && quoteStatus?.state === 'error') return <p className="waypoint-recommendation-state">Suggestions need a verified route. You can still add your own confirmed stop below.</p>;
+  if (state === 'error') return <p className="waypoint-recommendation-state">Suggested stops are unavailable. You can still add your own confirmed stop below.</p>;
+  if (state === 'loading') return <p className="waypoint-recommendation-state" role="status">Finding culinary and cultural stops along your route…</p>;
+  if (state === 'ready' && !items.length) return <p className="waypoint-recommendation-state">No culinary or cultural suggestions were found along this route. Add your own stop below.</p>;
   if (!items.length) return null;
-  return <section className="card waypoint-recommendations"><p className="card-title">Suggested stops along your route</p><div className="waypoint-recommendation-list">{items.map((item) => <button type="button" className="waypoint-recommendation" key={item.placeId} onClick={() => onAdd(item)} disabled={selectedWaypoints.length >= 10}><span><strong>{item.name}</strong><small>{item.category === 'culinary' ? 'Culinary' : 'Cultural'} · {item.stopMinutes} min default stop</small></span><span>＋</span></button>)}</div><small>Adding a stop will require a fresh route quote before publishing.</small></section>;
+  return <div className="waypoint-recommendations"><p className="waypoint-option-label">Suggested along your route</p><div className="waypoint-recommendation-list">{items.map((item) => <button type="button" className="waypoint-recommendation" key={item.placeId} onClick={() => onAdd(item)} disabled={selectedWaypoints.length >= 10}><span><strong>{item.name}</strong><small>{item.category === 'culinary' ? 'Culinary' : 'Cultural'} · {item.stopMinutes} min default stop</small></span><IconPlus size={17} aria-hidden="true" /></button>)}</div><small>Choose a suggestion or add your own. Any stop change requires a fresh route quote.</small></div>;
 }
 
 function formatDistance(metres) {

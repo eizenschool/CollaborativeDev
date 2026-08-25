@@ -251,10 +251,26 @@ the existing 100 m accuracy and 200 m distance limits. Authored, undeployed
 follow-up `049` preserves nullable accuracy only for historical Checked In rows;
 every new check-in still writes the measured accuracy.
 
+Authored, undeployed migration `058_m2_widen_checkin_tolerance.sql` makes the
+requested small passenger-only adjustment to `min(250 m + accuracy, 400 m)`.
+It retains the 150 m accuracy ceiling, historical nullable-accuracy
+compatibility, coordinate non-persistence, and the Driver arrival limits.
+
 Publish Ride autocomplete supplies a 5 km location bias and origin only when
 the existing foreground preview is at most 500 m inaccurate. Malaysia remains
 the restriction and the returned Google distance is shown to the user. The
 same input contract is used by pickup, destination and waypoint selection.
+Only after the Driver selects `Use current location`, the browser obtains one
+fresh GPS reading and uses it for both reverse geocoding and Google Nearby
+Search. At 100 m accuracy or better, the reverse-geocoded device coordinate is
+immediately retained as Pickup while up to five pickup-friendly alternatives
+within 5 km appear in distance order. At 101–500 m, no GPS Pickup is selected,
+but the same alternatives can still be chosen. Above 500 m no Nearby request is
+made. The automatic map preview, focusing an empty field, and the Destination
+field do not trigger or reveal nearby options. This Create Ride source is Google
+Nearby rather than Module 6's catalogue; typing continues to use normal Google
+autocomplete. Nearby Search Pro billing, quota and alert requirements are
+recorded in `docs/GOOGLE-MAPS-SETUP.md`.
 
 `M2WaypointRecommendationService` consumes the host-only
 `recommendationRoute` returned by `m2-route-quote`, asks Module 6's
@@ -263,6 +279,10 @@ sorts by route progress, removes selected Place IDs, and caps the panel at six
 items. Selecting one creates the existing confirmed waypoint with a 30-minute
 default stop. A failed recommendation request falls back to manual waypoint
 entry; adding or editing a waypoint requires a fresh final route quote.
+Publish now renders those suggestions inside the existing Culinary & cultural
+waypoints builder, above an explicit “Or add your own stop” path, instead of as
+a separate Review card. The preserved recommendation route lets the Driver add
+more than one suggestion while the final route quote remains correctly stale.
 The quote fingerprint contains only the host-bound vehicle, confirmed route
 locations, departure and ordered waypoint Place IDs/stop minutes, so changing
 contribution, restrictions, pickup instructions or display copy does not spend

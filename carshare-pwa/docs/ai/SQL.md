@@ -25,7 +25,7 @@ Repository SQL history: 001-052
   Module 6's `041_m6`-`042_m6` and Module 3's `043_m3`-`045_m3` retain their
   deployed numbering; Module 2's `041_m2`-`052_m2` sequence was renumbered to
   `046_m2`-`057_m2` during this merge to keep the shared history unambiguous.
-  The final `056_m2` and `057_m2` files are authored locally but not deployed.)
+  The final `056_m2`-`058_m2` files are authored locally but not deployed.)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -352,6 +352,13 @@ empty-search-path body calls `extensions.gen_random_bytes` and
 Supabase project without changing participation checks, expiry, token hashing,
 the RPC signature, or its authenticated-only execute grant.
 
+`058_m2_widen_checkin_tolerance.sql` is authored locally and is **not
+deployed**. It widens passenger Check-in distance from
+`least(200 + accuracy, 350)` m to `least(250 + accuracy, 400)` m while retaining
+the 150 m accuracy ceiling, nullable accuracy for historical Checked In rows,
+coordinate non-persistence, and the Driver arrival policy. It replaces the
+existing RPC body without changing its signature or execute grant.
+
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
 Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
@@ -503,6 +510,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `057_m2_fix_family_link_crypto_schema.sql` - authored, not deployed;
   schema-qualifies the pgcrypto token generator and digest inside the existing
   authenticated Family Link creation RPC.
+- `058_m2_widen_checkin_tolerance.sql` - authored, not deployed; slightly
+  widens passenger-only adaptive Check-in distance while retaining the GPS
+  accuracy, privacy, historical compatibility, and RPC authorization boundary.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

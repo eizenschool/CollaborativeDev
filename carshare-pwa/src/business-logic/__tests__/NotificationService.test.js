@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   countUnread,
   createNotificationService,
+  getPushCapability,
   mapNotificationRow,
   PUSH_ONLY_EVENT_TYPES,
   urlBase64ToUint8Array,
@@ -115,6 +116,30 @@ describe('NotificationService', () => {
 
   it('converts URL-safe VAPID public-key bytes for PushManager', () => {
     expect([...urlBase64ToUint8Array('AQID-_8')]).toEqual([1, 2, 3, 251, 255]);
+  });
+
+  it('distinguishes an insecure connection from a browser without Web Push', async () => {
+    const browserApis = {
+      Notification: {},
+      PushManager: class PushManager {},
+    };
+    expect(getPushCapability({
+      windowObject: { ...browserApis, isSecureContext: false },
+      navigatorObject: { serviceWorker: {} },
+    })).toBe('insecure');
+    expect(getPushCapability({
+      windowObject: { isSecureContext: true, Notification: {} },
+      navigatorObject: { serviceWorker: {} },
+    })).toBe('unsupported');
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { ...browserApis, isSecureContext: false },
+    });
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { serviceWorker: {} } });
+    const service = createNotificationService(createRepository(), { vapidPublicKey: 'AQID-_8' });
+    await expect(service.getPushStatus()).resolves.toBe('insecure');
+    await expect(service.enablePush()).rejects.toThrow('require HTTPS');
   });
 
   it('reports a denied browser permission without attempting a subscription', async () => {

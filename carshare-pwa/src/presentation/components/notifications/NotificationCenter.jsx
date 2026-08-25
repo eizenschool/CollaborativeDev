@@ -47,7 +47,8 @@ function PushControl({ compact = false }) {
   }
   if (pushStatus === 'denied') return <p className="notification-helper">Device alerts are blocked in this browser&apos;s settings.</p>;
   if (pushStatus === 'unconfigured') return <p className="notification-helper">Device alerts are not configured for this deployment yet.</p>;
-  if (pushStatus === 'unsupported') return <p className="notification-helper">This browser or connection does not support device alerts.</p>;
+  if (pushStatus === 'insecure') return <p className="notification-helper info">Device alerts need HTTPS. Open the deployed HTTPS app, or use localhost on this device. Your in-app notifications still work here.</p>;
+  if (pushStatus === 'unsupported') return <p className="notification-helper info">This browser does not offer device alerts. Your in-app notifications still work here.</p>;
   return null;
 }
 

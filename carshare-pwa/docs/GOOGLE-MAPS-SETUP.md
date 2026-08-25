@@ -7,9 +7,12 @@ Module 2 uses two separate website-restricted browser keys:
 - **Maps Embed API** for directions previews. Google currently documents Embed
   as no-charge with unlimited requests.
 - **Maps JavaScript API + Places API (New) + Geocoding API** for confirmed
-  Malaysia-only Autocomplete suggestions and one-shot current-location reverse
-  geocoding. The app uses the Autocomplete Data API and does not request Place
-  Details or create a Dynamic Maps instance.
+  Malaysia-only Autocomplete suggestions, one-shot current-location reverse
+  geocoding, and the five nearest pickup-friendly Google places disclosed only
+  after the Driver selects `Use current location`. Nearby Search requests
+  `displayName`, `formattedAddress`, and `location`, so Google bills them under
+  the Nearby Search Pro SKU. The app does not request Place Details or create a
+  Dynamic Maps instance.
 
 Google currently lists separate monthly 10,000-event free usage caps for
 Autocomplete Requests and Geocoding. Free usage is calculated per SKU, not as
@@ -25,6 +28,8 @@ Official references:
 - https://developers.google.com/maps/documentation/embed/usage-and-billing
 - https://developers.google.com/maps/billing-and-pricing/pricing
 - https://developers.google.com/maps/billing-and-pricing/manage-costs
+- https://developers.google.com/maps/documentation/javascript/nearby-search
+- https://developers.google.com/maps/documentation/places/web-service/data-fields
 - https://developers.google.com/maps/documentation/places/web-service/place-id
 - https://developers.google.com/maps/documentation/routes/specify_location
 - https://developers.google.com/maps/api-security-best-practices
@@ -55,13 +60,17 @@ The owning Google account is intentionally not recorded in the repository.
 7. Create a second key named `lets-tumpang-web-locations`, apply the same
    website restrictions, and restrict it to **Maps JavaScript API**, **Places
    API (New)**, and **Geocoding API only**.
-8. Configure separate daily hard quotas of **250 requests** for Autocomplete
-   Requests and Geocoding. Disable automatic quota increases. If Cloud Console
-   does not expose an enforceable hard daily quota for either service, do not
-   put the location key into the production environment.
-9. Configure 50%, 75%, and 90% quota alerts for both services and a low
-   project-level billing budget alert. Alerts are notifications and do not stop
-   requests; the hard quota is the production cost boundary.
+8. Configure the lowest practical daily hard quotas for Autocomplete,
+   Geocoding, and Places API (New) Nearby Search, with an initial operational
+   target of **250 requests per day for each used request class**. Disable
+   automatic quota increases. Confirm in the actual Cloud project how the
+   Places API quota groups Nearby Search before production; if Cloud Console
+   does not expose an enforceable hard limit, keep the feature out of the
+   production environment until a separately approved cost boundary exists.
+9. Configure 50%, 75%, and 90% usage alerts for all three request paths and a
+   low project-level billing budget alert that includes Nearby Search Pro.
+   Alerts are notifications and do not stop requests; the hard quota is the
+   production cost boundary.
 10. Put both keys in the ignored `.env.local` file:
 
 ```text
@@ -116,10 +125,13 @@ but does not replace, the required Google Cloud hard quota.
   location permission. Eligible Hosts receive one automatic high-accuracy
   browser geolocation request that centres an Embed `view` preview only; there
   is no background tracking and this coordinate is not saved as pickup.
-- Choosing “Use current location” reuses an accurate entry reading where
-  possible. Accuracy over 100 metres is rejected before Geocoding; accepted
-  candidates use exactly one reverse-geocoding request and require driver
-  confirmation.
+- Choosing `Use current location` always requests one fresh high-accuracy GPS
+  reading. At 100 metres or better, the same reading is reverse geocoded and
+  immediately becomes the device-coordinate Pickup while Nearby Search runs in
+  parallel. At 101–500 metres, the GPS point is not selected but may still
+  anchor five pickup-friendly alternatives. Above 500 metres, neither Google
+  request is made. Nearby Search uses a 5 km circle, distance ranking, and at
+  most five results. No Nearby Search runs before this explicit button action.
 - Automated tests mock Google and browser geolocation. They must make zero real
   API calls.
 - If the location key is absent, offline, or over quota, existing Ride text and
@@ -134,10 +146,10 @@ but does not replace, the required Google Cloud hard quota.
 
 Run this only after both hard quotas and alerts are visible in Cloud Console:
 
-1. Record Autocomplete and Geocoding usage before the test.
+1. Record Autocomplete, Geocoding, and Nearby Search Pro usage before the test.
 2. Select one pickup and one destination from Google suggestions.
 3. Resolve and confirm current pickup once with browser geolocation.
-4. Confirm the counters increased only for the expected Autocomplete and
-   Geocoding SKUs and that Routes usage remains zero.
+4. Confirm the counters increased only for the expected Autocomplete,
+   Geocoding, and Nearby Search Pro SKUs and that Routes usage remains zero.
 5. Do not repeat the smoke test merely to exercise UI states; use mocks for all
    regression and responsive tests.
