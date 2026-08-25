@@ -66,7 +66,7 @@ export default function ConfirmedLocationInput({
     setMessage('Searching locations…');
     const timer = window.setTimeout(async () => {
       try {
-        const results = await GooglePlacesService.searchLocations(trimmed);
+        const results = await GooglePlacesService.searchLocations(trimmed, { origin: currentLocationPreview });
         if (sequence !== requestSequence.current) return;
         setSuggestions(results);
         setActiveIndex(results.length ? 0 : -1);
@@ -82,7 +82,7 @@ export default function ConfirmedLocationInput({
     }, LOCATION_SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [confirmed, currentCandidate, disabled, query, value]);
+  }, [confirmed, currentCandidate, currentLocationPreview, disabled, query, value]);
 
   function changeText(nextValue) {
     requestSequence.current += 1;
@@ -209,7 +209,7 @@ export default function ConfirmedLocationInput({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => selectSuggestion(suggestion)}
               >
-                <IconMapPin size={15} /> <span>{suggestion.label}</span>
+                <IconMapPin size={15} /> <span>{suggestion.label}{suggestion.distanceMeters != null && <small className="location-distance">{suggestion.distanceMeters >= 1000 ? `${(suggestion.distanceMeters / 1000).toFixed(1)} km away` : `${Math.round(suggestion.distanceMeters)} m away`}</small>}</span>
               </li>
             ))}
           </ul>

@@ -28,6 +28,7 @@ import TripDetail from './presentation/components/trip/TripDetail.jsx';
 import NotificationCenter from './presentation/components/notifications/NotificationCenter.jsx';
 import SearchModule from './presentation/components/search/SearchModule.jsx';
 import FavouritePage from './presentation/components/search/FavouritePage.jsx';
+import FamilyLocationShare from './presentation/components/ride/FamilyLocationShare.jsx';
 
 function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
   const { user } = useAuth();
@@ -104,6 +105,7 @@ function AppShell() {
         <Route path="/ride/:rideId/edit" element={<RequireAuth reason="Sign in to edit this ride."><EditRide /></RequireAuth>} />
         <Route path="/ride/:rideId/review" element={<RequireAuth reason="Sign in to review this ride."><RateReview /></RequireAuth>} />
         <Route path="/ride/:rideId" element={<RideDetail />} />
+        <Route path="/share/ride-location" element={<FamilyLocationShare />} />
         {/* Home, Search, and Published Ride Detail form the public browsing
             surface. The Ride workspace and other personal destinations are guarded. */}
         <Route path="/home" element={<HomeScreen />} />

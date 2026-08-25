@@ -2779,3 +2779,22 @@ button.ride-card {
     font-size: 10px;
   }
 }
+.live-tracking-panel .tracking-state { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted, #64748b); }
+.live-tracking-copy { color: var(--muted, #64748b); font-size: .88rem; }
+.live-location-list { display: grid; gap: .55rem; margin-top: .8rem; }
+.live-location-list > div { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; border: 1px solid rgba(15, 118, 110, .16); border-radius: .7rem; }
+.live-location-list span { display: grid; gap: .15rem; }
+.live-location-list small, .waypoint-photo-wrap small { color: var(--muted, #64748b); font-size: .75rem; }
+.family-share-result { display: grid; gap: .35rem; margin-top: .75rem; }
+.family-share-result input { width: 100%; min-width: 0; }
+.live-ride-map { position: relative; min-height: 240px; margin: .85rem 0; border-radius: .85rem; overflow: hidden; background: #e2e8f0; display: grid; place-items: center; color: #475569; }
+.live-ride-map-canvas { position: absolute; inset: 0; }
+.live-map-loading { position: relative; z-index: 1; pointer-events: none; }
+.live-map-fallback { display: grid; gap: .25rem; padding: .75rem; margin: .75rem 0; border-radius: .7rem; background: #f1f5f9; color: #475569; font-size: .82rem; }
+.waypoint-photo-wrap { display: grid; gap: .2rem; }
+.waypoint-photo-wrap img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: .7rem; }
+.location-distance { display: block; color: var(--muted, #64748b); font-size: .75rem; }
+.waypoint-recommendation-list { display: grid; gap: .45rem; margin: .5rem 0 .65rem; }
+.waypoint-recommendation { display: flex; align-items: center; justify-content: space-between; gap: .5rem; width: 100%; padding: .65rem .75rem; text-align: left; border: 1px solid rgba(15, 118, 110, .18); border-radius: .7rem; background: #fff; cursor: pointer; }
+.waypoint-recommendation span:first-child { display: grid; gap: .15rem; }
+.waypoint-recommendation small { color: var(--muted, #64748b); }

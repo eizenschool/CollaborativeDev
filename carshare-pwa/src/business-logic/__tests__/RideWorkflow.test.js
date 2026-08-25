@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildRoutePayload,
   isRouteQuoteFresh,
+  mergeRideUpdate,
   routeChangeRequiresConfirmation,
   validateConfirmedRoute,
   validateConfirmedWaypoints,
   validateRideDraft
 } from '../RideService.js';
-import { validateRideRequest } from '../RideRequestService.js';
+import { mapRideRequestRow, validateRideRequest } from '../RideRequestService.js';
 import { validateRideReview } from '../RideReviewService.js';
 import {
   departureParts,
@@ -34,6 +36,8 @@ globalThis.localStorage = {
   clear: () => memory.clear()
 };
 
+const STORAGE_KEY = 'letstumpang_mock_db_v1';
+
 describe('Module 2 ride workflow contracts', () => {
   beforeEach(() => {
     memory.clear();
@@ -51,6 +55,30 @@ describe('Module 2 ride workflow contracts', () => {
       start: '2026-08-19T16:00:00.000Z',
       end: '2026-08-20T16:00:00.000Z'
     });
+  });
+
+  it('uses the edited date and time for both the route quote and Published Ride update', () => {
+    const current = {
+      date: '2026-08-20',
+      time: '09:30',
+      departureAt: '2026-08-20T01:30:00.000Z'
+    };
+    const form = { date: '2026-08-21', time: '14:45' };
+    const merged = mergeRideUpdate(current, form);
+    const routeDetails = {
+      vehicleId: 'v_1',
+      pickup: 'KL Sentral',
+      destination: 'Ipoh',
+      pickupLocation: { placeId: 'pickup-id' },
+      destinationLocation: { placeId: 'destination-id' },
+      journeyScale: 'Intercity',
+      seatsTotal: 2,
+      waypoints: []
+    };
+
+    expect(merged.departureAt).toBe('2026-08-21T06:45:00.000Z');
+    expect(buildRoutePayload({ ...routeDetails, ...merged }).departureAt)
+      .toBe(buildRoutePayload({ ...routeDetails, ...form }).departureAt);
   });
 
   it('enforces the exact one-hour publication boundary', () => {
@@ -279,6 +307,70 @@ describe('Module 2 ride workflow contracts', () => {
     const requests = await mockDb.listMyRideRequests('u_demo_1');
     expect(ride.status).toBe('Expired');
     expect(requests.find((request) => request.rideId === 'r_1').status).toBe('Expired');
+  });
+
+  it('maps the stable acceptance timestamp separately from later processing', () => {
+    expect(mapRideRequestRow({
+      id: 'rq-history', ride_id: 'ride-history', requester_id: 'user-history',
+      seats_requested: 1, status: 'Expired', accepted_at: '2026-08-20T00:00:00.000Z',
+      processed_at: '2026-08-20T00:30:00.000Z'
+    })).toMatchObject({
+      acceptedAt: '2026-08-20T00:00:00.000Z',
+      processedAt: '2026-08-20T00:30:00.000Z'
+    });
+  });
+
+  it('moves accepted rides through departure grace and preserves acceptance history', async () => {
+    const departure = new Date('2026-08-20T00:00:00.000Z');
+    await mockDb.processRideLifecycle(departure);
+
+    expect((await mockDb.getRide('r_5')).status).toBe('Matched');
+    let acceptedRequest = (await mockDb.listRideRequests('r_5')).find((request) => request.id === 'rq_2');
+    expect(acceptedRequest).toMatchObject({ status: 'Accepted', acceptedAt: '2026-08-11T03:00:00.000Z' });
+
+    await mockDb.processRideLifecycle(new Date(departure.getTime() + 29 * 60 * 1000 + 59 * 1000));
+    expect((await mockDb.getRide('r_5')).status).toBe('Matched');
+
+    await mockDb.processRideLifecycle(new Date(departure.getTime() + 30 * 60 * 1000));
+    expect((await mockDb.getRide('r_5')).status).toBe('Expired');
+    acceptedRequest = (await mockDb.listRideRequests('r_5')).find((request) => request.id === 'rq_2');
+    expect(acceptedRequest).toMatchObject({
+      status: 'Expired',
+      acceptedAt: '2026-08-11T03:00:00.000Z',
+      boardingStatus: 'Pending'
+    });
+  });
+
+  it('rejects every stale day-of mock action at the exact grace deadline', async () => {
+    await mockDb.getRide('r_5');
+    const db = JSON.parse(memory.get(STORAGE_KEY));
+    db.rides.r_5.status = 'Matched';
+    memory.set(STORAGE_KEY, JSON.stringify(db));
+    vi.setSystemTime(new Date('2026-08-20T00:30:00.000Z'));
+
+    await expect(mockDb.cancelRide('r_5', 'Too late')).rejects.toThrow('expired 30 minutes');
+    await expect(mockDb.markRideRequestNoShow('rq_2')).rejects.toThrow('expired 30 minutes');
+    await expect(mockDb.startRide('r_5')).rejects.toThrow('expired 30 minutes');
+
+    db.currentUserId = 'u_host_sarah';
+    memory.set(STORAGE_KEY, JSON.stringify(db));
+    await expect(mockDb.checkInRideRequest('rq_2', {
+      latitude: 3.127, longitude: 101.594, accuracy: 10
+    })).rejects.toThrow('expired 30 minutes');
+    await expect(mockDb.cancelRideRequest('rq_2', 'Too late')).rejects.toThrow();
+  });
+
+  it('restores Matched to Published when the final accepted passenger cancels before departure', async () => {
+    await mockDb.getRide('r_5');
+    const db = JSON.parse(memory.get(STORAGE_KEY));
+    db.rides.r_5.status = 'Matched';
+    db.rides.r_5.recruitmentClosedAt = '2026-08-13T00:00:00.000Z';
+    db.currentUserId = 'u_host_sarah';
+    memory.set(STORAGE_KEY, JSON.stringify(db));
+
+    const cancelled = await mockDb.cancelRideRequest('rq_2', 'Change of plans');
+    expect(cancelled).toMatchObject({ status: 'Cancelled', acceptedAt: '2026-08-11T03:00:00.000Z' });
+    expect((await mockDb.getRide('r_5')).status).toBe('Published');
   });
 
   it('exposes accepted-request edit locks in the mock ride adapter', async () => {

@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation, normaliseInternalReturnPath } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
-import { isAtLeastHoursAway, REQUEST_CUTOFF_HOURS } from '../../../business-logic/rideDateTime.js';
+import { PlaceQueryService } from '../../../business-logic/discovery/PlaceQueryService.js';
+import { buildPlacePhotoUrl } from '../../../business-logic/discovery/placePhotos.js';
+import { loadGoogleMapsLibraries } from '../../../business-logic/GooglePlacesService.js';
+import { RideLiveTrackingService, isPointStale, isPointUnavailable } from '../../../business-logic/RideLiveTrackingService.js';
+import { isAtLeastHoursAway, isBeforeRideExpiry, REQUEST_CUTOFF_HOURS } from '../../../business-logic/rideDateTime.js';
 import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedService.js';
 import { MessagingService } from '../../../business-logic/MessagingService.js';
 import { formatJourneyCountdown, getRideJourneyState, isTripModeEligible, RIDE_ACTION } from '../../../business-logic/rideJourneyState.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
+import LiveRideMap from '../maps/LiveRideMap.jsx';
 import {
   IconAlertTriangle, IconArrowLeft, IconCalendar, IconCheck, IconEdit,
   IconMapPin, IconMessage, IconRoute, IconStar, IconUsers, IconX
@@ -17,6 +22,7 @@ import {
 import '../../styles/ride.css';
 
 const LIFECYCLE = ['Draft', 'Published', 'Matched', 'In Transit', 'Completed'];
+const LIVE_TRACKING_ENABLED = import.meta.env.VITE_M2_LIVE_TRACKING_ENABLED === 'true';
 
 function initials(name) {
   return (name || 'Host').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
@@ -87,13 +93,203 @@ function HostIdentity({ ride }) {
   );
 }
 
+function WaypointPhoto({ waypoint }) {
+  const [photo, setPhoto] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [inView, setInView] = useState(false);
+  const containerRef = useRef(null);
+  const freshLoaderRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current || typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setInView(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!inView) return undefined;
+    let active = true;
+    setPhoto(null);
+    setFailed(false);
+    freshLoaderRef.current = null;
+    (async () => {
+      try {
+        const loadFreshPhoto = async () => {
+          const { places } = await loadGoogleMapsLibraries(['places']);
+          const place = new places.Place({ id: waypoint.placeId });
+          await place.fetchFields({ fields: ['photos'] });
+          const first = place.photos?.[0];
+          const url = first?.getURI?.({ maxWidth: 600 });
+          if (!url) throw new Error('No waypoint photo');
+          const attribution = first?.authorAttributions?.[0];
+          if (active) setPhoto({ url, attribution, cached: false });
+        };
+        freshLoaderRef.current = loadFreshPhoto;
+        const cataloguePlace = await PlaceQueryService.getPlaceBySourcePlaceId(waypoint.placeId);
+        const cachedReference = cataloguePlace?.photoReference;
+        const cachedUrl = buildPlacePhotoUrl(cachedReference, { maxWidthPx: 600 });
+        if (cachedUrl) {
+          if (active) setPhoto({ url: cachedUrl, attribution: cataloguePlace?.photoAttribution || 'Google Maps', cached: true });
+          return;
+        }
+        await loadFreshPhoto();
+      } catch {
+        if (active) setFailed(true);
+      }
+    })();
+    return () => { active = false; freshLoaderRef.current = null; };
+  }, [inView, waypoint.placeId]);
+
+  if (failed || !photo?.url) return <div className="waypoint-art" ref={containerRef} aria-hidden="true">✦</div>;
+  const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(waypoint.name || 'Waypoint')}&query_place_id=${encodeURIComponent(waypoint.placeId || '')}`;
+  const attributionName = typeof photo.attribution === 'string' ? photo.attribution : photo.attribution?.displayName;
+  const attributionUri = typeof photo.attribution === 'object' ? photo.attribution?.uri : null;
+  return <div className="waypoint-photo-wrap" ref={containerRef}><img src={photo.url} alt="" loading="lazy" onError={() => {
+    if (photo.cached && freshLoaderRef.current) {
+      setPhoto(null);
+      freshLoaderRef.current().catch(() => setFailed(true));
+    } else setFailed(true);
+  }} />{attributionName && <small>{attributionUri ? <a href={attributionUri} target="_blank" rel="noreferrer">{attributionName}</a> : attributionName}</small>}<small><a href={sourceUrl} target="_blank" rel="noreferrer">Google Maps</a></small></div>;
+}
+
+function LiveTrackingPanel({ ride, isHost, userId }) {
+  const [sharing, setSharing] = useState(false);
+  const [state, setState] = useState('off');
+  const [points, setPoints] = useState([]);
+  const [error, setError] = useState('');
+  const [connectionWarning, setConnectionWarning] = useState('');
+  const [familyLink, setFamilyLink] = useState('');
+  const [familyShareId, setFamilyShareId] = useState('');
+  const [pageSessionId] = useState(() => globalThis.crypto?.randomUUID?.() || `map-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const [clock, setClock] = useState(() => Date.now());
+  const watcherRef = useRef(null);
+  const observerCleanupRef = useRef(null);
+
+  const mergePoint = useCallback((point) => {
+    setPoints((current) => {
+      const next = current.filter((item) => item.userId !== point.userId);
+      return [...next, point];
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!LIVE_TRACKING_ENABLED) return undefined;
+    let active = true;
+    const intervalId = window.setInterval(() => setClock(Date.now()), 10_000);
+    RideLiveTrackingService.observeLive(ride.id, {
+      isDriver: isHost,
+      onSnapshot: (snapshot) => { if (active) setPoints(snapshot); },
+      onPoint: mergePoint,
+      onStatus: (status) => {
+        if (active && ['CHANNEL_ERROR', 'TIMED_OUT'].includes(status)) {
+          setConnectionWarning('Live location updates are reconnecting.');
+        } else if (active && status === 'SUBSCRIBED') {
+          setConnectionWarning('');
+        }
+      }
+    }).then((cleanup) => {
+      if (active) observerCleanupRef.current = cleanup;
+      else cleanup();
+    }).catch((observeError) => {
+      if (active) setError(observeError.message || 'Unable to load live locations.');
+    });
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      observerCleanupRef.current?.();
+      observerCleanupRef.current = null;
+    };
+  }, [isHost, mergePoint, ride.id]);
+
+  useEffect(() => () => { void watcherRef.current?.stop(); }, []);
+
+  async function start() {
+    const audience = isHost
+      ? 'yourself and accepted passengers'
+      : 'yourself and the Driver';
+    if (!window.confirm(`Start live location sharing? Your latest location will be visible to ${audience}. Sampled history is visible to accepted ride participants after the trip; family links never receive history. Keep this trip screen open because background tracking is best effort.`)) return;
+    setError('');
+    try {
+      const watcher = RideLiveTrackingService.createWatcher({
+        rideId: ride.id,
+        onPoint: (point) => mergePoint({
+          ...point,
+          userId: userId || 'self',
+          role: isHost ? 'Driver' : 'Passenger'
+        }),
+        onState: setState
+      });
+      watcherRef.current = watcher;
+      await watcher.start();
+      setSharing(true);
+    } catch (startError) {
+      setError(startError.message || 'Live location is unavailable right now.');
+      setState('offline');
+    }
+  }
+
+  async function stop() {
+    await watcherRef.current?.stop();
+    watcherRef.current = null;
+    setSharing(false);
+    setState('off');
+  }
+
+  async function createFamilyLink() {
+    setError('');
+    try {
+      const result = await RideLiveTrackingService.createFamilyShare(ride.id);
+      const token = encodeURIComponent(result.token);
+      setFamilyShareId(result.shareId || '');
+      setFamilyLink(`${window.location.origin}/share/ride-location#token=${token}`);
+    } catch (shareError) { setError(shareError.message || 'Unable to create a family link.'); }
+  }
+
+  async function revokeFamilyLink() {
+    if (!familyShareId) return;
+    setError('');
+    try {
+      await RideLiveTrackingService.revokeFamilyShare(familyShareId);
+      setFamilyShareId('');
+      setFamilyLink('');
+    } catch (shareError) { setError(shareError.message || 'Unable to revoke the family link.'); }
+  }
+
+  if (!LIVE_TRACKING_ENABLED) return null;
+  const visiblePoints = points
+    .filter((point) => !isPointUnavailable(point, clock))
+    .filter((point) => isHost || point.role === 'Driver' || point.userId === userId || point.userId === 'self')
+    .sort((left, right) => (left.role === 'Driver' ? -1 : 0) - (right.role === 'Driver' ? -1 : 0));
+  const unavailableDriver = !isHost && points.some((point) => point.role === 'Driver' && isPointUnavailable(point, clock));
+  return <section className="ride-info-card live-tracking-panel">
+    <div className="trip-section-heading"><div><p className="eyebrow">LIVE LOCATION</p><h2>{sharing ? 'Your sharing is on' : 'Your sharing is off'}</h2></div><span className={`tracking-state tracking-${state}`}>{state}</span></div>
+    <p className="live-tracking-copy">You can view an actively sharing Driver without sharing your own location. Keep this trip screen open for best-effort foreground tracking; passengers never see one another.</p>
+    {error && <p className="location-field-message error" role="alert">{error}</p>}
+    {connectionWarning && <p className="location-field-message" role="status">{connectionWarning}</p>}
+    {sharing ? <button type="button" className="btn-secondary full" onClick={stop}>Stop sharing</button> : <button type="button" className="primary-action full" onClick={start}>Start sharing</button>}
+    {isHost === false && <button type="button" className="outline-action full" onClick={createFamilyLink}>Create family link</button>}
+    {familyLink && <div className="family-share-result"><label htmlFor="family-location-link">Family link</label><input id="family-location-link" readOnly value={familyLink} onFocus={(event) => event.currentTarget.select()} /><small>Expires after the ride ends or departure +24 hours.</small><button type="button" className="btn-link" onClick={revokeFamilyLink}>Revoke family link</button></div>}
+    {visiblePoints.length > 0 && <LiveRideMap ride={ride} points={visiblePoints} pageSessionId={pageSessionId} />}
+    <div className="live-location-list" aria-live="polite">{visiblePoints.length ? visiblePoints.map((point) => <div key={point.userId || point.role}><span><strong>{point.role === 'Driver' ? 'Driver’s current location' : 'Passenger current location'}</strong><small>{isPointStale(point, clock) ? 'Stale location' : `±${Math.round(point.accuracyM)} m accuracy`}</small></span><a href={`https://www.google.com/maps/search/?api=1&query=${point.lat},${point.lng}`} target="_blank" rel="noreferrer">Open in Google Maps</a></div>) : <small>{unavailableDriver ? 'Driver location is temporarily unavailable.' : 'No active location is being shared.'}</small>}</div>
+  </section>;
+}
+
 function TripModeView({
-  ride, journeyState, isHost, activeRequest, hostRequests, lifecycleContext,
-  lifecycleBusy, notice, error, onLifecycle, onDetails, onBack, onManageRequests, onTripChat
+  ride, journeyState, isHost, userId, activeRequest, hostRequests, lifecycleContext,
+  lifecycleBusy, notice, error, clock, onLifecycle, onDetails, onBack, onManageRequests, onTripChat
 }) {
   const accepted = hostRequests.filter((request) => request.status === 'Accepted');
   const pending = hostRequests.filter((request) => request.status === 'Pending');
-  const departureReached = new Date(ride.departureAt) <= new Date();
+  const departureReached = new Date(ride.departureAt) <= clock;
   const mapsUrl = GoogleMapsEmbedService.buildGoogleMapsDirectionsUrl({ pickup: ride.pickup, pickupLocation: ride.pickupLocation, destination: ride.destination, destinationLocation: ride.destinationLocation, waypoints: ride.waypoints });
   const checkedInCount = accepted.filter((request) => request.boardingStatus === 'Checked In').length;
   const unresolvedCount = accepted.filter((request) => request.boardingStatus === 'Pending').length;
@@ -103,13 +299,15 @@ function TripModeView({
     <div className="trip-mode-content">
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
-      <section className={`trip-command-card urgency-${journeyState.urgency}`} aria-live="polite"><span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span><h2>{journeyState.title}</h2><p>{journeyState.description}</p>{journeyState.countdownAt && <strong className="trip-countdown">{formatJourneyCountdown(journeyState.countdownAt)}</strong>}{journeyState.blockers.map((blocker) => <small key={blocker}>{blocker}</small>)}</section>
+      <section className={`trip-command-card urgency-${journeyState.urgency}`} aria-live="polite"><span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span><h2>{journeyState.title}</h2><p>{journeyState.description}</p>{journeyState.countdownAt && <strong className="trip-countdown">{formatJourneyCountdown(journeyState.countdownAt, clock, journeyState.countdownKind)}</strong>}{journeyState.blockers.map((blocker) => <small key={blocker}>{blocker}</small>)}</section>
       <section className="trip-route-card"><RouteMap ride={ride} /><div><p><strong>{ride.pickup}</strong><span>Pickup</span></p><p><strong>{ride.destination}</strong><span>Destination</span></p>{ride.status === 'In Transit' && ride.estimatedArrivalAt && <p><strong>{formatDateTime(ride.estimatedArrivalAt)}</strong><span>Updated traffic ETA</span></p>}</div></section>
       {ride.pickupInstructions && <section className="ride-info-card pickup-instructions-card"><p className="eyebrow">PICKUP INSTRUCTIONS</p><p><IconMapPin size={15} /> {ride.pickupInstructions}</p></section>}
 
       {isHost && <section className="ride-info-card trip-readiness-card"><div className="trip-section-heading"><div><p className="eyebrow">PASSENGER READINESS</p><h2>{checkedInCount} of {accepted.length} checked in</h2></div>{pending.length > 0 && <button type="button" className="btn-link" onClick={onManageRequests}>{pending.length} pending request{pending.length === 1 ? '' : 's'}</button>}</div>{accepted.length ? <div className="trip-passenger-list">{accepted.map((request) => <div key={request.id}><span><strong>{request.requester?.fullName || 'Passenger'}</strong><small>{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</small></span><b className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>{request.boardingStatus}</b>{request.boardingStatus === 'Pending' && departureReached && <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle(`no-show-${request.id}`, () => RideRequestService.markNoShow(request.id))}>{lifecycleBusy === `no-show-${request.id}` ? 'Working…' : 'Mark No-show'}</button>}</div>)}</div> : <p>No accepted passengers yet.</p>}</section>}
 
-      {!isHost && activeRequest && <section className="ride-info-card trip-passenger-status"><p className="eyebrow">YOUR BOARDING STATUS</p><h2>{activeRequest.boardingStatus}</h2>{activeRequest.checkedInAt && <p>Checked in {formatDateTime(activeRequest.checkedInAt)}</p>}{activeRequest.checkInDistanceMeters != null && <small>{activeRequest.checkInDistanceMeters} m from pickup</small>}</section>}
+      <LiveTrackingPanel ride={ride} isHost={isHost} userId={userId} />
+
+      {!isHost && activeRequest && <section className="ride-info-card trip-passenger-status"><p className="eyebrow">YOUR BOARDING STATUS</p><h2>{activeRequest.boardingStatus}</h2>{activeRequest.checkedInAt && <p>Checked in {formatDateTime(activeRequest.checkedInAt)}</p>}{activeRequest.checkInDistanceMeters != null && <small>{activeRequest.checkInDistanceMeters} m from pickup{activeRequest.checkInAccuracyMeters != null ? ` · GPS ±${activeRequest.checkInAccuracyMeters} m` : ''}</small>}</section>}
 
       <section className="trip-mode-actions" aria-label="Trip actions">
         {!isHost && journeyState.nextAction.id === RIDE_ACTION.CHECK_IN && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : 'Check in near pickup'}</button>}
@@ -223,7 +421,7 @@ export default function RideDetail() {
   useEffect(() => { loadDetail(); }, [loadDetail]);
   useEffect(() => { window.scrollTo({ top: 0, left: 0 }); }, [rideId]);
   useEffect(() => {
-    const timer = window.setInterval(() => setClock(new Date()), 30000);
+    const timer = window.setInterval(() => setClock(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -251,15 +449,14 @@ export default function RideDetail() {
   if (!ride) return <div className="ride-page-loading">This ride could not be found.</div>;
 
   const canEdit = isHost && ['Draft', 'Published'].includes(ride.status) && !ride.hasAcceptedRequests;
-  const canCancel = isHost && ['Published', 'Matched'].includes(ride.status);
+  const canCancel = isHost && ['Published', 'Matched'].includes(ride.status) && isBeforeRideExpiry(ride.departureAt, clock);
   const hasActiveRequest = ['Pending', 'Accepted'].includes(activeRequest?.status);
   const canResubmitRequest = activeRequest?.status !== 'Rejected';
   const canRequest = !isHost && ride.status === 'Published' && ride.seatsAvailable > 0 && isAtLeastHoursAway(ride.departureAt) && canResubmitRequest;
   const canMessageHost = !isHost && ride.status === 'Published';
   const requestDeadline = new Date(new Date(ride.departureAt).getTime() - REQUEST_CUTOFF_HOURS * 60 * 60 * 1000);
   const waypoints = ride.waypoints?.length ? ride.waypoints : [];
-  const departureReached = new Date(ride.departureAt) <= new Date();
-  const checkInOpen = new Date(ride.departureAt).getTime() - Date.now() <= REQUEST_CUTOFF_HOURS * 60 * 60 * 1000;
+  const departureReached = new Date(ride.departureAt) <= clock;
   const returnTo = normaliseInternalReturnPath(location.state?.returnTo, user ? '/ride' : '/search');
 
   async function cancelRide(reason) {
@@ -344,9 +541,9 @@ export default function RideDetail() {
 
   if (showTripMode) {
     return <TripModeView
-      ride={ride} journeyState={journeyState} isHost={isHost} activeRequest={activeRequest}
+      ride={ride} journeyState={journeyState} isHost={isHost} userId={user?.id} activeRequest={activeRequest}
       hostRequests={hostRequests} lifecycleContext={lifecycleContext} lifecycleBusy={lifecycleBusy}
-      notice={lifecycleNotice || location.state?.notice} error={error}
+      notice={lifecycleNotice || location.state?.notice} error={error} clock={clock}
       onLifecycle={runLifecycle} onDetails={() => setSearchParams({ view: 'details' })}
       onBack={() => navigate(returnTo)} onManageRequests={() => navigate(`/ride/${ride.id}/requests`)}
       onTripChat={openTripChat}
@@ -385,13 +582,12 @@ export default function RideDetail() {
         <section className="fixed-route-note"><IconAlertTriangle size={16} /><span>This ride follows a <strong>fixed route</strong>. Route-deviation automation is not enabled yet.</span></section>
 
         {(isHost || activeRequest?.status === 'Accepted') && <section className="ride-info-card ride-verification-card">
-          <p className="eyebrow">TRIP VERIFICATION</p>
-          {activeRequest?.status === 'Accepted' && ['Published', 'Matched', 'In Transit'].includes(ride.status) && <div className="verification-row"><span>Passenger check-in</span><strong>{activeRequest.boardingStatus}</strong>{activeRequest.boardingStatus === 'Pending' && ['Published', 'Matched'].includes(ride.status) && <button type="button" disabled={!checkInOpen || Boolean(lifecycleBusy)} onClick={() => runLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : checkInOpen ? 'Check in near pickup' : 'Opens 1 hour before'}</button>}</div>}
-        {isHost && ['Published', 'Matched'].includes(ride.status) && <div className="verification-row"><span>Departure</span><strong>{journeyState.nextAction.id === RIDE_ACTION.START_RIDE ? journeyState.description : 'All accepted passengers must Check in before the Driver can start early.'}</strong><button type="button" disabled={journeyState.nextAction.id !== RIDE_ACTION.START_RIDE || Boolean(lifecycleBusy)} onClick={() => runLifecycle('start', () => RideService.startRide(ride.id))}>{lifecycleBusy === 'start' ? 'Recalculating ETA…' : journeyState.nextAction.id === RIDE_ACTION.START_RIDE ? journeyState.nextAction.label : 'Waiting for all check-ins'}</button></div>}
-          {isHost && ride.status === 'In Transit' && !lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Destination</span><strong>GPS must be within 200 m with accuracy ≤100 m.</strong><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => runLifecycle('driver-arrival', () => RideService.confirmDriverArrival(ride.id))}>{lifecycleBusy === 'driver-arrival' ? 'Checking GPS…' : 'Confirm destination arrival'}</button></div>}
+          <p className="eyebrow">TRIP LIFECYCLE</p>
+          <div className="verification-row"><span>Current step</span><strong>{journeyState.title}</strong></div>
+          {activeRequest?.status === 'Accepted' && <div className="verification-row"><span>Passenger check-in</span><strong>{activeRequest.boardingStatus}</strong></div>}
           {lifecycleContext?.driverArrivedAt && <div className="verification-row"><span>Driver arrived</span><strong>{formatDateTime(lifecycleContext.driverArrivedAt)}</strong>{lifecycleContext.passengerConfirmationDueAt && <small>Auto-completes by {formatDateTime(lifecycleContext.passengerConfirmationDueAt)} if confirmations remain.</small>}</div>}
-          {activeRequest?.boardingStatus === 'Checked In' && ride.status === 'In Transit' && lifecycleContext?.driverArrivedAt && !activeRequest.arrivalConfirmedAt && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => runLifecycle('passenger-arrival', () => RideRequestService.confirmArrival(activeRequest.id))}>{lifecycleBusy === 'passenger-arrival' ? 'Confirming…' : 'Confirm I arrived'}</button>}
           {activeRequest?.arrivalConfirmedAt && <div className="request-sent"><IconCheck size={15} /> Arrival confirmed</div>}
+          {tripModeEligible && <button type="button" className="primary-action full" onClick={() => setSearchParams({ view: 'trip' })}>Open Trip Mode</button>}
         </section>}
 
         <section className="ride-info-card ride-preferences">
@@ -399,7 +595,7 @@ export default function RideDetail() {
           <div className="contribution"><p className="eyebrow">NON-MONETARY CONTRIBUTION</p><strong>🤝 {ride.contribution || 'No contribution needed'}</strong></div>
         </section>
 
-        {waypoints.length > 0 && <section className="waypoints-section"><h2>🗺️ Culinary & cultural waypoints</h2><div className="waypoint-scroller">{waypoints.map((waypoint) => <article key={waypoint.placeId || waypoint.name}><div className="waypoint-art">✦</div><strong>{waypoint.name}</strong><p>{waypoint.description || `${waypoint.stopMinutes || 0} minute stop`}</p></article>)}</div></section>}
+        {waypoints.length > 0 && <section className="waypoints-section"><h2>🗺️ Culinary & cultural waypoints</h2><div className="waypoint-scroller">{waypoints.map((waypoint) => <article key={waypoint.placeId || waypoint.name}><WaypointPhoto waypoint={waypoint} /><strong>{waypoint.name}</strong><p>{waypoint.description || `${waypoint.stopMinutes || 0} minute stop`}</p></article>)}</div></section>}
         <HostIdentity ride={ride} />
         <section className="ride-info-card"><p className="eyebrow">HOST REVIEWS</p>{reviews.length ? reviews.slice(0, 3).map((review) => <div className="review-row" key={review.id}><span>{review.reviewer?.fullName || 'Member'} · {review.rating}/5</span><strong>{review.comment || 'No written comment'}</strong></div>) : <p className="empty-waypoints">No reviews yet</p>}</section>
       </div>
@@ -408,9 +604,9 @@ export default function RideDetail() {
         {isHost ? <>
           {ride.status === 'Draft' ? <button className="primary-action full" onClick={() => navigate(`/ride/${ride.id}/publish`)}><IconEdit size={15} /> Continue draft</button> : <div className="host-action-row">
             {canEdit && <button className="outline-action" onClick={() => navigate(`/ride/${ride.id}/edit`)}><IconEdit size={15} /> Edit ride</button>}
-            {['Published', 'Matched'].includes(ride.status) && <button className="primary-action" onClick={() => navigate(`/ride/${ride.id}/requests`)}><IconUsers size={15} /> Manage requests</button>}
+            {!departureReached && ['Published', 'Matched'].includes(ride.status) && <button className="primary-action" onClick={() => navigate(`/ride/${ride.id}/requests`)}><IconUsers size={15} /> Manage requests</button>}
           </div>}
-          {ride.status === 'Published' && <button className="outline-action full" onClick={() => changeRecruitment('close')}>Close recruitment</button>}
+          {ride.status === 'Published' && !departureReached && hostRequests.some((request) => request.status === 'Accepted') && <button className="outline-action full" onClick={() => changeRecruitment('close')}>Close recruitment</button>}
           {ride.status === 'Matched' && isAtLeastHoursAway(ride.departureAt) && <button className="outline-action full" onClick={() => changeRecruitment('reopen')}>Reopen recruitment</button>}
           {ride.status === 'Completed' && <button className="primary-action full" onClick={() => navigate(journeyState.nextAction.path || `/ride/${ride.id}`)}>{journeyState.nextAction.label}</button>}
           {canCancel && <button className="cancel-action" onClick={() => setCancelling(true)}>Cancel this ride</button>}

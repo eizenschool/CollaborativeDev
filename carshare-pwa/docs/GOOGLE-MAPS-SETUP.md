@@ -95,7 +95,8 @@ Routes calls per Malaysia day; Cloud usage alerts remain an operational task.
    and it rejects before Google is called.
 4. Set Edge secrets `GOOGLE_ROUTES_SERVER_KEY`, `M2_ROUTE_QUOTE_SECRET` (at
    least 32 random characters), `M2_ROUTE_BACKFILL_SECRET` (at least 32 random
-   characters), and `M2_ALLOWED_ORIGIN`.
+   characters), and `M2_ALLOWED_ORIGIN` (one exact app origin or a
+   comma-separated local + production origin list; never `*`).
 5. Apply migration `027` only after live migration history is checked, then
    deploy `m2-route-quote` and `m2-route-backfill` together. Never deploy the
    frontend route flow before both server pieces are ready.

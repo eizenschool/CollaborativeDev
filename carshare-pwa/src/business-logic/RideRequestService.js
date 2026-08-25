@@ -2,7 +2,7 @@
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 import { mapRideRow } from './RideService.js';
-import { getCurrentPosition, MAX_GPS_ACCURACY_METRES } from './GooglePlacesService.js';
+import { getCurrentPosition, MAX_CHECK_IN_ACCURACY_METRES } from './GooglePlacesService.js';
 
 const REQUEST_SELECT = `
   *,
@@ -65,10 +65,12 @@ export function mapRideRequestRow(row) {
     createdAt: row.created_at ?? row.createdAt,
     updatedAt: row.updated_at ?? row.updatedAt,
     processedAt: row.processed_at ?? row.processedAt ?? null,
+    acceptedAt: row.accepted_at ?? row.acceptedAt ?? null,
     cancelledAt: row.cancelled_at ?? row.cancelledAt ?? null,
     boardingStatus: row.boarding_status ?? row.boardingStatus ?? 'Pending',
     checkedInAt: row.checked_in_at ?? row.checkedInAt ?? null,
     checkInDistanceMeters: row.check_in_distance_meters ?? row.checkInDistanceMeters ?? null,
+    checkInAccuracyMeters: row.check_in_accuracy_meters ?? row.checkInAccuracyMeters ?? null,
     noShowAt: row.no_show_at ?? row.noShowAt ?? null,
     noShowMarkedBy: row.no_show_marked_by ?? row.noShowMarkedBy ?? null,
     arrivalConfirmedAt: row.arrival_confirmed_at ?? row.arrivalConfirmedAt ?? null,
@@ -176,8 +178,8 @@ export const RideRequestService = {
   async checkIn(requestId) {
     const position = await getCurrentPosition();
     const { latitude, longitude, accuracy } = position.coords;
-    if (!Number.isFinite(accuracy) || accuracy > MAX_GPS_ACCURACY_METRES) {
-      throw new Error(`GPS accuracy must be ${MAX_GPS_ACCURACY_METRES} metres or better.`);
+    if (!Number.isFinite(accuracy) || accuracy > MAX_CHECK_IN_ACCURACY_METRES) {
+      throw new Error(`GPS accuracy must be ${MAX_CHECK_IN_ACCURACY_METRES} metres or better for passenger check-in.`);
     }
     if (isSupabaseConfigured) {
       const { error } = await supabase.rpc('check_in_ride_request', {

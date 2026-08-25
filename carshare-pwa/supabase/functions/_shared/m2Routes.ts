@@ -235,7 +235,19 @@ async function sha256(value: string): Promise<string> {
 }
 
 export async function rideFingerprint(ride: NormalizedRide, rideId: string | null): Promise<string> {
-  return sha256(JSON.stringify({ rideId, ride }));
+  // Only data that changes the Google route or the schedule/vehicle conflict
+  // check belongs in the quote fingerprint. Contribution, restriction copy,
+  // pickup instructions, and display labels can change without spending a
+  // second Routes request.
+  const routeInputs = {
+    rideId,
+    vehicleId: ride.vehicleId,
+    pickupLocation: ride.pickupLocation,
+    destinationLocation: ride.destinationLocation,
+    departureAt: ride.departureAt,
+    waypoints: ride.waypoints.map(({ placeId, order, stopMinutes }) => ({ placeId, order, stopMinutes })),
+  };
+  return sha256(JSON.stringify(routeInputs));
 }
 
 async function hmacKey(secret: string): Promise<CryptoKey> {
@@ -465,6 +477,10 @@ export function publicQuote(quote: RouteComputation, token: string) {
     stopoverSeconds: quote.stopoverSeconds,
     totalDurationSeconds: quote.routeDurationSeconds + quote.stopoverSeconds,
     estimatedArrivalAt: quote.estimatedArrivalAt,
+    recommendationRoute: {
+      origin: { lat: quote.pickupAnchor.latitude, lng: quote.pickupAnchor.longitude },
+      destination: { lat: quote.destinationAnchor.latitude, lng: quote.destinationAnchor.longitude },
+    },
     attribution: `Powered by Google, ©${new Date().getUTCFullYear()} Google`,
   };
 }

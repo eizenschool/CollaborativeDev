@@ -16,11 +16,18 @@ Deployed SQL history: 001-026, 028, 033, 034, and 036_m3 as tracked Supabase
   migrations, plus tracked 035_m4 and 023, 027, 029, 030, 031, 032, and
   037_m2 applied through
   the Dashboard SQL Editor (see below)
-Repository SQL history: 001-040
+Repository SQL history: 001-052
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
-  through the Dashboard SQL Editor; 038, 039, and 040 remain undeployed)
+  through the Dashboard SQL Editor; 038, 041, 042, and 043 are deployed
+  through shared migration tooling; 039 and 040 remain undeployed; 044 is the
+  deployed advisor follow-up, 045 the dispute-resolution notification
+  follow-up, 046 the role-admin reassignment follow-up, 047 its audit indexes,
+  048 the history user-FK index, 049 applied through the Dashboard but absent
+  from migration history, 050 the deployed Admin-removal compensation, and
+  051 the authored but undeployed lifecycle-expiry compensation, and 052 the
+  authored but undeployed Family Link crypto-schema correction)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -186,10 +193,10 @@ authenticated execution of the legacy direct `start_ride` path, adds the actual
 `m2-route-quote` Edge Function. Before the scheduled departure, every Accepted
 passenger must be Checked In; after departure, at least one must be Checked In
 and remaining unresolved passengers may be marked No-show. The matching
-`m2-route-quote` Edge Function is deployed as active version 9.
+`m2-route-quote` Edge Function is deployed as active version 11.
 
-`038_m2_ride_usability_notifications.sql` is **written but not yet deployed**
-and must follow `033_project_notifications.sql`. It reuses
+`038_m2_ride_usability_notifications.sql` is deployed as
+`m2_ride_usability_notifications` after `033_project_notifications.sql`. It reuses
 `private.create_user_notification(...)` for Module 2 request, cancellation,
 arrangement, boarding, arrival, and completion events. Its private minute-Cron
 producer adds deduplicated 24-hour, final-hour, and departure-due reminders;
@@ -210,7 +217,75 @@ The post-deployment advisors reported no Module 4 security findings. Performance
 reported the expected unused-index notice for the new favourites table and one
 missing covering index on `ride_favourites.ride_id`. The latter is addressed by
 `040_m4_favourites_advisor_followup.sql`, authored but not deployed so the
-deployed `034` remains immutable. The next new migration starts at `041`.
+deployed `034` remains immutable. M2 migrations `041`-`043` are now deployed.
+
+`041_m2_adaptive_checkin.sql` is deployed as `m2_adaptive_checkin`. Passenger
+check-in accepts accuracy up to 150 m and distance up to
+`least(200 + accuracy, 350)` m; Driver arrival remains 100 m/200 m. Raw
+submitted coordinates are not stored.
+
+`042_m2_live_location_tracking.sql` is deployed as `m2_live_location_tracking`.
+It adds private consent sessions, latest points, sampled history, expiring
+family-share hashes, map permits, evidence holds, filtered RPCs, and Realtime
+broadcast policies. Browser roles have no direct table write access.
+
+`043_project_trust_admin_ride_disputes.sql` is deployed as
+`project_trust_admin_ride_disputes`. It adds the project role/audit boundary,
+Module 2 dispute lifecycle, assigned Trust Admin evidence access, and retention
+holds without creating a general enforcement system.
+
+`044_m2_tracking_advisor_followup.sql` is deployed as
+`m2_tracking_advisor_followup`. It adds covering indexes for the new private
+foreign keys and rewrites the two Realtime read policies to evaluate the
+authenticated user once per statement.
+
+`045_m2_dispute_resolution_notifications.sql` is deployed as
+`m2_dispute_resolution_notifications`. It keeps the assigned Trust Admin
+resolution transition atomic, extends the evidence hold for 90 days, and sends
+the opener a case-result notification without GPS data.
+
+`046_m2_admin_dispute_reassignment.sql` is deployed as
+`m2_admin_dispute_reassignment`. It gives Role Admin a non-GPS open-case queue,
+audited reassignment to an active Trust Admin, and no direct browser table
+access.
+
+`047_m2_admin_audit_indexes.sql` is deployed as `m2_admin_audit_indexes` and
+covers the audit table's actor and subject foreign keys.
+
+`048_m2_history_user_index.sql` is deployed as `m2_history_user_index` and
+covers the history table's user foreign key without changing its ride-first
+playback ordering index.
+
+`049_m2_tracking_correctness_fixes.sql` was applied through the Dashboard SQL
+Editor and is absent from migration history. Its nullable historical Check-in
+accuracy correction is live. Its temporary Role Admin actor-forwarding change
+is removed by `050` together with the superseded Admin system.
+
+`050_m2_remove_trust_admin.sql` is deployed as `m2_remove_trust_admin`. It removes the
+project-role, ride-dispute and GPS-evidence tables/RPCs/notifications while
+preserving live/latest/history, family shares, map permits and Module 5 replay.
+It also separates valid scheduled/waiting family snapshots from invalid links,
+keeps link expiry aligned to rescheduled departures, invalidates links on a
+terminal Ride, and removes unavailable live coordinates after two minutes.
+`m2-live-share` active version 4 consumes the UUID-free snapshot RPC; remote
+`project-admin` and `ride-dispute-evidence` Edge Functions were deleted.
+
+`051_m2_lifecycle_expiry_and_validation.sql` is authored locally and is **not
+deployed**. It adds stable nullable `ride_requests.accepted_at`, a partial
+participant-history index, the exact 30-minute unstarted-Ride expiry boundary,
+Matched/Accepted invariants, terminal former-participant history access, and
+safe expiry notifications. It replaces existing RPC bodies without changing
+their signatures and leaves active Realtime/family access restricted to
+current Accepted participants. Deployment must be separately approved; after
+deployment, verify the existing overdue Matched Ride and requests, Cron,
+notifications, and security/performance advisors.
+
+`052_m2_fix_family_link_crypto_schema.sql` is authored locally and is **not
+deployed**. It replaces only `create_m2_family_location_share(uuid)` so its
+empty-search-path body calls `extensions.gen_random_bytes` and
+`extensions.digest` explicitly. This fixes token creation on the shared
+Supabase project without changing participation checks, expiry, token hashing,
+the RPC signature, or its authenticated-only execute grant.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -225,7 +300,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner; nullable `vehicle_type` is authored in undeployed `039`.
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, public pickup instructions, authenticated browsing, and RPC-only mutation.
-- `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation.
+- `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
 - `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
 - `conversations`: one ride/traveller direct chat and one ride group, lifecycle snapshot, last-message pointer, and terminal retention.
 - `conversation_members`: role, join/leave, per-user archive, and trusted read cursor.
@@ -321,9 +396,41 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `035_m4_destination_proximity_search.sql` - deployed and anonymously live-verified on 2026-08-20; public invoker safe-card proximity RPC over recommendable Module 6 destinations and private confirmed Ride destination IDs, with 5/10/25 km validation and no private Ride-location return fields.
 - `036_m3_message_translation.sql` - deployed; four-language source-versioned text/voice translation cache, member-only SELECT RLS, and no browser write grant.
 - `037_m2_early_start_and_eta_refresh.sql` - applied through the Dashboard SQL Editor; all-checked-in early Start, departure-time No-show handling, actual start timestamp, and guarded traffic-aware ETA refresh.
-- `038_m2_ride_usability_notifications.sql` - not deployed; private Module 2 notification triggers and deduplicated minute-Cron reminders only.
+- `038_m2_ride_usability_notifications.sql` - deployed as
+  `m2_ride_usability_notifications`; private Module 2 notification triggers
+  and deduplicated minute-Cron reminders only.
 - `039_m4_vehicle_language_filters.sql` - not deployed pending separate review; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
 - `040_m4_favourites_advisor_followup.sql` - not deployed; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
+- `041_m2_adaptive_checkin.sql` - deployed; accuracy-aware passenger check-in
+  tolerance and nullable recorded accuracy.
+- `042_m2_live_location_tracking.sql` - deployed; private live/latest/history,
+  family-share, retention, map-permit, RPC, trigger, and Realtime contracts.
+- `043_project_trust_admin_ride_disputes.sql` - deployed; role audit, ride
+  dispute lifecycle, evidence access, and evidence holds.
+- `044_m2_tracking_advisor_followup.sql` - deployed; private foreign-key
+  covering indexes and optimized Realtime auth policies.
+- `045_m2_dispute_resolution_notifications.sql` - deployed; safe resolution
+  notification and post-closure evidence-hold extension.
+- `046_m2_admin_dispute_reassignment.sql` - deployed; Role Admin queue,
+  audited Trust Admin reassignment, and service-role-only admin RPCs.
+- `047_m2_admin_audit_indexes.sql` - deployed; covering indexes for the
+  reassignment audit foreign keys.
+- `048_m2_history_user_index.sql` - deployed; user-first location-history
+  foreign-key coverage.
+- `049_m2_tracking_correctness_fixes.sql` - applied through Dashboard SQL
+  Editor but absent from migration history; legacy nullable Check-in accuracy
+  compatibility and temporary Role Admin actor forwarding.
+- `050_m2_remove_trust_admin.sql` - deployed as `m2_remove_trust_admin`;
+  compensating removal
+  of the Trust Admin/dispute/evidence rollout while preserving and tightening
+  participant/family live tracking and sampled history.
+- `051_m2_lifecycle_expiry_and_validation.sql` - authored, not deployed;
+  stable acceptance history, exact departure-grace expiry, Matched/request
+  invariants, terminal former-participant access, validation alignment, and
+  deduplicated expiry notifications.
+- `052_m2_fix_family_link_crypto_schema.sql` - authored, not deployed;
+  schema-qualifies the pgcrypto token generator and digest inside the existing
+  authenticated Family Link creation RPC.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.
@@ -338,14 +445,15 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   2026-08-20; shared recipient-owned notification inbox, protected device
   subscriptions, narrow read RPCs, 30-day retention, Realtime, and Message
   producer integration.
-- `038_m2_ride_usability_notifications.sql` - written locally and pending
-  deployment after `033`; private Module 2 notification triggers and
-  deduplicated minute-Cron reminders only.
+- `038_m2_ride_usability_notifications.sql` - deployed as
+  `m2_ride_usability_notifications`; private Module 2 notification triggers
+  and deduplicated minute-Cron reminders only.
 - `037_m2_early_start_and_eta_refresh.sql` - applied through the Dashboard SQL
   Editor and recorded here because it is absent from migration history;
   all-checked-in early Start, departure-time No-show handling, actual start
   timestamp, and guarded traffic-aware ETA refresh. The matching
-  `m2-route-quote` Function is active as version 9.
+  `m2-route-quote` Function is active as version 11 after adding host-only
+  recommendation route anchors and route-only quote fingerprinting.
 
 ## Rules for New Database Work
 

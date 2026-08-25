@@ -49,24 +49,16 @@ function monthKey(year, month) {
 }
 
 // ---------- Lifecycle status ----------
-// Module 2 owns ride lifecycle and its cron job already drives
-// Published -> Matched | Expired. Those states, plus Draft/Cancelled, are
-// authoritative and must never be overridden - in particular 'Expired'
-// (published, nobody joined, departure passed) is NOT a completed trip and
-// must never earn carbon credit.
-export function deriveDisplayStatus(ride, now = new Date()) {
-  if (ride.status !== 'Matched') return ride.status;
+// Module 2 and its database lifecycle processor own every Ride state. Module 5
+// must never promote a stale Matched Ride from the clock: only a persisted
+// Completed state earns trip or impact credit.
+export function deriveDisplayStatus(ride) {
+  return ride.status;
+}
 
-  // A Matched ride whose departure has passed really has started or finished,
-  // but D012 reserves the 'In Transit'/'Completed' writes for a service-role
-  // Module 6 verification pipeline that does not exist yet. Until it lands,
-  // show the stage the trip has actually reached rather than leaving every
-  // past ride stuck on 'Matched'. Delete this branch the day that pipeline
-  // starts writing real transitions.
-  const hoursSinceDeparture = (now - new Date(ride.departureAt)) / 3_600_000;
-  if (hoursSinceDeparture < 0) return 'Matched';
-  if (hoursSinceDeparture < 3) return 'In Transit';
-  return 'Completed';
+export function isHistoricalParticipantRequest(request) {
+  return request?.status === 'Accepted'
+    || (request?.status === 'Expired' && Boolean(request.acceptedAt));
 }
 
 // ---------- Estimated carbon savings ----------
@@ -229,7 +221,7 @@ async function buildParticipants(ride, userId, ownRequest, listRideRequests) {
   if (ride.hostId === userId) {
     try {
       const requests = await listRideRequests(ride.id);
-      return [host, ...requests.filter((request) => request.status === 'Accepted').flatMap(partyOf)];
+      return [host, ...requests.filter(isHistoricalParticipantRequest).flatMap(partyOf)];
     } catch {
       // Losing the passenger list should not take the whole trip page down.
       return [host];
@@ -253,10 +245,10 @@ export const TripHistoryEngine = {
     ]);
 
     const hostedCards = hosting.map((ride) => toHistoryCard(ride, 'Host', now));
-    // request.status is the REQUEST state - only an Accepted request means the
-    // user actually joined the trip.
+    // Accepted is active participation. Expired is historical participation
+    // only when acceptedAt proves that the Host accepted the passenger first.
     const joinedCards = requests
-      .filter((request) => request.status === 'Accepted' && request.ride)
+      .filter((request) => isHistoricalParticipantRequest(request) && request.ride)
       .map((request) => toHistoryCard(request.ride, 'Passenger', now));
 
     // UC5.1 C2 - most recent trip first.
@@ -275,7 +267,7 @@ export const TripHistoryEngine = {
 
     const isHost = ride.hostId === userId;
     const ownRequest = requests.find(
-      (request) => request.rideId === tripId && request.status === 'Accepted'
+      (request) => request.rideId === tripId && isHistoricalParticipantRequest(request)
     );
     // UC5.3 C1 - users may only view trips they hosted or joined. A
     // non-participant gets the same "not found" answer as a missing trip so

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { RideReviewService } from '../../../business-logic/RideReviewService.js';
-import { compareJourneyStates, getRideJourneyState, isTripModeEligible } from '../../../business-logic/rideJourneyState.js';
+import { compareJourneyStates, formatJourneyCountdown, getRideJourneyState, isTripModeEligible } from '../../../business-logic/rideJourneyState.js';
 import { IconArrowLeft, IconCalendar, IconMapPin, IconX } from '../icons.jsx';
 import '../../styles/ride.css';
 
@@ -24,9 +24,11 @@ export default function MyRequests() {
   const [cancelling, setCancelling] = useState(null);
   const [reason, setReason] = useState('');
   const [otherReason, setOtherReason] = useState('');
+  const [clock, setClock] = useState(() => new Date());
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!user) return;
+    if (!silent) setLoading(true);
     setError('');
     try {
       const nextRequests = await RideRequestService.listMyRequests(user.id);
@@ -43,18 +45,37 @@ export default function MyRequests() {
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const refreshVisible = () => {
+      setClock(new Date());
+      if (document.visibilityState === 'visible') load({ silent: true });
+    };
+    const timer = window.setInterval(() => setClock(new Date()), 1000);
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+    };
+  }, [load]);
   const journeyRequests = useMemo(() => requests.map((request) => ({
     request, ride: request.ride,
-    state: request.ride ? getRideJourneyState({ ride: request.ride, role: 'passenger', request, reviewEligibility: reviewsByRide[request.ride.id] ?? null }) : null
+    state: request.ride ? getRideJourneyState({ ride: request.ride, role: 'passenger', request, reviewEligibility: reviewsByRide[request.ride.id] ?? null, now: clock }) : null
   })).sort((left, right) => {
     if (!left.state) return 1;
     if (!right.state) return -1;
     return compareJourneyStates(left, right);
-  }), [requests, reviewsByRide]);
+  }), [clock, requests, reviewsByRide]);
 
   async function cancel() {
     const finalReason = reason === 'Other' ? otherReason.trim() : reason;
     if (!finalReason) return;
+    if (!cancelling?.ride || new Date(cancelling.ride.departureAt) <= new Date()) {
+      setError('Requests can only be cancelled before departure.');
+      setCancelling(null);
+      return;
+    }
     setError('');
     setNotice('');
     try {
@@ -82,9 +103,10 @@ export default function MyRequests() {
               <span className="request-date">{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}{request.companionNames.length ? ` · ${request.companionNames.join(', ')}` : ''}</span>
               {request.status === 'Accepted' && <span className="request-date">Boarding: {request.boardingStatus}</span>}
               {state && <span className={`request-next-action urgency-${state.urgency}`}><strong>{state.title}</strong> · {state.nextAction.label}</span>}
+              {state?.countdownAt && <span className="request-date">{formatJourneyCountdown(state.countdownAt, clock, state.countdownKind)}</span>}
               {request.decisionReason && <span className="request-date">Reason: {request.decisionReason}</span>}
             </button>
-            <div className="request-row-footer"><span>Host: <strong>{ride?.host?.fullName || 'Let’s Tumpang Host'}</strong></span><RequestStatus status={request.status} />{['Pending', 'Accepted'].includes(request.status) && <button onClick={() => { setCancelling(request); setReason(''); setOtherReason(''); }}>Cancel</button>}</div>
+            <div className="request-row-footer"><span>Host: <strong>{ride?.host?.fullName || 'Let’s Tumpang Host'}</strong></span><RequestStatus status={request.status} />{ride && new Date(ride.departureAt) > clock && ['Pending', 'Accepted'].includes(request.status) && <button onClick={() => { setCancelling(request); setReason(''); setOtherReason(''); }}>Cancel</button>}</div>
           </article>;
         }) : <section className="empty-request-state"><span className="empty-car">🚗</span><strong>No requests yet</strong><p>Find a ride and submit your first request.</p><button className="primary-action" onClick={() => navigate('/search')}>Find rides</button></section>}
       </div>

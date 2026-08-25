@@ -20,11 +20,11 @@ function compareWorkspaceDeparture(left, right) {
   return leftHistory ? -difference : difference;
 }
 
-function WorkspaceGroup({ groupKey, eyebrow, title, items, collapsible = false, onOpenItem, onDeleteDraft }) {
+function WorkspaceGroup({ groupKey, eyebrow, title, items, now, collapsible = false, onOpenItem, onDeleteDraft }) {
   if (!items.length) return null;
 
   const heading = <div className="ride-hub-header"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><span>{items.length}</span></div>;
-  const cards = <div className={`ride-grid ride-grid-${groupKey}`}>{items.map((item) => <div className="ride-journey-card-wrap" key={`${item.state.role}-${item.request?.id || 'host'}-${item.ride.id}`}><RideCard ride={item.ride} statusChip roleLabel={item.state.role === 'driver' ? 'Driver' : 'Passenger'} journeyState={item.state} compact onClick={() => onOpenItem(item)} />{item.state.phase === 'draft' && <button type="button" className="ride-draft-delete" onClick={() => onDeleteDraft(item.ride)}><IconTrash size={14} /> Delete draft</button>}</div>)}</div>;
+  const cards = <div className={`ride-grid ride-grid-${groupKey}`}>{items.map((item) => <div className="ride-journey-card-wrap" key={`${item.state.role}-${item.request?.id || 'host'}-${item.ride.id}`}><RideCard ride={item.ride} statusChip roleLabel={item.state.role === 'driver' ? 'Driver' : 'Passenger'} journeyState={item.state} compact now={now} onClick={() => onOpenItem(item)} />{item.state.phase === 'draft' && <button type="button" className="ride-draft-delete" onClick={() => onDeleteDraft(item.ride)}><IconTrash size={14} /> Delete draft</button>}</div>)}</div>;
 
   if (!collapsible) return <section className={`ride-journey-group ride-journey-group-${groupKey}`} aria-labelledby={`ride-${groupKey}-heading`}><div id={`ride-${groupKey}-heading`}>{heading}</div>{cards}</section>;
   return <details className={`ride-journey-group ride-journey-group-${groupKey} ride-history-group`}><summary aria-labelledby={`ride-${groupKey}-heading`}><span id={`ride-${groupKey}-heading`}>{heading}</span></summary>{cards}</details>;
@@ -38,10 +38,11 @@ export default function RideHub() {
   const [error, setError] = useState('');
   const [draftToDelete, setDraftToDelete] = useState(null);
   const [deletingDraft, setDeletingDraft] = useState(false);
+  const [clock, setClock] = useState(() => new Date());
 
-  const loadWorkspace = useCallback(async () => {
+  const loadWorkspace = useCallback(async ({ silent = false } = {}) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError('');
     try {
       const [rides, passengerRequests] = await Promise.all([RideService.listMyRides(user.id), RideRequestService.listMyRequests(user.id)]);
@@ -66,13 +67,27 @@ export default function RideHub() {
   }, [user]);
 
   useEffect(() => { loadWorkspace(); }, [loadWorkspace]);
+  useEffect(() => {
+    const refreshVisible = () => {
+      setClock(new Date());
+      if (document.visibilityState === 'visible') loadWorkspace({ silent: true });
+    };
+    const timer = window.setInterval(() => setClock(new Date()), 1000);
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+    };
+  }, [loadWorkspace]);
 
   const driverItems = useMemo(() => (workspace?.hosting || []).map((ride) => ({
-    ride, state: getRideJourneyState({ ride, role: 'driver', requests: workspace?.requestsByRide?.[ride.id] || [], reviewEligibility: workspace?.reviewsByRide?.[ride.id] ?? null })
-  })).sort(compareJourneyStates), [workspace]);
+    ride, state: getRideJourneyState({ ride, role: 'driver', requests: workspace?.requestsByRide?.[ride.id] || [], reviewEligibility: workspace?.reviewsByRide?.[ride.id] ?? null, now: clock })
+  })).sort(compareJourneyStates), [clock, workspace]);
   const passengerItems = useMemo(() => (workspace?.passengerRequests || []).filter((request) => request.ride).map((request) => ({
-    ride: request.ride, request, state: getRideJourneyState({ ride: request.ride, role: 'passenger', request, reviewEligibility: workspace?.reviewsByRide?.[request.ride.id] ?? null })
-  })).sort(compareJourneyStates), [workspace]);
+    ride: request.ride, request, state: getRideJourneyState({ ride: request.ride, role: 'passenger', request, reviewEligibility: workspace?.reviewsByRide?.[request.ride.id] ?? null, now: clock })
+  })).sort(compareJourneyStates), [clock, workspace]);
 
   const priorityItems = useMemo(() => [...driverItems, ...passengerItems].sort(compareJourneyStates), [driverItems, passengerItems]);
   const items = useMemo(() => [...driverItems, ...passengerItems], [driverItems, passengerItems]);
@@ -111,9 +126,9 @@ export default function RideHub() {
         {error && <div className="alert alert-error ride-management-error" role="alert"><span>{error}</span><button type="button" className="btn-link" onClick={loadWorkspace}>Retry</button></div>}
         {loading && <div className="ride-page-loading compact" role="status">Loading your ride workspace…</div>}
         {!loading && !error && workspace && <>
-          {nextItem ? <section className={`ride-next-action urgency-${nextItem.state.urgency}`} aria-labelledby="ride-next-action-title"><div><p className="eyebrow">YOUR NEXT STEP · {nextItem.state.role.toUpperCase()}</p><h2 id="ride-next-action-title">{nextItem.state.title}</h2><p>{nextItem.state.description}</p>{nextItem.state.countdownAt && <strong>{formatJourneyCountdown(nextItem.state.countdownAt)}</strong>}</div><button type="button" className="btn-primary" onClick={() => openItem(nextItem)}>{nextItem.state.nextAction.label}</button></section>
+          {nextItem ? <section className={`ride-next-action urgency-${nextItem.state.urgency}`} aria-labelledby="ride-next-action-title"><div><p className="eyebrow">YOUR NEXT STEP · {nextItem.state.role.toUpperCase()}</p><h2 id="ride-next-action-title">{nextItem.state.title}</h2><p>{nextItem.state.description}</p>{nextItem.state.countdownAt && <strong>{formatJourneyCountdown(nextItem.state.countdownAt, clock, nextItem.state.countdownKind)}</strong>}</div><button type="button" className="btn-primary" onClick={() => openItem(nextItem)}>{nextItem.state.nextAction.label}</button></section>
             : <section className="ride-empty-state compact"><IconSearch size={24} /><h3>No rides yet</h3><p>Publish a ride or use Search to request your first journey.</p><button className="btn-secondary" type="button" onClick={() => navigate('/search')}>Find rides</button></section>}
-          {items.length > 0 && <div className="ride-inbox-groups"><WorkspaceGroup groupKey="attention" eyebrow="Next actions" title="Needs attention" items={groupedItems.attention} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="upcoming" eyebrow="Upcoming" title="Scheduled rides" items={groupedItems.upcoming} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="drafts" eyebrow="Drafts" title="Finish publishing" items={groupedItems.drafts} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="history" eyebrow="History" title="Past rides and requests" items={groupedItems.history} collapsible onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /></div>}
+          {items.length > 0 && <div className="ride-inbox-groups"><WorkspaceGroup groupKey="attention" eyebrow="Next actions" title="Needs attention" items={groupedItems.attention} now={clock} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="upcoming" eyebrow="Upcoming" title="Scheduled rides" items={groupedItems.upcoming} now={clock} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="drafts" eyebrow="Drafts" title="Finish publishing" items={groupedItems.drafts} now={clock} onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /><WorkspaceGroup groupKey="history" eyebrow="History" title="Past rides and requests" items={groupedItems.history} now={clock} collapsible onOpenItem={openItem} onDeleteDraft={setDraftToDelete} /></div>}
         </>}
       </section>
 

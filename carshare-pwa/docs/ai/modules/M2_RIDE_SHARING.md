@@ -17,7 +17,7 @@ Business logic: `src/business-logic/RideService.js`.
 Ride entity behaviour, publishing/request flows, host decisions, ride lifecycle contract.
 
 ## Depends On
-Module 1 eligibility/profile/vehicle; Google Maps; Module 6 lifecycle verification; Module 3 group membership after acceptance.
+Module 1 eligibility/profile/vehicle; Google Maps; Module 3 group membership after acceptance; Module 5 read-only history/impact consumption.
 
 ## Provides
 Ride data, accepted participation context, lifecycle state, searchable rides.
@@ -30,6 +30,26 @@ requests, atomic acceptance/cancellation, manual recruitment close/reopen,
 automatic departure-time lifecycle processing, and mutual Completed-ride
 reviews. The same interfaces and state rules exist in the offline mock adapter;
 its automatic lifecycle processing is deterministic and lazy.
+
+Accepted decision D025 and authored, undeployed migration
+`051_m2_lifecycle_expiry_and_validation.sql` make the database the only status
+authority. Published rides without an Accepted request expire at departure;
+rides with an Accepted request become Matched and receive a 30-minute Start
+grace. At the exact deadline, every unstarted Published/Matched Ride and its
+remaining Pending/Accepted requests becomes Expired. Accepted-to-Expired rows
+retain `accepted_at` and boarding facts without assigning No-show. Close
+recruitment requires an Accepted request, and cancelling the final Accepted
+passenger before departure restores Matched to Published while the one-hour
+request cutoff remains enforced.
+
+Active operations and live/family location remain strict `Accepted`-status
+capabilities. Only an Expired former participant with non-null `accepted_at`
+gets terminal detail and sampled route-history access. Trip Mode is the sole
+Check-in, No-show, Start, and arrival-confirmation surface; Ride Detail is a
+lifecycle summary/entry point and Manage Requests is pre-departure
+Accept/Reject plus history. Ride Hub and My Requests recompute countdowns on a
+visible clock and refresh on focus, so a delayed Cron cannot leave an action
+visible after the deadline.
 
 Deployed migration `028_m2_route_schedule_and_completion.sql` and the deployed
 `m2-route-quote` / `m2-route-backfill` Edge Functions upgrade the schedule
@@ -189,11 +209,12 @@ the dedicated key is available only to these Edge Functions and the database
 enforces the fail-closed 250-request Malaysia-day cap before Google is called.
 Cloud usage alerts remain an operational follow-up. Failed/legacy rows must ask
 the Driver to reconfirm; no fixed-duration ETA fallback is allowed.
-Route-deviation automation, map-pin selection, and messaging notifications
-remain deferred.
+Route-deviation automation and map-pin selection remain deferred. Messaging
+notifications now use the shared Module 3 notification centre through deployed
+`038_m2_ride_usability_notifications.sql`.
 
 Migration `037` is applied through the Dashboard SQL Editor and the updated
-`m2-route-quote` is active as version 9. The SQL file remains the repository
+`m2-route-quote` is active as version 11. The SQL file remains the repository
 record because the Dashboard-applied change is absent from migration history.
 The frontend must still be rebuilt from the matching client code; deploying
 only the frontend before the Function leaves early Start unavailable, while
@@ -210,3 +231,59 @@ Notification text and payloads exclude Place IDs, coordinates, pickup
 instructions, and companion data. This work
 does not change or deploy Web Push, VAPID, service workers, subscription APIs,
 Edge Functions, or Database Webhook configuration.
+
+## Module 2 Improvement Rollout (2026-08-24)
+
+Migration `038` is now deployed as `m2_ride_usability_notifications`; it uses
+the shared Module 3 notification inbox, unread Realtime count, Web Push and
+service-worker path. Module 2 does not create a second notification centre.
+
+Passenger check-in uses adaptive GPS tolerance from deployed migration `041`:
+accuracy must be at most 150 m and measured distance must be at most
+`min(200 m + accuracy, 350 m)`. Driver destination arrival intentionally keeps
+the existing 100 m accuracy and 200 m distance limits. Authored, undeployed
+follow-up `049` preserves nullable accuracy only for historical Checked In rows;
+every new check-in still writes the measured accuracy.
+
+Publish Ride autocomplete supplies a 5 km location bias and origin only when
+the existing foreground preview is at most 500 m inaccurate. Malaysia remains
+the restriction and the returned Google distance is shown to the user. The
+same input contract is used by pickup, destination and waypoint selection.
+
+`M2WaypointRecommendationService` consumes the host-only
+`recommendationRoute` returned by `m2-route-quote`, asks Module 6's
+`PlaceQueryService` for a 5 km corridor, filters culinary/heritage places,
+sorts by route progress, removes selected Place IDs, and caps the panel at six
+items. Selecting one creates the existing confirmed waypoint with a 30-minute
+default stop. A failed recommendation request falls back to manual waypoint
+entry; adding or editing a waypoint requires a fresh final route quote.
+The quote fingerprint contains only the host-bound vehicle, confirmed route
+locations, departure and ordered waypoint Place IDs/stop minutes, so changing
+contribution, restrictions, pickup instructions or display copy does not spend
+another Routes request.
+
+Waypoint cards prefer the academic Module 6 cached photo reference and lazily
+fall back to a fresh Google Maps JavaScript `Place` photo. Bytes, fresh URIs and
+new resource names are never persisted. This is the documented D018 prototype
+limitation: Google permits indefinite Place ID storage, but photo references
+and URIs can expire and are not a production cache contract.
+
+The deployed `042` contract provides explicit opt-in foreground live tracking,
+latest points, sampled history, filtered Driver/passenger visibility and
+expiring family links. The PWA labels hidden/locked-screen tracking as best
+effort and never uses a live point to trigger Check-in, Start Ride or arrival.
+Viewing and sharing are independent: an Accepted passenger can observe an
+opted-in Driver without sharing, the Driver sees opted-in passengers, and
+passengers never see one another.
+
+Module 5 consumes cursor-paginated history through `TripRouteReplay`; family
+links never receive history. Family payloads contain only `driver` and
+`shared-passenger` marker IDs, return scheduled/waiting/active states, expire
+with the latest planned departure, and become invalid on a terminal Ride.
+
+D024 supersedes the `043-049` Trust Admin/ride-dispute experiment. The deployed
+`050_m2_remove_trust_admin.sql` compensation migration removes its tables, RPCs,
+notifications and evidence holds without rewriting deployed history. The
+original browser-local `/safety` verification demo remains; `/safety/admin` and
+the two production Admin Edge Functions are removed. `m2-live-share` version 4
+is active and returns only the privacy-safe family snapshot.

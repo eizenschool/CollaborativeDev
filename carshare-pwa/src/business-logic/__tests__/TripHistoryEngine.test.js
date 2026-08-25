@@ -60,7 +60,7 @@ function seed() {
         hosted_done: ride({
           id: 'hosted_done', hostId: USER, pickup: 'KL Sentral', destination: 'Melaka',
           departureAt: '2026-08-05T01:00:00.000Z', journeyScale: 'Intercity',
-          seatsTotal: 3, seatsAvailable: 1
+          seatsTotal: 3, seatsAvailable: 1, status: 'Completed'
         }),
         // Published, nobody joined, departure passed. Module 2 lapsed it.
         hosted_expired: ride({
@@ -76,21 +76,25 @@ function seed() {
         // Finished in July with every seat still free.
         hosted_empty: ride({
           id: 'hosted_empty', hostId: USER, pickup: 'Shah Alam', destination: 'Klang',
-          departureAt: '2026-07-10T01:00:00.000Z', seatsTotal: 4, seatsAvailable: 4
+          departureAt: '2026-07-10T01:00:00.000Z', seatsTotal: 4, seatsAvailable: 4, status: 'Completed'
         }),
         joined_accepted: ride({
           id: 'joined_accepted', hostId: 'u_host_sarah', pickup: 'SS2', destination: 'USJ 10',
-          departureAt: '2026-08-08T01:00:00.000Z', seatsTotal: 2, seatsAvailable: 0
+          departureAt: '2026-08-08T01:00:00.000Z', seatsTotal: 2, seatsAvailable: 0, status: 'Completed'
+        }),
+        joined_expired: ride({
+          id: 'joined_expired', hostId: 'u_host_sarah', pickup: 'Subang Jaya', destination: 'Putrajaya',
+          departureAt: '2026-08-10T01:00:00.000Z', seatsTotal: 2, seatsAvailable: 1, status: 'Expired'
         }),
         joined_pending: ride({
           id: 'joined_pending', hostId: 'u_host_raj', pickup: 'Ampang', destination: 'KLCC',
-          departureAt: '2026-08-09T01:00:00.000Z', seatsTotal: 2, seatsAvailable: 1
+          departureAt: '2026-08-09T01:00:00.000Z', seatsTotal: 2, seatsAvailable: 1, status: 'Completed'
         }),
         // Someone else's finished trip - the signed-in user has no part in it.
         stranger_done: ride({
           id: 'stranger_done', hostId: 'u_host_ahmad', pickup: 'Johor', destination: 'KL',
           departureAt: '2026-08-07T01:00:00.000Z', journeyScale: 'Intercity',
-          seatsTotal: 3, seatsAvailable: 1
+          seatsTotal: 3, seatsAvailable: 1, status: 'Completed'
         })
       },
       rideRequests: {
@@ -101,6 +105,11 @@ function seed() {
         rq_pending: {
           id: 'rq_pending', rideId: 'joined_pending', requesterId: USER, seatsRequested: 1,
           companionNames: [], status: 'Pending', createdAt: '2026-08-02T00:00:00.000Z'
+        },
+        rq_expired_accepted: {
+          id: 'rq_expired_accepted', rideId: 'joined_expired', requesterId: USER, seatsRequested: 1,
+          companionNames: [], status: 'Expired', acceptedAt: '2026-08-09T00:00:00.000Z',
+          processedAt: '2026-08-10T01:30:00.000Z', createdAt: '2026-08-08T00:00:00.000Z'
         },
         rq_on_my_ride: {
           id: 'rq_on_my_ride', rideId: 'hosted_done', requesterId: 'u_host_sarah', seatsRequested: 2,
@@ -135,11 +144,11 @@ describe('Module 5 lifecycle status', () => {
     expect(deriveDisplayStatus(upcoming, NOW)).toBe('Matched');
   });
 
-  it('advances a departed matched ride through in transit to completed', () => {
+  it('never invents in-transit or completed state for a departed matched ride', () => {
     const oneHourAgo = { status: 'Matched', departureAt: '2026-08-13T03:00:00.000Z' };
     const yesterday = { status: 'Matched', departureAt: '2026-08-12T04:00:00.000Z' };
-    expect(deriveDisplayStatus(oneHourAgo, NOW)).toBe('In Transit');
-    expect(deriveDisplayStatus(yesterday, NOW)).toBe('Completed');
+    expect(deriveDisplayStatus(oneHourAgo, NOW)).toBe('Matched');
+    expect(deriveDisplayStatus(yesterday, NOW)).toBe('Matched');
   });
 });
 
@@ -161,6 +170,7 @@ describe('Module 5 ride history', () => {
     const history = await TripHistoryEngine.listHistory(USER, NOW);
     const ids = history.map((trip) => trip.id);
     expect(ids).toContain('joined_accepted');
+    expect(ids).toContain('joined_expired');
     expect(ids).not.toContain('joined_pending');
     expect(ids).not.toContain('stranger_done');
   });
@@ -169,6 +179,7 @@ describe('Module 5 ride history', () => {
     const history = await TripHistoryEngine.listHistory(USER, NOW);
     expect(history.map((trip) => trip.id)).toEqual([
       'hosted_upcoming',
+      'joined_expired',
       'joined_accepted',
       'hosted_expired',
       'hosted_done',
@@ -217,6 +228,15 @@ describe('Module 5 trip detail access control', () => {
       ['Jamie Delacroix', 'Passenger'],
       ['Aina', 'Companion']
     ]);
+  });
+
+  it('keeps an accepted-then-expired passenger in history without impact credit', async () => {
+    const detail = await TripHistoryEngine.getTripDetail('joined_expired', USER, NOW);
+    const summary = await TripHistoryEngine.getImpactSummary(USER, NOW);
+
+    expect(detail).toMatchObject({ role: 'Passenger', status: 'Expired', carbonSavedKg: null });
+    expect(detail.participants.map((person) => person.name)).toEqual(['Sarah Tan', 'Jamie Delacroix']);
+    expect(summary.completedTrips).toBe(3);
   });
 });
 

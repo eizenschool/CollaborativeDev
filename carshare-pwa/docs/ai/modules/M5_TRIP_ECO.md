@@ -15,7 +15,7 @@ Business logic: `src/business-logic/TripHistoryEngine.js`.
 Tests: `src/business-logic/__tests__/TripHistoryEngine.test.js`.
 
 ## Depends On
-Module 2 lifecycle/ride data; Module 1 Host Impact; Module 6 completion/trust outcomes where relevant.
+Module 2 authoritative lifecycle/ride data; Module 1 Host Impact.
 
 ## Current Status
 Module 5 UI is in `Development` and its logic layer now reads Module 2's real data
@@ -25,12 +25,16 @@ lifecycle filtering, trip detail) work against Supabase as well as the mock.
 Resolved:
 - Authoritative trip source is Module 2, reached through its services rather
   than a data-access store. History merges hosted rides with rides the user has
-  an **Accepted** `ride_request` on; the module's own
+  an active **Accepted** `ride_request` on, plus an Expired request with a
+  non-null `acceptedAt` on an Expired Ride; the module's own
   `letstumpang_module5_joined_trips_v1` localStorage seed is gone.
   Note `RideService.listMyRides()` returns `joining: []` on its Supabase path,
   so joined trips must come from `RideRequestService.listMyRequests()`.
-- Lifecycle state comes from `ride.status`. `Expired` is no longer mistaken for
-  `Completed` (it used to earn carbon credit), and `Matched` is reachable.
+- Lifecycle state comes only from `ride.status`. `deriveDisplayStatus()` is a
+  pass-through: a past Matched Ride is never fabricated as In Transit or
+  Completed. Expired former participants appear in Passenger history but
+  receive no distance, carbon, review, monthly impact, achievement, or
+  leaderboard credit.
 - Reads `departure_at` via `departureParts()`, not the `date`/`time` columns
   dropped in `database/sql/013`.
 - Monthly aggregation and the leaderboard period are computed on read from
@@ -55,6 +59,16 @@ empty states, and `getLeaderboard()` throws
 `LEADERBOARD_NEEDS_COMPLETED_TRIPS` rather than feeding demo host ids into a
 Supabase uuid column. Drop that guard and read live rides once completions exist.
 
-`deriveDisplayStatus()` derives `In Transit`/`Completed` from a departed
-`Matched` ride as an interim stand-in; delete that branch once Module 6's
-verified-trip pipeline writes real transitions (D012).
+The Module 2 lifecycle processor owns real `In Transit`/`Completed` writes and
+the 30-minute unstarted-Ride expiry contract (D025). Module 5 never repairs or
+predicts those states from departure time.
+
+## Location History Replay (Module 2 integration)
+
+Completed, Cancelled, and Expired participant trips may render `TripRouteReplay`. It
+loads cursor-paginated, sampled participant history from Module 2's private
+RPC, splits gaps longer than two minutes, shows participant/accuracy/stale
+state, and never grants family-link viewers history. A participant's “Hide my
+route” action hides only that owner's playback and schedules the owner track
+for the Module 2 retention policy; other accepted participants retain their
+view. This integration does not change Module 5's carbon calculation contract.

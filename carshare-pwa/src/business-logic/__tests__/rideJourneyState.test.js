@@ -39,6 +39,48 @@ describe('ride journey state', () => {
     expect(ready.description).toContain('marks 1 passenger who did not check in as No-show');
     expect(noneReady.nextAction.id).toBe(RIDE_ACTION.RESOLVE_BOARDING);
     expect(noneReady.blockers).toContain('At least one checked-in passenger is required');
+    expect(ready.countdownKind).toBe('expiry');
+    expect(formatJourneyCountdown(ready.countdownAt, NOW, ready.countdownKind)).toBe('Expires in 30 min');
+  });
+
+  it('keeps departure actions open one second before departure', () => {
+    const oneSecondBefore = new Date(NOW.getTime() + 1000);
+    const state = getRideJourneyState({
+      ride: { id: 'ride-boundary', status: 'Matched', departureAt: oneSecondBefore.toISOString() },
+      role: 'passenger', request: accepted(), now: NOW
+    });
+
+    expect(state.nextAction.id).toBe(RIDE_ACTION.CHECK_IN);
+    expect(state.countdownKind).toBe('departure');
+  });
+
+  it('keeps accepted participants actionable through 29:59 and disables stale data at 30:00', () => {
+    const beforeDeadline = getRideJourneyState({
+      ride: ride(-((29 * 60 + 59) / 3600)), role: 'passenger', request: accepted(), now: NOW
+    });
+    const atDeadline = getRideJourneyState({ ride: ride(-0.5), role: 'passenger', request: accepted(), now: NOW });
+
+    expect(beforeDeadline.nextAction.id).toBe(RIDE_ACTION.CHECK_IN);
+    expect(beforeDeadline.countdownKind).toBe('expiry');
+    expect(atDeadline.phase).toBe('terminal');
+    expect(atDeadline.title).toBe('Ride expired');
+    expect(isTripModeEligible(atDeadline)).toBe(false);
+  });
+
+  it('treats a stale pending request and passengerless Published ride as expired at departure', () => {
+    const pending = getRideJourneyState({
+      ride: ride(0, 'Published'), role: 'passenger', request: { status: 'Pending' }, now: NOW
+    });
+    const driver = getRideJourneyState({ ride: ride(0, 'Published'), role: 'driver', requests: [], now: NOW });
+
+    expect(pending.title).toBe('Request expired');
+    expect(driver.title).toBe('Ride expired');
+  });
+
+  it('requires an old Draft to be rescheduled instead of showing the normal Continue state', () => {
+    const state = getRideJourneyState({ ride: ride(-1, 'Draft'), role: 'driver', now: NOW });
+    expect(state.title).toBe('Reschedule this draft');
+    expect(state.countdownAt).toBeNull();
   });
 
   it('never offers Check-in for a Completed ride even with stale boarding data', () => {
@@ -78,6 +120,8 @@ describe('ride journey state', () => {
 
   it('formats relative departure copy without exposing timezone-sensitive dates', () => {
     expect(formatJourneyCountdown(ride(1).departureAt, NOW)).toBe('Leaves in 1h');
-    expect(formatJourneyCountdown(ride(-0.5).departureAt, NOW)).toBe('30 min overdue');
+    expect(formatJourneyCountdown(ride(-0.5).departureAt, NOW)).toBe('Departure time');
+    expect(formatJourneyCountdown(ride(0.25).departureAt, NOW, 'expiry')).toBe('Expires in 15 min');
+    expect(formatJourneyCountdown(ride(0).departureAt, NOW, 'expiry')).toBe('Expired');
   });
 });

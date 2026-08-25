@@ -1103,6 +1103,24 @@
   color: #F5C518;
 }
 
+.trip-replay-controls {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--m5-text-secondary, #64748b);
+  font-size: 12px;
+}
+.trip-replay-controls input { width: 100%; accent-color: var(--m5-primary, #0f766e); }
+.trip-replay-controls time { font-variant-numeric: tabular-nums; }
+.trip-replay-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+  color: var(--m5-text-secondary, #64748b);
+  font-size: 12px;
+}
+
 .m5-place-avatar {
   width: 52px;
   height: 52px;
