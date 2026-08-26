@@ -87,6 +87,9 @@ describe('Module 2 waypoint and Ride photo contracts', () => {
     expect(workspace).not.toContain('<button className={\'ride-card\'');
     expect(requests).toContain('attachRequestRidePhotoPlaceIds');
     expect(requests).toContain('attachDestinationPhotoPlaceIds');
+    expect(requests).toContain("request.status === 'Accepted' || request.acceptedAt");
+    expect(requests).toContain('RideService.getRide(rideId)');
+    expect(requests).toContain('detail?.destinationPhotoPlaceId || detail?.destinationLocation?.placeId');
   });
 
   it('keeps expired accepted passengers eligible for destination card photos', async () => {

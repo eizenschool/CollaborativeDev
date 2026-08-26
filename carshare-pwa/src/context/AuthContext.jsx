@@ -1,7 +1,7 @@
 // ===== PRESENTATION LAYER SUPPORT (AuthContext - shares session state across GUI components; delegates all real logic to business-logic/AuthService) =====
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { AuthService } from '../business-logic/AuthService.js';
-import { parseOAuthHashError } from '../business-logic/authAccess.js';
+import { getAuthProfileRefreshOptions, parseOAuthHashError } from '../business-logic/authAccess.js';
 
 const AuthContext = createContext(null);
 
@@ -24,15 +24,15 @@ export function AuthProvider({ children }) {
 
   const clearOauthError = useCallback(() => setOauthError(null), []);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async ({ showLoading = true } = {}) => {
+    if (showLoading) setLoading(true);
     try {
       const u = await AuthService.getCurrentUser();
       setUser(u);
     } catch {
       setUser(null);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
@@ -46,8 +46,12 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       }
-      if (['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event)) {
-        window.setTimeout(() => active && refresh(), 0);
+      const refreshOptions = getAuthProfileRefreshOptions(event);
+      if (refreshOptions) {
+        // Supabase re-emits SIGNED_IN or TOKEN_REFRESHED when a hidden tab
+        // returns to the foreground. Keep the profile fresh without replacing
+        // the current route with the app-wide startup screen.
+        window.setTimeout(() => active && refresh(refreshOptions), 0);
       }
     });
     return () => {

@@ -70,6 +70,9 @@ test('Trip Mode presents a responsive control overview and compact safety suppor
   await expect(page.getByRole('heading', { name: 'Safety & live sharing' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Get help from trusted family' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Your sharing is off' })).toBeVisible();
+  await expect(page.getByText('Family Link', { exact: true })).toBeVisible();
+  await expect(page.getByText('Accepted passengers create their own private link.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create family link' })).toHaveCount(0);
 
   const viewportWidth = page.viewportSize()?.width || 0;
   const overviewColumns = await page.locator('.trip-overview-grid').evaluate((element) => (
@@ -107,6 +110,41 @@ test('Trip Mode presents a responsive control overview and compact safety suppor
   expect(actionLayout[0].top).toBe(actionLayout[1].top);
   expect(actionLayout.every(({ height }) => height >= 44)).toBe(true);
 
+  const width = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+  expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+});
+
+test('accepted Passenger keeps the Family Link creation action in Trip Mode', async ({ page }) => {
+  test.skip(process.env.VITE_M2_LIVE_TRACKING_ENABLED !== 'true', 'Family Link is release-gated with live tracking.');
+
+  await page.goto('/home');
+  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    const departure = new Date(Date.now() + (30 * 60 * 1000));
+    Object.assign(database.rides.r_5, {
+      status: 'Matched',
+      date: departure.toLocaleDateString('en-CA'),
+      time: departure.toTimeString().slice(0, 5),
+      departureAt: departure.toISOString(),
+      expiredAt: null,
+    });
+    Object.assign(database.rideRequests.rq_2, {
+      status: 'Accepted',
+      boardingStatus: 'Pending',
+      checkedInAt: null,
+    });
+    database.currentUserId = 'u_host_sarah';
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+
+  await page.goto('/ride/r_5?view=trip');
+  await expect(page.getByText('Family Link', { exact: true })).toBeVisible();
+  await expect(page.getByText('Create a private, trip-only link', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create family link' })).toBeVisible();
+
+  const buttonBox = await page.getByRole('button', { name: 'Create family link' }).boundingBox();
+  expect(buttonBox?.height || 0).toBeGreaterThanOrEqual(44);
   const width = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
 });

@@ -284,7 +284,14 @@ function LiveTrackingPanel({ ride, isHost, userId, sosActive = false }) {
     {error && <p className="location-field-message error" role="alert">{error}</p>}
     {connectionWarning && <p className="location-field-message" role="status">{connectionWarning}</p>}
     {sharing ? <button type="button" className="btn-secondary full" onClick={stop} disabled={sosActive}>{sosActive ? 'Sharing locked during SOS' : 'Stop sharing'}</button> : <button type="button" className="primary-action full" onClick={start}>Start sharing</button>}
-    {isHost === false && <button type="button" className="outline-action full" onClick={createFamilyLink}>Create family link</button>}
+    <div className={`family-link-control ${isHost ? 'is-driver-note' : ''}`} aria-labelledby="trip-family-link-title">
+      <span className="family-link-control-icon" aria-hidden="true"><IconUsers size={18} /></span>
+      <span className="family-link-control-copy">
+        <strong id="trip-family-link-title">Family Link</strong>
+        <small>{isHost ? 'Accepted passengers create their own private link. Start sharing so their link can include your Driver location.' : 'Create a private, trip-only link showing your latest location and an actively sharing Driver.'}</small>
+      </span>
+      {!isHost && (familyLink ? <span className="family-link-ready"><IconCheck size={14} aria-hidden="true" /> Link ready</span> : <button type="button" className="outline-action" onClick={createFamilyLink}>Create family link</button>)}
+    </div>
     {familyLink && <div className="family-share-result"><label htmlFor="family-location-link">Family link</label><input id="family-location-link" readOnly value={familyLink} onFocus={(event) => event.currentTarget.select()} /><small>Expires after the ride ends or departure +24 hours.</small><div className="family-share-actions"><button type="button" className="outline-action" onClick={shareFamilyLink}>Copy / Share</button><button type="button" className="btn-link" onClick={revokeFamilyLink}>Revoke family link</button></div></div>}
     {visiblePoints.length > 0 && <LiveRideMap ride={ride} points={visiblePoints} pageSessionId={pageSessionId} />}
     <div className="live-location-list" aria-live="polite">{visiblePoints.length ? visiblePoints.map((point) => <div key={point.userId || point.role}><span><strong>{point.role === 'Driver' ? 'Driver’s current location' : 'Passenger current location'}</strong><small>{isPointStale(point, clock) ? 'Stale location' : `±${Math.round(point.accuracyM)} m accuracy`}</small></span><a href={`https://www.google.com/maps/search/?api=1&query=${point.lat},${point.lng}`} target="_blank" rel="noreferrer">Open in Google Maps</a></div>) : <small>{unavailableDriver ? 'Driver location is temporarily unavailable.' : 'No active location is being shared.'}</small>}</div>

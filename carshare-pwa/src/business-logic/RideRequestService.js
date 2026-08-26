@@ -1,7 +1,7 @@
 // ===== BUSINESS LOGIC LAYER (RideRequestService) =====
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
-import { attachDestinationPhotoPlaceIds, mapRideRow } from './RideService.js';
+import { attachDestinationPhotoPlaceIds, mapRideRow, RideService } from './RideService.js';
 import { getCurrentPosition, MAX_CHECK_IN_ACCURACY_METRES } from './GooglePlacesService.js';
 
 const REQUEST_SELECT = `
@@ -92,6 +92,31 @@ export async function attachRequestRidePhotoPlaceIds(requests = []) {
 
   const enrichedRides = await attachDestinationPhotoPlaceIds(rides);
   const rideById = new Map(enrichedRides.map((ride) => [ride.id, ride]));
+
+  if (isSupabaseConfigured) {
+    const missingAcceptedRideIds = [...new Set(requests
+      .filter((request) => request?.ride
+        && (request.status === 'Accepted' || request.acceptedAt)
+        && !rideById.get(request.ride.id)?.destinationPhotoPlaceId
+        && !rideById.get(request.ride.id)?.destinationLocation?.placeId)
+      .map((request) => request.ride.id)
+      .filter(Boolean))];
+
+    const detailPhotoPlaceIds = await Promise.all(missingAcceptedRideIds.map(async (rideId) => {
+      try {
+        const detail = await RideService.getRide(rideId);
+        return [rideId, detail?.destinationPhotoPlaceId || detail?.destinationLocation?.placeId || null];
+      } catch {
+        return [rideId, null];
+      }
+    }));
+
+    detailPhotoPlaceIds.forEach(([rideId, placeId]) => {
+      if (!placeId) return;
+      rideById.set(rideId, { ...rideById.get(rideId), destinationPhotoPlaceId: placeId });
+    });
+  }
+
   return requests.map((request) => request.ride
     ? { ...request, ride: rideById.get(request.ride.id) || request.ride }
     : request);

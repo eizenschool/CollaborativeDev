@@ -1,5 +1,16 @@
 export const DEFAULT_AUTH_RETURN_PATH = '/home';
 
+const AUTH_PROFILE_REFRESH_EVENTS = new Set([
+  'INITIAL_SESSION',
+  'SIGNED_IN',
+  'TOKEN_REFRESHED',
+  'USER_UPDATED'
+]);
+
+export function getAuthProfileRefreshOptions(event) {
+  return AUTH_PROFILE_REFRESH_EVENTS.has(event) ? { showLoading: false } : null;
+}
+
 export function normaliseInternalReturnPath(value, fallback = DEFAULT_AUTH_RETURN_PATH) {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
     return fallback;

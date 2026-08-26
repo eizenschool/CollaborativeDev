@@ -2945,6 +2945,15 @@ button.ride-card {
 .live-location-list > div { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; border: 1px solid rgba(15, 118, 110, .16); border-radius: .7rem; }
 .live-location-list span { display: grid; gap: .15rem; }
 .live-location-list small { color: var(--muted, #64748b); font-size: .75rem; }
+.family-link-control { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 2px; padding: 11px; border: 1px solid rgba(15, 118, 110, .18); border-radius: 12px; background: #fff; }
+.family-link-control.is-driver-note { background: var(--teal-tint); }
+.family-link-control-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: var(--teal-dark); background: var(--teal-tint); }
+.family-link-control.is-driver-note .family-link-control-icon { background: #fff; }
+.family-link-control-copy { min-width: 0; display: grid; gap: 2px; }
+.family-link-control-copy strong { color: var(--ink); font-size: 13px; }
+.family-link-control-copy small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.family-link-control > .outline-action { min-height: 44px; flex: 0 0 auto; padding: 0 13px; white-space: nowrap; }
+.family-link-ready { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 5px 9px; border-radius: 999px; color: #166534; background: #dcfce7; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .family-share-result { display: grid; gap: .35rem; margin-top: .45rem; }
 .family-share-result input { width: 100%; min-width: 0; }
 .family-share-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
@@ -2992,6 +3001,8 @@ button.ride-card {
 
 @media (max-width: 520px) {
   .sos-stats { grid-template-columns: 1fr; }
+  .family-link-control { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .family-link-control > .outline-action, .family-link-ready { grid-column: 2; justify-self: start; }
   .invite-accept-card { margin-block: 8px; }
 }
 .live-ride-map { position: relative; min-height: 240px; margin: .85rem 0; border-radius: .85rem; overflow: hidden; background: #e2e8f0; display: grid; place-items: center; color: #475569; }

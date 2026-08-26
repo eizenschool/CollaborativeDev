@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_AUTH_RETURN_PATH,
+  getAuthProfileRefreshOptions,
   getAuthNavigation,
   normaliseAuthReturnPath,
   normaliseInternalReturnPath,
@@ -51,5 +52,20 @@ describe('reading a failed Google OAuth round trip off the URL', () => {
     expect(parseOAuthHashError('#access_token=abc&token_type=bearer')).toBeNull();
     expect(parseOAuthHashError('')).toBeNull();
     expect(parseOAuthHashError(undefined)).toBeNull();
+  });
+});
+
+describe('Supabase auth-state profile refresh', () => {
+  it('refreshes profile data for session events that can arrive after returning to a tab', () => {
+    expect(getAuthProfileRefreshOptions('INITIAL_SESSION')).toEqual({ showLoading: false });
+    expect(getAuthProfileRefreshOptions('SIGNED_IN')).toEqual({ showLoading: false });
+    expect(getAuthProfileRefreshOptions('TOKEN_REFRESHED')).toEqual({ showLoading: false });
+    expect(getAuthProfileRefreshOptions('USER_UPDATED')).toEqual({ showLoading: false });
+  });
+
+  it('does not treat sign-out or unrelated events as profile refreshes', () => {
+    expect(getAuthProfileRefreshOptions('SIGNED_OUT')).toBeNull();
+    expect(getAuthProfileRefreshOptions('PASSWORD_RECOVERY')).toBeNull();
+    expect(getAuthProfileRefreshOptions(undefined)).toBeNull();
   });
 });
