@@ -152,16 +152,16 @@ export default function RideSOSPanel({ rideId, isHost, userId, onActiveChange = 
 
   const safeConfirmationMatches = matchesSOSSafeConfirmation(safeConfirmation);
 
-  return <section className={`ride-info-card sos-panel ${event ? 'sos-panel-active' : ''}`}>
-    <div className="trip-section-heading"><div><p className="eyebrow">EMERGENCY SOS</p><h2>{event ? 'SOS is active' : 'Get help from trusted family'}</h2></div><span className="sos-status-icon" aria-hidden="true">{event ? <IconAlertTriangle size={22} /> : <IconCheckCircle size={22} />}</span></div>
+  return <section className={`trip-safety-tool sos-panel ${event ? 'sos-panel-active' : ''}`}>
+    <div className="trip-section-heading"><div><p className="eyebrow">EMERGENCY SOS</p><h3>{event ? 'SOS is active' : 'Get help from trusted family'}</h3></div><span className="sos-status-icon" aria-hidden="true">{event ? <IconAlertTriangle size={22} /> : <IconCheckCircle size={22} />}</span></div>
     {event ? <>
       <p className="sos-persistent-warning">The server alert remains active if this PWA is closed, but GPS updates may stop. Your last point is retained until you mark yourself safe.</p>
       <dl className="sos-stats"><div><dt>GPS</dt><dd>{statusText(gpsState)}</dd></div><div><dt>Trusted family</dt><dd>{event.trustedFamilyCount || 0}</dd></div><div><dt>Push-ready</dt><dd>{event.pushReadyCount || 0}</dd></div></dl>
       <Button variant="danger" onClick={openResolveDialog}>I&apos;m safe — end SOS</Button>
     </> : countdown != null ? <div className="sos-cancel-countdown" role="alert"><strong>Activating SOS in {countdown}…</strong><p>The server alert will start even if GPS or Push is unavailable.</p><Button variant="secondary" onClick={cancelCountdown}>Cancel SOS</Button></div> : <>
-      <p>Press and hold for 2 seconds. You then have 5 seconds to cancel. Keyboard and assistive technology users can use the confirmation dialog.</p>
+      <p>Hold for 2 seconds, then cancel within 5 seconds if needed. Keyboard and assistive technology users can confirm normally.</p>
       <button type="button" className="sos-hold-button" disabled={busy} aria-describedby="sos-hold-help" onPointerDown={beginHold} onPointerUp={cancelHold} onPointerCancel={cancelHold} onPointerLeave={cancelHold} onClick={(eventValue) => { if (eventValue.detail === 0) setDialog('activate'); }}><IconAlertTriangle size={22} aria-hidden="true" />{busy ? 'Activating SOS…' : 'Hold for SOS'}</button>
-      <small id="sos-hold-help">Available to the Driver and accepted passengers from one hour before departure until the Ride ends.</small>
+      <small id="sos-hold-help">Driver and accepted passengers · From one hour before departure until the Ride ends.</small>
     </>}
     {warning && <div className="alert" role="status">{warning}</div>}
     {error && <div className="alert alert-error" role="alert">{error}</div>}

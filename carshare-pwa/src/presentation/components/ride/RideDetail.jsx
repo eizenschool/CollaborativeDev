@@ -15,7 +15,7 @@ import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import LiveRideMap from '../maps/LiveRideMap.jsx';
 import {
   IconAlertTriangle, IconArrowLeft, IconCalendar, IconCheck, IconEdit,
-  IconClock, IconMapPin, IconMessage, IconPlus, IconRoute, IconStar, IconUsers, IconX
+  IconClock, IconMapPin, IconMessage, IconPlus, IconRoute, IconShield, IconStar, IconUsers, IconX
 } from '../icons.jsx';
 import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
 import { Button } from '../ui/Button.jsx';
@@ -278,9 +278,9 @@ function LiveTrackingPanel({ ride, isHost, userId, sosActive = false }) {
     .filter((point) => isHost || point.role === 'Driver' || point.userId === userId || point.userId === 'self')
     .sort((left, right) => (left.role === 'Driver' ? -1 : 0) - (right.role === 'Driver' ? -1 : 0));
   const unavailableDriver = !isHost && points.some((point) => point.role === 'Driver' && isPointUnavailable(point, clock));
-  return <section className="ride-info-card live-tracking-panel">
-    <div className="trip-section-heading"><div><p className="eyebrow">LIVE LOCATION</p><h2>{sharing ? 'Your sharing is on' : 'Your sharing is off'}</h2></div><span className={`tracking-state tracking-${state}`}>{state}</span></div>
-    <p className="live-tracking-copy">You can view an actively sharing Driver without sharing your own location. Keep this trip screen open for best-effort foreground tracking; passengers never see one another.</p>
+  return <section className="trip-safety-tool live-tracking-panel">
+    <div className="trip-section-heading"><div><p className="eyebrow">LIVE LOCATION</p><h3>{sharing ? 'Your sharing is on' : 'Your sharing is off'}</h3></div><span className={`tracking-state tracking-${state}`}>{state}</span></div>
+    <p className="live-tracking-copy">Share your latest position or view the Driver. Passengers never see one another; background GPS is best effort.</p>
     {error && <p className="location-field-message error" role="alert">{error}</p>}
     {connectionWarning && <p className="location-field-message" role="status">{connectionWarning}</p>}
     {sharing ? <button type="button" className="btn-secondary full" onClick={stop} disabled={sosActive}>{sosActive ? 'Sharing locked during SOS' : 'Stop sharing'}</button> : <button type="button" className="primary-action full" onClick={start}>Start sharing</button>}
@@ -308,26 +308,44 @@ function TripModeView({
     <div className="trip-mode-content">
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
-      <section className={`trip-command-card urgency-${journeyState.urgency}`} aria-live="polite"><span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span><h2>{journeyState.title}</h2><p>{journeyState.description}</p>{journeyState.countdownAt && <strong className="trip-countdown">{formatJourneyCountdown(journeyState.countdownAt, clock, journeyState.countdownKind)}</strong>}{journeyState.blockers.map((blocker) => <small key={blocker}>{blocker}</small>)}</section>
-      <section className="trip-route-card"><RouteMap ride={ride} /><div><p><strong>{ride.pickup}</strong><span>Pickup</span></p><p><strong>{ride.destination}</strong><span>Destination</span></p>{ride.status === 'In Transit' && ride.estimatedArrivalAt && <p><strong>{formatDateTime(ride.estimatedArrivalAt)}</strong><span>Updated traffic ETA</span></p>}</div></section>
-      {ride.pickupInstructions && <section className="ride-info-card pickup-instructions-card"><p className="eyebrow">PICKUP INSTRUCTIONS</p><p><IconMapPin size={15} /> {ride.pickupInstructions}</p></section>}
-
-      {isHost && <section className="ride-info-card trip-readiness-card"><div className="trip-section-heading"><div><p className="eyebrow">PASSENGER READINESS</p><h2>{checkedInCount} of {accepted.length} checked in</h2></div>{pending.length > 0 && <button type="button" className="btn-link" onClick={onManageRequests}>{pending.length} pending request{pending.length === 1 ? '' : 's'}</button>}</div>{accepted.length ? <div className="trip-passenger-list">{accepted.map((request) => <div key={request.id}><span><strong>{request.requester?.fullName || 'Passenger'}</strong><small>{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</small></span><b className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>{request.boardingStatus}</b>{request.boardingStatus === 'Pending' && departureReached && <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle(`no-show-${request.id}`, () => RideRequestService.markNoShow(request.id))}>{lifecycleBusy === `no-show-${request.id}` ? 'Working…' : 'Mark No-show'}</button>}</div>)}</div> : <p>No accepted passengers yet.</p>}</section>}
-
-      {SOS_ENABLED && <RideSOSPanel rideId={ride.id} isHost={isHost} userId={userId} onActiveChange={setSosActive} />}
-      <LiveTrackingPanel ride={ride} isHost={isHost} userId={userId} sosActive={sosActive} />
-
-      {!isHost && activeRequest && <section className="ride-info-card trip-passenger-status"><p className="eyebrow">YOUR BOARDING STATUS</p><h2>{activeRequest.boardingStatus}</h2>{activeRequest.checkedInAt && <p>Checked in {formatDateTime(activeRequest.checkedInAt)}</p>}{activeRequest.checkInDistanceMeters != null && <small>{activeRequest.checkInDistanceMeters} m from pickup{activeRequest.checkInAccuracyMeters != null ? ` · GPS ±${activeRequest.checkInAccuracyMeters} m` : ''}</small>}</section>}
-
-      <section className="trip-mode-actions" aria-label="Trip actions">
-        {!isHost && journeyState.nextAction.id === RIDE_ACTION.CHECK_IN && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : 'Check in near pickup'}</button>}
-        {isHost && journeyState.nextAction.id === RIDE_ACTION.START_RIDE && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('start', () => RideService.startRide(ride.id))}>{lifecycleBusy === 'start' ? 'Recalculating ETA…' : journeyState.nextAction.label}</button>}
-        {isHost && ride.status === 'In Transit' && !lifecycleContext?.driverArrivedAt && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('driver-arrival', () => RideService.confirmDriverArrival(ride.id))}>{lifecycleBusy === 'driver-arrival' ? 'Checking GPS…' : 'Confirm destination arrival'}</button>}
-        {!isHost && journeyState.nextAction.id === RIDE_ACTION.CONFIRM_PASSENGER_ARRIVAL && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('passenger-arrival', () => RideRequestService.confirmArrival(activeRequest.id))}>{lifecycleBusy === 'passenger-arrival' ? 'Confirming…' : 'Confirm I arrived'}</button>}
-        {isHost && departureReached && unresolvedCount > 0 && journeyState.nextAction.id !== RIDE_ACTION.START_RIDE && <button type="button" className="btn-secondary full" onClick={onManageRequests}>Resolve all passengers</button>}
-        <a className="outline-action full" href={mapsUrl} target="_blank" rel="noreferrer"><IconRoute size={16} /> Open in Google Maps</a>
-        <button type="button" className="outline-action full" onClick={onTripChat}><IconMessage size={16} /> Open trip chat</button>
+      <section className="trip-overview-grid" aria-label="Current trip overview">
+        <div className="trip-overview-command">
+          <section className={`trip-command-card urgency-${journeyState.urgency}`} aria-live="polite">
+            <div className="trip-command-meta"><span className={`ride-status-badge ${statusClass(ride.status)}`}>{ride.status}</span>{journeyState.countdownAt && <strong className="trip-countdown"><IconClock size={15} aria-hidden="true" />{formatJourneyCountdown(journeyState.countdownAt, clock, journeyState.countdownKind)}</strong>}</div>
+            <h2>{journeyState.title}</h2><p>{journeyState.description}</p>{journeyState.blockers.map((blocker) => <small key={blocker}>{blocker}</small>)}
+          </section>
+          <section className="trip-mode-actions" aria-label="Trip actions">
+            {!isHost && journeyState.nextAction.id === RIDE_ACTION.CHECK_IN && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('check-in', () => RideRequestService.checkIn(activeRequest.id))}>{lifecycleBusy === 'check-in' ? 'Checking GPS…' : 'Check in near pickup'}</button>}
+            {isHost && journeyState.nextAction.id === RIDE_ACTION.START_RIDE && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('start', () => RideService.startRide(ride.id))}>{lifecycleBusy === 'start' ? 'Recalculating ETA…' : journeyState.nextAction.label}</button>}
+            {isHost && ride.status === 'In Transit' && !lifecycleContext?.driverArrivedAt && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('driver-arrival', () => RideService.confirmDriverArrival(ride.id))}>{lifecycleBusy === 'driver-arrival' ? 'Checking GPS…' : 'Confirm destination arrival'}</button>}
+            {!isHost && journeyState.nextAction.id === RIDE_ACTION.CONFIRM_PASSENGER_ARRIVAL && <button type="button" className="primary-action full" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle('passenger-arrival', () => RideRequestService.confirmArrival(activeRequest.id))}>{lifecycleBusy === 'passenger-arrival' ? 'Confirming…' : 'Confirm I arrived'}</button>}
+            {isHost && departureReached && unresolvedCount > 0 && journeyState.nextAction.id !== RIDE_ACTION.START_RIDE && <button type="button" className="btn-secondary full" onClick={onManageRequests}>Resolve all passengers</button>}
+            <a className="outline-action full" href={mapsUrl} target="_blank" rel="noreferrer" aria-label="Open route in Google Maps"><IconRoute size={16} aria-hidden="true" /> Directions</a>
+            <button type="button" className="outline-action full" onClick={onTripChat}><IconMessage size={16} aria-hidden="true" /> Trip chat</button>
+          </section>
+        </div>
+        <div className="trip-overview-route">
+          <section className="trip-route-card"><RouteMap ride={ride} /><div><p><strong>{ride.pickup}</strong><span>Pickup</span></p><p><strong>{ride.destination}</strong><span>Destination</span></p>{ride.status === 'In Transit' && ride.estimatedArrivalAt && <p><strong>{formatDateTime(ride.estimatedArrivalAt)}</strong><span>Updated traffic ETA</span></p>}</div></section>
+          {ride.pickupInstructions && <section className="ride-info-card pickup-instructions-card"><p className="eyebrow">PICKUP INSTRUCTIONS</p><p><IconMapPin size={15} aria-hidden="true" /> {ride.pickupInstructions}</p></section>}
+        </div>
       </section>
+
+      <section className={`trip-support-grid ${SOS_ENABLED || LIVE_TRACKING_ENABLED ? '' : 'is-single'}`} aria-label="Trip support">
+        {isHost && <section className="ride-info-card trip-readiness-card"><div className="trip-section-heading"><div><p className="eyebrow">PASSENGER READINESS</p><h2>{checkedInCount} of {accepted.length} checked in</h2></div>{pending.length > 0 && <button type="button" className="btn-link" onClick={onManageRequests}>{pending.length} pending request{pending.length === 1 ? '' : 's'}</button>}</div>{accepted.length ? <div className="trip-passenger-list">{accepted.map((request) => <div key={request.id}><span><strong>{request.requester?.fullName || 'Passenger'}</strong><small>{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</small></span><b className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>{request.boardingStatus}</b>{request.boardingStatus === 'Pending' && departureReached && <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle(`no-show-${request.id}`, () => RideRequestService.markNoShow(request.id))}>{lifecycleBusy === `no-show-${request.id}` ? 'Working…' : 'Mark No-show'}</button>}</div>)}</div> : <p>No accepted passengers yet.</p>}</section>}
+        {!isHost && activeRequest && <section className="ride-info-card trip-passenger-status"><p className="eyebrow">YOUR BOARDING STATUS</p><h2>{activeRequest.boardingStatus}</h2>{activeRequest.checkedInAt && <p>Checked in {formatDateTime(activeRequest.checkedInAt)}</p>}{activeRequest.checkInDistanceMeters != null && <small>{activeRequest.checkInDistanceMeters} m from pickup{activeRequest.checkInAccuracyMeters != null ? ` · GPS ±${activeRequest.checkInAccuracyMeters} m` : ''}</small>}</section>}
+        {(SOS_ENABLED || LIVE_TRACKING_ENABLED) && <section className={`trip-safety-hub ${sosActive ? 'is-sos-active' : ''}`} aria-labelledby="trip-safety-title">
+          <header className="trip-safety-hub-header">
+            <span className="trip-safety-hub-icon" aria-hidden="true"><IconShield size={23} /></span>
+            <div><p className="eyebrow">RIDE SAFETY</p><h2 id="trip-safety-title">Safety &amp; live sharing</h2><p>Share your trip or alert trusted family when you need help.</p></div>
+            {sosActive && <span className="trip-safety-hub-status"><IconAlertTriangle size={14} aria-hidden="true" /> SOS active</span>}
+          </header>
+          <div className={`trip-safety-grid ${SOS_ENABLED && LIVE_TRACKING_ENABLED ? '' : 'is-single'}`}>
+            {SOS_ENABLED && <RideSOSPanel rideId={ride.id} isHost={isHost} userId={userId} onActiveChange={setSosActive} />}
+            {LIVE_TRACKING_ENABLED && <LiveTrackingPanel ride={ride} isHost={isHost} userId={userId} sosActive={sosActive} />}
+          </div>
+        </section>}
+      </section>
+
     </div>
   </main>;
 }
