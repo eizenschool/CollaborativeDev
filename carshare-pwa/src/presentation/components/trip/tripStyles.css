@@ -345,6 +345,7 @@
 
 /* Progress toward a locked milestone. */
 .m5-badge-track {
+  position: relative;
   height: 4px;
   border-radius: 999px;
   background: var(--border);
@@ -1688,4 +1689,476 @@
   .m5-detail-state, .m5-detail-layout { padding: 16px; }
   .m5-detail-info-row { align-items: flex-start; flex-direction: column; gap: 2px; }
   .m5-detail-info-row > strong { text-align: left; }
+}
+
+/* Handoff banner: shown when a chat app can only be given the card through
+   the clipboard. Sits directly under the sticky header, full width, so the
+   instruction cannot be scrolled past or mistaken for a caption. */
+.m5-share-handoff {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 16px 20px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--teal);
+  border-radius: 12px;
+  background: var(--teal-tint);
+}
+.m5-share-handoff.warn {
+  border-color: #FCD34D;
+  background: #FEF9C3;
+}
+.m5-share-handoff-icon { font-size: 20px; line-height: 1.2; flex-shrink: 0; }
+.m5-share-handoff p {
+  flex: 1;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0;
+}
+.m5-share-handoff strong {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  color: var(--teal-dark);
+}
+.m5-share-handoff.warn strong { color: #92400E; }
+.m5-share-handoff kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.m5-share-handoff .m5-icon-btn { flex-shrink: 0; }
+
+/* ---------- Module 5 entrances ----------
+   Each of these animates something the screen is already saying: a total that
+   accumulated, six months stacking up one at a time, a trip's story arriving
+   in the order it happened. Nothing here is longer than ~half a second, so the
+   figures are readable straight away, and theme.css's global
+   prefers-reduced-motion rule flattens every one of them to nothing.
+
+   All of them animate transform/opacity only - never height or width - so a
+   six-bar chart or a ten-badge wall does not relayout on every frame.
+
+   --m5-delay is set inline by the component that knows the item's position. */
+
+@keyframes m5-tile-in {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes m5-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.m5-stat {
+  animation: m5-tile-in 400ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+
+/* Bars rise out of the baseline left to right, so six months read as six
+   months passing rather than six numbers appearing at once. */
+@keyframes m5-bar-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.m5-bar {
+  transform-origin: bottom;
+  animation: m5-bar-grow 540ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+/* The figure waits for its own bar to land before naming it. */
+.m5-bar-value {
+  animation: m5-fade-in 260ms ease-out backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+
+.m5-badge {
+  animation: m5-tile-in 360ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+/* Only an earned badge gets the overshoot - it is the one that is worth a
+   small celebration. A locked one just arrives. */
+@keyframes m5-badge-earn {
+  0% { transform: scale(0.55); }
+  70% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+.m5-badge.earned .m5-badge-icon {
+  animation: m5-badge-earn 480ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation-delay: calc(var(--m5-delay, 0ms) + 140ms);
+}
+/* Progress toward a locked milestone fills from the left, so the bar shows
+   the distance travelled rather than stating it. */
+@keyframes m5-track-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.m5-badge-track span {
+  transform-origin: left;
+  animation: m5-track-fill 640ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  animation-delay: calc(var(--m5-delay, 0ms) + 180ms);
+}
+
+/* The timeline writes itself downward: each step arrives, then the connector
+   reaches for the next one. */
+@keyframes m5-step-in {
+  from { opacity: 0; transform: translateX(-7px); }
+  to { opacity: 1; transform: none; }
+}
+.m5-timeline-step {
+  animation: m5-step-in 340ms ease-out backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+@keyframes m5-line-draw {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.m5-timeline-line {
+  transform-origin: top;
+  animation: m5-line-draw 320ms ease-out backwards;
+  animation-delay: calc(var(--m5-delay, 0ms) + 220ms);
+}
+
+/* ---------- Impact journey (the trees line at the foot of Impact) ----------
+   Cartoon, but not wallpaper: the trees beside the road are the ones the user
+   earned and the dotted ones are what is next. It is a strip rather than a
+   banner, and it sits with the sentence that explains it, so it decorates the
+   figures instead of pushing them down the page.
+
+   The car is positioned from JS by writing a transform ATTRIBUTE - never a
+   CSS transform, which would fight the same property. */
+.m5-trees-note {
+  margin-top: 16px;
+  border-radius: 12px;
+  background: var(--teal-tint);
+  overflow: hidden;
+}
+.m5-trees-note p {
+  margin: 0;
+  padding: 0 16px 13px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--teal-dark);
+  text-align: center;
+}
+/* Capped, or a 6.7:1 strip becomes 165px tall on a wide desktop column -
+   the exact thing that made the first version shout. */
+.m5-journey {
+  width: min(100%, 460px);
+  margin-inline: auto;
+}
+.m5-journey-art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* An earned tree grows out of the ground with a little overshoot. */
+@keyframes m5-tree-grow {
+  0% { transform: scale(0); }
+  68% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+.m5-tree.planted {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: m5-tree-grow 620ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+/* A place still to be filled just fades in, faintly. */
+@keyframes m5-sapling-in {
+  from { opacity: 0; }
+  to { opacity: 0.38; }
+}
+.m5-tree:not(.planted) {
+  opacity: 0.38;
+  animation: m5-sapling-in 420ms ease-out backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+
+/* Leaves off the back of the car, not exhaust. */
+@keyframes m5-puff-out {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+  22% { opacity: 0.7; }
+  100% { opacity: 0; transform: translate(-14px, -6px) scale(1.5); }
+}
+.m5-puff {
+  animation: m5-puff-out 1.9s ease-out infinite;
+  animation-delay: var(--m5-delay, 0ms);
+}
+
+/* Reduced motion already loses the durations to theme.css. Stop the looping
+   piece outright as well, so nothing twitches at 0.01ms forever. */
+@media (prefers-reduced-motion: reduce) {
+  .m5-puff { animation: none; opacity: 0; }
+}
+
+/* ---------- Module 5 scenes (tripScenes.jsx) ----------
+   Small illustrations for screens that are empty or finished. Every one is
+   width-capped: an SVG left at width:100% becomes a billboard in a wide
+   desktop column. */
+.m5-scene {
+  margin-inline: auto;
+}
+.m5-scene-art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.m5-scene-waiting { width: min(100%, 300px); margin-bottom: 6px; }
+
+/* The car is stationary, so it idles rather than drives. */
+@keyframes m5-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.2px); }
+}
+.m5-scene-idle {
+  animation: m5-idle 2.6s ease-in-out infinite;
+}
+@keyframes m5-blink {
+  0%, 44% { opacity: 0.15; }
+  50%, 94% { opacity: 1; }
+}
+.m5-blink { animation: m5-blink 1.5s steps(1, end) infinite; }
+
+.m5-month-blank {
+  padding: 10px 4px 16px;
+  text-align: center;
+}
+.m5-month-blank p {
+  margin: 8px 0 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Confetti over a first place that someone actually holds. */
+.m5-place { position: relative; }
+.m5-confetti {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 74%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.m5-confetti i {
+  position: absolute;
+  top: -10px;
+  width: 5px;
+  height: 8px;
+  border-radius: 1px;
+  opacity: 0;
+  animation: m5-confetti-fall 2.4s cubic-bezier(0.4, 0.1, 0.7, 1) infinite;
+  animation-delay: var(--m5-delay, 0ms);
+}
+@keyframes m5-confetti-fall {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  12% { opacity: 1; }
+  75% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(var(--m5-drift, 0), 132px) rotate(var(--m5-spin, 180deg));
+  }
+}
+
+/* Reduced motion loses the durations to theme.css already. Stop the looping
+   pieces outright too, so nothing twitches at 0.01ms forever. */
+@media (prefers-reduced-motion: reduce) {
+  .m5-scene-idle, .m5-blink, .m5-confetti i { animation: none; }
+  .m5-confetti i { opacity: 0; }
+  .m5-blink { opacity: 1; }
+}
+
+/* ---------- Arena crowd + month road ---------- */
+/* Fixed-size supporters at each end, fluid lane between. See tripScenes.jsx
+   for why this is not one stretched SVG. */
+.m5-crowd {
+  display: flex;
+  align-items: flex-end;
+  margin: 8px -20px 0;
+  padding: 0 6px;
+}
+/* Grown from 76x58: the supporters read as people at this size rather than
+   as specks. viewBox aspect and box aspect must match, or the drawing
+   letterboxes inside its own frame. */
+.m5-crowd-side {
+  flex: none;
+  width: 100px;
+  height: 79px;
+  display: block;
+}
+.m5-crowd-lane {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 79px;
+}
+.m5-crowd-road {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 11px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.13);
+}
+.m5-crowd-road::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  border-top: 1.4px dashed rgba(226, 232, 240, 0.3);
+}
+/* One 26px element moving across a 58px strip - `left` is cheap enough here,
+   and it is the only property that knows the lane's width. */
+.m5-crowd-car {
+  position: absolute;
+  bottom: 8px;
+  width: 32px;
+  height: 22px;
+  animation: m5-lap 5s linear infinite;
+}
+@keyframes m5-lap {
+  from { left: -9%; }
+  to { left: 105%; }
+}
+
+/* The supporters cheer unconditionally - see tripScenes.jsx for why that is
+   deliberate rather than an oversight. Two animations, not one: the body bobs
+   while each arm waves on its own offset, so four figures never look like one
+   figure copied four times. */
+@keyframes m5-fan-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3.5px) rotate(var(--m5-lean, 0deg)); }
+}
+.m5-crowd .m5-fan {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: m5-fan-bob 900ms ease-in-out infinite;
+  animation-delay: var(--m5-delay, 0ms);
+}
+@keyframes m5-fan-wave {
+  0%, 100% { transform: rotate(-16deg); }
+  50% { transform: rotate(18deg); }
+}
+.m5-crowd .m5-fan-arm {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: m5-fan-wave 620ms ease-in-out infinite;
+  animation-delay: var(--m5-delay, 0ms);
+}
+.m5-crowd .m5-fan-arm.right {
+  animation-delay: calc(var(--m5-delay, 0ms) + 310ms);
+}
+
+.m5-scene-month {
+  width: min(100%, 380px);
+  margin: 0 auto var(--m5-gap-section);
+}
+/* Pins drop onto the road in the order the car would reach them. The origin is
+   the point of the teardrop, so it lands on the road rather than hovering. */
+@keyframes m5-pin-drop {
+  0% { transform: translateY(-16px) scale(0.6); opacity: 0; }
+  58% { transform: translateY(0) scale(1.14); opacity: 1; }
+  78% { transform: translateY(-3px) scale(1); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.m5-pin {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: m5-pin-drop 560ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation-delay: var(--m5-delay, 0ms);
+}
+
+/* The flag marks the end of a month that is over. */
+@keyframes m5-flag-wave {
+  0%, 100% { transform: skewY(0deg) scaleX(1); }
+  50% { transform: skewY(-3.5deg) scaleX(0.93); }
+}
+.m5-flag-cloth {
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+  animation: m5-flag-wave 1.9s ease-in-out infinite;
+}
+
+/* The start line at the foot of the History list. */
+.m5-journey-start {
+  width: min(100%, 380px);
+  margin: 4px auto 0;
+  text-align: center;
+}
+
+/* Stands in for the greyed-out leaf that used to head a filter holding
+   nothing. 340px so the sign has room to be legible. */
+.m5-stage-empty {
+  width: min(100%, 340px);
+  margin: 0 auto 10px;
+}
+.m5-stage-label {
+  font-family: 'Poppins', 'Inter', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+.m5-journey-start p {
+  margin: 2px 0 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m5-crowd .m5-fan,
+  .m5-crowd .m5-fan-arm,
+  .m5-crowd-car,
+  .m5-flag-cloth { animation: none; }
+  .m5-crowd-car { left: 42%; }
+}
+
+/* ---------- Milestones that are alive before anything is earned ----------
+   A wall of nine grey badges with nothing moving reads as a disabled feature.
+   These two loops run on the LOCKED ones specifically, so a brand new account
+   sees a milestone wall that is waiting rather than switched off. The earned
+   pop (m5-badge-earn) still marks the difference. */
+@keyframes m5-badge-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(-5deg); }
+}
+.m5-badge:not(.earned) .m5-badge-icon {
+  animation: m5-badge-float 3.4s ease-in-out infinite;
+  animation-delay: var(--m5-delay, 0ms);
+}
+
+/* A shimmer crossing the track says "in progress" without faking a number. */
+@keyframes m5-track-shimmer {
+  0% { transform: translateX(-120%); }
+  55%, 100% { transform: translateX(360%); }
+}
+.m5-badge-track::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  animation: m5-track-shimmer 2.8s ease-in-out infinite;
+  animation-delay: var(--m5-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m5-badge:not(.earned) .m5-badge-icon { animation: none; }
+  .m5-badge-track::after { display: none; }
 }
