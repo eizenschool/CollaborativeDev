@@ -396,6 +396,46 @@ Pickup Place IDs, coordinates, waypoint data, route geometry, Storage paths,
 and non-Published pickup context remain private. Google photo URIs are fetched
 on demand, attributed, and never stored in the database.
 
+## D028 — One-way Trusted Family and PWA SOS
+**Status:** Accepted; implementation authored, migration and release pending
+
+Trusted Family is an account-level, one-way relationship established by a
+hashed, one-use 24-hour invitation. It grants no ordinary Ride or location
+access. Every active trusted family recipient receives shared notification
+centre/Web Push events while the owner has an active SOS; notification payloads
+contain an event ID only, never coordinates.
+
+SOS is limited to the Driver and Accepted passengers from one hour before
+departure until the Ride reaches a terminal state. It remains a server event
+when GPS, trusted recipients, or Web Push are unavailable, and the PWA reports
+those degraded states. Active SOS prevents ordinary location Stop, retains the
+last private point, marks signal loss after 120 seconds, and resolves only by
+the actor's confirmed “I'm safe” or terminal Ride transition. Resolution
+immediately removes coordinates and keeps only a coordinate-free 24-hour shell.
+
+This is a PWA best-effort foreground implementation. Page-hidden tracking may
+continue and reconnect retries the latest in-memory point, but browser process
+termination can stop GPS. Capacitor, native foreground services, FCM, SMS and
+iOS-native work are explicitly outside this decision.
+
+## D029 — Terminal Ride republishing creates a separate Draft
+**Status:** Accepted and deployed
+
+Only the Driver may republish a Completed, Cancelled, or Expired Ride from
+History. Republishing never reopens or mutates the terminal row: the server
+creates a new Draft ID containing only editable Ride settings and then opens
+the existing publisher for review. The old departure time may be copied into
+the Draft, but publication still requires a valid future schedule and a fresh
+server route quote.
+
+Requests, lifecycle and route-quote state, ETA, live/history location,
+conversations, reviews, impact/statistics, and pickup-photo objects remain
+bound to the original Ride. Passengers and non-owners cannot republish it.
+History cards open Ride Detail before either follow-up. On desktop,
+`Publish again` sits in the right action rail; on phone it uses the bottom
+action area. A Completed Ride shows its review action above `Publish again`,
+and Review opens only after that explicit action is selected.
+
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;

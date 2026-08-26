@@ -152,6 +152,17 @@ cancellation actions. Draft cards resume the existing five-step publisher at
 `/ride/:rideId/publish`, can be deleted with confirmation, and a successful
 publish opens the new Ride Detail with a success/next-step notice.
 
+Completed, Cancelled, and Expired Driver cards in History always open Ride
+Detail first. Its desktop action rail (and phone bottom action area) offers
+`Publish again`; for a Completed Ride, the review action appears immediately
+above it and is the only control that opens `RateReview`. `Publish again` uses
+the deployed Host-only `republish_m2_ride_as_draft` RPC and opens the existing
+five-step publisher for review and editing. The old schedule
+is intentionally copied even when stale, but normal publication still requires
+a new valid departure time and fresh server route quote. Requests, lifecycle
+state, route/ETA results, live location, conversations, reviews, statistics,
+and the old pickup photo stay bound to the original Ride.
+
 Requester cancellation is an immediate requester-owned transition, not another
 Host decision. Host approval applies only while a join request is `Pending`; a
 `Cancelled` request is written immediately, restores seats when it was
@@ -315,7 +326,7 @@ adds the narrowly owner/path/Ride-scoped Storage `SELECT` required for upload
 metadata to be returned without weakening the private bucket. The
 `m2-ride-pickup-photo` Edge Function is active as version 1.
 
-The deployed `042` contract provides explicit opt-in foreground live tracking,
+The deployed `047` contract provides explicit opt-in foreground live tracking,
 latest points, sampled history, filtered Driver/passenger visibility and
 expiring family links. The PWA labels hidden/locked-screen tracking as best
 effort and never uses a live point to trigger Check-in, Start Ride or arrival.
@@ -326,7 +337,41 @@ passengers never see one another.
 Module 5 consumes cursor-paginated history through `TripRouteReplay`; family
 links never receive history. Family payloads contain only `driver` and
 `shared-passenger` marker IDs, return scheduled/waiting/active states, expire
-with the latest planned departure, and become invalid on a terminal Ride.
+with the latest planned departure, and become invalid on a terminal Ride. The
+anonymous family page is map-first: it refreshes the latest permitted Driver
+and shared-passenger points every ten seconds, shows freshness/accuracy and a
+Google Maps fallback, and never requests the viewer's own location.
+
+## Trusted Family and PWA SOS (authored, deployment gated)
+
+Migration `061_m2_sos_trusted_family.sql`, advisor follow-up `062`, and
+`notification-push` version 11 are deployed; the matching client remains
+release-disabled. Trusted Family is a one-way, account-level
+relationship claimed through a hashed, one-use invitation that expires after
+24 hours. A trusted user has no ordinary Ride or location access. During an
+active SOS they may open authenticated `/sos/:eventId` and receive only status,
+the actor's display name, latest retained point, accuracy and update/signal
+times. The page uses the same responsive live-map presentation as Trip Mode,
+while clearly labelling stale or signal-lost points as last known rather than
+live. Resolved deep links remain coordinate-free for 24 hours.
+
+Trip Mode exposes SOS to the Driver and Accepted passengers only from one hour
+before departure until a terminal Ride. Pointer users hold for two seconds and
+receive a five-second cancellation window; keyboard and assistive-technology
+activation uses a normal confirmation dialog. The server event is created even
+when GPS is denied, no trusted family exists, or no recipient has Web Push, and
+the UI reports those degraded states. While SOS is active, ordinary Stop
+Sharing is locked; only the actor's confirmed “I'm safe” or a terminal Ride
+resolves it.
+
+The PWA keeps the geolocation watcher when the page is hidden and retries the
+latest in-memory point after reconnect, but makes no background-GPS guarantee.
+The server retains the last point for active SOS, marks it stale in the client
+after 30 seconds and signal-lost after 120 seconds through minute Cron. All
+active trusted family receive shared notification-centre events
+`sos_activated`, `sos_signal_lost`, `sos_signal_restored`, and `sos_resolved`;
+Push payloads contain no coordinates. Android foreground services, Capacitor,
+FCM, SMS and iOS-native work remain out of scope.
 
 D024 supersedes the `043-049` Trust Admin/ride-dispute experiment. The deployed
 `055_m2_remove_trust_admin.sql` compensation migration removes its tables, RPCs,

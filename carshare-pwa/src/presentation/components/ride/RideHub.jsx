@@ -105,7 +105,8 @@ export default function RideHub() {
   const nextItem = priorityItems.find((item) => !HISTORY_PHASES.has(item.state.phase)) || priorityItems[0] || null;
 
   function openItem(item) {
-    navigate(item.state.nextAction.path || `/ride/${item.ride.id}`, { state: { returnTo: '/ride' } });
+    const historyPath = HISTORY_PHASES.has(item.state.phase) ? `/ride/${item.ride.id}` : null;
+    navigate(historyPath || item.state.nextAction.path || `/ride/${item.ride.id}`, { state: { returnTo: '/ride' } });
   }
 
   async function deleteDraft() {

@@ -78,6 +78,7 @@ Deno.serve(async (request) => {
 
     const server = await applicationServer();
     const isVoiceCall = record.event_type === "voice_call";
+    const isSOS = record.event_type.startsWith("sos_");
     const callId = typeof record.payload.callId === "string" ? record.payload.callId : null;
     const message = JSON.stringify({
       notificationId: record.id,
@@ -96,7 +97,7 @@ Deno.serve(async (request) => {
         await subscriber.pushTextMessage(message, {
           // A delayed call alert is actively misleading after the 45-second
           // ringing window; durable ride/message alerts retain one-day TTL.
-          ttl: isVoiceCall ? 45 : 60 * 60 * 24,
+          ttl: isVoiceCall ? 45 : isSOS ? 60 * 60 : 60 * 60 * 24,
           urgency: webpush.Urgency.High,
           topic: `notification-${record.id}`,
         });

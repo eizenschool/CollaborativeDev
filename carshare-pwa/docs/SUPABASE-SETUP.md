@@ -103,6 +103,12 @@ Functions are the voice-call production boundary. Follow
 `docs/VOICE-CALL-DEPLOYMENT.md` for the Cloudflare key, server-only secrets,
 five-minute quota monitor, Netlify HTTPS, and two-device acceptance sequence.
 
+Module 2 Trusted Family/SOS is deployed through tracked `057`, `061`, and the
+foreign-key advisor follow-up `062`; `notification-push` version 11 is active.
+Keep `VITE_M2_SOS_ENABLED=false` in production until the two-account/two-phone
+acceptance sequence passes. Push secrets, endpoints and
+raw SOS coordinates must never be placed in a Vite environment variable.
+
 ## Message translation setup (project owner)
 
 Translation is deliberately proxied through Supabase. Never add a Cloudflare

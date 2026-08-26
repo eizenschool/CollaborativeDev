@@ -19,6 +19,9 @@ const publishRideComponent = new URL('../../presentation/components/ride/Publish
 const mockStore = new URL('../../data-access/mockDataStore.js', import.meta.url);
 const replayComponent = new URL('../../presentation/components/trip/TripRouteReplay.jsx', import.meta.url);
 const liveMapComponent = new URL('../../presentation/components/maps/LiveRideMap.jsx', import.meta.url);
+const familyShareComponent = new URL('../../presentation/components/ride/FamilyLocationShare.jsx', import.meta.url);
+const familyMapPanel = new URL('../../presentation/components/ride/FamilyLiveMapPanel.jsx', import.meta.url);
+const rideStyles = new URL('../../presentation/styles/ride.css', import.meta.url);
 
 describe('Module 2 improvement contracts', () => {
   it('adds a GPS bias only for a sufficiently accurate current-location preview', () => {
@@ -55,6 +58,27 @@ describe('Module 2 improvement contracts', () => {
     expect(source).toContain('<div className="live-ride-map-canvas" ref={containerRef} />');
     expect(source).toContain('<span className="live-map-loading">Loading live map…</span>');
     expect(source).not.toContain('className="live-ride-map" ref={containerRef}');
+  });
+
+  it('shows Family Link locations in a responsive map-first view without reading the viewer GPS', async () => {
+    const [family, mapPanel, map, styles] = await Promise.all([
+      readFile(familyShareComponent, 'utf8'),
+      readFile(familyMapPanel, 'utf8'),
+      readFile(liveMapComponent, 'utf8'),
+      readFile(rideStyles, 'utf8')
+    ]);
+    expect(family).toContain('<FamilyLiveMapPanel');
+    expect(family).toContain('Current shared locations');
+    expect(family).toContain('Family ride live location map');
+    expect(family).toContain('This private link never includes trip history.');
+    expect(family).not.toContain('navigator.geolocation');
+    expect(mapPanel).toContain("import '../../styles/ride.css';");
+    expect(mapPanel).toContain('<LiveRideMap');
+    expect(mapPanel).toContain('mapPermit={mapPermit === true}');
+    expect(family).toContain('const [mapPermit, setMapPermit] = useState(null)');
+    expect(map).toContain('point.label ||');
+    expect(styles).toContain('.family-live-map-card .live-ride-map');
+    expect(styles).toContain('@media (max-width: 600px)');
   });
 
   it('filters Module 6 suggestions to culinary and heritage stops', async () => {

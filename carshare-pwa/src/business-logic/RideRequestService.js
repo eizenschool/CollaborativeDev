@@ -1,7 +1,7 @@
 // ===== BUSINESS LOGIC LAYER (RideRequestService) =====
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
-import { mapRideRow } from './RideService.js';
+import { attachDestinationPhotoPlaceIds, mapRideRow } from './RideService.js';
 import { getCurrentPosition, MAX_CHECK_IN_ACCURACY_METRES } from './GooglePlacesService.js';
 
 const REQUEST_SELECT = `
@@ -86,6 +86,17 @@ export function mapRideRequestRow(row) {
   };
 }
 
+export async function attachRequestRidePhotoPlaceIds(requests = []) {
+  const rides = requests.map((request) => request?.ride).filter(Boolean);
+  if (!rides.length) return requests;
+
+  const enrichedRides = await attachDestinationPhotoPlaceIds(rides);
+  const rideById = new Map(enrichedRides.map((ride) => [ride.id, ride]));
+  return requests.map((request) => request.ride
+    ? { ...request, ride: rideById.get(request.ride.id) || request.ride }
+    : request);
+}
+
 function normalizeError(error) {
   return Object.assign(new Error(error?.message?.replace(/^.*?: /, '') || 'The request could not be processed.'), { code: error?.code });
 }
@@ -107,9 +118,9 @@ export const RideRequestService = {
         ({ data, error: readError } = await supabase.from('ride_requests').select(LEGACY_REQUEST_SELECT).eq('id', requestId).single());
       }
       if (readError) throw normalizeError(readError);
-      return mapRideRequestRow(data);
+      return (await attachRequestRidePhotoPlaceIds([mapRideRequestRow(data)]))[0];
     }
-    return mockDb.submitRideRequest(requesterId, { rideId, ...request });
+    return (await attachRequestRidePhotoPlaceIds([await mockDb.submitRideRequest(requesterId, { rideId, ...request })]))[0];
   },
 
   async listMyRequests(requesterId) {
@@ -119,9 +130,9 @@ export const RideRequestService = {
       let { data, error } = await run(REQUEST_SELECT);
       if (error && isMissingEstimatedArrival(error)) ({ data, error } = await run(LEGACY_REQUEST_SELECT));
       if (error) throw normalizeError(error);
-      return data.map(mapRideRequestRow);
+      return attachRequestRidePhotoPlaceIds(data.map(mapRideRequestRow));
     }
-    return mockDb.listMyRideRequests(requesterId);
+    return attachRequestRidePhotoPlaceIds(await mockDb.listMyRideRequests(requesterId));
   },
 
   async listRideRequests(rideId) {
@@ -131,9 +142,9 @@ export const RideRequestService = {
       let { data, error } = await run(REQUEST_SELECT);
       if (error && isMissingEstimatedArrival(error)) ({ data, error } = await run(LEGACY_REQUEST_SELECT));
       if (error) throw normalizeError(error);
-      return data.map(mapRideRequestRow);
+      return attachRequestRidePhotoPlaceIds(data.map(mapRideRequestRow));
     }
-    return mockDb.listRideRequests(rideId);
+    return attachRequestRidePhotoPlaceIds(await mockDb.listRideRequests(rideId));
   },
 
   async acceptRequest(requestId) {

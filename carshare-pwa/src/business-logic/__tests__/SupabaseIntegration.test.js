@@ -171,6 +171,22 @@ describe('Supabase integration contracts', () => {
     expect(sql).toContain('grant execute on function public.update_ride');
   });
 
+  it('republishes only terminal Host rides through a narrow authenticated RPC', async () => {
+    const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../database/sql/064_m2_republish_terminal_ride_as_draft.sql', import.meta.url),
+      'utf8'
+    ));
+    expect(sql).toContain('security definer');
+    expect(sql).toContain("set search_path = ''");
+    expect(sql).toContain('v_source.host_id <> v_user_id');
+    expect(sql).toContain("v_source.status not in ('Completed', 'Cancelled', 'Expired')");
+    expect(sql).toContain("coalesce(v_source.waypoints, '[]'::jsonb)");
+    expect(sql).not.toContain('v_source.pickup_photo_path');
+    expect(sql).not.toContain('v_source.estimated_arrival_at');
+    expect(sql).toContain('revoke all on function public.republish_m2_ride_as_draft(uuid)');
+    expect(sql).toContain('grant execute on function public.republish_m2_ride_as_draft(uuid)');
+  });
+
   it('keeps Realtime read receipts idempotent in SQL history', async () => {
     const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
       new URL('../../../database/sql/021_m3_stabilize_realtime_reads.sql', import.meta.url),
@@ -243,7 +259,8 @@ describe('Supabase integration contracts', () => {
     ));
     expect(pushFunctionSource).toContain('return "delivered" as const');
     expect(pushFunctionSource).toContain('failed > 0 ? 502 : 200');
-    expect(pushFunctionSource).toContain('ttl: isVoiceCall ? 45 : 60 * 60 * 24');
+    expect(pushFunctionSource).toContain('const isSOS = record.event_type.startsWith("sos_")');
+    expect(pushFunctionSource).toContain('ttl: isVoiceCall ? 45 : isSOS ? 60 * 60 : 60 * 60 * 24');
   });
 
   it('allows current conversation members to sign private chat media without listing the bucket', async () => {

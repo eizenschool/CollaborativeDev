@@ -25,7 +25,7 @@ function trackColor(userId, fallbackIndex) {
   return TRACK_COLORS[hash % TRACK_COLORS.length];
 }
 
-export default function LiveRideMap({ ride, points = [], segments = [], pageSessionId, mapPermit = false }) {
+export default function LiveRideMap({ ride, points = [], segments = [], pageSessionId, mapPermit = false, ariaLabel = 'Live ride location map' }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRefs = useRef(new Map());
@@ -102,7 +102,7 @@ export default function LiveRideMap({ ride, points = [], segments = [], pageSess
         markerRefs.current.set(id, marker);
       }
       marker.position = { lat: point.lat, lng: point.lng };
-      marker.title = `${point.role === 'Driver' ? 'Driver’s current location' : 'Passenger current location'} (±${Math.round(point.accuracyM)} m)`;
+      marker.title = `${point.label || (point.role === 'Driver' ? 'Driver’s current location' : 'Passenger current location')} (±${Math.round(point.accuracyM)} m)`;
       let circle = circleRefs.current.get(id);
       if (!circle) {
         const color = point.role === 'Driver' ? '#2563EB' : '#0F766E';
@@ -149,5 +149,5 @@ export default function LiveRideMap({ ride, points = [], segments = [], pageSess
     const limitReached = diagnostic?.code === 'MAP_LOAD_LIMIT';
     return <div className="live-map-fallback" data-map-fallback-stage={diagnostic?.stage || 'unknown'} data-map-fallback-code={diagnostic?.code || 'MAP_UNAVAILABLE'}><span>{limitReached ? 'Interactive map has reached today’s app limit.' : 'Interactive map is temporarily unavailable.'}</span><small>Use the live location cards and Open in Google Maps links below.</small></div>;
   }
-  return <div className="live-ride-map" aria-label="Live ride location map"><div className="live-ride-map-canvas" ref={containerRef} />{status === 'loading' && <span className="live-map-loading">Loading live map…</span>}</div>;
+  return <div className="live-ride-map" aria-label={ariaLabel}><div className="live-ride-map-canvas" ref={containerRef} />{status === 'loading' && <span className="live-map-loading">Loading live map…</span>}</div>;
 }

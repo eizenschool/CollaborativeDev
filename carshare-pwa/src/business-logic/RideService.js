@@ -572,6 +572,15 @@ export const RideService = {
     return mockDb.deleteDraft(rideId);
   },
 
+  async republishAsDraft(rideId) {
+    if (isSupabaseConfigured) {
+      const { data: newRideId, error } = await supabase.rpc('republish_m2_ride_as_draft', { p_ride_id: rideId });
+      if (error) throw rpcError(error);
+      return this.getRide(newRideId);
+    }
+    return mockDb.republishRideAsDraft(rideId);
+  },
+
   async cancelRide(rideId, reason) {
     if (isSupabaseConfigured) {
       const { error } = await supabase.rpc('cancel_ride', { p_ride_id: rideId, p_reason: reason });

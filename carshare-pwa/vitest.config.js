@@ -21,7 +21,8 @@ export default defineConfig({
       VITE_GOOGLE_MAPS_PLACES_API_KEY: '',
       VITE_WEB_PUSH_PUBLIC_KEY: '',
       VITE_DISCOVERY_DATA_SOURCE: 'fixture',
-      VITE_M2_LIVE_TRACKING_ENABLED: 'false'
+      VITE_M2_LIVE_TRACKING_ENABLED: 'false',
+      VITE_M2_SOS_ENABLED: 'false'
     },
     include: [
       'src/business-logic/verification/__tests__/**/*.test.js',

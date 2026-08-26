@@ -559,6 +559,16 @@ body.dialog-open { overflow: hidden; }
   padding: 20px; margin-bottom: 16px;
 }
 .card-title { font-weight: 700; font-size: 14px; margin: 0 0 2px; }
+.trusted-family-card { display: grid; gap: 12px; }
+.trusted-family-card .card-title { display: flex; align-items: center; gap: 6px; }
+.trusted-family-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.trusted-family-list li { display: grid; grid-template-columns: 42px minmax(0, 1fr) 44px; align-items: center; gap: 9px; min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 12px; }
+.trusted-family-list li > span:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
+.trusted-family-list strong { overflow-wrap: anywhere; }
+.trusted-family-list small { display: flex; align-items: center; gap: 4px; color: var(--muted); }
+.trusted-family-avatar { width: 42px; height: 42px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: var(--teal-dark); background: var(--teal-tint); }
+.trusted-family-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.trusted-family-empty { margin: 0; padding: 11px; border-radius: 10px; color: var(--muted); background: var(--surface-soft, #f4f7f5); font-size: 12px; line-height: 1.5; }
 .card-subtitle { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
 
 .compatibility-option-grid {

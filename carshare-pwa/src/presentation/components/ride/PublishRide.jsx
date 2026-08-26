@@ -1,6 +1,6 @@
 // ===== PRESENTATION LAYER (PublishRide) =====
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { isRouteQuoteFresh, RideService } from '../../../business-logic/RideService.js';
 import { departureParts, formatMalaysiaDeparture } from '../../../business-logic/rideDateTime.js';
@@ -48,6 +48,7 @@ const emptyForm = {
 
 export default function PublishRide() {
   const { user } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const { rideId: draftRideId } = useParams();
 
@@ -364,6 +365,7 @@ export default function PublishRide() {
         <h2 ref={stepHeadingRef} className="step-title" tabIndex={-1}>{STEPS[step]}</h2>
         <p className="step-description">{STEP_DESCRIPTIONS[step]}</p>
 
+        {location.state?.republishedFromRideId && <div className="alert alert-info" role="status">New Draft created from your Ride history. Review the old departure date and time before publishing. The previous Ride's pickup photo was not copied.</div>}
         {error && <div ref={errorRef} className="alert alert-error publish-error" role="alert" tabIndex={-1}><span>{error}</span>{/In Transit/i.test(error) && <button type="button" className="btn-link" onClick={() => navigate('/ride')}>Open My rides to complete it</button>}</div>}
         {photoRecovery && <div className="alert alert-error pickup-photo-recovery" role="alert"><div><strong>Ride saved, but the pickup photo was not uploaded.</strong><span>{photoRecovery.message}</span></div><button type="button" className="btn-secondary" disabled={saving} onClick={retryPickupPhoto}>Retry photo</button><button type="button" className="btn-link" onClick={() => navigate(photoRecovery.navigation.path, photoRecovery.navigation.options)}>Continue without photo</button></div>}
 

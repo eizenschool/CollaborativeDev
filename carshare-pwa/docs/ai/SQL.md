@@ -12,11 +12,12 @@ Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 favourites/proximity
-Deployed SQL history: 001-026, 028, 033, 034, 036_m3, 045_m3, and 060_m2 as tracked Supabase
+Deployed SQL history: 001-026, 028, 033, 034, 036_m3, 045_m3, 057_m2,
+  060_m2, 061_m2, 062_m2, and 064_m2 as tracked Supabase
   migrations, plus tracked 035_m4 and 023, 027, 029, 030, 031, 032, and
   037_m2 applied through
   the Dashboard SQL Editor (see below)
-Repository SQL history: 001-060
+Repository SQL history: 001-064
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -27,7 +28,9 @@ Repository SQL history: 001-060
   `046_m2`-`057_m2` during this merge to keep the shared history unambiguous.
   `056_m2`-`058_m2` remain authored locally and undeployed. The `059_m2`
   schema is live without a tracked migration entry; tracked `060_m2` adds the
-  missing owner-scoped Storage SELECT policy required by upload RETURNING.)
+  missing owner-scoped Storage SELECT policy required by upload RETURNING.
+  `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
+  `063_m2` is authored locally and remains undeployed.)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -282,7 +285,8 @@ grant or RLS policy on either TURN table.
 deduplicated, Push-only incoming-call notification for the callee when a ringing
 call row is inserted. The notification action opens the direct conversation;
 the call row and participant RLS remain authoritative. The matching deployed
-`notification-push` version 10 gives call alerts a 45-second TTL. The next new
+`notification-push` version 11 keeps call alerts at a 45-second TTL and adds
+one-hour urgent SOS delivery. The next new
 migration starts at `046`.
 M2 migrations `041`-`043` are now deployed.
 
@@ -347,12 +351,31 @@ current Accepted participants. Deployment must be separately approved; after
 deployment, verify the existing overdue Matched Ride and requests, Cron,
 notifications, and security/performance advisors.
 
-`057_m2_fix_family_link_crypto_schema.sql` is authored locally and is **not
-deployed**. It replaces only `create_m2_family_location_share(uuid)` so its
+`057_m2_fix_family_link_crypto_schema.sql` is now recorded as tracked migration
+`m2_fix_family_link_crypto_schema`. It replaced only
+`create_m2_family_location_share(uuid)` so its
 empty-search-path body calls `extensions.gen_random_bytes` and
 `extensions.digest` explicitly. This fixes token creation on the shared
 Supabase project without changing participation checks, expiry, token hashing,
 the RPC signature, or its authenticated-only execute grant.
+
+`061_m2_sos_trusted_family.sql` is deployed as `m2_sos_trusted_family`.
+It adds hashed, one-use 24-hour trusted-family invites, one-way account
+relationships, and one active SOS per Ride participant. Private tables have
+RLS enabled and no browser table grants; authenticated `SECURITY DEFINER` RPCs
+perform `auth.uid()`, current Driver/Accepted-passenger, one-hour window, and
+active relationship checks. SOS notifications reuse
+`private.create_user_notification(...)` and carry only an event ID. A minute
+Cron marks a missing signal after 120 seconds, active SOS retains the last
+private point, recovery is deduplicated, and resolution immediately removes
+the coordinate while retaining a coordinate-free event shell for 24 hours.
+Tracked `057` was reconciled first and `notification-push` version 11 is active.
+The post-deployment advisor's three new foreign-key notices are covered by
+tracked `062_m2_sos_advisor_followup.sql`; its private/no-policy INFO and
+authenticated `SECURITY DEFINER` warnings are intentional because tables have
+no browser grants and every narrow RPC performs explicit authorization.
+Two-account/two-device acceptance is still required before
+`VITE_M2_SOS_ENABLED` is enabled.
 
 `058_m2_widen_checkin_tolerance.sql` is authored locally and is **not
 deployed**. It widens passenger Check-in distance from
@@ -509,7 +532,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   stable acceptance history, exact departure-grace expiry, Matched/request
   invariants, terminal former-participant access, validation alignment, and
   deduplicated expiry notifications.
-- `057_m2_fix_family_link_crypto_schema.sql` - authored, not deployed;
+- `057_m2_fix_family_link_crypto_schema.sql` - deployed as tracked migration;
   schema-qualifies the pgcrypto token generator and digest inside the existing
   authenticated Family Link creation RPC.
 - `058_m2_widen_checkin_tolerance.sql` - authored, not deployed; slightly
@@ -524,6 +547,19 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `m2_allow_pickup_photo_upload_return` on 2026-08-26; adds the missing
   owner/path/Ride-scoped `SELECT` policy used when Storage returns metadata for
   a successful Host upload.
+- `061_m2_sos_trusted_family.sql` - deployed; private one-time
+  trusted-family invitations, one-way relationships, participant/time-guarded
+  SOS RPCs, retained-last-point signal monitoring, shared notifications, and
+  24-hour coordinate-free resolved-event cleanup.
+- `062_m2_sos_advisor_followup.sql` - deployed; covers the invite owner,
+  claimed recipient, and SOS actor foreign keys reported after `061`.
+- `063_m2_expired_passenger_destination_photos.sql` - authored, not deployed;
+  extends the destination-photo Place ID batch RPC to the same Expired,
+  previously accepted passenger boundary used by terminal Ride Detail.
+- `064_m2_republish_terminal_ride_as_draft.sql` - deployed as tracked migration;
+  lets only the authenticated Host copy a Completed, Cancelled, or Expired
+  Ride's editable settings into a new Draft ID without copying requests,
+  lifecycle/route-quote state, live data, conversations, reviews, or photos.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

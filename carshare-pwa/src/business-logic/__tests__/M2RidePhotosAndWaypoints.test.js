@@ -7,11 +7,13 @@ import {
 import { validWaypointStopMinutes } from '../../presentation/components/ride/PublishRide.jsx';
 
 const migration = new URL('../../../database/sql/059_m2_ride_pickup_destination_photos.sql', import.meta.url);
+const expiredPhotoMigration = new URL('../../../database/sql/063_m2_expired_passenger_destination_photos.sql', import.meta.url);
 const uploadReturnMigration = new URL('../../../database/sql/060_m2_allow_pickup_photo_upload_return.sql', import.meta.url);
 const edgeFunction = new URL('../../../supabase/functions/m2-ride-pickup-photo/index.ts', import.meta.url);
 const publishRide = new URL('../../presentation/components/ride/PublishRide.jsx', import.meta.url);
 const rideCard = new URL('../../presentation/components/ride/RideCard.jsx', import.meta.url);
 const searchCards = new URL('../../presentation/components/search/RideCards.jsx', import.meta.url);
+const rideRequestService = new URL('../RideRequestService.js', import.meta.url);
 const destinationPhoto = new URL('../../presentation/components/ride/DestinationRidePhoto.jsx', import.meta.url);
 const rideDetail = new URL('../../presentation/components/ride/RideDetail.jsx', import.meta.url);
 
@@ -73,7 +75,9 @@ describe('Module 2 waypoint and Ride photo contracts', () => {
   });
 
   it('loads destination photography lazily with attribution and non-nested card navigation', async () => {
-    const [photo, workspace] = await Promise.all([readFile(destinationPhoto, 'utf8'), readFile(rideCard, 'utf8')]);
+    const [photo, workspace, requests] = await Promise.all([
+      readFile(destinationPhoto, 'utf8'), readFile(rideCard, 'utf8'), readFile(rideRequestService, 'utf8')
+    ]);
     expect(photo).toContain('IntersectionObserver');
     expect(photo).toContain('loading="lazy"');
     expect(photo).toContain('alt=""');
@@ -81,5 +85,15 @@ describe('Module 2 waypoint and Ride photo contracts', () => {
     expect(workspace).toContain('<article className=');
     expect(workspace).toContain('className="ride-card-primary-action"');
     expect(workspace).not.toContain('<button className={\'ride-card\'');
+    expect(requests).toContain('attachRequestRidePhotoPlaceIds');
+    expect(requests).toContain('attachDestinationPhotoPlaceIds');
+  });
+
+  it('keeps expired accepted passengers eligible for destination card photos', async () => {
+    const sql = await readFile(expiredPhotoMigration, 'utf8');
+    expect(sql).toContain("rr.status = 'Accepted'");
+    expect(sql).toContain("r.status = 'Expired'");
+    expect(sql).toContain("rr.status = 'Expired'");
+    expect(sql).toContain("to_jsonb(rr)->>'accepted_at' is not null");
   });
 });

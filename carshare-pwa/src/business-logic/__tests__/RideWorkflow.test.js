@@ -9,7 +9,7 @@ import {
   validateConfirmedWaypoints,
   validateRideDraft
 } from '../RideService.js';
-import { mapRideRequestRow, validateRideRequest } from '../RideRequestService.js';
+import { attachRequestRidePhotoPlaceIds, mapRideRequestRow, validateRideRequest } from '../RideRequestService.js';
 import { validateRideReview } from '../RideReviewService.js';
 import {
   departureParts,
@@ -215,6 +215,36 @@ describe('Module 2 ride workflow contracts', () => {
     await expect(mockDb.deleteDraft(protectedDraft.id)).rejects.toThrow('Only your Draft');
   });
 
+  it('republishes a terminal Host Ride as a separate editable Draft', async () => {
+    await mockDb.getRide('r_5');
+    const stored = JSON.parse(memory.get(STORAGE_KEY));
+    stored.rides.r_5.status = 'Expired';
+    stored.rides.r_5.expiredAt = '2026-08-20T00:30:00.000Z';
+    stored.rides.r_5.pickupLocation = { placeId: 'old-pickup' };
+    stored.rides.r_5.destinationLocation = { placeId: 'old-destination' };
+    stored.rides.r_5.pickupPhotoPath = 'u_demo_1/r_5/photo.webp';
+    stored.rides.r_5.estimatedArrivalAt = '2026-08-20T02:00:00.000Z';
+    memory.set(STORAGE_KEY, JSON.stringify(stored));
+
+    const draft = await RideService.republishAsDraft('r_5');
+    const original = await mockDb.getRide('r_5');
+
+    expect(draft).toMatchObject({
+      status: 'Draft', pickup: original.pickup, destination: original.destination,
+      departureAt: original.departureAt, vehicleId: original.vehicleId,
+      seatsTotal: original.seatsTotal, seatsAvailable: original.seatsTotal,
+      pickupPhotoPath: null, estimatedArrivalAt: null
+    });
+    expect(draft.id).not.toBe(original.id);
+    expect(original.status).toBe('Expired');
+    await expect(mockDb.updateRide(draft.id, { contribution: 'Updated contribution' })).resolves.toMatchObject({ contribution: 'Updated contribution' });
+  });
+
+  it('rejects republishing an active Ride or another Host ride', async () => {
+    await expect(RideService.republishAsDraft('r_5')).rejects.toThrow('completed, cancelled, or expired');
+    await expect(RideService.republishAsDraft('r_6')).rejects.toThrow('permission denied');
+  });
+
   it('uses half-open occupied intervals for equal times, overlaps, and the buffer boundary', () => {
     const firstStart = '2026-08-20T01:00:00.000Z';
     const firstEnd = '2026-08-20T03:30:00.000Z';
@@ -351,6 +381,17 @@ describe('Module 2 ride workflow contracts', () => {
       acceptedAt: '2026-08-20T00:00:00.000Z',
       processedAt: '2026-08-20T00:30:00.000Z'
     });
+  });
+
+  it('hydrates destination photo place ids on nested passenger rides', async () => {
+    const [request] = await attachRequestRidePhotoPlaceIds([{
+      ride: {
+        id: 'ride-with-destination-photo',
+        destinationLocation: { source: 'google', placeId: 'fixture_destination' }
+      }
+    }]);
+
+    expect(request.ride.destinationPhotoPlaceId).toBe('fixture_destination');
   });
 
   it('moves accepted rides through departure grace and preserves acceptance history', async () => {

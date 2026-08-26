@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ProfileService } from '../../business-logic/ProfileService.js';
 import { VehicleService } from '../../business-logic/VehicleService.js';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
+import TrustedFamilyCard from './profile/TrustedFamilyCard.jsx';
 import {
   SPOKEN_LANGUAGE_OPTIONS,
   VEHICLE_TYPE_OPTIONS,
@@ -228,6 +229,7 @@ function InfoSecurityPanel({ user, onSaved }) {
         <div>
           <ProfilePhotoCard user={user} onSaved={onSaved} />
           <EmergencyContactCard user={user} onSaved={onSaved} />
+          {import.meta.env.VITE_M2_SOS_ENABLED === 'true' && <TrustedFamilyCard />}
         </div>
       </div>
     </>

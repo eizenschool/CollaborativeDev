@@ -496,6 +496,23 @@ test('personal destinations expose honest loading, empty, error, and content sta
     await openPage(page, path, heading);
     await expectNoPageOverflow(page);
   }
+  await expect(page.locator('.family-live-map-card')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Current shared locations' })).toBeVisible();
+  const familyRouteStyles = await page.locator('.family-live-map-card').evaluate((card) => {
+    const shell = document.querySelector('.family-location-shell');
+    const cardStyle = getComputedStyle(card);
+    const shellStyle = getComputedStyle(shell);
+    return {
+      cardOverflow: cardStyle.overflow,
+      cardRadius: Number.parseFloat(cardStyle.borderTopLeftRadius),
+      shellDisplay: shellStyle.display,
+      shellGap: Number.parseFloat(shellStyle.gap),
+    };
+  });
+  expect(familyRouteStyles.cardOverflow).toBe('hidden');
+  expect(familyRouteStyles.cardRadius).toBeGreaterThanOrEqual(18);
+  expect(familyRouteStyles.shellDisplay).toBe('grid');
+  expect(familyRouteStyles.shellGap).toBeGreaterThanOrEqual(12);
   await expect(page.getByRole('alert')).toContainText('invalid or expired');
 });
 

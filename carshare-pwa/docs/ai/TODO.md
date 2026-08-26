@@ -38,6 +38,12 @@ Please tell Brayden if the shape or the ordering does not suit your screen; it i
 easier to change now than after you have built against it.
 
 ## NEXT
+- [x] Reconcile tracked `057_m2_fix_family_link_crypto_schema.sql`, deploy
+  `061_m2_sos_trusted_family.sql`, advisor follow-up `062`, and
+  `notification-push` version 11, then run Supabase advisors.
+- [ ] Keep `VITE_M2_SOS_ENABLED` off until the two-account/two-phone Trusted
+  Family/SOS acceptance sequence passes. Netlify upload remains a separate
+  release-owner step.
 - [ ] Complete the documented two-account four-language/device-voice acceptance checks for deployed `036_m3_message_translation.sql` and active `m3-message-translation` version 2.
 - [ ] Update module file maps during each module's next task.
 - [ ] Review CI branch names because the workflow references `dev` while the repository uses `Development`.

@@ -61,6 +61,12 @@ Profile exposes an explicit Sign out action after the page content on phone
 because the desktop top-navigation actions are hidden below 700px.
 Profile's Overview panel continues to omit the redundant Quick actions card
 because Home owns primary navigation.
+When `VITE_M2_SOS_ENABLED=true`, Info & Security also hosts Module 2's Trusted
+Family card. It lists only the account owner's outgoing one-way relationships,
+shows whether each recipient has at least one Push-ready device, creates a
+hashed one-use 24-hour invitation, and requires confirmation before revocation.
+The card never exposes Push endpoints or grants ordinary location access;
+Module 2 owns the service and database contract.
 Module 4's reviewed-but-undeployed migration `039` adds optional owner-managed
 classification fields: one `vehicles.vehicle_type` per vehicle and a set of
 `profiles.spoken_languages` for the Host. The profile and vehicle screens and

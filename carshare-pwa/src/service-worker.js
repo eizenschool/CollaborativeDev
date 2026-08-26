@@ -52,6 +52,7 @@ function safePushPayload(event) {
 self.addEventListener('push', (event) => {
   const payload = safePushPayload(event);
   const isVoiceCall = payload.eventType === 'voice_call';
+  const isSOS = payload.eventType.startsWith('sos_');
   event.waitUntil(self.registration.showNotification(payload.title, {
     body: payload.body,
     icon: '/icons/icon-192.png',
@@ -59,8 +60,8 @@ self.addEventListener('push', (event) => {
     tag: isVoiceCall && payload.callId
       ? `voice-call-${payload.callId}`
       : payload.notificationId ? `notification-${payload.notificationId}` : undefined,
-    requireInteraction: isVoiceCall,
-    vibrate: isVoiceCall ? [300, 150, 300, 150, 500] : undefined,
+    requireInteraction: isVoiceCall || isSOS,
+    vibrate: isVoiceCall ? [300, 150, 300, 150, 500] : isSOS ? [250, 100, 250, 100, 600] : undefined,
     data: {
       actionPath: payload.actionPath,
       eventType: payload.eventType,

@@ -796,6 +796,56 @@ export const mockDb = {
     return true;
   },
 
+  async republishRideAsDraft(rideId) {
+    await delay();
+    const db = load();
+    processDueRides(db);
+    const source = db.rides[rideId];
+    if (!source || source.hostId !== db.currentUserId) throw new Error('Ride not found or permission denied.');
+    if (!['Completed', 'Cancelled', 'Expired'].includes(source.status)) {
+      throw new Error('Only a completed, cancelled, or expired Ride can be republished.');
+    }
+
+    const now = new Date().toISOString();
+    const id = `r_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const draft = {
+      id,
+      hostId: source.hostId,
+      pickup: source.pickup,
+      destination: source.destination,
+      pickupLocation: source.pickupLocation ? { ...source.pickupLocation } : null,
+      destinationLocation: source.destinationLocation ? { ...source.destinationLocation } : null,
+      pickupInstructions: source.pickupInstructions || '',
+      pickupPhotoPath: null,
+      date: source.date,
+      time: source.time,
+      departureAt: source.departureAt,
+      journeyScale: source.journeyScale,
+      vehicleId: source.vehicleId,
+      seatsTotal: Number(source.seatsTotal),
+      seatsAvailable: Number(source.seatsTotal),
+      contribution: source.contribution || '',
+      restrictionTags: [...(source.restrictionTags || [])],
+      waypoints: (source.waypoints || []).map((waypoint) => typeof waypoint === 'string' ? waypoint : { ...waypoint }),
+      status: 'Draft',
+      publishedAt: null,
+      recruitmentClosedAt: null,
+      cancelReason: null,
+      expiredAt: null,
+      startedAt: null,
+      estimatedArrivalAt: null,
+      scheduleBufferUntil: null,
+      routeDistanceMeters: null,
+      routeDurationSeconds: null,
+      routeStopoverSeconds: null,
+      createdAt: now,
+      updatedAt: now
+    };
+    db.rides[id] = draft;
+    save(db);
+    return enrichRide(db, draft);
+  },
+
   async cancelRide(rideId, reason) {
     await delay();
     const db = load();

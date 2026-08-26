@@ -35,6 +35,9 @@ const NotificationCenter = lazy(() => import('./presentation/components/notifica
 const SearchModule = lazy(() => import('./presentation/components/search/SearchModule.jsx'));
 const FavouritePage = lazy(() => import('./presentation/components/search/FavouritePage.jsx'));
 const FamilyLocationShare = lazy(() => import('./presentation/components/ride/FamilyLocationShare.jsx'));
+const TrustedFamilyInvite = lazy(() => import('./presentation/components/ride/TrustedFamilyInvite.jsx'));
+const SOSFamilyView = lazy(() => import('./presentation/components/ride/SOSFamilyView.jsx'));
+const SOS_ENABLED = import.meta.env.VITE_M2_SOS_ENABLED === 'true';
 
 function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
   const { user } = useAuth();
@@ -116,6 +119,8 @@ function AppShell() {
         <Route path="/ride/:rideId/review" element={<RequireAuth reason="Sign in to review this ride."><RateReview /></RequireAuth>} />
         <Route path="/ride/:rideId" element={<RideDetail />} />
         <Route path="/share/ride-location" element={<FamilyLocationShare />} />
+        {SOS_ENABLED && <Route path="/family/invite" element={<RequireAuth reason="Sign in to accept this trusted family invitation."><TrustedFamilyInvite /></RequireAuth>} />}
+        {SOS_ENABLED && <Route path="/sos/:eventId" element={<RequireAuth reason="Sign in to open this trusted family SOS alert."><SOSFamilyView /></RequireAuth>} />}
         {/* Home, Search, and Published Ride Detail form the public browsing
             surface. The Ride workspace and other personal destinations are guarded. */}
         <Route path="/home" element={<HomeScreen />} />

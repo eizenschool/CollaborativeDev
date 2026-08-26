@@ -8,6 +8,7 @@ const read = (file) => readFileSync(resolve(root, file), 'utf8');
 const hub = read('src/presentation/components/ride/RideHub.jsx');
 const card = read('src/presentation/components/ride/RideCard.jsx');
 const detail = read('src/presentation/components/ride/RideDetail.jsx');
+const publish = read('src/presentation/components/ride/PublishRide.jsx');
 const requests = read('src/presentation/components/ride/ManageRequests.jsx');
 const styles = read('src/presentation/styles/ride.css');
 
@@ -35,6 +36,27 @@ describe('Module 2 ride workspace UI contract', () => {
     expect(styles).toContain('.ride-next-action .btn-primary {');
     expect(styles).toContain('max-width: 190px;');
     expect(styles).toContain('.ride-history-group[open] > summary');
+  });
+
+  it('offers terminal Driver history as a new editable Draft', () => {
+    expect(hub).not.toContain('ride-history-republish');
+    expect(hub).toContain('HISTORY_PHASES.has(item.state.phase) ? `/ride/${item.ride.id}`');
+    expect(detail).toContain("['Completed', 'Cancelled', 'Expired'].includes(ride.status)");
+    expect(detail).toContain('RideService.republishAsDraft(ride.id)');
+    expect(detail).toContain('Publish again');
+    expect(detail).toContain('Creating draft');
+    expect(detail).toContain('`/ride/${draft.id}/publish`');
+    expect(styles).toContain('.ride-detail-republish');
+    expect(styles).toMatch(/\.ride-bottom-actions \{[^}]*display: grid;[^}]*gap: 12px;/);
+    expect(publish).toContain('New Draft created from your Ride history.');
+    expect(publish).toContain("previous Ride's pickup photo was not copied");
+  });
+
+  it('opens Completed History in Ride Detail before exposing its review', () => {
+    expect(hub).toContain('const historyPath = HISTORY_PHASES.has(item.state.phase)');
+    expect(detail).toContain("ride.status === 'Completed' && <button");
+    expect(detail).toContain('journeyState.nextAction.label');
+    expect(detail.indexOf("ride.status === 'Completed' && <button")).toBeLessThan(detail.indexOf('className="ride-detail-republish"'));
   });
 
   it('keeps day-of execution in Trip Mode and labels the refreshed traffic ETA', () => {

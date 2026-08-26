@@ -174,12 +174,21 @@ export const RideLiveTrackingService = {
     };
   },
 
-  createWatcher({ rideId, onPoint = () => {}, onState = () => {}, geolocation = globalThis.navigator?.geolocation, documentObject = globalThis.document, windowObject = globalThis.window } = {}) {
+  createWatcher({
+    rideId,
+    onPoint = () => {},
+    onState = () => {},
+    sosMode = false,
+    geolocation = globalThis.navigator?.geolocation,
+    documentObject = globalThis.document,
+    windowObject = globalThis.window
+  } = {}) {
     let watchId = null;
     let lastSentAt = 0;
     let lastPointAt = 0;
     let stopped = false;
     let staleTimer = null;
+    let latestPoint = null;
 
     const state = (value) => { if (!stopped) onState(value); };
     const publish = async (position) => {
@@ -197,6 +206,7 @@ export const RideLiveTrackingService = {
         return;
       }
       onPoint(point);
+      latestPoint = point;
       lastPointAt = Date.now();
       if (Date.now() - lastSentAt < LIVE_UPLOAD_INTERVAL_MS) return;
       lastSentAt = Date.now();
@@ -205,7 +215,7 @@ export const RideLiveTrackingService = {
     };
     const startWatch = () => {
       if (stopped || !geolocation?.watchPosition) { state('offline'); return; }
-      state(documentObject?.visibilityState === 'hidden' ? 'paused' : 'starting');
+      state(documentObject?.visibilityState === 'hidden' ? (sosMode ? 'background' : 'paused') : 'starting');
       watchId = geolocation.watchPosition((position) => { void publish(position); }, () => state('offline'), {
         enableHighAccuracy: true,
         maximumAge: 5000,
@@ -215,13 +225,27 @@ export const RideLiveTrackingService = {
     const onVisibility = () => {
       if (stopped) return;
       if (documentObject?.visibilityState === 'hidden') {
-        if (watchId != null) geolocation?.clearWatch?.(watchId);
-        watchId = null;
-        state('paused');
+        if (sosMode) {
+          state('background');
+        } else {
+          if (watchId != null) geolocation?.clearWatch?.(watchId);
+          watchId = null;
+          state('paused');
+        }
       } else {
         state('starting');
         if (watchId == null) startWatch();
       }
+    };
+    const retryLatest = () => {
+      if (stopped) return;
+      if (latestPoint && sosMode) {
+        lastSentAt = 0;
+        void RideLiveTrackingService.publishLocation(rideId, latestPoint)
+          .then(() => state('active'))
+          .catch(() => state('offline'));
+      }
+      if (watchId == null && documentObject?.visibilityState !== 'hidden') startWatch();
     };
 
     return {
@@ -232,6 +256,7 @@ export const RideLiveTrackingService = {
         await RideLiveTrackingService.startSharing(rideId);
         documentObject?.addEventListener?.('visibilitychange', onVisibility);
         windowObject?.addEventListener?.('focus', onVisibility);
+        if (sosMode) windowObject?.addEventListener?.('online', retryLatest);
         staleTimer = windowObject?.setInterval?.(() => {
           if (!lastPointAt) return;
           const age = Date.now() - lastPointAt;
@@ -243,6 +268,7 @@ export const RideLiveTrackingService = {
         } catch (error) {
           documentObject?.removeEventListener?.('visibilitychange', onVisibility);
           windowObject?.removeEventListener?.('focus', onVisibility);
+          if (sosMode) windowObject?.removeEventListener?.('online', retryLatest);
           if (staleTimer != null) windowObject?.clearInterval?.(staleTimer);
           staleTimer = null;
           try { await RideLiveTrackingService.stopSharing(rideId); } catch { /* server TTL remains the safety net */ }
@@ -256,6 +282,7 @@ export const RideLiveTrackingService = {
         if (staleTimer != null) windowObject?.clearInterval?.(staleTimer);
         documentObject?.removeEventListener?.('visibilitychange', onVisibility);
         windowObject?.removeEventListener?.('focus', onVisibility);
+        if (sosMode) windowObject?.removeEventListener?.('online', retryLatest);
         try { await RideLiveTrackingService.stopSharing(rideId); } catch { /* server TTL remains the safety net */ }
       }
     };
