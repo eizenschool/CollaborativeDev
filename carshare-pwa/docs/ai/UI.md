@@ -308,6 +308,18 @@ local content and state plainly what is unavailable.
   would otherwise miss them.
 - Keep motion short and purposeful, respect `prefers-reduced-motion`, and do not
   require animation to understand state changes.
+- Use the shared motion tokens in `theme.css`: instant feedback, fast control
+  state changes, normal component feedback, slower route/dialog entry, and a
+  shorter exit. Module styles should not introduce a separate motion rhythm.
+- Animate only `transform`, individual transform properties, and `opacity` for
+  route, dialog, popover, badge, and list-entry motion. Pressed states must not
+  change layout bounds, and continuous animation is reserved for real loading
+  or live-status feedback. Do not fade a text-bearing page, card, dialog, or
+  popover as a whole because intermediate compositing can lower text contrast;
+  reserve opacity animation for non-text scrims and decorative indicators.
+- `App.jsx` owns the shared route-entry transition and `AdaptiveDialog` owns
+  dialog/sheet entry and exit. Reuse these paths instead of copying page-local
+  keyframes. In reduced-motion mode, content and final state appear immediately.
 
 ## Figma and Design References
 

@@ -88,13 +88,16 @@ function ServiceWorkerNotificationNavigation() {
 }
 
 function AppShell() {
+  const location = useLocation();
+
   return (
     <div className="app-shell">
       <TopNav />
       <div id="main-content" className="app-main" tabIndex={-1}>
         <ServiceWorkerNotificationNavigation />
-        <RouteBoundary>
-          <Routes>
+        <div className="ui-route-transition" key={location.pathname}>
+          <RouteBoundary>
+            <Routes>
         {/* Profile Settings, My Vehicles, Reputation, Host Dashboard, and Account
             Settings are consolidated into one "My Profile" page (hero + in-page
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
@@ -140,8 +143,9 @@ function AppShell() {
         <Route path="/discover/*" element={<DiscoverRoutes />} />
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
-          </Routes>
-        </RouteBoundary>
+            </Routes>
+          </RouteBoundary>
+        </div>
       </div>
     </div>
   );
@@ -225,7 +229,7 @@ export default function App() {
         <Routes>
           <Route
             path="/auth"
-            element={<div id="main-content" className="auth-main" tabIndex={-1}><AuthEntry /></div>}
+            element={<div id="main-content" className="auth-main ui-route-transition" tabIndex={-1}><AuthEntry /></div>}
           />
           <Route path="*" element={<AppShell />} />
         </Routes>

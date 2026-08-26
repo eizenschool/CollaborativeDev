@@ -86,7 +86,7 @@ export default function TopNav() {
             onClick={() => navigate('/notifications')}
           >
             <IconBell size={20} aria-hidden="true" />
-            {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            {unreadCount > 0 && <span key={unreadCount} className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
           </IconButton>
         )}
       </header>
@@ -114,7 +114,7 @@ export default function TopNav() {
                 <span className="topnav-icon">
                   <Icon size={18} aria-hidden="true" />
                   {isMessageItem && unreadMessageCount > 0 && (
-                    <span className="nav-unread-badge" aria-hidden="true">
+                    <span key={unreadMessageCount} className="nav-unread-badge" aria-hidden="true">
                       {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
                     </span>
                   )}
@@ -138,7 +138,7 @@ export default function TopNav() {
                 onClick={() => setNotificationsOpen((open) => !open)}
               >
                 <IconBell size={18} aria-hidden="true" />
-                {unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+                {unreadCount > 0 && <span key={unreadCount} className="notification-badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
               </IconButton>
               {notificationsOpen && (
                 <Suspense fallback={<div className="notification-popover notification-popover-loading" role="status">Loading notifications…</div>}>

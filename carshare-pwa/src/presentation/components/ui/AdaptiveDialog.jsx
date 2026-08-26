@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { IconX } from '../icons.jsx';
 import { IconButton } from './Button.jsx';
 
@@ -20,6 +20,8 @@ export default function AdaptiveDialog({
   title,
   triggerRef,
 }) {
+  const [rendered, setRendered] = useState(open);
+  const [closing, setClosing] = useState(false);
   const dialogRef = useRef(null);
   const returnFocusRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -29,7 +31,29 @@ export default function AdaptiveDialog({
   onCloseRef.current = onClose;
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (open) {
+      setRendered(true);
+      setClosing(false);
+      return undefined;
+    }
+
+    if (!rendered || closing) return undefined;
+
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setRendered(false);
+      return undefined;
+    }
+
+    setClosing(true);
+    const timeout = window.setTimeout(() => {
+      setRendered(false);
+      setClosing(false);
+    }, 160);
+    return () => window.clearTimeout(timeout);
+  }, [closing, open, rendered]);
+
+  useEffect(() => {
+    if (!rendered || closing) return undefined;
 
     returnFocusRef.current = triggerRef?.current || document.activeElement;
     const dialog = dialogRef.current;
@@ -70,15 +94,23 @@ export default function AdaptiveDialog({
       document.body.classList.remove('dialog-open');
       returnFocusRef.current?.focus?.();
     };
-  }, [open, triggerRef]);
+  }, [closing, rendered, triggerRef]);
 
-  if (!open) return null;
+  if (!rendered) return null;
 
   return (
     <div
       className="ui-dialog-backdrop"
+      aria-hidden={closing || undefined}
+      data-closing={closing || undefined}
+      onAnimationEnd={(event) => {
+        if (closing && event.target === event.currentTarget) {
+          setRendered(false);
+          setClosing(false);
+        }
+      }}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) onCloseRef.current();
       }}
     >
       <section
@@ -96,7 +128,7 @@ export default function AdaptiveDialog({
             <h2 id={titleId}>{title}</h2>
             {description && <p id={descriptionId}>{description}</p>}
           </div>
-          <IconButton label="Close dialog" onClick={onClose}>
+          <IconButton label="Close dialog" onClick={() => onCloseRef.current()}>
             <IconX size={20} aria-hidden="true" />
           </IconButton>
         </header>

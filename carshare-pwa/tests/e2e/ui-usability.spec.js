@@ -550,6 +550,73 @@ test('mobile filters trap focus and return it to the trigger', async ({ page }) 
   await expect(trigger).toBeFocused();
 });
 
+test('Ride workspace keeps long route names inside compact cards', async ({ page }) => {
+  await openPage(page, '/home', 'Hi, Jamie');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    Object.assign(database.rides.r_5, {
+      pickup: 'Sempalit Fresh Mart, 359b, Jalan Kampung Sempalit, Kampung Baharu Sempalit',
+      destination: 'Kuala Lumpur',
+      date: '2026-09-15',
+      time: '08:05',
+      departureAt: '2026-09-15T00:05:00.000Z',
+      status: 'Published',
+      expiredAt: null,
+    });
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+
+  await openPage(page, '/ride', 'My rides');
+  const card = page.locator('.ride-grid-upcoming .ride-card').filter({ hasText: 'Sempalit Fresh Mart' });
+  await expect(card).toBeVisible();
+  const layout = await card.evaluate((element) => {
+    const action = element.querySelector('.ride-card-next')?.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    const route = element.querySelector('.ride-route-text')?.getBoundingClientRect();
+    return action && route ? {
+      actionLeftInset: action.left - bounds.left,
+      actionRightInset: bounds.right - action.right,
+      routeRight: route.right,
+      cardRight: bounds.right,
+    } : null;
+  });
+  expect(layout).not.toBeNull();
+  expect(layout.actionLeftInset).toBeGreaterThanOrEqual(15);
+  expect(layout.actionRightInset).toBeGreaterThanOrEqual(15);
+  expect(layout.routeRight).toBeLessThanOrEqual(layout.cardRight - 15);
+  await expectNoPageOverflow(page);
+});
+
+test('shared motion uses staged feedback and honours reduced motion', async ({ page }) => {
+  await openPage(page, '/home', 'Hi, Jamie');
+  const standardMotion = await page.evaluate(() => {
+    const route = document.querySelector('.ui-route-transition');
+    const cards = [...document.querySelectorAll('.home-action-card')];
+    return {
+      reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+      routeName: getComputedStyle(route).animationName,
+      routeDuration: parseFloat(getComputedStyle(route).animationDuration),
+      cardName: getComputedStyle(cards[0]).animationName,
+      cardDelays: cards.map((card) => getComputedStyle(card).animationDelay),
+    };
+  });
+  expect(standardMotion).toEqual({
+    reduced: false,
+    routeName: 'ui-route-enter',
+    routeDuration: 0.28,
+    cardName: 'ui-item-enter',
+    cardDelays: ['0s', '0.04s', '0.08s', '0.12s', '0.16s'],
+  });
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  const reducedDuration = await page.locator('.ui-route-transition').evaluate((route) => (
+    parseFloat(getComputedStyle(route).animationDuration)
+  ));
+  expect(reducedDuration).toBeLessThanOrEqual(0.00001);
+});
+
 test('layout reflows for zoom, reduced motion, long names, and offline recovery', async ({ page, context }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await openPage(page, '/home', 'Hi, Jamie');

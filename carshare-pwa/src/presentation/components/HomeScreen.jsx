@@ -30,8 +30,14 @@ export default function HomeScreen() {
       <section aria-labelledby="home-actions-title">
         <h2 className="home-section-title" id="home-actions-title">Plan your journey</h2>
         <div className="home-actions">
-          {ACTIONS.map(({ to, Icon, title, sub }) => (
-            <button key={to} className="home-action-card" onClick={() => navigate(to)} type="button">
+          {ACTIONS.map(({ to, Icon, title, sub }, index) => (
+            <button
+              key={to}
+              className="home-action-card"
+              onClick={() => navigate(to)}
+              style={{ '--motion-delay': `${index * 40}ms` }}
+              type="button"
+            >
               <span className="home-action-icon"><Icon size={20} aria-hidden="true" /></span>
               <span>
                 <span className="home-action-title">{title}</span>
