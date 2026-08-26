@@ -2922,6 +2922,10 @@ button.ride-card {
 .sos-hold-button:active { background: #7f1d1d; }
 .sos-hold-button:disabled { opacity: .58; cursor: wait; }
 .sos-cancel-countdown { display: grid; gap: 8px; padding: 14px; border: 2px solid #dc2626; border-radius: 13px; color: #7f1d1d; background: #fff1f2; }
+.sos-safe-confirm-form { margin-top: 18px; }
+.sos-safe-confirm-form .ui-field { margin-bottom: 0; }
+.sos-safe-confirm-form .ui-field__hint strong { color: var(--ink); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.sos-safe-confirm-form input { min-height: 48px; font-size: 16px; }
 .invite-accept-card { width: min(100%, 660px); margin: 30px auto; display: grid; gap: 13px; }
 .invite-accept-card h1 { margin: 0; }
 .invite-shield { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; color: var(--teal-dark); background: var(--teal-tint); }

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { RideLiveTrackingService } from '../RideLiveTrackingService.js';
+import { matchesSOSSafeConfirmation, SOS_SAFE_CONFIRMATION } from '../../presentation/components/ride/RideSOSPanel.jsx';
 
 const migration = new URL('../../../database/sql/061_m2_sos_trusted_family.sql', import.meta.url);
 const advisorMigration = new URL('../../../database/sql/062_m2_sos_advisor_followup.sql', import.meta.url);
@@ -55,6 +56,9 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(panel).toContain('eventValue.detail === 0');
     expect(panel).toContain('SOS is active, but GPS could not start');
     expect(panel).toContain('No trusted family members will receive this alert.');
+    expect(panel).toContain('form="sos-safe-confirm-form"');
+    expect(panel).toContain('disabled={!safeConfirmationMatches}');
+    expect(panel).toContain('aria-describedby="sos-safe-confirmation-hint"');
     expect(invite).toContain("sessionStorage.setItem(STORAGE_KEY");
     expect(invite).toContain('sessionStorage.removeItem(STORAGE_KEY)');
     expect(family).toContain('This page cannot end the SOS');
@@ -65,6 +69,15 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(mapPanel).toContain("import '../../styles/ride.css';");
     expect(mapPanel).toContain('aria-atomic="true"');
     expect(family).not.toContain('resolve_m2_sos');
+  });
+
+  it('requires the exact typed safety phrase before SOS can be resolved', () => {
+    expect(SOS_SAFE_CONFIRMATION).toBe('I am safe');
+    expect(matchesSOSSafeConfirmation('I am safe')).toBe(true);
+    expect(matchesSOSSafeConfirmation('  I am safe  ')).toBe(true);
+    expect(matchesSOSSafeConfirmation('i am safe')).toBe(false);
+    expect(matchesSOSSafeConfirmation("I'm safe")).toBe(false);
+    expect(matchesSOSSafeConfirmation('')).toBe(false);
   });
 
   it('keeps a geolocation watcher alive while hidden in SOS mode and retries on reconnect', async () => {

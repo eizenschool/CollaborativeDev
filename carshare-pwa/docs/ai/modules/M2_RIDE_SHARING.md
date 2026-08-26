@@ -361,8 +361,9 @@ receive a five-second cancellation window; keyboard and assistive-technology
 activation uses a normal confirmation dialog. The server event is created even
 when GPS is denied, no trusted family exists, or no recipient has Web Push, and
 the UI reports those degraded states. While SOS is active, ordinary Stop
-Sharing is locked; only the actor's confirmed “I'm safe” or a terminal Ride
-resolves it.
+Sharing is locked; only the actor's “I'm safe” flow or a terminal Ride resolves
+it. The manual flow requires the actor to type the case-sensitive phrase
+`I am safe` before its final confirmation button becomes available.
 
 The PWA keeps the geolocation watcher when the page is hidden and retries the
 latest in-memory point after reconnect, but makes no background-GPS guarantee.
