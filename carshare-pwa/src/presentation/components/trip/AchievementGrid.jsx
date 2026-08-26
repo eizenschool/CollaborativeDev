@@ -33,22 +33,22 @@ export default function AchievementGrid({ achievements }) {
       </p>
 
       <div className="m5-badge-grid">
-        {milestones.map((milestone) => (
-          <Badge key={milestone.id} milestone={milestone} />
+        {milestones.map((milestone, index) => (
+          <Badge key={milestone.id} milestone={milestone} delay={index * 55} />
         ))}
       </div>
     </div>
   );
 }
 
-function Badge({ milestone }) {
+function Badge({ milestone, delay = 0 }) {
   const tone = TONES[milestone.tone] || TONES.primary;
   const { earned } = milestone;
 
   return (
     <div
       className={'m5-badge' + (earned ? ' earned' : '')}
-      style={{ borderColor: earned ? tone.bar : COLORS.border }}
+      style={{ '--m5-delay': `${delay}ms`, borderColor: earned ? tone.bar : COLORS.border }}
       title={milestone.description}
     >
       <span

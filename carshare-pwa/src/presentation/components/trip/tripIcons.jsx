@@ -118,3 +118,32 @@ export function IconMapPinSmall(props) {
     </Svg>
   );
 }
+export function IconCarSmall(props) {
+  return (
+    <Svg {...props}>
+      <path d="M5 17h14M6.5 17v1.5M17.5 17v1.5" />
+      <path d="M4 17v-4.2L5.8 8A2 2 0 0 1 7.7 6.6h8.6A2 2 0 0 1 18.2 8L20 12.8V17z" />
+      <path d="M4.6 12.8h14.8" />
+      <path d="M7.2 14.9h.01M16.8 14.9h.01" />
+    </Svg>
+  );
+}
+
+export function IconSteeringSmall(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="2.6" />
+      <path d="M3.4 10.4h17.2M12 14.6V21" />
+    </Svg>
+  );
+}
+
+export function IconCheckSmall(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.2 12.3l2.6 2.6 5-5.2" />
+    </Svg>
+  );
+}
