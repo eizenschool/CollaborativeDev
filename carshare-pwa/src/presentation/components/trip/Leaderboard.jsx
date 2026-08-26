@@ -15,6 +15,7 @@ import { IconCrownSmall, IconSparkSmall, IconTrophySmall } from './tripIcons.jsx
 import { ErrorState } from './tripStates.jsx';
 import MonthStepper, { MONTH_NAMES } from './MonthStepper.jsx';
 import useCountUp from './useCountUp.js';
+import { ArenaCrowd } from './tripScenes.jsx';
 
 // Deterministic gradient per host, purely cosmetic - the same host always gets
 // the same colour without needing a photo.
@@ -124,6 +125,10 @@ export default function Leaderboard({ userId }) {
         <div className="m5-podium" key={`${state.board.year}-${month}`}>
           {podium.map((place) => <PodiumPlace key={place.rank} {...place} />)}
         </div>
+
+        {/* Supporters at either side and a car doing a lap. entries[0] is
+            first place, so they applaud only when somebody holds it. */}
+        <ArenaCrowd />
       </div>
 
       <div className="m5-lb-list">
@@ -166,6 +171,9 @@ function PodiumPlace({ rank, height, tone, delay, entry }) {
 
   return (
     <div className={`m5-place ${tone}` + (open ? ' open' : '')} style={{ '--rise-delay': `${delay}ms` }}>
+      {/* Over first place whether or not it is held. A board nobody has joined
+          yet should still look like somewhere worth arriving. */}
+      {rank === 1 && <Confetti delay={delay} />}
       <div className="m5-place-who">
         {rank === 1 && !open && <span className="m5-place-crown"><IconCrownSmall size={20} /></span>}
 
@@ -184,6 +192,34 @@ function PodiumPlace({ rank, height, tone, delay, entry }) {
         <span className="m5-place-score">{open ? '—' : `${score} pts`}</span>
       </div>
     </div>
+  );
+}
+
+const CONFETTI = [
+  { x: 14, tone: 'var(--teal)', spin: 220, drift: -9 },
+  { x: 30, tone: '#EAB308', spin: -180, drift: 7 },
+  { x: 46, tone: 'var(--teal-dark)', spin: 300, drift: -5 },
+  { x: 58, tone: '#F59E0B', spin: -240, drift: 11 },
+  { x: 72, tone: 'var(--teal)', spin: 160, drift: -12 },
+  { x: 86, tone: '#EAB308', spin: -300, drift: 6 }
+];
+
+function Confetti({ delay = 0 }) {
+  return (
+    <span className="m5-confetti" aria-hidden="true">
+      {CONFETTI.map((piece, index) => (
+        <i
+          key={piece.x}
+          style={{
+            left: `${piece.x}%`,
+            background: piece.tone,
+            '--m5-delay': `${delay + 420 + index * 130}ms`,
+            '--m5-spin': `${piece.spin}deg`,
+            '--m5-drift': `${piece.drift}px`
+          }}
+        />
+      ))}
+    </span>
   );
 }
 

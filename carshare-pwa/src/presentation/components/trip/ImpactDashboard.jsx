@@ -8,6 +8,7 @@ import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
 import AchievementGrid from './AchievementGrid.jsx';
 import StatTile from './StatTile.jsx';
+import ImpactJourney from './ImpactJourney.jsx';
 
 export default function ImpactDashboard({ userId }) {
   const isDesktop = useIsDesktop();
@@ -41,8 +42,8 @@ export default function ImpactDashboard({ userId }) {
   const summary = state.summary;
 
   const stats = [
-    { icon: <IconLeafSmall size={17} />, label: 'CO₂ saved', value: `${summary.totalCarbonSavedKg} kg`, accent: true },
-    { icon: <IconRoadSmall size={17} />, label: 'Distance shared', value: `${summary.totalDistanceKm} km` },
+    { icon: <IconLeafSmall size={17} />, label: 'CO₂ saved', value: summary.totalCarbonSavedKg, unit: 'kg', accent: true },
+    { icon: <IconRoadSmall size={17} />, label: 'Distance shared', value: summary.totalDistanceKm, unit: 'km' },
     { icon: <IconUsersSmall size={17} />, label: 'Passengers carried', value: summary.passengersCarried }
   ];
 
@@ -59,7 +60,7 @@ export default function ImpactDashboard({ userId }) {
       )}
 
       <div className="m5-stat-grid cols-3">
-        {stats.map((s) => <StatTile key={s.label} {...s} />)}
+        {stats.map((s, index) => <StatTile key={s.label} {...s} delay={index * 70} />)}
       </div>
 
       <div className="m5-card m5-section" style={{ padding: 20 }}>
@@ -73,9 +74,12 @@ export default function ImpactDashboard({ userId }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '14px 18px', background: COLORS.primaryTint, borderRadius: 12 }}>
-        <span style={{ fontSize: 18 }}>🌱</span>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: COLORS.primaryDark, margin: 0 }}>
+      {/* The illustration and the sentence are one unit: the roadside shows
+          the trees, the sentence says what they are. Neither works alone -
+          which is why this is here rather than heading the tab. */}
+      <div className="m5-trees-note">
+        <ImpactJourney trees={summary.treesEquivalent} />
+        <p>
           {summary.treesEquivalent > 0
             ? `You've helped avoid the equivalent of planting ${summary.treesEquivalent} tree${summary.treesEquivalent === 1 ? '' : 's'}.`
             : 'Every shared seat keeps a car off the road - your first trip starts the count.'}
@@ -130,18 +134,20 @@ function TrendBars({ points }) {
           ))}
 
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 12 }}>
-            {points.map((point) => {
+            {points.map((point, index) => {
               const filled = point.carbonSavedKg > 0;
               return (
                 <div key={`${point.year}-${point.month}`} style={{ flex: 1, textAlign: 'center' }}>
                   {filled && (
-                    <p style={{ fontFamily: 'Poppins, sans-serif', fontSize: 11, fontWeight: 700, color: COLORS.teal, margin: '0 0 4px' }}>
+                    <p className="m5-bar-value" style={{ '--m5-delay': `${index * 90 + 380}ms`, fontFamily: 'Poppins, sans-serif', fontSize: 11, fontWeight: 700, color: COLORS.teal, margin: '0 0 4px' }}>
                       {point.carbonSavedKg}
                     </p>
                   )}
                   <div
+                    className="m5-bar"
                     title={`${point.label}: ${point.carbonSavedKg} kg CO₂`}
                     style={{
+                      '--m5-delay': `${index * 90}ms`,
                       height: filled ? Math.max(6, (point.carbonSavedKg / ceiling) * (PLOT_HEIGHT - 22)) : 3,
                       background: filled
                         ? `linear-gradient(180deg, ${COLORS.teal} 0%, ${COLORS.primary} 100%)`

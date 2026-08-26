@@ -3,11 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import { TripHistoryEngine } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
-import { IconChevronLeftSmall, IconChevronRightSmall, IconLeafSmall } from './tripIcons.jsx';
+import { IconCheckSmall, IconChevronLeftSmall, IconChevronRightSmall, IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
 import ShareReportButton from './ShareReportButton.jsx';
 import MonthStepper, { MONTH_NAMES } from './MonthStepper.jsx';
 import StatTile from './StatTile.jsx';
+import { MonthRoad } from './tripScenes.jsx';
 
 export default function MonthlyReport({ userId, userName }) {
   const now = new Date();
@@ -49,10 +50,10 @@ export default function MonthlyReport({ userId, userName }) {
           <ShareReportButton report={report} userName={userName} />
 
           <div className="m5-stat-grid cols-4">
-            <StatTile icon={<IconLeafSmall size={17} />} label="CO₂ saved" value={`${report.totalCarbonSavedKg} kg`} accent />
-            <StatTile label="Completed trips" value={report.completedTrips} />
-            <StatTile label="Distance shared" value={`${report.totalDistanceKm} km`} />
-            <StatTile label="Passengers carried" value={report.passengersCarried} />
+            <StatTile icon={<IconLeafSmall size={17} />} label="CO₂ saved" value={report.totalCarbonSavedKg} unit="kg" accent />
+            <StatTile icon={<IconCheckSmall size={17} />} label="Completed trips" value={report.completedTrips} delay={70} />
+            <StatTile icon={<IconRoadSmall size={17} />} label="Distance shared" value={report.totalDistanceKm} unit="km" delay={140} />
+            <StatTile icon={<IconUsersSmall size={17} />} label="Passengers carried" value={report.passengersCarried} delay={210} />
           </div>
 
           {!report.hasData && (
@@ -62,15 +63,22 @@ export default function MonthlyReport({ userId, userName }) {
             </div>
           )}
 
+          {/* The same scene whether or not the month has anything in it: a
+              month with no trips gets the road, the houses and the flag with
+              zero pins on it. Swapping in a smaller picture for an empty month
+              made the page look broken rather than new - and the pin count is
+              already the honest difference. */}
+          <MonthRoad trips={report.completedTrips} />
+
           <p className="m5-section-title">
             Completed trips this month
             <span>{report.trips.length} {report.trips.length === 1 ? 'trip' : 'trips'}</span>
           </p>
           <div>
             {report.trips.length === 0 && (
-              <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: COLORS.textSecondary, margin: 0, padding: '18px 4px' }}>
-                Nothing recorded for this month.
-              </p>
+              <div className="m5-month-blank">
+                <p>Nothing recorded for this month.</p>
+              </div>
             )}
             {report.trips.map((trip) => {
               const palette = STATUS_COLORS[trip.status] || STATUS_COLORS.Completed;
