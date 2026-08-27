@@ -4,12 +4,24 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { NotificationService, countUnread } from '../business-logic/NotificationService.js';
+import { AlertSoundService } from '../business-logic/AlertSoundService.js';
 import { useAuth } from './AuthContext.jsx';
 
 const NotificationContext = createContext(null);
+
+function soundPreferenceKey(userId) {
+  return `m3-alert-sounds:${userId}`;
+}
+
+function readSoundPreference(userId) {
+  if (!userId) return true;
+  try { return localStorage.getItem(soundPreferenceKey(userId)) !== 'off'; }
+  catch { return true; }
+}
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
@@ -19,6 +31,9 @@ export function NotificationProvider({ children }) {
   const [pushStatus, setPushStatus] = useState('unsupported');
   const [pushError, setPushError] = useState('');
   const [pushPending, setPushPending] = useState(false);
+  const [alertSoundsEnabled, setAlertSoundsEnabled] = useState(true);
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const playedNotificationIdsRef = useRef(new Set());
 
   const refreshNotifications = useCallback(async () => {
     if (!user) {
@@ -63,9 +78,79 @@ export function NotificationProvider({ children }) {
   }, [refreshNotifications, refreshPushStatus]);
 
   useEffect(() => {
+    setAlertSoundsEnabled(readSoundPreference(user?.id));
+    setSoundBlocked(false);
+    playedNotificationIdsRef.current.clear();
+    AlertSoundService.stopRingtone();
+  }, [user?.id]);
+
+  const unlockAlertSounds = useCallback(async () => {
+    const unlocked = await AlertSoundService.unlock();
+    setSoundBlocked(!unlocked);
+    return unlocked;
+  }, []);
+
+  useEffect(() => {
+    if (!user || !alertSoundsEnabled) return undefined;
+    const unlock = () => { void unlockAlertSounds(); };
+    globalThis.addEventListener?.('pointerdown', unlock, { once: true, capture: true });
+    globalThis.addEventListener?.('keydown', unlock, { once: true, capture: true });
+    return () => {
+      globalThis.removeEventListener?.('pointerdown', unlock, { capture: true });
+      globalThis.removeEventListener?.('keydown', unlock, { capture: true });
+    };
+  }, [alertSoundsEnabled, unlockAlertSounds, user]);
+
+  const playNotificationBell = useCallback(() => {
+    if (!alertSoundsEnabled) return false;
+    const played = AlertSoundService.playBell();
+    setSoundBlocked(!played);
+    return played;
+  }, [alertSoundsEnabled]);
+
+  const startCallRingtone = useCallback((callId) => {
+    if (!alertSoundsEnabled) return false;
+    const played = AlertSoundService.startRingtone(callId);
+    setSoundBlocked(!played);
+    return played;
+  }, [alertSoundsEnabled]);
+
+  const stopCallRingtone = useCallback(() => {
+    AlertSoundService.stopRingtone();
+  }, []);
+
+  const setAlertSounds = useCallback(async (enabled) => {
+    const next = Boolean(enabled);
+    setAlertSoundsEnabled(next);
+    setSoundBlocked(false);
+    try {
+      if (user?.id) localStorage.setItem(soundPreferenceKey(user.id), next ? 'on' : 'off');
+    } catch {
+      // The preference remains active for this session when storage is unavailable.
+    }
+    if (next) await unlockAlertSounds();
+    else AlertSoundService.stopRingtone();
+  }, [unlockAlertSounds, user?.id]);
+
+  useEffect(() => {
     if (!user) return undefined;
-    return NotificationService.subscribeToNotifications(() => { void refreshNotifications(); });
-  }, [refreshNotifications, user]);
+    return NotificationService.subscribeToNotifications((change) => {
+      const notificationId = change?.new?.id;
+      const isNewAudibleNotification = change?.eventType === 'INSERT'
+        && change.new?.event_type !== 'voice_call'
+        && notificationId
+        && !playedNotificationIdsRef.current.has(notificationId);
+      if (isNewAudibleNotification) {
+        playedNotificationIdsRef.current.add(notificationId);
+        if (playedNotificationIdsRef.current.size > 100) {
+          const oldestId = playedNotificationIdsRef.current.values().next().value;
+          playedNotificationIdsRef.current.delete(oldestId);
+        }
+        playNotificationBell();
+      }
+      void refreshNotifications();
+    });
+  }, [playNotificationBell, refreshNotifications, user]);
 
   const markRead = useCallback(async (notificationId) => {
     const readAt = new Date().toISOString();
@@ -131,6 +216,12 @@ export function NotificationProvider({ children }) {
     pushPending,
     enablePush,
     disablePush,
+    alertSoundsEnabled,
+    soundBlocked,
+    setAlertSounds,
+    unlockAlertSounds,
+    startCallRingtone,
+    stopCallRingtone,
   }), [
     disablePush,
     enablePush,
@@ -139,10 +230,16 @@ export function NotificationProvider({ children }) {
     markAllRead,
     markRead,
     notifications,
+    alertSoundsEnabled,
     pushError,
     pushPending,
     pushStatus,
     refreshNotifications,
+    setAlertSounds,
+    soundBlocked,
+    startCallRingtone,
+    stopCallRingtone,
+    unlockAlertSounds,
   ]);
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

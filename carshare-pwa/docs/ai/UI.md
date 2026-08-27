@@ -194,12 +194,25 @@ The current route determines the active state.
   existing Message destination. Message notification records remain available
   to the shared Web Push pipeline so opted-in devices can alert while the page
   is closed.
-- A one-to-one voice call uses one global modal overlay so an incoming call is
-  reachable from every authenticated route. The overlay exposes only answer,
-  reject, mute, end, and blocked-autoplay recovery. When the paid relay is
+- A one-to-one voice call uses one global modal overlay for incoming/outgoing
+  ringing. Connecting, connected, and reconnecting phases add Minimize; the
+  minimized non-modal floating bar leaves navigation and page focus available
+  and exposes participant, state/duration, mute, expand, and end. Blocked audio
+  keeps an explicit recovery action. When the free relay allowance is
   unavailable it shows a non-blocking warning that the call is attempting a
   direct STUN connection; the warning must not pretend the call has already
   failed.
+- Message uses a two-column list + chat layout above 900 px and single-page
+  navigation at 900 px and below. The former desktop trip sidebar is removed.
+  Both private and group details open from the existing three-dot action with
+  accessible label `Conversation details and management`; the same adaptive
+  dialog is used on every viewport and remains viewable for active, terminal,
+  and archived conversations.
+- Notification and message Realtime inserts may use the account-local `Alert
+  sounds` toggle. General events use one short Web Audio bell; incoming calls
+  use a distinct repeating two-pulse ringtone. Do not promise a custom sound
+  for a background or closed PWA, where the operating system controls Push
+  notification audio.
 - The desktop auth journey scene keeps the car animated on the complete KL
   Sentral-Genting-Ipoh route; the car must follow the SVG curve rather than use
   an unrelated screen position. Drive the car from the route's own SVG geometry

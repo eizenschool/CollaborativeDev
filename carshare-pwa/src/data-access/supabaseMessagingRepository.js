@@ -5,7 +5,7 @@ const MEDIA_BUCKET = 'message-media';
 const SIGNED_URL_SECONDS = 60 * 60;
 // Attachment mutations are committed with a messages or conversations change,
 // so subscribing to them separately only produces duplicate refreshes.
-const REALTIME_TABLES = ['conversations', 'conversation_members', 'messages'];
+const REALTIME_TABLES = ['conversations', 'conversation_members', 'messages', 'call_sessions'];
 
 const CONVERSATION_SELECT = `
   *,

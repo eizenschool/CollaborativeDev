@@ -98,20 +98,45 @@ function mapProfile(profile) {
   };
 }
 
+export function callHistoryLabel(status, direction) {
+  const incoming = direction === 'incoming';
+  return {
+    ringing: incoming ? 'Incoming call' : 'Outgoing call',
+    accepted: 'Ongoing call',
+    declined: incoming ? 'Declined call' : 'Call declined',
+    cancelled: incoming ? 'Cancelled incoming call' : 'Cancelled call',
+    ended: incoming ? 'Incoming call' : 'Outgoing call',
+    missed: incoming ? 'Missed call' : 'No answer',
+    failed: 'Call failed',
+  }[status] || 'Voice call';
+}
+
+export function callDurationSeconds(answeredAt, endedAt) {
+  const start = new Date(answeredAt || '').getTime();
+  const end = new Date(endedAt || '').getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return Math.max(0, Math.floor((end - start) / 1000));
+}
+
 export function mapCallRow(row, currentUserId) {
   if (!row) return null;
   const isCaller = row.caller_id === currentUserId;
+  const direction = isCaller ? 'outgoing' : 'incoming';
   return {
+    itemType: 'call',
     id: row.id,
     conversationId: row.conversation_id,
     callerId: row.caller_id,
     calleeId: row.callee_id,
-    direction: isCaller ? 'outgoing' : 'incoming',
+    direction,
     status: row.status,
+    label: callHistoryLabel(row.status, direction),
     answerDeviceId: row.answer_device_id || null,
     createdAt: row.created_at,
     answeredAt: row.answered_at || null,
     endedAt: row.ended_at || null,
+    durationSeconds: callDurationSeconds(row.answered_at, row.ended_at),
+    sortAt: row.created_at,
     caller: mapProfile(row.caller),
     callee: mapProfile(row.callee),
     otherParticipant: mapProfile(isCaller ? row.callee : row.caller),
@@ -208,6 +233,15 @@ export function createCallService(repository = supabaseCallRepository) {
         repository.getCall(callId),
       ]);
       return mapCallRow(row, userId);
+    },
+
+    async listConversationCalls(conversationId) {
+      if (!conversationId) throw new Error('A conversation is required to load call history.');
+      const [userId, rows] = await Promise.all([
+        repository.getCurrentUserId(),
+        repository.listCalls(conversationId),
+      ]);
+      return rows.map((row) => mapCallRow(row, userId));
     },
 
     async getPendingIncomingCall() {

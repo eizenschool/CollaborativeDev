@@ -42,6 +42,18 @@ export const supabaseCallRepository = {
     return data;
   },
 
+  async listCalls(conversationId) {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('call_sessions')
+      .select(CALL_SELECT)
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+    if (error) throw normalizeError(error, 'Unable to load call history.');
+    return data || [];
+  },
+
   async getPendingIncomingCall() {
     const client = requireSupabase();
     const userId = await requireUserId();

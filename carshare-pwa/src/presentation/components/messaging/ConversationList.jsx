@@ -89,7 +89,8 @@ function ConversationRow({ conversation, currentUserId, isSelected, onSelect, on
         type="button"
         className="message-conversation-manage"
         onClick={() => onManage(conversation)}
-        aria-label={`Manage ${conversation.title}`}
+        aria-label={`Conversation details and management for ${conversation.title}`}
+        title="Conversation details and management"
       >
         <IconMoreVertical size={19} />
       </button>
@@ -107,7 +108,7 @@ function EmptyConversationState({ folder, hasSearchQuery, searchQuery, onBrowseR
         {hasSearchQuery ? `No results for "${searchQuery}"` : folder === 'archived' ? 'No archived conversations' : 'No conversations yet'}
       </h3>
       <p className="message-conversation-empty-text">
-        {hasSearchQuery ? 'Try searching with another name, route or message.' : folder === 'archived' ? 'Completed private chats you archive will appear here.' : 'Open a published ride to message its Host.'}
+        {hasSearchQuery ? 'Try searching with another name, route or message.' : folder === 'archived' ? 'Terminal private chats you archive will appear here.' : 'Open a published ride to message its Host.'}
       </p>
       {!hasSearchQuery && folder === 'active' && (
         <button type="button" className="message-empty-primary-action" onClick={onBrowseRides}>

@@ -449,6 +449,22 @@ export function IconMoreVertical(props) {
   );
 }
 
+export function IconMinus(props) {
+  return (
+    <Svg {...props}>
+      <path d="M5 12h14" />
+    </Svg>
+  );
+}
+
+export function IconMaximize(props) {
+  return (
+    <Svg {...props}>
+      <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
+    </Svg>
+  );
+}
+
 export function IconArchive(props) {
   return (
     <Svg {...props}>

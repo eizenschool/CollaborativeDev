@@ -176,7 +176,7 @@ export default function MessageBubble({
       id={`message-${message.id}`}
       className={`message-bubble-row ${isCurrentUser ? 'message-bubble-row-current-user' : 'message-bubble-row-other-user'} ${highlighted ? 'message-highlighted' : ''}`}
     >
-      {!isCurrentUser && <SenderAvatar message={message} />}
+      <SenderAvatar message={message} />
       <div className={`message-bubble-column ${isCurrentUser ? 'message-bubble-column-current-user' : ''}`}>
         {!isCurrentUser && <span className="message-bubble-sender">{message.senderName}</span>}
         <div className="message-composite-bubble-wrap">

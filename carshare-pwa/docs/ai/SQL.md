@@ -13,11 +13,11 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 favourites/proximity
 Deployed SQL history: 001-026, 028, 033, 034, 036_m3, 045_m3, 057_m2,
-  060_m2, 061_m2, 062_m2, and 064_m2 as tracked Supabase
+  060_m2, 061_m2, 062_m2, 064_m2, and 065_m3 as tracked Supabase
   migrations, plus tracked 035_m4 and 023, 027, 029, 030, 031, 032, and
   037_m2 applied through
   the Dashboard SQL Editor (see below)
-Repository SQL history: 001-064
+Repository SQL history: 001-065
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -30,7 +30,8 @@ Repository SQL history: 001-064
   schema is live without a tracked migration entry; tracked `060_m2` adds the
   missing owner-scoped Storage SELECT policy required by upload RETURNING.
   `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
-  `063_m2` is authored locally and remains undeployed.)
+  `063_m2` remains authored locally and undeployed; `065_m3` is deployed as
+  `m3_terminal_chat_and_call_history`.)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -404,7 +405,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
 - `message_translations` (in deployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
-- `call_sessions` (in live `043`): direct-chat caller/callee invitation and lifecycle rows; participants receive SELECT only and mutate through authenticated RPCs.
+- `call_sessions` (in live `043`): direct-chat caller/callee invitation and lifecycle rows; participants receive SELECT only and mutate through authenticated RPCs. Authored `065_m3` further requires current conversation visibility for SELECT so group leave and retention expiry remove retained call-history access.
 - `turn_usage_guard` and `turn_credential_issues` (in live `044`): service-only relay cutoff state and revocable temporary-username metadata; no TURN password or long-lived provider token is stored.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
@@ -560,6 +561,12 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   lets only the authenticated Host copy a Completed, Cancelled, or Expired
   Ride's editable settings into a new Draft ID without copying requests,
   lifecycle/route-quote state, live data, conversations, reviews, or photos.
+- `065_m3_terminal_chat_and_call_history.sql` - deployed as
+  `m3_terminal_chat_and_call_history`;
+  expands per-user direct archive and traveller-only group leave to Completed,
+  Cancelled, and Expired rides, preserves the Host group restriction and one
+  Realtime system message, and tightens call-history SELECT with current
+  conversation visibility.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

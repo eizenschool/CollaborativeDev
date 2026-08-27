@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCallSession } from '../../../context/CallSessionContext.jsx';
-import { IconMicrophone, IconPhone, IconX } from '../icons.jsx';
+import { useNotifications } from '../../../context/NotificationContext.jsx';
+import { IconMaximize, IconMicrophone, IconMinus, IconPhone, IconX } from '../icons.jsx';
 import '../../styles/call.css';
 
 function getInitials(name = 'Member') {
@@ -49,8 +50,11 @@ export default function CallOverlay() {
     declineCall,
     hangUp,
     toggleMute,
+    minimizeCall,
+    expandCall,
     dismissEndedCall,
   } = useCallSession();
+  const { soundBlocked, unlockAlertSounds } = useNotifications();
   const audioRef = useRef(null);
   const dialogRef = useRef(null);
   const returnFocusRef = useRef(null);
@@ -59,11 +63,12 @@ export default function CallOverlay() {
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [needsAudioTap, setNeedsAudioTap] = useState(false);
   const isOpen = callState.phase !== 'idle' && Boolean(callState.call);
+  const isModalOpen = isOpen && !callState.isMinimized;
   phaseRef.current = callState.phase;
   dismissRef.current = dismissEndedCall;
 
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isModalOpen) return undefined;
     returnFocusRef.current = document.activeElement;
     function handleKeyDown(event) {
       if (event.key === 'Escape' && phaseRef.current === 'ended') {
@@ -92,14 +97,14 @@ export default function CallOverlay() {
       document.removeEventListener('keydown', handleKeyDown);
       returnFocusRef.current?.focus?.();
     };
-  }, [isOpen]);
+  }, [isModalOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isModalOpen) return;
     window.requestAnimationFrame(() => {
       (dialogRef.current?.querySelector('[data-call-autofocus]') || dialogRef.current)?.focus();
     });
-  }, [callState.phase, isOpen]);
+  }, [callState.phase, isModalOpen]);
 
   useEffect(() => {
     if (callState.phase !== 'connected' || !callState.connectedAt) {
@@ -121,7 +126,7 @@ export default function CallOverlay() {
     void audio.play()
       .then(() => setNeedsAudioTap(false))
       .catch(() => setNeedsAudioTap(true));
-  }, [callState.remoteStream]);
+  }, [callState.isMinimized, callState.remoteStream]);
 
   if (callState.phase === 'idle' || !callState.call) return null;
 
@@ -129,6 +134,31 @@ export default function CallOverlay() {
   const isIncoming = callState.phase === 'incoming';
   const isEnded = callState.phase === 'ended';
   const showMute = ['connecting', 'connected', 'reconnecting'].includes(callState.phase);
+  const canMinimize = showMute;
+
+  if (callState.isMinimized && canMinimize) {
+    return (
+      <aside className="call-mini-bar" aria-label={`Active call with ${participant?.name || 'Member'}`}>
+        <audio ref={audioRef} autoPlay playsInline aria-label="Remote call audio" />
+        <CallAvatar participant={participant} />
+        <button type="button" className="call-mini-copy" onClick={expandCall} aria-label="Expand call controls">
+          <strong>{participant?.name || 'Member'}</strong>
+          <span>{callStatusText(callState, durationSeconds)}</span>
+        </button>
+        <div className="call-mini-actions">
+          <button type="button" className={`call-mini-action ${callState.isMuted ? 'is-active' : ''}`} onClick={toggleMute} aria-label={callState.isMuted ? 'Unmute call' : 'Mute call'}>
+            <IconMicrophone size={19} aria-hidden="true" />
+          </button>
+          <button type="button" className="call-mini-action" onClick={expandCall} aria-label="Expand call controls">
+            <IconMaximize size={18} aria-hidden="true" />
+          </button>
+          <button type="button" className="call-mini-action call-mini-end" onClick={() => { void hangUp(); }} aria-label="End call">
+            <IconPhone size={19} aria-hidden="true" />
+          </button>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <div className={`call-overlay-backdrop call-overlay-${callState.phase}`} role="presentation">
@@ -141,6 +171,11 @@ export default function CallOverlay() {
         aria-describedby="call-overlay-status"
         tabIndex={-1}
       >
+        {canMinimize && (
+          <button type="button" className="call-overlay-minimize" onClick={minimizeCall} aria-label="Minimize call">
+            <IconMinus size={20} aria-hidden="true" />
+          </button>
+        )}
         {isEnded && (
           <button type="button" className="call-overlay-close" onClick={dismissEndedCall} aria-label="Dismiss call status">
             <IconX size={19} />
@@ -158,6 +193,11 @@ export default function CallOverlay() {
         {callState.error && <p className="call-overlay-error" role="alert">{callState.error}</p>}
         {callState.relayNotice && !isEnded && (
           <p className="call-overlay-notice" role="status">{callState.relayNotice}</p>
+        )}
+        {soundBlocked && callState.phase === 'incoming' && (
+          <button type="button" className="call-overlay-audio-permission" onClick={() => { void unlockAlertSounds(); }}>
+            Tap to enable ring sound
+          </button>
         )}
         {needsAudioTap && callState.remoteStream && (
           <button

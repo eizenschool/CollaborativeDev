@@ -23,6 +23,7 @@ import {
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
 import { useCallSession } from '../../../context/CallSessionContext.jsx';
 import MessageBubble from './MessageBubble.jsx';
+import CallEventBubble from './CallEventBubble.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
 import usePhotoCapture from '../../hooks/usePhotoCapture.js';
 import useVideoRecorder from './useVideoRecorder.js';
@@ -760,7 +761,7 @@ export default function ChatWindow({
             </button>
           )}
           <button type="button" className="message-chat-header-button" onClick={() => onOpenHistory(conversation.id)} aria-label="Open message history" title="Message history"><IconClock size={19} /></button>
-          <button type="button" className="message-chat-header-button" onClick={() => onManage(conversation)} aria-label="Manage conversation" title="Manage conversation"><IconMoreVertical size={19} /></button>
+          <button type="button" className="message-chat-header-button" onClick={() => onManage(conversation)} aria-label="Conversation details and management" title="Conversation details and management"><IconMoreVertical size={19} /></button>
         </div>
       </header>
 
@@ -772,17 +773,19 @@ export default function ChatWindow({
       )}
 
       <div className="message-chat-scroll" aria-live="polite">
-        {messageList.length ? messageList.map((message) => (
+        {messageList.length ? messageList.map((item) => item.itemType === 'call' ? (
+          <CallEventBubble key={`call-${item.id}`} call={item} />
+        ) : (
           <MessageBubble
-            key={message.id}
-            message={message}
+            key={`message-${item.id}`}
+            message={item}
             currentUserId={currentUser.id}
             onEdit={beginEdit}
             onDelete={openDeleteDialog}
             onTranslate={translateMessage}
             translationLanguage={translationLanguage}
             onTranslationLanguageChange={changeTranslationLanguage}
-            highlighted={message.id === highlightedMessageId}
+            highlighted={item.id === highlightedMessageId}
           />
         )) : <ChatEmptyState />}
         <div ref={messageBottomRef} />

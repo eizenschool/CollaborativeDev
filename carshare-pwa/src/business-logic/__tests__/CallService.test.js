@@ -4,6 +4,8 @@ import {
   buildIceServers,
   CALL_MAX_DURATION_MS,
   CALL_STATUS,
+  callDurationSeconds,
+  callHistoryLabel,
   createCallService,
   incomingCallIdFromUrl,
   isTerminalCallStatus,
@@ -95,6 +97,24 @@ describe('voice-call configuration', () => {
     expect(isTerminalCallStatus(CALL_STATUS.MISSED)).toBe(true);
     expect(isTerminalCallStatus(CALL_STATUS.ACCEPTED)).toBe(false);
   });
+
+  it('maps timeline labels and connected duration', () => {
+    expect(callHistoryLabel('missed', 'incoming')).toBe('Missed call');
+    expect(callHistoryLabel('declined', 'outgoing')).toBe('Call declined');
+    expect(callDurationSeconds('2026-08-24T01:00:00Z', '2026-08-24T01:02:05Z')).toBe(125);
+    expect(callDurationSeconds(null, '2026-08-24T01:02:05Z')).toBeNull();
+    expect(mapCallRow(rawCall({
+      status: 'ended',
+      answered_at: '2026-08-24T01:00:00Z',
+      ended_at: '2026-08-24T01:02:05Z',
+    }), otherId)).toMatchObject({
+      itemType: 'call',
+      direction: 'incoming',
+      label: 'Incoming call',
+      durationSeconds: 125,
+      sortAt: '2026-08-24T00:00:00Z',
+    });
+  });
 });
 
 describe('CallService repository orchestration', () => {
@@ -175,6 +195,19 @@ describe('CallService repository orchestration', () => {
       accepted: true,
       answerDeviceId: 'device-1',
     });
+  });
+
+  it('lists conversation call history with local direction mapping', async () => {
+    const repository = {
+      backend: 'test',
+      getCurrentUserId: vi.fn().mockResolvedValue(otherId),
+      listCalls: vi.fn().mockResolvedValue([rawCall({ status: 'missed' })]),
+    };
+    const service = createCallService(repository);
+    await expect(service.listConversationCalls(conversationId)).resolves.toEqual([
+      expect.objectContaining({ itemType: 'call', direction: 'incoming', label: 'Missed call' }),
+    ]);
+    expect(repository.listCalls).toHaveBeenCalledWith(conversationId);
   });
 
   it('resyncs pending calls whenever Realtime first subscribes or reconnects', async () => {

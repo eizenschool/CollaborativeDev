@@ -12,6 +12,7 @@ import {
   getMessagingChangeConversationId,
   MessagingService,
 } from '../business-logic/MessagingService.js';
+import { CallService } from '../business-logic/CallService.js';
 import { createMessagingSessionCache } from '../business-logic/MessagingSessionCache.js';
 import { useAuth } from './AuthContext.jsx';
 
@@ -158,11 +159,23 @@ export function MessagingSessionProvider({ children }) {
 
     const request = (async () => {
       try {
-        const [conversation, messages] = await Promise.all([
+        const [conversation, messages, calls] = await Promise.all([
           MessagingService.getConversation(conversationId),
           MessagingService.listMessages(conversationId),
+          CallService.listConversationCalls(conversationId).catch(() => []),
         ]);
         if (!conversation) throw new Error('This conversation is no longer available.');
+        const timeline = [
+          ...messages.map((message) => ({
+            ...message,
+            itemType: 'message',
+            sortAt: message.createdAt,
+          })),
+          ...calls,
+        ].sort((first, second) => {
+          const timeDifference = new Date(first.sortAt) - new Date(second.sortAt);
+          return timeDifference || first.id.localeCompare(second.id);
+        });
         if (activeUserIdRef.current !== userId) return null;
         commitSession((current) => {
           if (current.userId !== userId) return current;
@@ -172,7 +185,7 @@ export function MessagingSessionProvider({ children }) {
             folders: replaceConversationInFolders(current.folders, conversation),
             messages: {
               ...current.messages,
-              [conversationId]: { items: messages, loaded: true, loading: false, error: '' },
+              [conversationId]: { items: timeline, loaded: true, loading: false, error: '' },
             },
           };
         });

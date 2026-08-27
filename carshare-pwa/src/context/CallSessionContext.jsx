@@ -17,6 +17,7 @@ import {
   remainingCallDurationMs,
 } from '../business-logic/CallService.js';
 import { useAuth } from './AuthContext.jsx';
+import { useNotifications } from './NotificationContext.jsx';
 
 const CallSessionContext = createContext(null);
 const CALL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -43,6 +44,7 @@ const EMPTY_STATE = Object.freeze({
   endedReason: '',
   error: '',
   relayNotice: '',
+  isMinimized: false,
 });
 
 function createDeviceId() {
@@ -110,6 +112,7 @@ function releaseResources(active) {
 
 export function CallSessionProvider({ children }) {
   const { user } = useAuth();
+  const { startCallRingtone, stopCallRingtone } = useNotifications();
   const userId = user?.id || null;
   const deviceIdRef = useRef(null);
   if (!deviceIdRef.current) deviceIdRef.current = createDeviceId();
@@ -590,6 +593,24 @@ export function CallSessionProvider({ children }) {
     updateState((current) => ({ ...current, isMuted: nextMuted }));
   }, [updateState]);
 
+  const minimizeCall = useCallback(() => {
+    if (!['connecting', 'connected', 'reconnecting'].includes(stateRef.current.phase)) return;
+    updateState((current) => ({ ...current, isMinimized: true }));
+  }, [updateState]);
+
+  const expandCall = useCallback(() => {
+    updateState((current) => ({ ...current, isMinimized: false }));
+  }, [updateState]);
+
+  useEffect(() => {
+    if (state.phase === 'incoming' && state.call?.id) {
+      startCallRingtone(state.call.id);
+    } else {
+      stopCallRingtone();
+    }
+    return () => stopCallRingtone();
+  }, [startCallRingtone, state.call?.id, state.phase, stopCallRingtone]);
+
   const value = useMemo(() => ({
     callState: state,
     isBusy: !['idle', 'ended'].includes(state.phase),
@@ -598,12 +619,16 @@ export function CallSessionProvider({ children }) {
     declineCall,
     hangUp,
     toggleMute,
+    minimizeCall,
+    expandCall,
     dismissEndedCall,
   }), [
     acceptCall,
     declineCall,
     dismissEndedCall,
     hangUp,
+    minimizeCall,
+    expandCall,
     startCall,
     state,
     toggleMute,

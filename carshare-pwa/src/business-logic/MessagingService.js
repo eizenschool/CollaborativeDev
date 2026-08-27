@@ -15,6 +15,16 @@ export const CONVERSATION_TYPE = {
   GROUP: 'group',
 };
 
+export const TERMINAL_RIDE_STATUSES = Object.freeze([
+  'Completed',
+  'Cancelled',
+  'Expired',
+]);
+
+export function isTerminalRideStatus(status) {
+  return TERMINAL_RIDE_STATUSES.includes(status);
+}
+
 export const MAX_MESSAGE_LENGTH = 1000;
 export const MAX_MEDIA_COUNT = 10;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -236,6 +246,8 @@ export function mapConversationRow(row, currentUserId) {
     isReadOnly: Boolean(currentMembership?.archivedAt),
     rideStatus: row.ride_status,
     expiresAt: row.expires_at,
+    pickup: row.ride?.pickup || null,
+    destination: row.ride?.destination || null,
     tripRoute: route,
     tripDate: formatTripDate(row.trip_departure_at),
     tripTime: formatTripTime(row.trip_departure_at),
@@ -376,6 +388,7 @@ export function getMessagingChangeConversationId(change) {
   if (['conversation_members', 'messages'].includes(change.table)) {
     return row.conversation_id || null;
   }
+  if (change.table === 'call_sessions') return row.conversation_id || null;
   return null;
 }
 

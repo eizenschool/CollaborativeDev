@@ -9,6 +9,7 @@ import {
   countUnreadMessages,
   createMessagingService,
   getMessagingChangeConversationId,
+  isTerminalRideStatus,
   mapMessageRow,
   validateMessageDraft,
 } from '../MessagingService.js';
@@ -51,6 +52,16 @@ describe('message unread totals', () => {
       { id: 'invalid', unreadCount: 'not-a-number' },
       null,
     ])).toBe(7);
+  });
+});
+
+describe('terminal conversation rules', () => {
+  it.each(['Completed', 'Cancelled', 'Expired'])('treats %s as terminal', (status) => {
+    expect(isTerminalRideStatus(status)).toBe(true);
+  });
+
+  it.each(['Published', 'In Progress', null])('does not treat %s as terminal', (status) => {
+    expect(isTerminalRideStatus(status)).toBe(false);
   });
 });
 
@@ -245,6 +256,10 @@ describe('MessagingService repository orchestration', () => {
       table: 'conversation_members',
       new: {},
       old: { conversation_id: conversationId },
+    })).toBe(conversationId);
+    expect(getMessagingChangeConversationId({
+      table: 'call_sessions',
+      new: { conversation_id: conversationId },
     })).toBe(conversationId);
     expect(getMessagingChangeConversationId({ table: 'unknown', new: { id: 'other' } })).toBeNull();
   });

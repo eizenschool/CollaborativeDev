@@ -52,6 +52,34 @@ function PushControl({ compact = false }) {
   return null;
 }
 
+function SoundControl({ compact = false }) {
+  const {
+    alertSoundsEnabled,
+    soundBlocked,
+    setAlertSounds,
+    unlockAlertSounds,
+  } = useNotifications();
+
+  return (
+    <div className="notification-sound-control">
+      {!compact && <span>Play a bell for new messages and notifications.</span>}
+      <button
+        type="button"
+        className="btn-link"
+        aria-pressed={alertSoundsEnabled}
+        onClick={() => { void setAlertSounds(!alertSoundsEnabled); }}
+      >
+        {alertSoundsEnabled ? 'Turn alert sounds off' : 'Turn alert sounds on'}
+      </button>
+      {alertSoundsEnabled && soundBlocked && (
+        <button type="button" className="notification-enable-push" onClick={() => { void unlockAlertSounds(); }}>
+          Enable sound in this browser
+        </button>
+      )}
+    </div>
+  );
+}
+
 function NotificationRows({ compact = false, onNavigate }) {
   const {
     notifications, loading, error, markRead, markAllRead,
@@ -131,6 +159,7 @@ export function NotificationPopover({ onClose }) {
         <button className="icon-btn" type="button" onClick={onClose} aria-label="Close notifications" autoFocus><IconX size={17} /></button>
       </div>
       <PushControl compact />
+      <SoundControl compact />
       <NotificationRows compact onNavigate={(path) => { onClose(); navigate(path); }} />
       <button type="button" className="notification-view-all" onClick={() => { onClose(); navigate('/notifications'); }}>
         View all notifications
@@ -145,7 +174,7 @@ export default function NotificationCenter() {
     <PageShell as="main" className="notification-page" size="narrow">
       <div className="notification-page-head">
         <div><h1>Notifications</h1><p>Ride, request, reminder, and account updates.</p></div>
-        <PushControl />
+        <div className="notification-page-controls"><PushControl /><SoundControl /></div>
       </div>
       <section className="notification-card">
         <NotificationRows onNavigate={navigate} />

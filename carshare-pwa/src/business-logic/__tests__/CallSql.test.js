@@ -86,4 +86,17 @@ describe('Module 3 voice-call security contract', () => {
     expect(sql).toContain('revoke all on function private.notify_incoming_voice_call()');
     expect(sql).not.toMatch(/grant\s+execute.*notify_incoming_voice_call/i);
   });
+
+  it('protects retained call history with current conversation visibility', async () => {
+    const sql = await read('../../../database/sql/065_m3_terminal_chat_and_call_history.sql');
+    expect(sql).toContain('private.conversation_is_visible(conversation_id, (select auth.uid()))');
+    expect(sql).toContain('(select auth.uid()) in (caller_id, callee_id)');
+    expect(sql).toContain("v_conversation.ride_status not in ('Completed', 'Cancelled', 'Expired')");
+    expect(sql).toContain("v_conversation.type <> 'direct'");
+    expect(sql).toContain("v_conversation.type <> 'group'");
+    expect(sql).toContain("v_role <> 'traveller'");
+    expect(sql).toContain('update public.conversation_members');
+    expect(sql).toContain('set archived_at = coalesce(archived_at, now())');
+    expect(sql).toContain('set left_at = now()');
+  });
 });

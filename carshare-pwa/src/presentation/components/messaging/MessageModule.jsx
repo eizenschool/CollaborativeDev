@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
+  isTerminalRideStatus,
   MessagingService,
 } from '../../../business-logic/MessagingService.js';
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
@@ -9,7 +10,7 @@ import { IconArchive, IconMessage, IconTrash } from '../icons.jsx';
 import ConversationList from './ConversationList.jsx';
 import ChatWindow from './ChatWindow.jsx';
 import MessageHistory from './MessageHistory.jsx';
-import TripInfoSidebar from './TripInfoSidebar.jsx';
+import ConversationDetailsContent from './ConversationDetailsContent.jsx';
 import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
 import { Button } from '../ui/Button.jsx';
 import '../../styles/message.css';
@@ -33,21 +34,21 @@ function EmptyChatSelection() {
 function ManageConversationDialog({ conversation, currentUserId, pending, error, onClose, onConfirm, triggerRef }) {
   if (!conversation) return null;
   const membership = conversation.members.find((member) => member.id === currentUserId);
-  const isCompleted = conversation.rideStatus === 'Completed';
-  const canArchive = isCompleted && conversation.type === 'direct' && !conversation.isArchived;
-  const canLeave = isCompleted && conversation.type === 'group' && membership?.role === 'traveller';
-  let note = 'Conversation management becomes available after the trip is Completed.';
+  const isTerminal = isTerminalRideStatus(conversation.rideStatus);
+  const canArchive = isTerminal && conversation.type === 'direct' && !conversation.isArchived;
+  const canLeave = isTerminal && conversation.type === 'group' && membership?.role === 'traveller';
+  let note = 'Conversation details remain available while this ride chat is active.';
   if (conversation.isArchived) note = 'This private chat is archived and read-only. It cannot be unarchived and will expire with the trip retention period.';
-  else if (canArchive) note = 'Archive this completed private chat? It will become read-only and remain searchable until expiry.';
-  else if (canLeave) note = 'Leave this completed group? You will immediately lose access and the remaining members will be notified.';
-  else if (isCompleted && conversation.type === 'group') note = 'The Host cannot leave a trip group.';
+  else if (canArchive) note = `Archive this ${conversation.rideStatus.toLowerCase()} private chat? It will become read-only and remain searchable until expiry.`;
+  else if (canLeave) note = `Leave this ${conversation.rideStatus.toLowerCase()} group? You will immediately lose access and the remaining members will be notified.`;
+  else if (isTerminal && conversation.type === 'group') note = 'The Host cannot leave or archive a trip group.';
 
   return (
     <AdaptiveDialog
       open={Boolean(conversation)}
       onClose={() => { if (!pending) onClose(); }}
-      title={`Manage ${conversation.title}`}
-      description={conversation.tripRoute}
+      title="Conversation details"
+      description={conversation.title}
       triggerRef={triggerRef}
       footer={(
         <>
@@ -57,8 +58,8 @@ function ManageConversationDialog({ conversation, currentUserId, pending, error,
         </>
       )}
     >
+      <ConversationDetailsContent conversation={conversation} currentUserId={currentUserId} />
       <p className="message-options-note">{note}</p>
-      {!isCompleted && <p className="message-composer-error" role="alert">This conversation cannot be managed until the trip is completed.</p>}
       {error && <p className="message-composer-error" role="alert">{error}</p>}
     </AdaptiveDialog>
   );
@@ -72,7 +73,6 @@ export default function MessageModule() {
   const {
     folder,
     folderState,
-    getConversation,
     setFolder,
     refreshConversations,
     refreshConversation,
@@ -189,7 +189,6 @@ export default function MessageModule() {
         <main className="message-module message-module-desktop">
           <section className="message-desktop-conversation-column">{conversationList}</section>
           <section className="message-desktop-chat-column">{chat}</section>
-          <section className="message-desktop-info-column"><TripInfoSidebar conversation={getConversation(conversationId)} currentUserId={user?.id} /></section>
         </main>
       ) : (
         <main className="message-module message-module-mobile">{conversationId ? chat : conversationList}</main>

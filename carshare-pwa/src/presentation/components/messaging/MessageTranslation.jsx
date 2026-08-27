@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TRANSLATION_LANGUAGES } from '../../../business-logic/MessagingService.js';
+import { IconX } from '../icons.jsx';
 
 const VOICE_LOCALES = {
   en: ['en-MY', 'en-GB', 'en-US', 'en'],
@@ -43,6 +44,7 @@ export default function MessageTranslation({
   const [isLoading, setIsLoading] = useState(false);
   const [showLanguages, setShowLanguages] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isResultDismissed, setIsResultDismissed] = useState(false);
   const requestSequence = useRef(0);
   const speechVoice = useSpeechVoice(result?.targetLanguage || targetLanguage);
   const canSpeak = Boolean(result && speechVoice && 'speechSynthesis' in window);
@@ -52,6 +54,7 @@ export default function MessageTranslation({
     setResult(null);
     setError('');
     setIsLoading(false);
+    setIsResultDismissed(false);
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setIsSpeaking(false);
   }, [message.editedAt, message.deletedAt]);
@@ -72,11 +75,15 @@ export default function MessageTranslation({
     const sequence = ++requestSequence.current;
     setIsLoading(true);
     setError('');
+    setIsResultDismissed(false);
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setIsSpeaking(false);
     try {
       const translated = await onTranslate(message.id, language);
-      if (requestSequence.current === sequence) setResult(translated);
+      if (requestSequence.current === sequence) {
+        setResult(translated);
+        setIsResultDismissed(false);
+      }
     } catch (translationError) {
       if (requestSequence.current !== sequence) return;
       const fallback = translationError?.code === 'FREE_TIER_EXHAUSTED'
@@ -109,6 +116,12 @@ export default function MessageTranslation({
     utterance.onerror = () => setIsSpeaking(false);
     setIsSpeaking(true);
     window.speechSynthesis.speak(utterance);
+  };
+
+  const closeResult = () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setIsResultDismissed(true);
   };
 
   return (
@@ -154,8 +167,17 @@ export default function MessageTranslation({
 
       {error && <p className="message-translation-error" role="alert">{error}</p>}
 
-      {result && (
+      {result && !isResultDismissed && (
         <div className="message-translation-result">
+          <button
+            type="button"
+            className="message-translation-result-close"
+            onClick={closeResult}
+            aria-label="Close translation result"
+            title="Close translation result"
+          >
+            <IconX size={16} aria-hidden="true" />
+          </button>
           {result.transcript && (
             <div>
               <span>Transcript</span>
