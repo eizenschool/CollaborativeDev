@@ -23,7 +23,13 @@ async function requireUserId() {
 
 function normalizeError(error, fallback) {
   const message = error?.message || error?.details || fallback;
-  return new Error(message || fallback);
+  return Object.assign(new Error(message || fallback), { code: error?.code });
+}
+
+function isMissingCallPresenceRpc(error) {
+  return error?.code === 'PGRST202'
+    || /Could not find the function public\.(?:heartbeat_voice_call|release_voice_call_device)/i
+      .test([error?.message, error?.details, error?.hint].filter(Boolean).join(' '));
 }
 
 export const supabaseCallRepository = {
@@ -70,11 +76,17 @@ export const supabaseCallRepository = {
     return data?.[0] || null;
   },
 
-  async startCall(conversationId) {
+  async startCall(conversationId, callerDeviceId) {
     const client = requireSupabase();
-    const { data, error } = await client.rpc('start_voice_call', {
+    let { data, error } = await client.rpc('start_voice_call', {
       p_conversation_id: conversationId,
+      p_caller_device_id: callerDeviceId,
     });
+    if (error && isMissingCallPresenceRpc(error)) {
+      ({ data, error } = await client.rpc('start_voice_call', {
+        p_conversation_id: conversationId,
+      }));
+    }
     if (error) throw normalizeError(error, 'Unable to start this call.');
     return this.getCall(data);
   },
@@ -98,6 +110,27 @@ export const supabaseCallRepository = {
     });
     if (error) throw normalizeError(error, 'Unable to end this call.');
     return data;
+  },
+
+  async heartbeatCall({ callId, deviceId }) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('heartbeat_voice_call', {
+      p_call_id: callId,
+      p_device_id: deviceId,
+    });
+    if (error && isMissingCallPresenceRpc(error)) return false;
+    if (error) throw normalizeError(error, 'Unable to refresh call presence.');
+    return Boolean(data);
+  },
+
+  async releaseDeviceCalls(deviceId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('release_voice_call_device', {
+      p_device_id: deviceId,
+    });
+    if (error && isMissingCallPresenceRpc(error)) return 0;
+    if (error) throw normalizeError(error, 'Unable to recover interrupted calls.');
+    return Number(data) || 0;
   },
 
   async getTurnIceConfiguration(callId) {

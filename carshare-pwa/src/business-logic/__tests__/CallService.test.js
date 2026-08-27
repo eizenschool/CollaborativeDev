@@ -179,9 +179,11 @@ describe('CallService repository orchestration', () => {
         answer_device_id: 'device-1',
       })),
       endCall: vi.fn().mockResolvedValue(callId),
+      heartbeatCall: vi.fn().mockResolvedValue(true),
+      releaseDeviceCalls: vi.fn().mockResolvedValue(1),
     };
     const service = createCallService(repository);
-    await expect(service.startCall(conversationId)).resolves.toMatchObject({
+    await expect(service.startCall(conversationId, 'caller-device')).resolves.toMatchObject({
       id: callId,
       direction: 'outgoing',
     });
@@ -190,12 +192,14 @@ describe('CallService repository orchestration', () => {
       answerDeviceId: 'device-1',
     });
     await expect(service.endCall(callId, 'ended')).resolves.toBe(callId);
-    expect(repository.startCall).toHaveBeenCalledWith(conversationId);
+    expect(repository.startCall).toHaveBeenCalledWith(conversationId, 'caller-device');
     expect(repository.respondToCall).toHaveBeenCalledWith({
       callId,
       accepted: true,
       answerDeviceId: 'device-1',
     });
+    await expect(service.heartbeatCall(callId, 'caller-device')).resolves.toBe(true);
+    await expect(service.releaseDeviceCalls('caller-device')).resolves.toBe(1);
   });
 
   it('lists conversation call history with local direction mapping', async () => {

@@ -21,6 +21,7 @@ import { useNotifications } from './NotificationContext.jsx';
 
 const CallSessionContext = createContext(null);
 const CALL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CALL_HEARTBEAT_INTERVAL_MS = 20_000;
 
 function clearIncomingCallFromUrl() {
   if (!globalThis.location?.href || !globalThis.history?.replaceState) return;
@@ -88,6 +89,7 @@ function createActiveCall(call, role) {
     ringTimerId: null,
     disconnectTimerId: null,
     maxDurationTimerId: null,
+    heartbeatTimerId: null,
     iceServers: null,
     offerStarted: false,
     finishing: false,
@@ -99,6 +101,7 @@ function releaseResources(active) {
   if (active.ringTimerId) globalThis.clearTimeout(active.ringTimerId);
   if (active.disconnectTimerId) globalThis.clearTimeout(active.disconnectTimerId);
   if (active.maxDurationTimerId) globalThis.clearTimeout(active.maxDurationTimerId);
+  if (active.heartbeatTimerId) globalThis.clearInterval(active.heartbeatTimerId);
   stopStream(active.localStream);
   stopStream(active.remoteStream);
   if (active.peer) {
@@ -212,6 +215,16 @@ export function CallSessionProvider({ children }) {
         broadcast: true,
       });
     }, remainingCallDurationMs(active.call.answeredAt));
+  }, []);
+
+  const startHeartbeat = useCallback((active) => {
+    if (active.heartbeatTimerId) globalThis.clearInterval(active.heartbeatTimerId);
+    const heartbeat = () => {
+      if (activeRef.current !== active || active.finishing) return;
+      void CallService.heartbeatCall(active.call.id, deviceIdRef.current).catch(() => {});
+    };
+    heartbeat();
+    active.heartbeatTimerId = globalThis.setInterval(heartbeat, CALL_HEARTBEAT_INTERVAL_MS);
   }, []);
 
   const loadIceConfiguration = useCallback(async (active) => {
@@ -353,10 +366,11 @@ export function CallSessionProvider({ children }) {
     clearTerminalTimer();
     const active = createActiveCall(call, 'callee');
     activeRef.current = active;
+    startHeartbeat(active);
     scheduleRingTimeout(active);
     updateState({ ...EMPTY_STATE, phase: 'incoming', call });
     globalThis.navigator?.vibrate?.([250, 150, 250]);
-  }, [clearTerminalTimer, scheduleRingTimeout, updateState]);
+  }, [clearTerminalTimer, scheduleRingTimeout, startHeartbeat, updateState]);
   presentIncomingRef.current = presentIncoming;
 
   const handleCallChange = useCallback(({ call }) => {
@@ -426,8 +440,13 @@ export function CallSessionProvider({ children }) {
     const unsubscribe = CallService.subscribeToCalls(handleCallChange, {
       onSubscribed: () => { void syncPendingIncomingCall(); },
     });
-    syncIncomingNavigation();
-    void syncPendingIncomingCall();
+    void CallService.releaseDeviceCalls(deviceIdRef.current)
+      .catch(() => 0)
+      .finally(() => {
+        if (disposed) return;
+        syncIncomingNavigation();
+        void syncPendingIncomingCall();
+      });
 
     const resumeIncomingChecks = () => {
       if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
@@ -473,10 +492,11 @@ export function CallSessionProvider({ children }) {
     const localStream = await CallService.requestMicrophone();
     let active = null;
     try {
-      const call = await CallService.startCall(conversation.id);
+      const call = await CallService.startCall(conversation.id, deviceIdRef.current);
       active = createActiveCall(call, 'caller');
       active.localStream = localStream;
       activeRef.current = active;
+      startHeartbeat(active);
       updateState({ ...EMPTY_STATE, phase: 'outgoing', call, isPending: true });
       scheduleRingTimeout(active);
       await loadIceConfiguration(active);
@@ -502,7 +522,7 @@ export function CallSessionProvider({ children }) {
       }
       throw error;
     }
-  }, [clearTerminalTimer, loadIceConfiguration, openSignalChannel, scheduleRingTimeout, sendSignal, updateState]);
+  }, [clearTerminalTimer, loadIceConfiguration, openSignalChannel, scheduleRingTimeout, sendSignal, startHeartbeat, updateState]);
 
   const acceptCall = useCallback(async () => {
     const active = activeRef.current;

@@ -99,4 +99,17 @@ describe('Module 3 voice-call security contract', () => {
     expect(sql).toContain('set archived_at = coalesce(archived_at, now())');
     expect(sql).toContain('set left_at = now()');
   });
+
+  it('recovers call rows orphaned by refreshes and crashed tabs', async () => {
+    const sql = await read('../../../database/sql/077_m3_voice_call_presence_recovery.sql');
+    expect(sql).toContain('caller_device_id text');
+    expect(sql).toContain('caller_last_seen_at timestamptz');
+    expect(sql).toContain('callee_last_seen_at timestamptz');
+    expect(sql).toContain("now() - interval '90 seconds'");
+    expect(sql).toContain('private.expire_stale_voice_calls(array[v_user_id, v_callee_id])');
+    expect(sql).toContain('public.heartbeat_voice_call(uuid, text)');
+    expect(sql).toContain('public.release_voice_call_device(text)');
+    expect(sql).toContain('grant execute on function public.start_voice_call(uuid, text) to authenticated');
+    expect(sql).not.toMatch(/grant\s+(insert|update|delete|all).*call_sessions.*authenticated/i);
+  });
 });

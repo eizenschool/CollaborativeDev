@@ -252,9 +252,9 @@ export function createCallService(repository = supabaseCallRepository) {
       return mapCallRow(row, userId);
     },
 
-    async startCall(conversationId) {
+    async startCall(conversationId, callerDeviceId) {
       const userId = await repository.getCurrentUserId();
-      return mapCallRow(await repository.startCall(conversationId), userId);
+      return mapCallRow(await repository.startCall(conversationId, callerDeviceId), userId);
     },
 
     async respondToCall(callId, accepted, answerDeviceId) {
@@ -275,6 +275,14 @@ export function createCallService(repository = supabaseCallRepository) {
         throw new Error('Unsupported call outcome.');
       }
       return repository.endCall({ callId, outcome });
+    },
+
+    heartbeatCall(callId, deviceId) {
+      return repository.heartbeatCall?.({ callId, deviceId }) || Promise.resolve(false);
+    },
+
+    releaseDeviceCalls(deviceId) {
+      return repository.releaseDeviceCalls?.(deviceId) || Promise.resolve(0);
     },
 
     openSignalChannel(callId, listener) {

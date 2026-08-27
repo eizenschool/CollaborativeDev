@@ -17,7 +17,7 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, and 074_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-075
+Repository SQL history: 001-077
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -33,8 +33,8 @@ Repository SQL history: 001-075
   `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
   `063_m2` remains authored locally and undeployed; `065_m3` is deployed as
   `m3_terminal_chat_and_call_history`; `066_m2` is deployed as
-`m2_fix_pickup_photo_storage_path_policy`; `075_m3` is authored locally and
-pending deployment. Module 1 migrations `072_m1`
+`m2_fix_pickup_photo_storage_path_policy`; `075_m3` and `077_m3` are authored
+locally and pending deployment. Module 1 migrations `072_m1`
 and `073_m1` are deployed through the Dashboard SQL Editor (verified
 2026-08-27: `reputation_events`, `profile_visibility`,
 `get_reputation_summary`, and `get_public_profile` all exist live), but
@@ -456,7 +456,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
 - `message_translations` (in deployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
-- `call_sessions` (in live `043`): direct-chat caller/callee invitation and lifecycle rows; authored `075` applies personal deletion boundaries and membership/closure visibility without Ride-age expiry.
+- `call_sessions` (in live `043`): direct-chat caller/callee invitation and lifecycle rows; authored `075` applies personal deletion boundaries and membership/closure visibility without Ride-age expiry, while authored `077` adds device-bound heartbeats and orphan recovery.
 - `turn_usage_guard` and `turn_credential_issues` (in live `044`): service-only relay cutoff state and revocable temporary-username metadata; no TURN password or long-lived provider token is stored.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
@@ -631,6 +631,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   closure, updated call/translation/media RLS, and block-aware profile/Ride/search
   boundaries. It supersedes `016`/`065` lifecycle behavior without rewriting
   deployed history.
+- `077_m3_voice_call_presence_recovery.sql` - authored, not deployed; adds
+  caller-device ownership, participant heartbeat timestamps, 90-second orphan
+  expiry, same-device refresh recovery, and compatible one-/two-argument call
+  start RPCs without granting browser roles direct call-session mutations.
 - `066_m2_fix_pickup_photo_storage_path_policy.sql` - deployed as tracked
   migration `m2_fix_pickup_photo_storage_path_policy`; corrects the pickup
   photo Storage policies to treat `user-id/ride-id/filename` as two folders,
