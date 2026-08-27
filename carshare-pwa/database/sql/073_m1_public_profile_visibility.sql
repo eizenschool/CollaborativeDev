@@ -1,6 +1,6 @@
 -- Module 1 privacy-controlled public profile projection.
 -- Deployed through the Dashboard SQL Editor; see docs/ai/SQL.md.
--- Depends on profiles.spoken_languages from 039 and the reputation helper from 067.
+-- Depends on profiles.spoken_languages from 039 and the reputation helper from 072.
 
 create table if not exists public.profile_visibility (
   user_id uuid primary key references public.profiles(id) on delete cascade,

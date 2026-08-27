@@ -13,11 +13,11 @@ Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 search/favourites and favourite availability alerts
 Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
-  045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m1,
-  and 068_m1 as tracked Supabase migrations, plus tracked 023, 027,
-  029, 030, 031, 032, and 037_m2 applied through the Dashboard SQL
-  Editor (see below)
-Repository SQL history: 001-071
+  045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m4, 068_m4,
+  069_project, 070_project, 072_m1, and 073_m1 as tracked Supabase
+  migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
+  applied through the Dashboard SQL Editor (see below)
+Repository SQL history: 001-073
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -33,24 +33,24 @@ Repository SQL history: 001-071
   `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
   `063_m2` remains authored locally and undeployed; `065_m3` is deployed as
   `m3_terminal_chat_and_call_history`; `066_m2` is deployed as
-`m2_fix_pickup_photo_storage_path_policy`. Module 1 migrations `067_m1`
-and `068_m1` are deployed through the Dashboard SQL Editor (verified
+`m2_fix_pickup_photo_storage_path_policy`. Module 1 migrations `072_m1`
+and `073_m1` are deployed through the Dashboard SQL Editor (verified
 2026-08-27: `reputation_events`, `profile_visibility`,
 `get_reputation_summary`, and `get_public_profile` all exist live), but
-`067_m1` reset the shared `private` schema's ACL without re-granting
+`072_m1` reset the shared `private` schema's ACL without re-granting
 `usage` afterward (unlike `016_m3`/`034_m4`/`035_m4`/`039_m4`, which all
 do), breaking anon/authenticated access to every private-schema object -
 Module 3 messaging and Module 4 search/favourites included, not just
 Module 1. `069_project_restore_private_schema_grants.sql` restores that
 grant plus the matching `private.profile_is_relevant_to_viewer` execute
-grant `068_m1` revoked, but re-running `068_m1` re-revokes it every time
-(068_m1 must never be re-run - it is a one-way regression against 069;
-069 needs re-running again any time 068_m1 accidentally is).
+grant `073_m1` revoked, but re-running `073_m1` re-revokes it every time
+(073_m1 must never be re-run - it is a one-way regression against 069;
+069 needs re-running again any time 073_m1 accidentally is).
 `070_project_reassert_profile_visibility_table_grants.sql` is deployed
 through the Dashboard SQL Editor (verified live via
 `information_schema.role_column_grants`) and re-applies
 `profile_visibility`'s column-restricted table grants in isolation so
-that gap can be closed without touching 068_m1 again, but Postgres
+that gap can be closed without touching 073_m1 again, but Postgres
 rejects that column-restricted `update` grant for the
 `INSERT ... ON CONFLICT DO UPDATE` supabase-js's `.upsert()` generates -
 confirmed live via the exact `42501 permission denied for table
@@ -438,12 +438,12 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 
 ### Tables
 
-- `profiles`: authenticated-visible safe fields plus deployed owner-managed `spoken_languages` from `039`; `profile_visibility` (authored in undeployed `066`) narrows raw cross-profile rows and adds a privacy-filtered public RPC; private profile fields remain separate.
+- `profiles`: authenticated-visible safe fields plus deployed owner-managed `spoken_languages` from `039`; `profile_visibility` (deployed `073_m1`) narrows raw cross-profile rows and adds a privacy-filtered public RPC; private profile fields remain separate.
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
-- `profile_visibility` (authored in undeployed `066`): owner-managed switches for public photo, languages, completed-trip count, and CO2 impact.
+- `profile_visibility` (deployed `073_m1`): owner-managed switches for public photo, languages, completed-trip count, and CO2 impact.
 - `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, at most one active vehicle per owner, and deployed nullable `vehicle_type` from `039`.
-- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Undeployed `065` adds a 70-point default, safety hold, and reputation update timestamp.
-- `reputation_events` (authored in undeployed `065`): owner-readable, trigger-written, idempotent verified-Ride reputation ledger with a +3 positive cap per Ride.
+- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Deployed `072_m1` adds a 70-point default, safety hold, and reputation update timestamp.
+- `reputation_events` (deployed `072_m1`): owner-readable, trigger-written, idempotent verified-Ride reputation ledger with a +3 positive cap per Ride.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, pickup instructions, one nullable private pickup-photo path after undeployed `059`, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
 - `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
@@ -484,8 +484,8 @@ table; deployed `039` changes the two classification columns above):
   on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce
   ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
-- Undeployed `065` makes reputation authoritative in database triggers: three evidence Rides are provisional, then publishing requires 65 and requesting 50; a safety hold overrides score. Browser clients receive SELECT-only ledger access and cannot manufacture events.
-- Undeployed `066` exposes only the privacy-filtered `get_public_profile(uuid)` projection to `anon`/`authenticated`; owner-private contact data is never selected.
+- Deployed `072_m1` makes reputation authoritative in database triggers: three evidence Rides are provisional, then publishing requires 65 and requesting 50; a safety hold overrides score. Browser clients receive SELECT-only ledger access and cannot manufacture events.
+- Deployed `073_m1` exposes only the privacy-filtered `get_public_profile(uuid)` projection to `anon`/`authenticated`; owner-private contact data is never selected.
 - Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
 - Translation-cache browser access is SELECT-only and follows the same visible-conversation/tombstone boundary; the authenticated Edge Function rechecks access before using its server credential to cache a result.
 - Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
@@ -507,8 +507,8 @@ table; deployed `039` changes the two classification columns above):
 - `ride_requests_pending_ride_idx`
 - `ride_reviews_reviewee_created_idx`
 - `ride_reviews_reviewer_created_idx`
-- `reputation_events_user_created_idx` (in undeployed `065`)
-- `reputation_events_ride_user_idx` (in undeployed `065`)
+- `reputation_events_user_created_idx` (in deployed `072_m1`)
+- `reputation_events_ride_user_idx` (in deployed `072_m1`)
 - `conversations_one_direct_per_ride_user_idx`
 - `conversations_one_group_per_ride_idx`
 - `conversations_direct_user_id_idx`
@@ -624,11 +624,11 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   migration `m2_fix_pickup_photo_storage_path_policy`; corrects the pickup
   photo Storage policies to treat `user-id/ride-id/filename` as two folders,
   matching `storage.foldername(name)` and the client upload path.
-- `067_m1_reputation_events_and_eligibility.sql` - deployed through the
+- `072_m1_reputation_events_and_eligibility.sql` - deployed through the
   Dashboard SQL Editor; verified-event Reputation ledger, balanced deltas,
   per-Ride positive cap, provisional access, safety hold, owner summary RPC,
   and authoritative Driver-publish/Traveller-request thresholds.
-- `068_m1_public_profile_visibility.sql` - deployed through the Dashboard
+- `073_m1_public_profile_visibility.sql` - deployed through the Dashboard
   SQL Editor; owner visibility switches, safe shortened-name public-profile
   RPC, raw profile-row narrowing, and explicit exclusion of private contact
   and Ride data. **Do not re-run this file**: it revokes execute on
@@ -638,14 +638,14 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `profile_visibility` table-grant gap instead.
 - `069_project_restore_private_schema_grants.sql` - deployed through the
   Dashboard SQL Editor; restores `usage on schema private` to
-  `anon, authenticated` after `067_m1` reset it without re-granting, and
+  `anon, authenticated` after `072_m1` reset it without re-granting, and
   restores `execute` on `private.profile_is_relevant_to_viewer` that
-  `068_m1` revoked from the same roles its own `profiles` RLS policies call
-  it for. Must be re-run any time `068_m1` is (accidentally) re-run.
+  `073_m1` revoked from the same roles its own `profiles` RLS policies call
+  it for. Must be re-run any time `073_m1` is (accidentally) re-run.
 - `070_project_reassert_profile_visibility_table_grants.sql` - deployed
   through the Dashboard SQL Editor; re-applies `profile_visibility`'s
-  table-level `select`/`insert`/`update` grants in isolation from `068_m1`,
-  so a grant gap on that table can be fixed without re-running `068_m1` and
+  table-level `select`/`insert`/`update` grants in isolation from `073_m1`,
+  so a grant gap on that table can be fixed without re-running `073_m1` and
   re-breaking `069_project`'s fix. Safe to run in any order relative to
   `069`. Its column-restricted `update` grant is not accepted by
   `.upsert()`'s `ON CONFLICT DO UPDATE`; see `071_project`.
@@ -654,7 +654,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `public.profile_visibility` to `authenticated`, which the exact PostgREST
   `42501` error and its own hint confirmed is what `.upsert()`'s
   `ON CONFLICT DO UPDATE` actually requires, not the column-restricted
-  grant `068_m1`/`070_project` applied.
+  grant `073_m1`/`070_project` applied.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

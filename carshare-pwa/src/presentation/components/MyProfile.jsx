@@ -847,7 +847,7 @@ function ProfileVisibilityCard({ user }) {
         </div>
       )}
       <p className="profile-visibility-note">For safety, an active Driver’s name, reputation, rating and ride-card identity remain visible on published rides.</p>
-      {visibility?.deploymentPending && <div className="alert alert-info">These controls are previewing defaults until database migration 068 is deployed.</div>}
+      {visibility?.deploymentPending && <div className="alert alert-info">These controls are previewing defaults until database migration 073 is deployed.</div>}
       {message && <div className="alert alert-success" role="status">{message}</div>}
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       <Button onClick={save} loading={saving} loadingLabel="Saving" disabled={!visibility}>Save visibility</Button>

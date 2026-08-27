@@ -1,4 +1,4 @@
--- 068_m1_public_profile_visibility.sql and 070 granted only a column-
+-- 073_m1_public_profile_visibility.sql and 070 granted only a column-
 -- restricted UPDATE (show_profile_photo, show_spoken_languages,
 -- show_completed_trips, show_eco_impact, updated_at) on profile_visibility.
 -- Confirmed live: supabase-js's .upsert(), which PostgREST turns into

@@ -157,7 +157,7 @@ export const ProfileService = {
     }).select().single();
     if (error) {
       if (isUndeployedPublicProfile(error)) {
-        throw new Error('Public-profile privacy settings need database migration 068 before they can be saved here.');
+        throw new Error('Public-profile privacy settings need database migration 073 before they can be saved here.');
       }
       throw error;
     }
