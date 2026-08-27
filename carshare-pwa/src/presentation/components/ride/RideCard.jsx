@@ -1,5 +1,6 @@
 // ===== PRESENTATION LAYER (RideCard) =====
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { IconMapPin, IconCalendar, IconUsers, IconStar, IconMedal } from '../icons.jsx';
 import { getBadgeForStats } from '../../../business-logic/HostImpactEngine.js';
 import { formatJourneyCountdown } from '../../../business-logic/rideJourneyState.js';
@@ -80,7 +81,7 @@ export default function RideCard({ ride, statusChip, roleLabel, journeyState, co
 
       {compact ? <div className="ride-card-bottom ride-card-compact-bottom">{statusChip && <span className={'status-chip status-' + ride.status.toLowerCase().replace(' ', '-')}>{ride.status}</span>}</div> : <div className="ride-card-bottom">
         {ride.host && (
-          <div className="ride-host">
+          <Link className="ride-host ride-host-profile-link" to={`/users/${ride.host.id || ride.hostId}`} onClick={(event) => event.stopPropagation()}>
             <div className="ride-host-avatar" style={ride.host.profilePhotoUrl ? { backgroundImage: `url(${ride.host.profilePhotoUrl})` } : undefined}>
               {!ride.host.profilePhotoUrl && initialsOf(ride.host.fullName)}
             </div>
@@ -93,7 +94,7 @@ export default function RideCard({ ride, statusChip, roleLabel, journeyState, co
                 <IconMedal size={10} /> {tier}
               </span>
             )}
-          </div>
+          </Link>
         )}
         {statusChip ? (
           <span className={'status-chip status-' + ride.status.toLowerCase().replace(' ', '-')}>{ride.status}</span>

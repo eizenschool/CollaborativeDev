@@ -10,6 +10,22 @@
 // change, not a rewrite.
 
 import { DEPARTURE_GRACE_MINUTES, rideIntervalsOverlap } from '../business-logic/rideDateTime.js';
+import {
+  cancellationReputationEvent,
+  describeReputationEvent,
+  getRideEligibility,
+  isReputationEventType,
+  REPUTATION_EVENT_DELTAS,
+  REPUTATION_POLICY,
+  reputationEvidenceCount,
+  reputationStanding,
+  reviewReputationDelta
+} from '../business-logic/ReputationPolicy.js';
+import {
+  buildPublicProfile,
+  DEFAULT_PROFILE_VISIBILITY,
+  normalizeProfileVisibility
+} from '../business-logic/PublicProfilePolicy.js';
 
 const STORAGE_KEY = 'letstumpang_mock_db_v1';
 
@@ -99,6 +115,8 @@ const seedData = {
     u_host_raj: { completedTrips: 8, co2SavedKg: 15, reputationScore: 45, rating: 4.5 },
     u_host_nurul: { completedTrips: 38, co2SavedKg: 110, reputationScore: 84, rating: 4.8 }
   },
+  profileVisibility: {},
+  reputationEvents: {},
   // Ride Sharing Management (Module 2, FR-2.x) - Ride Management Component's
   // records. Seeded with 4 published rides so Find a Ride has something to browse.
   rides: {
@@ -239,7 +257,12 @@ function normalizeModule2State(db) {
   db.rideRequests ||= {};
   db.rideReviews ||= {};
   db.favourites ||= {};
+  db.profileVisibility ||= {};
+  db.reputationEvents ||= {};
   for (const user of Object.values(db.users || {})) user.spokenLanguages ||= [];
+  for (const userId of Object.keys(db.users || {})) {
+    db.profileVisibility[userId] = normalizeProfileVisibility(db.profileVisibility[userId]);
+  }
   for (const ride of Object.values(db.rides || {})) {
     // Repair the pre-vehicle demo Host ride already persisted in older offline
     // browser sessions so Edit Ride can hydrate the same contract as Supabase.
@@ -281,6 +304,70 @@ function normalizeModule2State(db) {
     request.arrivalConfirmedAt ??= null;
   }
   return db;
+}
+
+function reputationEventKey(event) {
+  return `${event.userId}:${event.sourceModule || 'm1'}:${event.sourceEventId}:${event.type}`;
+}
+
+function recordMockReputationEvent(db, event) {
+  if (!isReputationEventType(event.type)) throw new Error('Unsupported reputation event type.');
+  const key = reputationEventKey(event);
+  if (db.reputationEvents[key]) return db.reputationEvents[key];
+
+  db.impact[event.userId] ||= {
+    completedTrips: 0,
+    co2SavedKg: 0,
+    reputationScore: REPUTATION_POLICY.baseScore,
+    rating: null
+  };
+  const positiveAlreadyApplied = event.rideId
+    ? Object.values(db.reputationEvents)
+      .filter((item) => item.userId === event.userId && item.rideId === event.rideId && item.delta > 0)
+      .reduce((sum, item) => sum + item.delta, 0)
+    : 0;
+  const requestedDelta = Number(event.delta || 0);
+  const delta = requestedDelta > 0 && event.rideId
+    ? Math.max(0, Math.min(requestedDelta, REPUTATION_POLICY.positivePointsPerRideCap - positiveAlreadyApplied))
+    : requestedDelta;
+  const stored = {
+    id: key,
+    userId: event.userId,
+    rideId: event.rideId || null,
+    sourceModule: event.sourceModule || 'm1',
+    sourceEventId: event.sourceEventId,
+    type: event.type,
+    role: event.role || 'traveller',
+    delta,
+    reason: event.reason || describeReputationEvent(event.type),
+    createdAt: event.createdAt || new Date().toISOString()
+  };
+  db.reputationEvents[key] = stored;
+  db.impact[event.userId].reputationScore = Math.min(100, Math.max(0, Number(db.impact[event.userId].reputationScore ?? REPUTATION_POLICY.baseScore) + delta));
+  return stored;
+}
+
+function recordMockCompletionEvents(db, ride) {
+  recordMockReputationEvent(db, {
+    userId: ride.hostId,
+    rideId: ride.id,
+    sourceModule: 'm2',
+    sourceEventId: `ride:${ride.id}:completed:host`,
+    type: 'ride_completed',
+    role: 'host',
+    delta: REPUTATION_EVENT_DELTAS.ride_completed
+  });
+  Object.values(db.rideRequests)
+    .filter((request) => request.rideId === ride.id && request.status === 'Accepted' && request.boardingStatus === 'Checked In')
+    .forEach((request) => recordMockReputationEvent(db, {
+      userId: request.requesterId,
+      rideId: ride.id,
+      sourceModule: 'm2',
+      sourceEventId: `ride:${ride.id}:completed:traveller:${request.id}`,
+      type: 'ride_completed',
+      role: 'traveller',
+      delta: REPUTATION_EVENT_DELTAS.ride_completed
+    }));
 }
 
 function distanceMetres(latitudeA, longitudeA, latitudeB, longitudeB) {
@@ -362,6 +449,7 @@ function processDueRides(db, now = new Date()) {
       ride.status = 'Completed';
       ride.completedAt ||= instant.toISOString();
       ride.updatedAt = instant.toISOString();
+      recordMockCompletionEvents(db, ride);
     }
   }
 }
@@ -416,7 +504,8 @@ export const mockDb = {
       createdAt: new Date().toISOString()
     };
     db.vehicles[id] = [];
-    db.impact[id] = { completedTrips: 0, co2SavedKg: 0, reputationScore: 50 };
+    db.impact[id] = { completedTrips: 0, co2SavedKg: 0, reputationScore: REPUTATION_POLICY.baseScore, rating: null };
+    db.profileVisibility[id] = { ...DEFAULT_PROFILE_VISIBILITY };
     db.currentUserId = id;
     save(db);
     return db.users[id];
@@ -447,6 +536,68 @@ export const mockDb = {
     db.users[userId] = { ...db.users[userId], ...patch };
     save(db);
     return db.users[userId];
+  },
+
+  async getPublicProfile(userId) {
+    await delay();
+    const db = load();
+    const reviews = Object.values(db.rideReviews).filter((review) => review.revieweeId === userId);
+    return buildPublicProfile({
+      user: db.users[userId],
+      stats: db.impact[userId],
+      reviewCount: reviews.length,
+      visibility: db.profileVisibility[userId]
+    });
+  },
+
+  async getProfileVisibility(userId) {
+    await delay();
+    const db = load();
+    return normalizeProfileVisibility(db.profileVisibility[userId]);
+  },
+
+  async updateProfileVisibility(userId, visibility) {
+    await delay();
+    const db = load();
+    if (!db.users[userId]) throw new Error('Account not found.');
+    db.profileVisibility[userId] = normalizeProfileVisibility(visibility);
+    save(db);
+    return db.profileVisibility[userId];
+  },
+
+  async getReputationSummary(userId) {
+    await delay();
+    const db = load();
+    const stats = db.impact[userId] || { completedTrips: 0, reputationScore: REPUTATION_POLICY.baseScore, rating: null };
+    const events = Object.values(db.reputationEvents)
+      .filter((event) => event.userId === userId)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const evidenceCount = reputationEvidenceCount(events, stats.completedTrips);
+    const provisional = evidenceCount < REPUTATION_POLICY.minEvidenceRides;
+    const reviews = Object.values(db.rideReviews).filter((review) => review.revieweeId === userId);
+    return {
+      score: stats.reputationScore ?? REPUTATION_POLICY.baseScore,
+      evidenceCount,
+      provisional,
+      hold: Boolean(stats.reputationHold),
+      standing: reputationStanding(stats.reputationScore, { provisional, hold: Boolean(stats.reputationHold) }),
+      rating: stats.rating ?? null,
+      reviewCount: reviews.length,
+      events: events.slice(0, 20)
+    };
+  },
+
+  async getRideEligibility(userId, role) {
+    const summary = await this.getReputationSummary(userId);
+    return { ...getRideEligibility(summary, role), score: summary.score, evidenceCount: summary.evidenceCount };
+  },
+
+  async recordReputationEvent(event) {
+    await delay();
+    const db = load();
+    const stored = recordMockReputationEvent(db, event);
+    save(db);
+    return stored;
   },
 
   // Mirrors the fake-hash scheme signUp() already uses ('hashed:' + length) so
@@ -867,6 +1018,16 @@ export const mockDb = {
     ride.seatsAvailable = ride.seatsTotal;
     ride.recruitmentClosedAt ||= now;
     ride.updatedAt = now;
+    const eventType = cancellationReputationEvent('host', ride.departureAt, now);
+    recordMockReputationEvent(db, {
+      userId: ride.hostId,
+      rideId,
+      sourceModule: 'm2',
+      sourceEventId: `ride:${rideId}:cancelled:host`,
+      type: eventType,
+      role: 'host',
+      delta: REPUTATION_EVENT_DELTAS[eventType]
+    });
     save(db);
     return enrichRide(db, ride);
   },
@@ -992,6 +1153,16 @@ export const mockDb = {
       ride.status = 'Published';
     }
     ride.updatedAt = now;
+    const eventType = cancellationReputationEvent('traveller', ride.departureAt, now);
+    recordMockReputationEvent(db, {
+      userId: request.requesterId,
+      rideId: ride.id,
+      sourceModule: 'm2',
+      sourceEventId: `request:${request.id}:cancelled:traveller`,
+      type: eventType,
+      role: 'traveller',
+      delta: REPUTATION_EVENT_DELTAS[eventType]
+    });
     save(db);
     return enrichRequest(db, request);
   },
@@ -1014,6 +1185,17 @@ export const mockDb = {
     request.checkedInAt = new Date().toISOString();
     request.checkInDistanceMeters = distance;
     request.checkInAccuracyMeters = Math.round(position.accuracy);
+    if (new Date(request.checkedInAt) <= new Date(ride.departureAt)) {
+      recordMockReputationEvent(db, {
+        userId: request.requesterId,
+        rideId: ride.id,
+        sourceModule: 'm2',
+        sourceEventId: `request:${request.id}:on-time-check-in`,
+        type: 'on_time_check_in',
+        role: 'traveller',
+        delta: REPUTATION_EVENT_DELTAS.on_time_check_in
+      });
+    }
     save(db);
     return enrichRequest(db, request);
   },
@@ -1030,6 +1212,15 @@ export const mockDb = {
     request.boardingStatus = 'No-show';
     request.noShowAt = new Date().toISOString();
     request.noShowMarkedBy = db.currentUserId;
+    recordMockReputationEvent(db, {
+      userId: request.requesterId,
+      rideId: ride.id,
+      sourceModule: 'm2',
+      sourceEventId: `request:${request.id}:no-show`,
+      type: 'no_show',
+      role: 'traveller',
+      delta: REPUTATION_EVENT_DELTAS.no_show
+    });
     save(db);
     return enrichRequest(db, request);
   },
@@ -1052,6 +1243,15 @@ export const mockDb = {
       request.boardingStatus = 'No-show';
       request.noShowAt = startedAt.toISOString();
       request.noShowMarkedBy = db.currentUserId;
+      recordMockReputationEvent(db, {
+        userId: request.requesterId,
+        rideId: ride.id,
+        sourceModule: 'm2',
+        sourceEventId: `request:${request.id}:no-show`,
+        type: 'no_show',
+        role: 'traveller',
+        delta: REPUTATION_EVENT_DELTAS.no_show
+      });
     }
     const routeSeconds = Number(ride.routeDurationSeconds) + Number(ride.routeStopoverSeconds || 0);
     if (Number.isFinite(routeSeconds) && routeSeconds > 0) {
@@ -1080,6 +1280,7 @@ export const mockDb = {
     if (!checkedIn.length) {
       ride.status = 'Completed';
       ride.completedAt ||= new Date().toISOString();
+      recordMockCompletionEvents(db, ride);
     }
     ride.updatedAt = new Date().toISOString();
     save(db);
@@ -1099,6 +1300,7 @@ export const mockDb = {
       ride.status = 'Completed';
       ride.completedAt = new Date().toISOString();
       ride.updatedAt = ride.completedAt;
+      recordMockCompletionEvents(db, ride);
     }
     save(db);
     return enrichRequest(db, request);
@@ -1130,8 +1332,17 @@ export const mockDb = {
     const id = `rv_${Date.now()}`;
     db.rideReviews[id] = { id, rideId, reviewerId, revieweeId, rating, comment, createdAt: new Date().toISOString() };
     const ratings = Object.values(db.rideReviews).filter((item) => item.revieweeId === revieweeId).map((item) => item.rating);
-    db.impact[revieweeId] ||= { completedTrips: 0, co2SavedKg: 0, reputationScore: 50 };
+    db.impact[revieweeId] ||= { completedTrips: 0, co2SavedKg: 0, reputationScore: REPUTATION_POLICY.baseScore };
     db.impact[revieweeId].rating = ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
+    recordMockReputationEvent(db, {
+      userId: revieweeId,
+      rideId,
+      sourceModule: 'm2',
+      sourceEventId: `review:${id}`,
+      type: `review_${rating}_star`,
+      role: revieweeId === ride.hostId ? 'host' : 'traveller',
+      delta: reviewReputationDelta(rating)
+    });
     save(db);
     return enrichReview(db, db.rideReviews[id]);
   },

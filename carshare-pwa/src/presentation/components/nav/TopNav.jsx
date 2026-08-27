@@ -142,13 +142,15 @@ export default function TopNav() {
                 </Suspense>
               )}
             </div>
-            <div
+            <NavLink
+              to="/profile"
               className="topnav-avatar"
               style={user.profilePhotoUrl ? { backgroundImage: `url(${user.profilePhotoUrl})` } : undefined}
               title={user.fullName || 'Profile'}
+              aria-label="Open my profile"
             >
               {!user.profilePhotoUrl && initials}
-            </div>
+            </NavLink>
             <IconButton className="icon-btn" label="Sign out" onClick={handleSignOut}>
               <IconLogOut size={17} aria-hidden="true" />
             </IconButton>

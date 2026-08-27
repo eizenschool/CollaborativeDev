@@ -21,6 +21,7 @@ const SwipeRouteViewport = lazy(() => import('./presentation/components/ui/Swipe
 const AuthPage = lazy(() => import('./presentation/components/AuthPage.jsx'));
 const HomeScreen = lazy(() => import('./presentation/components/HomeScreen.jsx'));
 const MyProfile = lazy(() => import('./presentation/components/MyProfile.jsx'));
+const PublicProfile = lazy(() => import('./presentation/components/PublicProfile.jsx'));
 const RideHub = lazy(() => import('./presentation/components/ride/RideHub.jsx'));
 const PublishRide = lazy(() => import('./presentation/components/ride/PublishRide.jsx'));
 const SafetyRoutes = lazy(() => import('./presentation/components/safety/SafetyRoutes.jsx'));
@@ -109,6 +110,7 @@ function AppShell() {
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
             /host still land on the right panel. */}
         <Route path="/profile" element={<RequireAuth reason="Sign in to view your profile."><MyProfile /></RequireAuth>} />
+        <Route path="/users/:userId" element={<PublicProfile />} />
         <Route path="/vehicles" element={<Navigate to="/profile" replace />} />
         <Route path="/reputation" element={<Navigate to="/profile" replace />} />
         <Route path="/host" element={<Navigate to="/profile" replace />} />

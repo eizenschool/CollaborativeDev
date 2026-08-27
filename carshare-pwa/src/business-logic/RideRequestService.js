@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js
 import { mockDb } from '../data-access/mockDataStore.js';
 import { attachDestinationPhotoPlaceIds, mapRideRow, RideService } from './RideService.js';
 import { getCurrentPosition, MAX_CHECK_IN_ACCURACY_METRES } from './GooglePlacesService.js';
+import { ReputationService } from './ReputationService.js';
 
 const REQUEST_SELECT = `
   *,
@@ -130,6 +131,7 @@ export const RideRequestService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
 
   async submitRequest(requesterId, { rideId, seatsRequested, companionNames }) {
+    await ReputationService.requireEligibility(requesterId, 'traveller');
     const request = validateRideRequest({ seatsRequested, companionNames });
     if (isSupabaseConfigured) {
       const { data: requestId, error } = await supabase.rpc('submit_ride_request', {

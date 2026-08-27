@@ -31,6 +31,14 @@ automatic departure-time lifecycle processing, and mutual Completed-ride
 reviews. The same interfaces and state rules exist in the offline mock adapter;
 its automatic lifecycle processing is deterministic and lazy.
 
+Module 1 now consumes Module 2's verified completion, on-time Check-in,
+cancellation, No-show, and review outcomes as Reputation events. The client
+checks a Driver before opening/publishing and a Traveller before requesting;
+authored undeployed migration `065` adds the authoritative database triggers,
+65 Driver minimum, 50 Traveller minimum, three-Ride provisional access, and
+safety-hold override. Driver and requester identity rows link to the safe
+`/users/:userId` public profile. Module 2's contribution remains non-monetary.
+
 The Ride UI now foregrounds the existing `rideJourneyState` next action with
 role, timing, and responsible party. Publish keeps its five-step unlock,
 location confirmation, quote invalidation, and Draft contracts while adding

@@ -436,12 +436,39 @@ History cards open Ride Detail before either follow-up. On desktop,
 action area. A Completed Ride shows its review action above `Publish again`,
 and Review opens only after that explicit action is selected.
 
+## D030 — Evidence-based Reputation and Privacy-filtered Public Profiles
+**Status:** Accepted in application; migrations 065-066 authored and not deployed
+
+Reputation starts at 70/100 and remains provisional for the first three
+evidence rides. Only verified Ride events may change it: completion +1,
+on-time Check-in +1, 4/5-star reviews +1/+2, timing-weighted cancellation
+−1/−3/−6, verified No-show −10, and confirmed conduct outcomes −8/−20. Positive
+events are capped at +3 per user per Ride and source events are idempotent.
+Ordinary login, profile completion, identity documents, and CO2 impact award no
+reputation because they do not demonstrate Ride reliability. Rating,
+Reputation, identity verification, and Module 5 Host Impact remain separate.
+
+After three evidence rides, publishing requires 65/100 and requesting requires
+50/100. New members may build evidence below either threshold; a confirmed
+safety hold overrides score. The client checks eligibility for early feedback,
+while migration 065 owns the authoritative publish/request triggers and event
+ledger. Until that migration is deployed, live database behavior is unchanged.
+
+Every active member has a safe public profile with a shortened display name,
+rating/review total, Reputation standing, and membership date. Optional
+switches control photo, spoken languages, completed-trip count, and CO2 impact.
+Email, phone, emergency contact, precise Ride data, vehicle registration, and
+companions are never included. An active Driver's minimum identity, rating and
+standing remain visible on Published Ride cards. Migration 066 stores the
+switches, exposes the filtered RPC, and narrows raw cross-profile visibility;
+until deployed, the app uses non-persistent defaults and labels that state.
+
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;
-- reputation and Host Impact formulas;
+- Host Impact formula and badge perks;
 - carbon model;
 - complete offline behaviour;
 - deployment workflow cleanup;

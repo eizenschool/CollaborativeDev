@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation, normaliseInternalReturnPath } from '../../../business-logic/authAccess.js';
 import { RideService } from '../../../business-logic/RideService.js';
@@ -83,7 +83,7 @@ function HostIdentity({ ride }) {
   return (
     <section className="ride-info-card host-card-mobile">
       <p className="eyebrow">HOST</p>
-      <div className="host-profile-row">
+      <Link className="host-profile-row host-profile-link" to={`/users/${host.id || ride.hostId}`}>
         <span className="host-avatar-large" style={host.profilePhotoUrl ? { backgroundImage: `url(${host.profilePhotoUrl})` } : undefined}>
           {!host.profilePhotoUrl && initials(host.fullName)}
         </span>
@@ -92,7 +92,7 @@ function HostIdentity({ ride }) {
           <span><IconStar size={13} /> {Number(rating).toFixed(1)} <b className="tier-badge">{tier}</b></span>
         </span>
         <span className="chevron">›</span>
-      </div>
+      </Link>
     </section>
   );
 }
@@ -338,7 +338,7 @@ function TripModeView({
       </section>
 
       <section className={`trip-support-grid ${SOS_ENABLED || LIVE_TRACKING_ENABLED ? '' : 'is-single'}`} aria-label="Trip support">
-        {isHost && <section className="ride-info-card trip-readiness-card"><div className="trip-section-heading"><div><p className="eyebrow">PASSENGER READINESS</p><h2>{checkedInCount} of {accepted.length} checked in</h2></div>{pending.length > 0 && <button type="button" className="btn-link" onClick={onManageRequests}>{pending.length} pending request{pending.length === 1 ? '' : 's'}</button>}</div>{accepted.length ? <div className="trip-passenger-list">{accepted.map((request) => <div key={request.id}><span><strong>{request.requester?.fullName || 'Passenger'}</strong><small>{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</small></span><b className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>{request.boardingStatus}</b>{request.boardingStatus === 'Pending' && departureReached && <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle(`no-show-${request.id}`, () => RideRequestService.markNoShow(request.id))}>{lifecycleBusy === `no-show-${request.id}` ? 'Working…' : 'Mark No-show'}</button>}</div>)}</div> : <p>No accepted passengers yet.</p>}</section>}
+        {isHost && <section className="ride-info-card trip-readiness-card"><div className="trip-section-heading"><div><p className="eyebrow">PASSENGER READINESS</p><h2>{checkedInCount} of {accepted.length} checked in</h2></div>{pending.length > 0 && <button type="button" className="btn-link" onClick={onManageRequests}>{pending.length} pending request{pending.length === 1 ? '' : 's'}</button>}</div>{accepted.length ? <div className="trip-passenger-list">{accepted.map((request) => <div key={request.id}><span><Link className="request-profile-name" to={`/users/${request.requester?.id || request.requesterId}`}><strong>{request.requester?.fullName || 'Passenger'}</strong></Link><small>{request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</small></span><b className={`boarding-state boarding-${request.boardingStatus.toLowerCase().replaceAll(' ', '-')}`}>{request.boardingStatus}</b>{request.boardingStatus === 'Pending' && departureReached && <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => onLifecycle(`no-show-${request.id}`, () => RideRequestService.markNoShow(request.id))}>{lifecycleBusy === `no-show-${request.id}` ? 'Working…' : 'Mark No-show'}</button>}</div>)}</div> : <p>No accepted passengers yet.</p>}</section>}
         {!isHost && activeRequest && <section className="ride-info-card trip-passenger-status"><p className="eyebrow">YOUR BOARDING STATUS</p><h2>{activeRequest.boardingStatus}</h2>{activeRequest.checkedInAt && <p>Checked in {formatDateTime(activeRequest.checkedInAt)}</p>}{activeRequest.checkInDistanceMeters != null && <small>{activeRequest.checkInDistanceMeters} m from pickup{activeRequest.checkInAccuracyMeters != null ? ` · GPS ±${activeRequest.checkInAccuracyMeters} m` : ''}</small>}</section>}
         {(SOS_ENABLED || LIVE_TRACKING_ENABLED) && <section className={`trip-safety-hub ${sosActive ? 'is-sos-active' : ''}`} aria-labelledby="trip-safety-title">
           <header className="trip-safety-hub-header">

@@ -103,6 +103,16 @@ export const AuthService = {
     return mockDb.signIn({ email });
   },
 
+  // AuthContext calls this from its onAuthStateChange listener on every
+  // SIGNED_IN event, since that's the only sign-in-completion signal a
+  // redirect-based flow (Google) fires - unlike signIn() above, which reactivates
+  // inline because it gets the result of its own direct API call. Best-effort:
+  // a failure here must not turn a successful sign-in into an error screen.
+  async reactivateOnSignIn(userId) {
+    if (!isSupabaseConfigured) return;
+    await ProfileService.reactivateAccount(userId).catch(() => {});
+  },
+
   // Google Sign-In/Sign-Up share one Supabase call: `signInWithOAuth` upserts
   // the auth.users row either way, then the 008 handle_new_user() trigger
   // creates the matching profiles/profile_private/host_impact_stats rows the

@@ -3169,6 +3169,14 @@ button.ride-card {
 .ride-card.has-destination-photo .ride-seats,
 .ride-card.has-destination-photo .ride-host-name,
 .ride-card.has-destination-photo .ride-host-rating { color: #fff; }
+
+.ride-host-profile-link, .host-profile-link, .request-profile-link, .request-profile-name { color: inherit; text-decoration: none; }
+.ride-host-profile-link { position: relative; z-index: 2; border-radius: 8px; }
+.ride-host-profile-link:hover .ride-host-name, .host-profile-link:hover strong, .request-profile-name:hover strong { color: var(--teal-dark); text-decoration: underline; }
+.host-profile-link { min-height: 54px; }
+.request-profile-link { min-width: 44px; min-height: 44px; display: grid; place-items: center; border-radius: 50%; }
+.request-profile-name { display: block; min-width: 0; }
+.request-profile-name strong { color: var(--ink); font: 600 13px var(--font-display); }
 .ride-card.has-destination-photo .ride-meta-row { border-color: rgba(255, 255, 255, .25); }
 .ride-card.has-destination-photo .ride-route-connector { background: rgba(255, 255, 255, .58); }
 .ride-card.has-destination-photo .contribution-tag {

@@ -40,6 +40,9 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   provides one. Applied filters are removable wrapping chips; the phone sheet
   uses the shared adaptive focus/return contract. Tailwind and Lucide are not
   required.
+- Every Search result Driver row links to Module 1's safe public profile. The
+  Ride card keeps minimum active-Driver identity for trust; optional profile
+  fields are filtered by the Module 1 visibility projection.
 - Favourite now uses the shared loading, empty, error, and action primitives
   while keeping refresh, removal, and alternative-search service behaviour.
 - Saved rides refresh when Favourite opens. Unavailable rides remain removable

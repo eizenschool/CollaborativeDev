@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { RideService } from '../../../business-logic/RideService.js';
 import { RideRequestService } from '../../../business-logic/RideRequestService.js';
 import { isBeforeRideExpiry } from '../../../business-logic/rideDateTime.js';
@@ -73,9 +73,13 @@ export default function ManageRequests() {
     const person = request.requester || { fullName: 'Member', reputationScore: 0, rating: null };
     return (
       <article className={`passenger-request-card ${muted ? 'muted' : ''}`} aria-busy={busyId === request.id}>
-        <span className="request-avatar">{avatar(person.fullName)}</span>
+        <Link className="request-profile-link" to={`/users/${person.id || request.requesterId}`} aria-label={`View ${person.fullName}'s profile`}>
+          <span className="request-avatar">{avatar(person.fullName)}</span>
+        </Link>
         <div className="request-person">
+          <Link className="request-profile-name" to={`/users/${person.id || request.requesterId}`}>
           <strong>{person.fullName} · {request.seatsRequested} seat{request.seatsRequested === 1 ? '' : 's'}</strong>
+          </Link>
           <span><IconStar size={11} /> {person.rating == null ? 'New' : Number(person.rating).toFixed(1)} <b className="tier-badge">{tier(person.reputationScore)}</b> <small>{request.status}</small></span>
           {request.companionNames.length > 0 && <small>Companions: {request.companionNames.join(', ')}</small>}
           {request.decisionReason && <small>Reason: {request.decisionReason}</small>}

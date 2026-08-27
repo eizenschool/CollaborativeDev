@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { calculateCompositeHostImpact, getBadgeForStats } from '../../../business-logic/HostImpactEngine.js';
 import {
   spokenLanguageLabel,
@@ -134,7 +135,7 @@ export function SearchRideCard({
           </div>
         )}
 
-        <div className="search-host-row">
+        <Link className="search-host-row search-host-profile-link" to={`/users/${ride.host?.id || ride.hostId}`}>
           <span className="search-host-avatar" style={ride.host?.profilePhotoUrl ? { backgroundImage: `url(${ride.host.profilePhotoUrl})` } : undefined}>
             {!ride.host?.profilePhotoUrl && initials(ride.host?.fullName)}
           </span>
@@ -146,7 +147,7 @@ export function SearchRideCard({
             </small>
           </span>
           {tier && <span className="search-tier"><IconMedal size={12} aria-hidden="true" />{tier.replace(' Host', '')}</span>}
-        </div>
+        </Link>
       </div>
 
       <footer className="search-ride-card-footer">

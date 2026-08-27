@@ -5,11 +5,13 @@
 // reference. All five screens are Module 1 data about the same user, so this
 // is one read/write surface instead of five.
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ProfileService } from '../../business-logic/ProfileService.js';
 import { VehicleService } from '../../business-logic/VehicleService.js';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
+import { ReputationService } from '../../business-logic/ReputationService.js';
+import { describeReputationEvent, REPUTATION_POLICY } from '../../business-logic/ReputationPolicy.js';
 import TrustedFamilyCard from './profile/TrustedFamilyCard.jsx';
 import {
   SPOKEN_LANGUAGE_OPTIONS,
@@ -19,15 +21,13 @@ import {
 import {
   IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart,
   IconCar, IconPlus, IconEdit, IconTrash, IconPause, IconPlay, IconCheckCircle,
-  IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar,
+  IconMedal, IconCheck, IconBolt, IconLeaf, IconStar,
   IconLayers, IconShield, IconAlertTriangle, IconSettings, IconCamera, IconChart, IconUsers, IconLogOut
 } from './icons.jsx';
 // Module 5 owns its own entry card, so this file only has to place it.
 import ImpactEntryCard from './trip/ImpactEntryCard.jsx';
 import AdaptiveDialog from './ui/AdaptiveDialog.jsx';
 import { Button } from './ui/Button.jsx';
-
-const REPUTATION_THRESHOLD = 60; // minimum reputation score required to publish rides (admin-configurable)
 
 const RAIL_ITEMS = [
   { id: 'overview', label: 'Overview', Icon: IconLayers },
@@ -48,6 +48,7 @@ export default function MyProfile() {
   const [vehicles, setVehicles] = useState([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(true);
   const [summary, setSummary] = useState(null);
+  const [reputation, setReputation] = useState(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
@@ -67,7 +68,12 @@ export default function MyProfile() {
   }
 
   async function refreshImpact() {
-    setSummary(await HostImpactEngine.getImpactSummary(user.id));
+    const [impactSummary, reputationSummary] = await Promise.all([
+      HostImpactEngine.getImpactSummary(user.id),
+      ReputationService.getSummary(user.id)
+    ]);
+    setSummary(impactSummary);
+    setReputation(reputationSummary);
   }
 
   async function handleSignOut() {
@@ -104,16 +110,16 @@ export default function MyProfile() {
             </button>
           </div>
           <div className="hero-card-name">{user.fullName}</div>
-          {summary && (
+          {reputation && (
             <div className="hero-card-meta-row">
-              <span className="hero-card-rating"><IconStar size={13} /> {summary.reputationScore}/100</span>
-              <span className="hero-card-tier"><IconMedal size={11} /> {summary.badge.name.replace(' Host', '')}</span>
+              <span className="hero-card-rating"><IconStar size={13} /> {reputation.score}/100</span>
+              <span className="hero-card-tier"><IconMedal size={11} /> {reputation.standing.label}</span>
             </div>
           )}
-          {summary && (
+          {reputation && (
             <div className="rep-bar">
-              <div className="rep-bar-track"><div className="rep-bar-fill" style={{ width: summary.reputationScore + '%' }} /></div>
-              <div className="rep-bar-labels"><span>Reputation score</span><span>{summary.reputationScore}/100</span></div>
+              <div className="rep-bar-track"><div className="rep-bar-fill" style={{ width: reputation.score + '%' }} /></div>
+              <div className="rep-bar-labels"><span>Reputation score</span><span>{reputation.score}/100</span></div>
             </div>
           )}
         </div>
@@ -125,7 +131,7 @@ export default function MyProfile() {
             </button>
           ))}
         </nav>
-        <p className="rail-note">Reputation, badge tier, and vehicle status are read-only here — they're calculated from Module 5 &amp; 6 trip data.</p>
+        <p className="rail-note">Reputation is calculated from verified Module 2 ride outcomes. Host Impact is calculated separately by Module 5.</p>
       </aside>
 
       <main className="panels">
@@ -133,6 +139,7 @@ export default function MyProfile() {
           <OverviewPanel
             user={user}
             summary={summary}
+            reputation={reputation}
             vehicles={vehicles}
             activeVehicleCount={activeVehicleCount}
             onOpenImpact={() => navigate('/trip')}
@@ -149,7 +156,7 @@ export default function MyProfile() {
           />
         )}
         {panel === 'reputation' && (
-          <ReputationImpactPanel user={user} summary={summary} refresh={refreshImpact} />
+          <ReputationImpactPanel summary={summary} reputation={reputation} />
         )}
         {panel === 'settings' && <AccountSettingsPanel user={user} />}
       </main>
@@ -166,9 +173,11 @@ export default function MyProfile() {
 
 // ---------- OVERVIEW ----------
 
-function OverviewPanel({ user, summary, vehicles, activeVehicleCount, onOpenImpact }) {
+function OverviewPanel({ user, summary, reputation, vehicles, activeVehicleCount, onOpenImpact }) {
   const hasEmergencyContact = Boolean(user.emergencyContact?.name && user.emergencyContact?.phone);
-  const meetsThreshold = summary ? summary.reputationScore >= REPUTATION_THRESHOLD : true;
+  const hostEligibility = reputation ? {
+    eligible: !reputation.hold && (reputation.provisional || reputation.score >= REPUTATION_POLICY.hostMinimum)
+  } : null;
 
   return (
     <>
@@ -178,15 +187,15 @@ function OverviewPanel({ user, summary, vehicles, activeVehicleCount, onOpenImpa
         <div className="card snap-card">
           <span className="snap-icon"><IconStar size={16} /></span>
           <div>
-            <div className="snap-value">{summary ? summary.reputationScore : '—'}</div>
+            <div className="snap-value">{reputation ? reputation.score : '—'}</div>
             <div className="snap-label">Reputation score</div>
           </div>
         </div>
         <div className="card snap-card">
           <span className="snap-icon"><IconMedal size={16} /></span>
           <div>
-            <div className="snap-value">{summary ? summary.badge.name.replace(' Host', '') : '—'}</div>
-            <div className="snap-label">Host tier{summary?.nextTier ? ` · ${summary.nextTier.pointsToNext} pts to ${summary.nextTier.name.replace(' Host', '')}` : ''}</div>
+            <div className="snap-value">{reputation ? reputation.standing.label : '—'}</div>
+            <div className="snap-label">Trust standing{reputation?.provisional ? ' · first 3 rides are provisional' : ''}</div>
           </div>
         </div>
         <div className="card snap-card">
@@ -203,9 +212,11 @@ function OverviewPanel({ user, summary, vehicles, activeVehicleCount, onOpenImpa
       <div className="card">
         <p className="card-title"><IconShield size={13} /> Account health</p>
         <p className="card-subtitle" style={{ marginBottom: 0 }}>
-          {meetsThreshold
-            ? 'Reputation above minimum threshold — ride publishing is unrestricted. '
-            : `Reputation below the ${REPUTATION_THRESHOLD}/100 minimum threshold — ride publishing is restricted. `}
+          {hostEligibility?.eligible
+            ? reputation?.provisional
+              ? 'New-member access is active while you build evidence through your first three rides. '
+              : `Your score meets the ${REPUTATION_POLICY.hostMinimum}/100 Driver minimum. `
+            : `Publishing is restricted below ${REPUTATION_POLICY.hostMinimum}/100 or during a safety hold. `}
           {hasEmergencyContact ? 'Emergency contact on file.' : 'No emergency contact on file yet.'}
         </p>
       </div>
@@ -495,7 +506,7 @@ function EmergencyContactCard({ user, onSaved }) {
   return (
     <div className="card">
       <p className="card-title"><IconAlertTriangle size={13} /> Emergency contact</p>
-      <p className="card-subtitle">Used by the Panic Button (Module 6) during an active trip</p>
+      <p className="card-subtitle">Used by the Module 2 SOS flow during an active ride</p>
       {status && <div className={'alert ' + (status.type === 'error' ? 'alert-error' : 'alert-success')}>{status.text}</div>}
       <form onSubmit={handleSave}>
         <div className="field">
@@ -665,16 +676,11 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
 
 // ---------- REPUTATION & IMPACT (merges Reputation + Host Dashboard) ----------
 
-function ReputationImpactPanel({ user, summary, refresh }) {
-  if (!summary) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
+function ReputationImpactPanel({ summary, reputation }) {
+  if (!summary || !reputation) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
 
   const maxForBar = summary.nextTier ? summary.nextTier.minScore : summary.compositeScore * 1.2;
   const pct = Math.min(100, Math.round((summary.compositeScore / maxForBar) * 100));
-
-  async function adjust(trips, reputation) {
-    await HostImpactEngine.applyDemoAdjustment(user.id, { trips, reputation });
-    refresh();
-  }
 
   return (
     <>
@@ -683,18 +689,45 @@ function ReputationImpactPanel({ user, summary, refresh }) {
         <div>
           <div className="card">
             <p className="card-title">Public reputation score</p>
-            <p className="card-subtitle">Shown to other riders and hosts before a trip is confirmed</p>
+            <p className="card-subtitle">Verified ride behaviour, separate from your rating and environmental impact</p>
             <div className="rep-score">
               <span className="icon"><IconStar size={26} /></span>
-              <span className="num">{summary.reputationScore}</span>
+              <span className="num">{reputation.score}</span>
               <span className="of">/ 100</span>
+            </div>
+            <div className={`reputation-standing reputation-standing-${reputation.standing.key}`}>
+              {reputation.standing.label}{reputation.provisional ? ` · ${reputation.evidenceCount}/${REPUTATION_POLICY.minEvidenceRides} evidence rides` : ''}
+            </div>
+            <div className="reputation-thresholds">
+              <span>Publish rides: {REPUTATION_POLICY.hostMinimum}+</span>
+              <span>Request rides: {REPUTATION_POLICY.travellerMinimum}+</span>
             </div>
           </div>
           <div className="card">
-            <p className="card-title" style={{ color: 'var(--ink)' }}>Coming from Module 6</p>
-            <p className="card-subtitle" style={{ marginBottom: 0 }}>
-              Trip-by-trip rating history and dispute detail live in Trip Verification &amp; Safety, and feed this score automatically.
-            </p>
+            <p className="card-title" style={{ color: 'var(--ink)' }}>How the score changes</p>
+            <ul className="reputation-rules">
+              <li>Completed ride +1; on-time check-in +1</li>
+              <li>4-star review +1; 5-star review +2</li>
+              <li>Cancellation −1 to −6 depending on notice</li>
+              <li>Verified no-show −10; confirmed conduct cases −8 to −20</li>
+            </ul>
+            <p className="card-subtitle reputation-login-note">Normal login does not add reputation points because it does not prove ride reliability.</p>
+          </div>
+          <div className="card">
+            <p className="card-title">Recent reputation activity</p>
+            {reputation.events.length ? (
+              <ul className="reputation-event-list">
+                {reputation.events.slice(0, 8).map((event) => (
+                  <li key={event.id || `${event.type}-${event.createdAt}`}>
+                    <div>
+                      <strong>{describeReputationEvent(event.type)}</strong>
+                      {event.createdAt && <span>{new Date(event.createdAt).toLocaleDateString('en-MY')}</span>}
+                    </div>
+                    <span className={event.delta >= 0 ? 'event-positive' : 'event-negative'}>{event.delta > 0 ? '+' : ''}{event.delta}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="card-subtitle" style={{ marginBottom: 0 }}>Your verified ride outcomes will appear here.</p>}
           </div>
         </div>
 
@@ -712,15 +745,6 @@ function ReputationImpactPanel({ user, summary, refresh }) {
                 <li key={p}><span className="perk-check"><IconCheck size={12} /></span>{p}</li>
               ))}
             </ul>
-
-            {HostImpactEngine.backend === 'mock' && (
-              <div className="demo-controls" style={{ marginTop: 16 }}>
-                <p className="card-title">Demo controls</p>
-                <button className="btn-block demo-up" onClick={() => adjust(5, 3)}><IconTrendUp size={14} /> +5 trips, +3 rep score</button>
-                <button className="btn-block demo-down" onClick={() => adjust(-8, -12)}><IconTrendDown size={14} /> −8 trips, −12 rep score</button>
-                <button className="demo-reset" onClick={() => alert('Clear localStorage (key: letstumpang_mock_db_v1) to reset all demo data.')}>Reset to defaults</button>
-              </div>
-            )}
           </div>
 
           <div className="card">
@@ -759,6 +783,78 @@ function ReputationImpactPanel({ user, summary, refresh }) {
 // Deactivation is reversible on the next successful login. Hard deletion is
 // intentionally deferred until it can remove the Supabase Auth identity too.
 
+const PROFILE_VISIBILITY_OPTIONS = [
+  { key: 'showProfilePhoto', label: 'Profile photo', description: 'Show your photo on your public profile.' },
+  { key: 'showSpokenLanguages', label: 'Spoken languages', description: 'Help people understand how they can communicate with you.' },
+  { key: 'showCompletedTrips', label: 'Completed ride count', description: 'Show your verified experience without exposing ride details.' },
+  { key: 'showEcoImpact', label: 'CO₂ impact', description: 'Share your total estimated environmental contribution.' }
+];
+
+function ProfileVisibilityCard({ user }) {
+  const [visibility, setVisibility] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    ProfileService.getProfileVisibility(user.id)
+      .then((value) => active && setVisibility(value))
+      .catch((loadError) => active && setError(loadError.message));
+    return () => { active = false; };
+  }, [user.id]);
+
+  async function save() {
+    setSaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const saved = await ProfileService.updateProfileVisibility(user.id, visibility);
+      setVisibility(saved);
+      setMessage('Public profile visibility saved.');
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card profile-visibility-card">
+      <div className="profile-visibility-head">
+        <div>
+          <p className="card-title">Public profile visibility</p>
+          <p className="card-subtitle">Only your shortened name, rating, reputation and member status are always shown. Email, phone and emergency contact are never public.</p>
+        </div>
+        <Link className="btn-outline" to={`/users/${user.id}`}>Preview</Link>
+      </div>
+      {!visibility ? <p className="card-subtitle">Loading visibility settings…</p> : (
+        <div className="profile-visibility-list">
+          {PROFILE_VISIBILITY_OPTIONS.map((option) => (
+            <label className="profile-visibility-row" key={option.key}>
+              <span><strong>{option.label}</strong><small>{option.description}</small></span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={Boolean(visibility[option.key])}
+                onChange={(event) => {
+                  setVisibility((current) => ({ ...current, [option.key]: event.target.checked }));
+                  setMessage('');
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      <p className="profile-visibility-note">For safety, an active Driver’s name, reputation, rating and ride-card identity remain visible on published rides.</p>
+      {visibility?.deploymentPending && <div className="alert alert-info">These controls are previewing defaults until database migration 068 is deployed.</div>}
+      {message && <div className="alert alert-success" role="status">{message}</div>}
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <Button onClick={save} loading={saving} loadingLabel="Saving" disabled={!visibility}>Save visibility</Button>
+    </div>
+  );
+}
+
 function AccountSettingsPanel({ user }) {
   const { signOut } = useAuth();
   const [confirm, setConfirm] = useState(false);
@@ -786,6 +882,8 @@ function AccountSettingsPanel({ user }) {
   return (
     <>
       <div className="panel-head"><h2>Account Settings</h2></div>
+
+      <ProfileVisibilityCard user={user} />
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div className="settings-row settings-row-last">

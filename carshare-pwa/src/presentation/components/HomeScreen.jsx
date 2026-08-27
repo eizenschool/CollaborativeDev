@@ -19,12 +19,23 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const firstName = (user?.fullName || '').split(' ')[0] || 'there';
+  const initials = (user?.fullName || '?').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 
   return (
     <PageShell as="main" className="home-page" size="narrow">
       <div className="home-greeting">
-        <h1>{user ? `Hi, ${firstName}` : 'Travel better, together'}</h1>
-        <p>{user ? 'Where are you headed today?' : 'Browse shared rides freely. Sign in only when you are ready to join, host, or manage your account.'}</p>
+        <div>
+          <h1>{user ? `Hi, ${firstName}` : 'Travel better, together'}</h1>
+          <p>{user ? 'Where are you headed today?' : 'Browse shared rides freely. Sign in only when you are ready to join, host, or manage your account.'}</p>
+        </div>
+        {user && (
+          <button className="home-profile-shortcut" type="button" onClick={() => navigate('/profile')} aria-label="Open my profile">
+            <span style={user.profilePhotoUrl ? { backgroundImage: `url(${user.profilePhotoUrl})` } : undefined}>
+              {!user.profilePhotoUrl && initials}
+            </span>
+            <small>My profile</small>
+          </button>
+        )}
       </div>
 
       <section aria-labelledby="home-actions-title">

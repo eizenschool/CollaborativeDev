@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   IconArrowLeft,
   IconArchive,
@@ -721,6 +722,9 @@ export default function ChatWindow({
   const hasDraft = Boolean(hasNormalDraft || voiceRecording);
   const isVoiceBusy = isVoiceStarting || isVoiceRecording || isVoiceProcessing;
   const memberDescription = conversation.type === 'group' ? `${conversation.members.length} members` : 'Private ride chat';
+  const profileMember = conversation.type === 'direct'
+    ? conversation.members.find((member) => member.id !== currentUser.id)
+    : null;
 
   async function beginVoiceCall() {
     setErrorMessage('');
@@ -735,10 +739,14 @@ export default function ChatWindow({
     <section className="message-chat-window" aria-label={`Conversation with ${conversation.title}`}>
       <header className="message-chat-header">
         {!isDesktop && <button type="button" className="message-chat-header-button message-chat-back-button" onClick={onBack} aria-label="Back to conversations"><IconArrowLeft size={17} /></button>}
-        <ConversationAvatar conversation={conversation} currentUserId={currentUser.id} />
+        {profileMember ? (
+          <Link className="message-chat-profile-link" to={`/users/${profileMember.id}`} aria-label={`View ${profileMember.fullName || conversation.title}'s profile`}>
+            <ConversationAvatar conversation={conversation} currentUserId={currentUser.id} />
+          </Link>
+        ) : <ConversationAvatar conversation={conversation} currentUserId={currentUser.id} />}
         <div className="message-chat-header-content">
           <div className="message-chat-header-title-row">
-            <h2>{conversation.title}</h2>
+            <h2>{profileMember ? <Link className="message-chat-profile-name" to={`/users/${profileMember.id}`}>{conversation.title}</Link> : conversation.title}</h2>
             {conversation.type === 'group' && <span className="message-chat-header-badge">Group chat</span>}
             {conversation.isArchived && <span className="message-chat-header-badge">Archived</span>}
           </div>

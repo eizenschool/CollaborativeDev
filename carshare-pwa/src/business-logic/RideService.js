@@ -1,6 +1,7 @@
 // ===== BUSINESS LOGIC LAYER (RideService) =====
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
+import { ReputationService } from './ReputationService.js';
 import {
   departureParts,
   isAtLeastHoursAway,
@@ -501,6 +502,7 @@ export const RideService = {
 
   async publishRide(hostId, rideData, status = 'Published') {
     if (!['Draft', 'Published'].includes(status)) throw new Error('Unsupported ride status.');
+    if (status === 'Published') await ReputationService.requireEligibility(hostId, 'host');
     validateRideDraft(rideData, {
       publishing: status === 'Published',
       requireConfirmedLocations: true,
@@ -546,6 +548,7 @@ export const RideService = {
   async publishDraft(rideId, draftChanges, routeQuote = null) {
     const ride = await this.getRide(rideId);
     if (!ride || ride.status !== 'Draft') throw new Error('Only a Draft ride can be published.');
+    await ReputationService.requireEligibility(ride.hostId, 'host');
     const merged = mergeRideUpdate(ride, draftChanges || {});
     validateRideDraft(merged, {
       publishing: true,

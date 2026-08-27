@@ -2,6 +2,11 @@
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 import { normalizeSpokenLanguages } from './CompatibilityOptions.js';
+import {
+  buildPublicProfile,
+  DEFAULT_PROFILE_VISIBILITY,
+  normalizeProfileVisibility
+} from './PublicProfilePolicy.js';
 
 const EMPTY_EMERGENCY_CONTACT = { name: '', phone: '', relationship: '' };
 const PROFILE_SELECT = `
@@ -25,6 +30,35 @@ const LEGACY_PROFILE_SELECT = `
 function isUndeployedCompatibilityProfile(error) {
   const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
   return error?.code === '42703' || /spoken_languages/i.test(detail);
+}
+
+function isUndeployedPublicProfile(error) {
+  if (['PGRST202', 'PGRST205', '42P01'].includes(error?.code)) return true;
+  // Only treat this as "not deployed" when the message both names the
+  // migration's objects AND says they're missing - "permission denied for
+  // table profile_visibility" (RLS/grant errors) mentions the same table
+  // name but is a real error that must not be masked as a pending migration.
+  const detail = `${error?.message || ''} ${error?.details || ''}`;
+  return /get_public_profile|profile_visibility/i.test(detail)
+    && /does not exist|schema cache|not found/i.test(detail);
+}
+
+function mapPublicProfileRpc(value) {
+  if (!value) return null;
+  return {
+    id: value.id,
+    displayName: value.displayName ?? value.display_name ?? 'Member',
+    profilePhotoUrl: value.profilePhotoUrl ?? value.profile_photo_url ?? null,
+    spokenLanguages: normalizeSpokenLanguages(value.spokenLanguages ?? value.spoken_languages),
+    createdAt: value.createdAt ?? value.created_at ?? null,
+    reputationScore: Number(value.reputationScore ?? value.reputation_score ?? 70),
+    rating: value.rating == null ? null : Number(value.rating),
+    reviewCount: Number(value.reviewCount ?? value.review_count ?? 0),
+    completedTrips: value.completedTrips ?? value.completed_trips ?? null,
+    co2SavedKg: value.co2SavedKg ?? value.co2_saved_kg ?? null,
+    provisional: Boolean(value.provisional),
+    visibility: normalizeProfileVisibility(value.visibility)
+  };
 }
 
 function privateRow(row) {
@@ -71,6 +105,63 @@ export const ProfileService = {
       return mapProfileRow(data, user);
     }
     return mockDb.getCurrentUser();
+  },
+
+  async getPublicProfile(userId) {
+    if (!isSupabaseConfigured) return mockDb.getPublicProfile(userId);
+
+    const { data, error } = await supabase.rpc('get_public_profile', { p_user_id: userId });
+    if (!error) return mapPublicProfileRpc(data);
+    if (!isUndeployedPublicProfile(error)) throw error;
+
+    let { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, spoken_languages, profile_photo_url, status, created_at, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)')
+      .eq('id', userId)
+      .single();
+    if (profileError && isUndeployedCompatibilityProfile(profileError)) {
+      ({ data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, profile_photo_url, status, created_at, host_impact_stats(completed_trips, co2_saved_kg, reputation_score, rating)')
+        .eq('id', userId)
+        .single());
+    }
+    if (profileError) {
+      if (profileError.code === 'PGRST116') return null;
+      throw profileError;
+    }
+    const stats = Array.isArray(profile.host_impact_stats) ? profile.host_impact_stats[0] : profile.host_impact_stats;
+    return buildPublicProfile({ user: profile, stats, visibility: DEFAULT_PROFILE_VISIBILITY });
+  },
+
+  async getProfileVisibility(userId) {
+    if (!isSupabaseConfigured) return mockDb.getProfileVisibility(userId);
+    const { data, error } = await supabase.from('profile_visibility').select('*').eq('user_id', userId).single();
+    if (error) {
+      if (isUndeployedPublicProfile(error)) return { ...DEFAULT_PROFILE_VISIBILITY, deploymentPending: true };
+      throw error;
+    }
+    return normalizeProfileVisibility(data);
+  },
+
+  async updateProfileVisibility(userId, visibility) {
+    const normalized = normalizeProfileVisibility(visibility);
+    if (!isSupabaseConfigured) return mockDb.updateProfileVisibility(userId, normalized);
+    const { data, error } = await supabase.from('profile_visibility').upsert({
+      user_id: userId,
+      show_profile_photo: normalized.showProfilePhoto,
+      show_spoken_languages: normalized.showSpokenLanguages,
+      show_completed_trips: normalized.showCompletedTrips,
+      show_eco_impact: normalized.showEcoImpact,
+      updated_at: new Date().toISOString()
+    }).select().single();
+    if (error) {
+      if (isUndeployedPublicProfile(error)) {
+        throw new Error('Public-profile privacy settings need database migration 068 before they can be saved here.');
+      }
+      throw error;
+    }
+    return normalizeProfileVisibility(data);
   },
 
   async updateProfileInfo(userId, { fullName, email, phone }) {

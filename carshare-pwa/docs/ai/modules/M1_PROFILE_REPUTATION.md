@@ -7,18 +7,18 @@ Daniel Lim Dong Hen
 User identity/profile, vehicle information, reputation/impact presentation, emergency-contact/account-management responsibilities.
 
 ## Requirement Intent
-Registration/profile management, photo, vehicles, reputation/level, public profile, host eligibility support, Host Impact Score/badge presentation, emergency contact, deactivation/deletion. Some scoring formulas/thresholds remain unresolved and should not be silently invented.
+Registration/profile management, photo, vehicles, evidence-based reputation/standing, privacy-filtered public profile, ride eligibility support, Host Impact Score/badge presentation, emergency contact, deactivation/deletion.
 
 ## Existing Repository Areas
 Presentation: `AuthPage.jsx`, `MyProfile.jsx`, `MyVehicles.jsx`, `ProfileSettings.jsx`, `Reputation.jsx`, `HostDashboard.jsx`, `Sidebar.jsx`.
-Business logic: `AuthService.js`, `ProfileService.js`, `VehicleService.js`, `HostImpactEngine.js`.
+Business logic: `AuthService.js`, `ProfileService.js`, `PublicProfilePolicy.js`, `ReputationPolicy.js`, `ReputationService.js`, `VehicleService.js`, `HostImpactEngine.js`.
 Shared: `AuthContext.jsx`, `supabaseClient.js`, `mockDataStore.js`.
 
 ## Owns
 Profile/account-facing behaviour, vehicles, profile-side reputation/impact display, host eligibility inputs exposed to Module 2.
 
 ## Depends On
-Module 6 trust/verification outcomes; Module 5/other trip data for some impact metrics; Supabase Auth/profile data.
+Module 2 verified ride lifecycle/review outcomes; Module 5 trip and CO2 data for Host Impact; Supabase Auth/profile data.
 
 ## Current Status
 `Development` already contains a substantial Module 1 prototype and services. Do not restart from scratch.
@@ -41,8 +41,8 @@ reversible on the next successful login and hides published rides; hard account
 deletion is hidden until Auth identity deletion can be implemented safely.
 `MyProfile.jsx`'s consolidated layout (`.profile-page`/`.profile-sidebar`/`.rail-card` in `theme.css`) now has a `@media (max-width: 700px)` breakpoint matching Module 2's Ride Hub pattern - previously the sidebar had no mobile treatment.
 Module 2 reviews now recalculate `host_impact_stats.rating` as the account-level
-average star rating. They intentionally do not alter `reputation_score` or the
-unconfirmed Host Impact formula.
+average star rating. Authored migration `065` additionally gives those reviews
+an asymmetric Reputation effect while preserving rating as a separate signal.
 `AuthPage.jsx` now offers "Continue with Google" next to email/password (D015);
 `AuthService.signInWithGoogle()` calls Supabase's `signInWithOAuth`, and the
 existing `handle_new_user()` trigger already covers Google's profile/avatar
@@ -52,8 +52,8 @@ Sign-up now also validates a Malaysian IC (MyKad) number format
 (`AuthService.validateMalaysianIC`) as an identity gate before an account can
 be created; the value is never persisted or sent to Supabase - format check
 only. Adding a vehicle now also requires a driver's license number
-(`vehicles.driver_license_number`, `database/sql/016`), an input-capture
-eligibility gate rather than a verified Module 6 check.
+(`vehicles.driver_license_number`, `database/sql/019`), an input-capture
+eligibility gate rather than identity verification.
 `/home` is now the public website entry rather than a post-login-only route.
 Guests can browse Home, Search, Ride listings, and Published Ride Detail; the
 shared auth gate is applied only when they enter account-specific services.
@@ -77,10 +77,30 @@ classification fields: one `vehicles.vehicle_type` per vehicle and a set of
 `profiles.spoken_languages` for the Host. The profile and vehicle screens and
 mock adapter support these fields now. Existing rows are intentionally not
 backfilled, and the live save actions report the deployment requirement until
-`036` is reviewed and applied. These classifications are the only new fields
+`039` is reviewed and applied. These classifications are the only new fields
 allowed into Module 4's public card projection; vehicle make/model/plate and
 other private profile data remain owner-only.
 
+The application now implements accepted decision D030. Reputation begins at
+70, is provisional for three evidence rides, caps positive credit at +3 per
+Ride, and changes only for verified completion, Check-in, participant review,
+cancellation, No-show, or confirmed conduct events. Publishing is restricted
+below 65 after the provisional period; requesting is restricted below 50; a
+safety hold overrides both. Ordinary login never changes trust. Client checks
+in `RideService` and `RideRequestService` provide early feedback, while authored
+undeployed migration `065` supplies the authoritative ledger, triggers and
+server enforcement.
+
+`/users/:userId` is the safe public profile linked from Ride cards/details,
+request management and direct-message headers. Account Settings has switches
+for photo, spoken languages, completed-trip count and CO2 impact, plus a public
+preview. The projection always excludes email, phone, emergency contact,
+vehicle registration, companion names and precise Ride data. Authored
+undeployed migration `066` stores these choices and exposes
+`get_public_profile`; the configured live app reports its pending deployment
+instead of pretending a preference was saved. Home and desktop navigation use
+the owner's photo as a direct Profile shortcut.
+
 ## Open Questions
-Reputation formula/weights; Host Impact formula; badge/publishing thresholds;
-hard account deletion; phone OTP.
+Host Impact formula and badge perks; hard account deletion; phone OTP; final
+Trust & Safety administrator path for applying confirmed conduct events.

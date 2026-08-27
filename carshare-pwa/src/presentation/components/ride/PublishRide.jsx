@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { isRouteQuoteFresh, RideService } from '../../../business-logic/RideService.js';
 import { departureParts, formatMalaysiaDeparture } from '../../../business-logic/rideDateTime.js';
 import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
+import { ReputationService } from '../../../business-logic/ReputationService.js';
 import {
   GooglePlacesService,
   MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES,
@@ -69,6 +70,8 @@ export default function PublishRide() {
   const [vehicles, setVehicles] = useState(null);
   const [vehicleGateError, setVehicleGateError] = useState('');
   const [vehicleGateAttempt, setVehicleGateAttempt] = useState(0);
+  const [reputationEligibility, setReputationEligibility] = useState(null);
+  const [reputationGateError, setReputationGateError] = useState('');
   const [previewLocation, setPreviewLocation] = useState(null);
   const [previewStatus, setPreviewStatus] = useState({ state: 'idle', message: '' });
   const [routeQuote, setRouteQuote] = useState(null);
@@ -131,13 +134,23 @@ export default function PublishRide() {
   }, [user.id, vehicleGateAttempt]);
 
   useEffect(() => {
+    let active = true;
+    setReputationEligibility(null);
+    setReputationGateError('');
+    ReputationService.getEligibility(user.id, 'host')
+      .then((result) => active && setReputationEligibility(result))
+      .catch((err) => active && setReputationGateError(err.message || 'Your reputation standing could not be checked.'));
+    return () => { active = false; };
+  }, [user.id, vehicleGateAttempt]);
+
+  useEffect(() => {
     if (!draftRideId || !vehicles?.length || !form.vehicleId || form.vehicleCapacity) return;
     const vehicle = vehicles.find((item) => item.id === form.vehicleId);
     if (vehicle) setForm((current) => ({ ...current, vehicleCapacity: vehicle.seats }));
   }, [draftRideId, form.vehicleCapacity, form.vehicleId, vehicles]);
 
   useEffect(() => {
-    if (!hasRegisteredVehicle(vehicles) || locationRequested.current) return;
+    if (!reputationEligibility?.eligible || !hasRegisteredVehicle(vehicles) || locationRequested.current) return;
     locationRequested.current = true;
     let active = true;
     setPreviewStatus({ state: 'locating', message: 'Finding your current location to place a pin on the map…' });
@@ -155,7 +168,7 @@ export default function PublishRide() {
         setPreviewStatus({ state: 'error', message: err.message });
       });
     return () => { active = false; };
-  }, [vehicles]);
+  }, [reputationEligibility, vehicles]);
 
   function patch(fields) {
     setForm((f) => ({ ...f, ...fields }));
@@ -295,20 +308,36 @@ export default function PublishRide() {
 
   if (draftLoadError) return <main className="publish-access-state"><section className="publish-access-card" role="alert"><h1>Draft unavailable</h1><p>{draftLoadError}</p><button className="btn-primary" onClick={() => navigate('/ride')}>Back to My rides</button></section></main>;
 
-  if (!vehicles && !vehicleGateError) {
-    return <main className="publish-access-state" role="status">Checking that you have a vehicle…</main>;
+  if ((!vehicles && !vehicleGateError) || (!reputationEligibility && !reputationGateError)) {
+    return <main className="publish-access-state" role="status">Checking your Driver eligibility…</main>;
   }
 
-  if (vehicleGateError) {
+  if (vehicleGateError || reputationGateError) {
     return (
       <main className="publish-access-state">
         <section className="publish-access-card" role="alert">
           <span className="publish-access-icon"><IconCar size={24} /></span>
-          <h1>We couldn't check your vehicles</h1>
-          <p>{vehicleGateError} Location permission has not been requested.</p>
+          <h1>We couldn't check your Driver access</h1>
+          <p>{vehicleGateError || reputationGateError} Location permission has not been requested.</p>
           <div>
             <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
             <button className="btn-primary" onClick={() => setVehicleGateAttempt((attempt) => attempt + 1)}>Try again</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!reputationEligibility.eligible) {
+    return (
+      <main className="publish-access-state">
+        <section className="publish-access-card" role="alert">
+          <span className="publish-access-icon"><IconCar size={24} /></span>
+          <h1>Ride publishing is paused</h1>
+          <p>{reputationEligibility.reason} Your location was not requested.</p>
+          <div>
+            <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
+            <button className="btn-primary" onClick={() => navigate('/profile')}>View reputation</button>
           </div>
         </section>
       </main>

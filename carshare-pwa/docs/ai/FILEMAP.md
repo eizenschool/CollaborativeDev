@@ -36,6 +36,9 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/business-logic/PlacePhotoService.js` — shared Module 6 catalogue-reference and fresh Google Place photo resolver; photo URIs are never persisted.
 - `src/business-logic/RidePickupPhotoService.js` — validates, resizes, uploads, binds, replaces, removes, and signs the single private Ride pickup photo.
 - `src/business-logic/CompatibilityOptions.js` — shared validated vehicle-category and Host-language values used by Module 1 owner editors and Module 4 Search.
+- `src/business-logic/ReputationPolicy.js` and `ReputationService.js` — Module 1 verified-event scoring, standing, provisional period, and Driver/Traveller eligibility boundary.
+- `src/business-logic/PublicProfilePolicy.js` — privacy defaults and the reusable safe public-profile projection consumed by mock/live adapters.
+- `src/presentation/components/PublicProfile.jsx` — `/users/:userId` public trust profile linked by Modules 2-4.
 - `src/business-logic/SmartSearchService.js` — Module 4 criteria normalization, URL state, filtering, sorting, and Module 2 ride-search delegation.
 - `src/business-logic/FavouriteService.js` — Module 4 owner-scoped favourite adapter and safe unavailable-card mapping.
 - `src/business-logic/NotificationService.js` — shared notification mapping,

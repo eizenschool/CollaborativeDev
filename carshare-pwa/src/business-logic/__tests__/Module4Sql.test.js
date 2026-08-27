@@ -59,8 +59,8 @@ describe('Module 4 SQL contract', () => {
 
     expect(sql).toContain("vehicle_type in ('sedan', 'hatchback', 'suv', 'mpv', 'pickup', 'van', 'other')");
     expect(sql).toContain("'malay', 'english', 'mandarin', 'cantonese', 'tamil', 'other'");
-    expect(sql).toContain('create function private.search_public_rides_with_compatibility');
-    expect(sql).toMatch(/create function public\.search_public_rides_with_compatibility[\s\S]*?security invoker/i);
+    expect(sql).toMatch(/create(?: or replace)? function private\.search_public_rides_with_compatibility/i);
+    expect(sql).toMatch(/create(?: or replace)? function public\.search_public_rides_with_compatibility[\s\S]*?security invoker/i);
     expect(sql).toContain('grant update (spoken_languages) on table public.profiles to authenticated');
     expect(sql).toContain('grant update (vehicle_type) on table public.vehicles to authenticated');
     expect(sql).toContain("r.status = 'Published'");

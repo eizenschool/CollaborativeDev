@@ -1038,6 +1038,9 @@
 .search-ride-card.has-destination-photo .search-ride-card-footer button { color: #fff; }
 .search-ride-card.has-destination-photo .search-route i,
 .search-ride-card.has-destination-photo .search-host-row { border-color: rgba(255, 255, 255, .27); }
+
+.search-host-profile-link { color: inherit; text-decoration: none; border-radius: 12px; }
+.search-host-profile-link:hover strong { color: var(--teal-dark); text-decoration: underline; }
 .search-ride-card.has-destination-photo .search-route i { background: rgba(255, 255, 255, .58); }
 .search-ride-card.has-destination-photo .search-ride-card-footer {
   padding-bottom: 41px;

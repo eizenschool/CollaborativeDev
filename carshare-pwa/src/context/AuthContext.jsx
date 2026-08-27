@@ -99,6 +99,16 @@ export function AuthProvider({ children }) {
         return;
       }
 
+      // AuthService.signIn() reactivates a deactivated account for the
+      // email/password flow before this listener ever sees SIGNED_IN, but
+      // Google's redirect-based sign-in has no equivalent call site - do it
+      // here so reactivation isn't tied to one sign-in method.
+      if (event === 'SIGNED_IN' && authUser) {
+        window.setTimeout(() => {
+          if (active) void AuthService.reactivateOnSignIn(authUser.id);
+        }, 0);
+      }
+
       const refreshOptions = getAuthProfileRefreshOptions(event);
       if (refreshOptions && authUser) {
         if (!bootstrapFinished) finishBootstrap(authUser);
