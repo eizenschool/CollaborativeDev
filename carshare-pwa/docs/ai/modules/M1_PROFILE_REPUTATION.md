@@ -86,19 +86,18 @@ Ride, and changes only for verified completion, Check-in, participant review,
 cancellation, No-show, or confirmed conduct events. Publishing is restricted
 below 65 after the provisional period; requesting is restricted below 50; a
 safety hold overrides both. Ordinary login never changes trust. Client checks
-in `RideService` and `RideRequestService` provide early feedback, while authored
-undeployed migration `065` supplies the authoritative ledger, triggers and
-server enforcement.
+in `RideService` and `RideRequestService` provide early feedback. Deployed
+migration `072` supplies the authoritative ledger, triggers and server
+enforcement; deployed compensating migration `074` keeps its Ride-status
+trigger within the actual `rides` row contract and restores recruitment close.
 
 `/users/:userId` is the safe public profile linked from Ride cards/details,
 request management and direct-message headers. Account Settings has switches
 for photo, spoken languages, completed-trip count and CO2 impact, plus a public
 preview. The projection always excludes email, phone, emergency contact,
-vehicle registration, companion names and precise Ride data. Authored
-undeployed migration `066` stores these choices and exposes
-`get_public_profile`; the configured live app reports its pending deployment
-instead of pretending a preference was saved. Home and desktop navigation use
-the owner's photo as a direct Profile shortcut.
+vehicle registration, companion names and precise Ride data. Deployed migration
+`073` stores these choices and exposes `get_public_profile`. Home and desktop
+navigation use the owner's photo as a direct Profile shortcut.
 
 ## Open Questions
 Host Impact formula and badge perks; hard account deletion; phone OTP; final
