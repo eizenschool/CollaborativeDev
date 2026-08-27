@@ -19,7 +19,7 @@ import {
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { IconFilter, IconMapPin, IconSearch, IconStar, IconX } from '../icons.jsx';
 import SearchForm from './SearchForm.jsx';
-import { SearchRideCard } from './RideCards.jsx';
+import { MultiLegItinerary, MultiLegJourneyCard, SearchRideCard } from './RideCards.jsx';
 import DestinationRecommendationPicker from './DestinationRecommendationPicker.jsx';
 import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
 import '../../styles/search.css';
@@ -149,9 +149,11 @@ export default function SearchModule() {
   const [notice, setNotice] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [recommendationsOpen, setRecommendationsOpen] = useState(false);
+  const [selectedJourney, setSelectedJourney] = useState(null);
   const filterTriggerRef = useRef(null);
   const recommendationButtonRef = useRef(null);
   const recommendationTriggerRef = useRef(null);
+  const itineraryTriggerRef = useRef(null);
 
   useEffect(() => setCriteria(appliedCriteria), [parameterKey]);
 
@@ -276,6 +278,18 @@ export default function SearchModule() {
     setSearchParams(smartSearchCriteriaToParams(normalized));
   }
 
+  function openItinerary(journey, trigger) {
+    itineraryTriggerRef.current = trigger;
+    setSelectedJourney(journey);
+  }
+
+  function viewItineraryLeg(leg) {
+    setSelectedJourney(null);
+    navigate(`/ride/${leg.id}`, {
+      state: { returnTo: `${location.pathname}${location.search}` }
+    });
+  }
+
   const activeFilterCount = [
     criteria.destinationPlaceId,
     criteria.journeyScale,
@@ -385,8 +399,8 @@ export default function SearchModule() {
 
         <section className="search-results" aria-busy={loading} aria-labelledby="search-results-title">
           <div className="search-results-heading">
-            <div><p>AVAILABLE JOURNEYS</p><h2 id="search-results-title">{loading ? 'Searching rides…' : `${rides.length} ride${rides.length === 1 ? '' : 's'} found`}</h2></div>
-            {!loading && <span>{appliedCriteria.sort === SMART_SEARCH_SORTS.HOST_IMPACT ? 'Highest impact' : 'Earliest first'}</span>}
+            <div><p>AVAILABLE JOURNEYS</p><h2 id="search-results-title">{loading ? 'Searching rides…' : `${rides.length} journey${rides.length === 1 ? '' : 's'} found`}</h2></div>
+            {!loading && <span>{rides.some((ride) => ride.journeyType === 'multi-leg') ? 'Two-leg alternatives' : appliedCriteria.sort === SMART_SEARCH_SORTS.HOST_IMPACT ? 'Highest impact' : 'Earliest first'}</span>}
           </div>
 
           {!loading && !error && rides.length === 0 && (
@@ -408,7 +422,14 @@ export default function SearchModule() {
           )}
 
           <div className="search-result-grid">
-            {rides.map((ride) => (
+            {rides.map((ride) => ride.journeyType === 'multi-leg' ? (
+              <MultiLegJourneyCard
+                key={ride.id}
+                journey={ride}
+                proximityLabel={appliedCriteria.destinationPlaceId ? appliedCriteria.destination : ''}
+                onView={(event) => openItinerary(ride, event.currentTarget)}
+              />
+            ) : (
               <SearchRideCard
                 key={ride.id}
                 ride={ride}
@@ -433,6 +454,16 @@ export default function SearchModule() {
         triggerRef={filterTriggerRef}
       >
         <FilterPanel criteria={criteria} onChange={setCriteria} onClear={clearFilters} onChooseRecommendation={openRecommendations} mobile onApply={submitSearch} />
+      </AdaptiveDialog>
+
+      <AdaptiveDialog
+        open={Boolean(selectedJourney)}
+        onClose={() => setSelectedJourney(null)}
+        title="Your two-leg itinerary"
+        description="Review both independent rides and the transfer before opening either ride detail."
+        triggerRef={itineraryTriggerRef}
+      >
+        <MultiLegItinerary journey={selectedJourney} onViewLeg={viewItineraryLeg} />
       </AdaptiveDialog>
 
       {recommendationsOpen && (

@@ -88,6 +88,14 @@ export const PlaceQueryService = {
     return place ? toContract(place) : null;
   },
 
+  /** Approved public-catalogue transfer points for Module 4 multi-leg matching. */
+  async getTransferPoints() {
+    return selectRecommendable(await discoveryDb.listPlaces())
+      .filter((place) => place.category === 'heritage'
+        || /(?:^|\b)(?:r\s*&\s*r|rest\s+(?:area|stop)|hentian)(?:\b|$)/i.test(place.name || ''))
+      .map((place) => toContract(place));
+  },
+
   /**
    * FR-6.36 - places within `radiusKm` of a coordinate, optionally one category.
    *

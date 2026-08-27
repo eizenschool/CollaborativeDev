@@ -19,7 +19,8 @@ import {
 vi.mock('../RideService.js', () => ({
   RideService: {
     backend: 'mock',
-    searchRides: vi.fn()
+    searchRides: vi.fn(),
+    searchMultiLegRides: vi.fn()
   }
 }));
 
@@ -255,5 +256,38 @@ describe('Module 4 smart search contracts', () => {
       now: new Date('2026-08-13T00:00:00.000Z')
     });
     expect(criteria).toMatchObject({ pickup: 'KL Sentral', destination: 'Ipoh', journeyScale: 'Intercity', date: '', departAfter: '' });
+  });
+
+  it('returns a two-leg fallback only when no suitable direct ride remains', async () => {
+    const first = ride({
+      id: 'leg-one',
+      destination: 'George Town Heritage Core',
+      destinationLocation: { placeId: 'fixture_georgetown' },
+      departureAt: '2026-09-10T00:00:00.000Z',
+      date: '2026-09-10', time: '08:00', journeyScale: 'Urban',
+      estimatedArrivalAt: '2026-09-10T02:00:00.000Z'
+    });
+    const second = ride({
+      id: 'leg-two',
+      pickup: 'George Town Heritage Core',
+      pickupLocation: { placeId: 'fixture_georgetown' },
+      destination: 'Ipoh Station',
+      destinationLocation: { placeId: 'fixture_chain_a' },
+      departureAt: '2026-09-10T02:30:00.000Z',
+      date: '2026-09-10', time: '10:30', journeyScale: 'Urban',
+      estimatedArrivalAt: '2026-09-10T04:00:00.000Z'
+    });
+    RideService.searchRides.mockResolvedValueOnce([]).mockResolvedValueOnce([first, second]);
+
+    const result = await SmartSearchService.search({
+      pickup: 'KL', destination: 'Ipoh', date: '2026-09-10',
+      minSeats: 2, tags: ['No smoking']
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: 'multileg:leg-one:leg-two', journeyType: 'multi-leg', waitMinutes: 30
+    });
+    expect(RideService.searchRides).toHaveBeenCalledTimes(2);
   });
 });

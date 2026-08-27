@@ -43,8 +43,9 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
 - Favourite now uses the shared loading, empty, error, and action primitives
   while keeping refresh, removal, and alternative-search service behaviour.
 - Saved rides refresh when Favourite opens. Unavailable rides remain removable
-  and offer a prefilled alternative search; background notifications are
-  deferred.
+  and offer a prefilled alternative search. Deployed migration `067` now emits
+  one deduplicated shared in-app/Web Push notification per user, ride, and
+  availability transition, with the on-open warning retained as fallback.
 - `/ride` is now the authenticated Module 2 management workspace. Its redundant
   basic search was retired while `SmartSearchService` continues to retrieve
   candidates through Module 2's `RideService.searchRides()` contract.
@@ -65,13 +66,18 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
 - FR-4.5 vehicle and language compatibility is implemented across Search,
   owner vehicle management, Host profile editing, favourites, mock persistence,
   and safe card display. Existing rows remain unclassified: they appear under
-  Any but do not match a specific choice. Migration `039` is deliberately not
-  deployed pending its separate review. Until then ordinary exact/proximity
-  search still falls back safely, while selecting either compatibility filter
-  reports the missing deployment honestly. Saving a vehicle also falls back:
-  it retries without `vehicle_type` and reports the unstored category, because
-  blocking the write would take Module 1 vehicle registration - and with it
-  Module 2 hosting, which requires a host vehicle - down with the filter.
+  Any but do not match a specific choice. Migration `039` was deployed on
+  2026-08-27. Its compatibility RPC, nullable columns, constraints, and owner
+  update grants are live; the fallback remains for environments that have not
+  applied the migration.
+- When no suitable direct ride survives the applied criteria, Search now asks
+  for a two-leg alternative. Both Published rides must have seats, stored ETAs,
+  confirmed endpoints, and satisfy every selected filter. Transfers are limited
+  to recommendable Module 6 cultural destinations or catalogue rest stops.
+  Leg 2 must follow Leg 1's ETA; if either leg is Intercity, the transfer must be
+  at least three hours. The card and keyboard-contained itinerary expose only
+  safe route/Host/schedule data and open each real ride independently. Migration
+  `068` is deployed; no paid Routes request is made for matching.
 
 Business logic: `src/business-logic/SmartSearchService.js` and
 `src/business-logic/FavouriteService.js`.
@@ -88,15 +94,19 @@ Presentation: `src/presentation/components/search/` and
 
 Database: `database/sql/034_m4_smart_search_favourites.sql` and
 `database/sql/035_m4_destination_proximity_search.sql` (both deployed and
-verified), plus `database/sql/039_m4_vehicle_language_filters.sql` (authored,
-review pending, not deployed). Post-deployment advisors reported no Module 4
-security finding; their favourite foreign-key index follow-up is authored as
-`040_m4_favourites_advisor_followup.sql` and remains undeployed for review.
+verified), plus deployed `039_m4_vehicle_language_filters.sql`,
+`040_m4_favourites_advisor_followup.sql`,
+`067_m4_favourite_unavailable_notifications.sql`, and
+`068_m4_multi_leg_journey_search.sql`. Post-deployment advisors reported no new
+Module 4 security finding. The new favourite/transfer indexes are initially
+reported as unused, which is expected before normal production traffic.
 
 ## Open Questions
-Deferred beyond this slice: route-corridor and multi-leg matching and transfer
-rules; Routes/Distance Matrix quota and cost; realtime or push notification
-delivery.
+Remaining acceptance work is operational rather than another feature slice:
+two-account notification/push verification, owner-edit verification, and a
+live dataset containing a valid two-leg chain. Route-corridor matching remains
+outside Module 4, and multi-leg matching deliberately uses stored schedules
+rather than paid Routes/Distance Matrix calls.
 
 Public live Supabase search uses the safe anonymous browsing policy in migration
 `023`. Environments without those grants must surface the service error rather
