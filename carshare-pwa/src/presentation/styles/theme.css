@@ -186,8 +186,9 @@ button { touch-action: manipulation; }
 }
 .skip-link:focus { transform: translateY(0); }
 
-#root, .app-shell { min-height: 100vh; }
+#root, .app-shell, .app-route-shell { min-height: 100vh; }
 .app-shell { display: flex; flex-direction: column; }
+.app-shell > .ui-swipe-route-stage { flex: 1; min-height: 0; }
 .app-main { flex: 1; min-width: 0; outline: none; }
 .auth-main { min-height: 100vh; outline: none; }
 .mobile-appbar { display: none; }
@@ -515,11 +516,16 @@ body.dialog-open { overflow: hidden; }
 }
 .topnav-signin:hover { background: var(--teal-dark); }
 
-@media (max-width: 900px) {
-  .topnav { padding: 0 16px; gap: 4px; }
-  .topnav-brand .brand-title { display: none; }
+@media (max-width: 1100px) {
+  .topnav { padding: 0 20px; gap: 4px; }
+  .topnav-brand { margin-right: 8px; }
   .topnav-item .nav-label { display: none; }
   .topnav-item { padding: 9px 11px; }
+}
+
+@media (max-width: 900px) {
+  .topnav { padding: 0 16px; }
+  .topnav-brand .brand-title { display: none; }
 }
 
 /* The Figma ride screens use a persistent bottom tab bar on phones. Keep the

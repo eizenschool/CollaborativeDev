@@ -93,18 +93,13 @@ function ServiceWorkerNotificationNavigation() {
   return null;
 }
 
-function AppShell() {
-  const location = useLocation();
-
+function AppShell({ routeLocation }) {
   return (
-    <div className="app-shell">
-      <TopNav />
-      <div id="main-content" className="app-main" tabIndex={-1}>
-        <ServiceWorkerNotificationNavigation />
-        <SwipeRouteViewport>
-          <div className="ui-route-transition" key={location.pathname}>
-            <RouteBoundary>
-              <Routes location={location}>
+    <div id="main-content" className="app-main" tabIndex={-1}>
+      <ServiceWorkerNotificationNavigation />
+      <div className="ui-route-transition" key={routeLocation.pathname}>
+        <RouteBoundary>
+          <Routes location={routeLocation}>
         {/* Profile Settings, My Vehicles, Reputation, Host Dashboard, and Account
             Settings are consolidated into one "My Profile" page (hero + in-page
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
@@ -153,10 +148,8 @@ function AppShell() {
         <Route path="/discover/*" element={<DiscoverRoutes />} />
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
-              </Routes>
-            </RouteBoundary>
-          </div>
-        </SwipeRouteViewport>
+          </Routes>
+        </RouteBoundary>
       </div>
     </div>
   );
@@ -239,6 +232,8 @@ function AuthRecoveryNotice() {
 export default function App() {
   const { loading } = useAuth();
   const online = useOnlineStatus();
+  const location = useLocation();
+  const showNavigation = location.pathname !== '/auth';
 
   if (loading) {
     return <RouteLoading label="Preparing Let's Tumpang" />;
@@ -258,15 +253,20 @@ export default function App() {
         </div>
       )}
 
-      <RouteBoundary>
-        <Routes>
-          <Route
-            path="/auth"
-            element={<div id="main-content" className="auth-main ui-route-transition" tabIndex={-1}><AuthEntry /></div>}
-          />
-          <Route path="*" element={<AppShell />} />
-        </Routes>
-      </RouteBoundary>
+      <div className={showNavigation ? 'app-shell' : 'app-route-shell'}>
+        {showNavigation && <TopNav />}
+        <SwipeRouteViewport>
+          <RouteBoundary>
+            <Routes location={location}>
+              <Route
+                path="/auth"
+                element={<div id="main-content" className="auth-main ui-route-transition" tabIndex={-1}><AuthEntry /></div>}
+              />
+              <Route path="*" element={<AppShell routeLocation={location} />} />
+            </Routes>
+          </RouteBoundary>
+        </SwipeRouteViewport>
+      </div>
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAlertSoundService } from '../AlertSoundService.js';
+import { createAlertSoundService, createRingtoneCoordinator } from '../AlertSoundService.js';
 
 function soundHarness(state = 'running') {
   const oscillator = {
@@ -58,5 +58,78 @@ describe('AlertSoundService', () => {
     service.startRingtone('call-1');
     service.startRingtone('call-1');
     expect(harness.setInterval).toHaveBeenCalledOnce();
+  });
+
+  it('stops only the ringtone owned by the requested alert id', async () => {
+    const harness = soundHarness();
+    const service = createAlertSoundService(harness.globalObject);
+    await service.unlock();
+    service.startRingtone('call:call-1');
+
+    expect(service.stopRingtone('sos:event-1')).toBe(false);
+    expect(harness.clearInterval).not.toHaveBeenCalled();
+    expect(service.stopRingtone('call:call-1')).toBe(true);
+    expect(harness.clearInterval).toHaveBeenCalledWith(42);
+  });
+
+  it('rings immediately after a previously blocked context is unlocked', async () => {
+    const harness = soundHarness('suspended');
+    const service = createAlertSoundService(harness.globalObject);
+
+    expect(service.startRingtone('sos:event-1')).toBe(false);
+    expect(harness.context.createOscillator).not.toHaveBeenCalled();
+    await service.unlock();
+    expect(service.startRingtone('sos:event-1')).toBe(true);
+    expect(harness.context.createOscillator).toHaveBeenCalledTimes(2);
+    expect(harness.setInterval).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ringtone coordination', () => {
+  it('lets SOS preempt a call and resumes only a still-ringing enabled call', () => {
+    const soundService = {
+      startRingtone: vi.fn(() => true),
+      stopRingtone: vi.fn(() => true),
+    };
+    const coordinator = createRingtoneCoordinator(soundService);
+
+    expect(coordinator.startCall('call-1', true)).toBe(true);
+    expect(coordinator.startSOS('event-1')).toBe(true);
+    expect(coordinator.stopSOS('event-1')).toBe(true);
+    expect(soundService.startRingtone.mock.calls).toEqual([
+      ['call:call-1'],
+      ['sos:event-1'],
+      ['call:call-1'],
+    ]);
+  });
+
+  it('does not let call cleanup stop an active SOS ringtone', () => {
+    const soundService = {
+      startRingtone: vi.fn(() => true),
+      stopRingtone: vi.fn(() => true),
+    };
+    const coordinator = createRingtoneCoordinator(soundService);
+
+    coordinator.startCall('call-1', true);
+    coordinator.startSOS('event-1');
+    coordinator.stopCall();
+    coordinator.stopSOS('event-1');
+
+    expect(soundService.stopRingtone).toHaveBeenNthCalledWith(1, 'call:call-1');
+    expect(soundService.stopRingtone).toHaveBeenNthCalledWith(2, 'sos:event-1');
+    expect(soundService.startRingtone).toHaveBeenCalledTimes(2);
+  });
+
+  it('forces SOS ringing while leaving disabled general call sound silent', () => {
+    const soundService = {
+      startRingtone: vi.fn(() => true),
+      stopRingtone: vi.fn(() => true),
+    };
+    const coordinator = createRingtoneCoordinator(soundService);
+
+    expect(coordinator.startCall('call-1', false)).toBe(false);
+    expect(coordinator.startSOS('event-1')).toBe(true);
+    expect(soundService.startRingtone).toHaveBeenCalledOnce();
+    expect(soundService.startRingtone).toHaveBeenCalledWith('sos:event-1');
   });
 });

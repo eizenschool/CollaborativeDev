@@ -56,7 +56,10 @@ export function RouteFocusManager() {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      document.getElementById('main-content')?.focus({ preventScroll: true });
+      const activeMain = document.querySelector(
+        '.ui-swipe-route-frame:not([aria-hidden="true"]) #main-content'
+      ) || document.getElementById('main-content');
+      activeMain?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [location.pathname]);

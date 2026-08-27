@@ -375,6 +375,33 @@ function CancelSheet({ onDismiss, onConfirm }) {
   );
 }
 
+function RequestCancelSheet({ onDismiss, onConfirm, saving }) {
+  const [reason, setReason] = useState('');
+  const [otherReason, setOtherReason] = useState('');
+  const reasons = ['Change of plans', 'Found another ride', 'Emergency', 'Scheduling conflict', 'Other'];
+  const finalReason = reason === 'Other' ? otherReason.trim() : reason;
+
+  return (
+    <AdaptiveDialog
+      open
+      onClose={() => { if (!saving) onDismiss(); }}
+      title="Cancel this request?"
+      description="Cancellation takes effect immediately. The Driver will be notified and does not need to approve it."
+      footer={(
+        <>
+          <Button variant="secondary" disabled={saving} onClick={onDismiss}>Keep request</Button>
+          <Button variant="danger" loading={saving} loadingLabel="Cancelling request" disabled={!finalReason} onClick={() => onConfirm(finalReason)}>Confirm cancellation</Button>
+        </>
+      )}
+    >
+      <div className="reason-list" role="group" aria-label="Cancellation reason">
+        {reasons.map((item) => <button type="button" disabled={saving} aria-pressed={reason === item} className={reason === item ? 'selected' : ''} key={item} onClick={() => setReason(item)}><i aria-hidden="true" />{item}</button>)}
+      </div>
+      {reason === 'Other' && <textarea className="request-cancellation-reason" disabled={saving} aria-label="Cancellation reason" value={otherReason} onChange={(event) => setOtherReason(event.target.value)} placeholder="Describe your reason…" />}
+    </AdaptiveDialog>
+  );
+}
+
 function RequestSheet({ ride, onDismiss, onSubmit, saving, error }) {
   const [seatsRequested, setSeatsRequested] = useState(1);
   const [companionNames, setCompanionNames] = useState([]);
@@ -411,6 +438,9 @@ export default function RideDetail() {
   const [showRequest, setShowRequest] = useState(false);
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [requestCancelling, setRequestCancelling] = useState(false);
+  const [requestCancelBusy, setRequestCancelBusy] = useState(false);
+  const [requestNotice, setRequestNotice] = useState('');
   const [reviews, setReviews] = useState([]);
   const [isOpeningChat, setIsOpeningChat] = useState(false);
   const [lifecycleContext, setLifecycleContext] = useState(null);
@@ -487,6 +517,7 @@ export default function RideDetail() {
   const canEdit = isHost && ['Draft', 'Published'].includes(ride.status) && !ride.hasAcceptedRequests;
   const canCancel = isHost && ['Published', 'Matched'].includes(ride.status) && isBeforeRideExpiry(ride.departureAt, clock);
   const hasActiveRequest = ['Pending', 'Accepted'].includes(activeRequest?.status);
+  const canCancelRequest = !isHost && hasActiveRequest && !['In Transit', 'Completed', 'Cancelled', 'Expired'].includes(ride.status) && new Date(ride.departureAt) > clock;
   const canResubmitRequest = activeRequest?.status !== 'Rejected';
   const canRequest = !isHost && ride.status === 'Published' && ride.seatsAvailable > 0 && isAtLeastHoursAway(ride.departureAt) && canResubmitRequest;
   const canMessageHost = !isHost && ride.status === 'Published';
@@ -502,6 +533,23 @@ export default function RideDetail() {
       setRide(await RideService.cancelRide(ride.id, reason));
       setCancelling(false);
     } catch (err) { setError(err.message); }
+  }
+
+  async function cancelRequest(reason) {
+    if (!canCancelRequest || requestCancelBusy) return;
+    setRequestCancelBusy(true);
+    setError('');
+    setRequestNotice('');
+    try {
+      await RideRequestService.cancelRequest(activeRequest.id, reason);
+      setRequestCancelling(false);
+      setRequestNotice('Request cancelled immediately. The Driver does not need to approve this cancellation.');
+      await loadDetail({ silent: true });
+    } catch (err) {
+      setError(err.message || 'Unable to cancel this request.');
+    } finally {
+      setRequestCancelBusy(false);
+    }
   }
 
   async function submitRequest(payload) {
@@ -611,6 +659,7 @@ export default function RideDetail() {
 
       <div className="ride-detail-content">
         {error && <div className="alert alert-error" role="alert">{error}</div>}
+        {requestNotice && <div className="alert alert-success" role="status">{requestNotice}</div>}
         {location.state?.notice && <div className="alert alert-success" role="status">{location.state.notice}</div>}
         {tripModeEligible && <section className="trip-mode-return-banner"><div><strong>Trip mode is ready</strong><span>{journeyState.title}</span></div><button type="button" className="btn-primary" onClick={() => setSearchParams({ view: 'trip' })}>Back to trip mode</button></section>}
         <section className="ride-info-card lifecycle-card"><Lifecycle status={ride.status} /></section>
@@ -700,9 +749,11 @@ export default function RideDetail() {
                   : activeRequest ? <div className="request-status-message"><IconX size={15} /> Request {activeRequest.status.toLowerCase()}. You can submit a new request while this ride is open.</div>
                     : null}
           {ride.status !== 'Completed' && !hasActiveRequest && canResubmitRequest && <button className="primary-action full" disabled={!canRequest} onClick={openRequest}>{canRequest ? 'Request to join' : 'Requests are closed'}</button>}
+          {canCancelRequest && <button type="button" className="cancel-action" onClick={() => setRequestCancelling(true)}>Cancel request</button>}
         </>}
       </div>
       {cancelling && <CancelSheet onDismiss={() => setCancelling(false)} onConfirm={cancelRide} />}
+      {requestCancelling && <RequestCancelSheet onDismiss={() => setRequestCancelling(false)} onConfirm={cancelRequest} saving={requestCancelBusy} />}
       {showRequest && <RequestSheet ride={ride} onDismiss={() => { setShowRequest(false); setError(''); }} onSubmit={submitRequest} saving={requesting} error={error} />}
     </main>
   );
