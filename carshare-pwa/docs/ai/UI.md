@@ -172,6 +172,14 @@ other records them. On a 375px phone seven items leave 50px each, above the
 Use `TopNav.jsx`; do not implement a separate navigation bar inside a module.
 The current route determines the active state.
 
+On touch phone layouts, the seven exact top-level destinations also support
+horizontal swipe navigation in the same order: swipe left for the next
+destination and right for the previous destination. Home and Profile are hard boundaries.
+Detail, form, trip, and conversation routes keep their normal back behaviour;
+forms, dialogs, maps, horizontal rails, and other interactive regions must not
+be intercepted by the page gesture. The visible navigation remains the
+non-gesture and keyboard alternative.
+
 - The default website entry is public Home. Guests may browse Home, Search
   results, and Published Ride Detail without creating a session. `/search` is
   the only public ride-listing surface.

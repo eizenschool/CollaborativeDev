@@ -1,14 +1,22 @@
 // ===== PRESENTATION LAYER SUPPORT (AuthContext - shares session state across GUI components; delegates all real logic to business-logic/AuthService) =====
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { AuthService } from '../business-logic/AuthService.js';
-import { getAuthProfileRefreshOptions, parseOAuthHashError } from '../business-logic/authAccess.js';
+import {
+  AUTH_BOOTSTRAP_TIMEOUT_MS,
+  getAuthProfileRefreshOptions,
+  parseOAuthHashError,
+  promiseWithTimeout
+} from '../business-logic/authAccess.js';
 
 const AuthContext = createContext(null);
+const AUTH_RECOVERY_MESSAGE = 'Sign-in restoration is taking longer than expected.';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [oauthError, setOauthError] = useState(null);
+  const [authRecoveryError, setAuthRecoveryError] = useState(null);
+  const [retryingAuth, setRetryingAuth] = useState(false);
 
   // Runs once on the page load that Google/Supabase redirects back to. A
   // failed round trip (see parseOAuthHashError) never surfaces through
@@ -24,57 +32,134 @@ export function AuthProvider({ children }) {
 
   const clearOauthError = useCallback(() => setOauthError(null), []);
 
-  const refresh = useCallback(async ({ showLoading = true } = {}) => {
+  const refresh = useCallback(async ({ showLoading = true, preserveUser = false } = {}) => {
     if (showLoading) setLoading(true);
     try {
-      const u = await AuthService.getCurrentUser();
+      const u = await promiseWithTimeout(AuthService.getCurrentUser());
       setUser(u);
+      setAuthRecoveryError(null);
+      return u;
     } catch {
-      setUser(null);
+      if (!preserveUser) setUser(null);
+      setAuthRecoveryError(AUTH_RECOVERY_MESSAGE);
+      return null;
     } finally {
       if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refresh();
     let active = true;
-    const unsubscribe = AuthService.onAuthStateChange((event) => {
+    let bootstrapFinished = false;
+    let bootstrapTimer;
+
+    const finishBootstrap = (authUser) => {
+      if (!active) return;
+      bootstrapFinished = true;
+      window.clearTimeout(bootstrapTimer);
+      setUser(AuthService.sessionUser(authUser));
+      setAuthRecoveryError(null);
+      setLoading(false);
+    };
+
+    const syncProfile = (authUser) => {
+      if (!authUser) return;
+      // Supabase recommends keeping onAuthStateChange callbacks short. Defer
+      // profile I/O so it cannot hold up INITIAL_SESSION or the App Shell.
+      window.setTimeout(() => {
+        if (!active) return;
+        void AuthService.getProfileForAuthUser(authUser)
+          .then((profile) => {
+            if (active && profile) setUser(profile);
+          })
+          .catch(() => {
+            // Keep the session-derived user mounted. A transient profile error
+            // must not turn a signed-in screen into a sign-out or loading loop.
+          });
+      }, 0);
+    };
+
+    bootstrapTimer = window.setTimeout(() => {
+      if (!active || bootstrapFinished) return;
+      bootstrapFinished = true;
+      setLoading(false);
+      setAuthRecoveryError(AUTH_RECOVERY_MESSAGE);
+    }, AUTH_BOOTSTRAP_TIMEOUT_MS);
+
+    const unsubscribe = AuthService.onAuthStateChange((event, authUser) => {
       if (!active) return;
       if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setLoading(false);
+        finishBootstrap(null);
         return;
       }
+
+      if (event === 'INITIAL_SESSION') {
+        finishBootstrap(authUser);
+        syncProfile(authUser);
+        return;
+      }
+
       const refreshOptions = getAuthProfileRefreshOptions(event);
-      if (refreshOptions) {
+      if (refreshOptions && authUser) {
+        if (!bootstrapFinished) finishBootstrap(authUser);
         // Supabase re-emits SIGNED_IN or TOKEN_REFRESHED when a hidden tab
         // returns to the foreground. Keep the profile fresh without replacing
         // the current route with the app-wide startup screen.
-        window.setTimeout(() => active && refresh(refreshOptions), 0);
+        syncProfile(authUser);
       }
     });
+
+    if (AuthService.backend !== 'supabase') {
+      void AuthService.getCurrentUser()
+        .then((currentUser) => {
+          if (!active) return;
+          bootstrapFinished = true;
+          window.clearTimeout(bootstrapTimer);
+          setUser(currentUser);
+          setLoading(false);
+        })
+        .catch(() => finishBootstrap(null));
+    }
+
     return () => {
       active = false;
+      window.clearTimeout(bootstrapTimer);
       unsubscribe();
     };
-  }, [refresh]);
+  }, []);
+
+  const retryAuth = useCallback(async () => {
+    setRetryingAuth(true);
+    try {
+      const currentUser = await promiseWithTimeout(AuthService.getCurrentUser());
+      setUser(currentUser);
+      setAuthRecoveryError(null);
+      return currentUser;
+    } catch {
+      setAuthRecoveryError(AUTH_RECOVERY_MESSAGE);
+      return null;
+    } finally {
+      setRetryingAuth(false);
+    }
+  }, []);
 
   const signUp = async (form) => {
     const result = await AuthService.signUp(form);
     setUser(result.user);
+    setAuthRecoveryError(null);
     return result;
   };
 
   const signIn = async (form) => {
     const u = await AuthService.signIn(form);
     setUser(u);
+    setAuthRecoveryError(null);
     return u;
   };
 
   // No `setUser` here: this redirects the browser to Google and back, so the
-  // signed-in user only becomes known once Supabase fires SIGNED_IN after the
-  // redirect - the effect above already listens for that and calls refresh().
+  // signed-in user only becomes known once Supabase emits the restored session
+  // after the redirect; the listener above mounts it without a second auth call.
   const signInWithGoogle = async () => {
     await AuthService.signInWithGoogle();
   };
@@ -85,7 +170,21 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signInWithGoogle, signOut, refresh, setUser, oauthError, clearOauthError }}>
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      signUp,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      refresh,
+      retryAuth,
+      retryingAuth,
+      authRecoveryError,
+      setUser,
+      oauthError,
+      clearOauthError
+    }}>
       {children}
     </AuthContext.Provider>
   );

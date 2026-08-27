@@ -33,6 +33,27 @@ export function buildSignUpResult({ authUser, session, appUser }) {
   };
 }
 
+export function buildSessionUser(authUser) {
+  if (!authUser) return null;
+  const metadata = authUser.user_metadata || {};
+  const email = authUser.email || '';
+
+  // This is a presentation-only fallback while the private profile query runs.
+  // Server authorization continues to rely on the authenticated JWT and RLS,
+  // never on editable user metadata.
+  return {
+    id: authUser.id,
+    fullName: metadata.full_name || metadata.name || email.split('@')[0] || 'Member',
+    spokenLanguages: [],
+    email,
+    phone: '',
+    emergencyContact: { name: '', phone: '', relationship: '' },
+    profilePhotoUrl: metadata.avatar_url || metadata.picture || null,
+    status: 'active',
+    createdAt: authUser.created_at || null
+  };
+}
+
 export const AuthService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
 
@@ -117,6 +138,18 @@ export const AuthService = {
       const { data, error } = await supabase.auth.getUser();
       if (error) throw error;
       return data.user ? ProfileService.getProfile(data.user.id, data.user) : null;
+    }
+    return mockDb.getCurrentUser();
+  },
+
+  sessionUser(authUser) {
+    return buildSessionUser(authUser);
+  },
+
+  async getProfileForAuthUser(authUser) {
+    if (!authUser) return null;
+    if (isSupabaseConfigured) {
+      return ProfileService.getProfile(authUser.id, authUser);
     }
     return mockDb.getCurrentUser();
   },

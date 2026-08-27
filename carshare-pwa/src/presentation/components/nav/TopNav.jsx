@@ -11,21 +11,12 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
-import { IconCar, IconHome, IconSearch, IconRoute, IconClock, IconMessage, IconHeart, IconUser, IconBell, IconLogOut } from '../icons.jsx';
+import { IconCar, IconBell, IconLogOut } from '../icons.jsx';
 import { IconButton } from '../ui/Button.jsx';
+import { PRIMARY_NAV_ITEMS } from './primaryNavigation.js';
 
 const NotificationPopover = lazy(() => import('../notifications/NotificationCenter.jsx')
   .then((module) => ({ default: module.NotificationPopover })));
-
-const NAV_ITEMS = [
-  { to: '/home', label: 'Home', Icon: IconHome },
-  { to: '/search', label: 'Search', Icon: IconSearch },
-  { to: '/ride', label: 'Ride', Icon: IconRoute, requiresAuth: true },
-  { to: '/trip', label: 'Trips', Icon: IconClock, requiresAuth: true },
-  { to: '/message', label: 'Message', Icon: IconMessage, requiresAuth: true },
-  { to: '/favourite', label: 'Favourite', Icon: IconHeart, requiresAuth: true },
-  { to: '/profile', label: 'Profile', Icon: IconUser, requiresAuth: true }
-];
 
 export default function TopNav() {
   const { user, signOut } = useAuth();
@@ -98,7 +89,7 @@ export default function TopNav() {
         </NavLink>
 
         <nav className="topnav-links" aria-label="Primary navigation">
-          {NAV_ITEMS.map(({ to, label, Icon, requiresAuth }) => {
+          {PRIMARY_NAV_ITEMS.map(({ to, label, Icon, requiresAuth }) => {
             const target = requiresAuth
               ? getAuthNavigation(user, to, `Sign in to open ${label}.`)
               : { to };

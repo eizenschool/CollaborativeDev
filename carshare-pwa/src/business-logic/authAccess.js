@@ -1,4 +1,16 @@
 export const DEFAULT_AUTH_RETURN_PATH = '/home';
+export const AUTH_BOOTSTRAP_TIMEOUT_MS = 8000;
+
+export function promiseWithTimeout(promise, timeoutMs = AUTH_BOOTSTRAP_TIMEOUT_MS) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('Authentication is taking longer than expected.'));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
 
 const AUTH_PROFILE_REFRESH_EVENTS = new Set([
   'INITIAL_SESSION',

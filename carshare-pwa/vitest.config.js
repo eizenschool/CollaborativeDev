@@ -3,8 +3,9 @@
 // build and the test run stay completely independent of each other.
 //
 // No React plugin and a plain node environment, because everything under test is
-// pure business-logic - PIN generation, haversine distance, confidence scoring. No
-// component rendering means no jsdom and no JSX transform to configure.
+// pure logic - PIN generation, haversine distance, confidence scoring, and the
+// shared primary-navigation order. No component rendering means no jsdom and no
+// JSX transform to configure.
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -28,6 +29,7 @@ export default defineConfig({
       'src/business-logic/verification/__tests__/**/*.test.js',
       'src/business-logic/discovery/__tests__/**/*.test.js',
       'src/business-logic/__tests__/**/*.test.js',
+      'src/presentation/components/nav/__tests__/primaryNavigation.test.js',
       // Module 6's Edge Functions are Deno, not Vite, so their logic sits
       // outside src/ and would otherwise be untestable - which is exactly how
       // FR-6.7 classification shipped two catalogue-wide bugs. Only each

@@ -325,6 +325,9 @@ Tracked migration `060_m2_allow_pickup_photo_upload_return.sql` is deployed and
 adds the narrowly owner/path/Ride-scoped Storage `SELECT` required for upload
 metadata to be returned without weakening the private bucket. The
 `m2-ride-pickup-photo` Edge Function is active as version 1.
+Tracked migration `066_m2_fix_pickup_photo_storage_path_policy.sql` corrects the
+same policies' folder-count check: `storage.foldername(name)` excludes the
+filename, so the `user-id/ride-id/filename` upload path has two folders.
 
 The deployed `047` contract provides explicit opt-in foreground live tracking,
 latest points, sampled history, filtered Driver/passenger visibility and

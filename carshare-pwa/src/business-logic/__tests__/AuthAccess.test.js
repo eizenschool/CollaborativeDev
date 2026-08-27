@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AUTH_BOOTSTRAP_TIMEOUT_MS,
   DEFAULT_AUTH_RETURN_PATH,
   getAuthProfileRefreshOptions,
   getAuthNavigation,
   normaliseAuthReturnPath,
   normaliseInternalReturnPath,
   parseOAuthHashError,
+  promiseWithTimeout,
   resolveAuthReturnPath
 } from '../authAccess.js';
 
@@ -67,5 +69,21 @@ describe('Supabase auth-state profile refresh', () => {
     expect(getAuthProfileRefreshOptions('SIGNED_OUT')).toBeNull();
     expect(getAuthProfileRefreshOptions('PASSWORD_RECOVERY')).toBeNull();
     expect(getAuthProfileRefreshOptions(undefined)).toBeNull();
+  });
+});
+
+describe('bounded auth recovery', () => {
+  it('uses an eight-second ceiling for the initial auth screen', () => {
+    expect(AUTH_BOOTSTRAP_TIMEOUT_MS).toBe(8000);
+  });
+
+  it('returns a completed auth request without waiting for the ceiling', async () => {
+    await expect(promiseWithTimeout(Promise.resolve({ id: 'user-1' }), 20))
+      .resolves.toEqual({ id: 'user-1' });
+  });
+
+  it('rejects a stuck auth request so the UI can offer retry', async () => {
+    await expect(promiseWithTimeout(new Promise(() => {}), 5))
+      .rejects.toThrow('Authentication is taking longer than expected.');
   });
 });

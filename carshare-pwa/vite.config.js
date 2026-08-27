@@ -11,6 +11,15 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
+          const normalizedId = id.replaceAll('\\', '/');
+          if (
+            normalizedId.includes('/node_modules/motion/')
+            || normalizedId.includes('/node_modules/framer-motion/')
+            || normalizedId.includes('/node_modules/motion-dom/')
+            || normalizedId.includes('/node_modules/motion-utils/')
+          ) {
+            return 'vendor-motion';
+          }
           if (id.includes('@supabase') || id.includes('@realtime') || id.includes('phoenix')) {
             return 'vendor-supabase';
           }

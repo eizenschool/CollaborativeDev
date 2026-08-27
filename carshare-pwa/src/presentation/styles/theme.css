@@ -201,6 +201,18 @@ button { touch-action: manipulation; }
   to { transform: translate3d(0, 0, 0); }
 }
 
+.ui-swipe-route-stage {
+  position: relative;
+  min-width: 0;
+  overflow-x: clip;
+}
+.ui-swipe-route-frame,
+.ui-swipe-route-surface {
+  width: 100%;
+  min-width: 0;
+}
+.ui-swipe-route-surface { will-change: transform; }
+
 body.dialog-open { overflow: hidden; }
 
 /* ---------- Shared UI primitives ---------- */
@@ -720,6 +732,33 @@ body.dialog-open { overflow: hidden; }
   background: #fff7e0; color: #8a6d1f; border-bottom: 1px solid #f0e0a6;
   font-size: 12.5px; padding: 8px 32px; text-align: center;
   animation: ui-banner-enter var(--motion-slow) var(--ease-enter) both;
+}
+
+.auth-recovery-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 24px;
+  border-bottom: 1px solid #f0d49b;
+  background: #fff7e0;
+  color: #735818;
+  font-size: 13px;
+  text-align: center;
+  animation: ui-banner-enter var(--motion-slow) var(--ease-enter) both;
+}
+
+.auth-recovery-banner__button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 600px) {
+  .auth-recovery-banner {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px;
+  }
 }
 
 @keyframes ui-banner-enter {
