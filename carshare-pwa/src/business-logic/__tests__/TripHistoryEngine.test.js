@@ -8,7 +8,7 @@ globalThis.localStorage = {
   clear: () => memory.clear()
 };
 
-const { TripHistoryEngine, deriveDisplayStatus, estimateCarbonSavedKg } = await import(
+const { TripHistoryEngine, deriveDisplayStatus, estimateCarbonSavedKg, tripDistanceKm } = await import(
   '../TripHistoryEngine.js'
 );
 
@@ -152,6 +152,37 @@ describe('Module 5 lifecycle status', () => {
   });
 });
 
+describe('Module 5 trip distance', () => {
+  it('uses the distance Module 2 actually routed', () => {
+    // Publishing takes a route quote and stores its distance on the ride, so
+    // a trip that went through the current flow has a real number.
+    expect(tripDistanceKm({ routeDistanceMeters: 23400, journeyScale: 'Urban' }))
+      .toEqual({ km: 23.4, measured: true });
+  });
+
+  it('falls back to the table for a ride that predates route quotes', () => {
+    expect(tripDistanceKm({ journeyScale: 'Urban' })).toEqual({ km: 18, measured: false });
+    expect(tripDistanceKm({ journeyScale: 'Intercity' })).toEqual({ km: 340, measured: false });
+  });
+
+  it('says which figure it used, so the card can mark an estimate', () => {
+    expect(tripDistanceKm({ routeDistanceMeters: 5000 }).measured).toBe(true);
+    expect(tripDistanceKm({ routeDistanceMeters: null }).measured).toBe(false);
+  });
+
+  it('treats a missing, zero or broken distance as no distance at all', () => {
+    // A zero would otherwise wipe out the trip's carbon rather than fall back.
+    for (const bad of [null, undefined, 0, -1, NaN, 'far']) {
+      expect(tripDistanceKm({ routeDistanceMeters: bad, journeyScale: 'Urban' }))
+        .toEqual({ km: 18, measured: false });
+    }
+  });
+
+  it('survives a ride object that is not there', () => {
+    expect(tripDistanceKm(undefined).km).toBe(18);
+  });
+});
+
 describe('Module 5 carbon estimate', () => {
   it('claims nothing for a trip that carried no passengers', () => {
     // Regression: the estimate used to floor the passenger count at 1, so an
@@ -162,6 +193,14 @@ describe('Module 5 carbon estimate', () => {
   it('scales with journey distance and seats actually filled', () => {
     expect(estimateCarbonSavedKg({ journeyScale: 'Urban', seatsTotal: 2, seatsAvailable: 0 })).toBe(4.3);
     expect(estimateCarbonSavedKg({ journeyScale: 'Intercity', seatsTotal: 3, seatsAvailable: 1 })).toBe(81.6);
+  });
+
+  it('prefers the routed distance over the table for the same ride', () => {
+    // 42 km routed x 2 passengers x 0.12 = 10.08, against the Urban table's
+    // 18 km x 2 x 0.12 = 4.3. The real figure has to win.
+    const ride = { journeyScale: 'Urban', seatsTotal: 3, seatsAvailable: 1 };
+    expect(estimateCarbonSavedKg(ride)).toBe(4.3);
+    expect(estimateCarbonSavedKg({ ...ride, routeDistanceMeters: 42000 })).toBe(10.1);
   });
 });
 

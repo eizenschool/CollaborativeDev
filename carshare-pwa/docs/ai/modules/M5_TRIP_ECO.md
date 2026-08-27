@@ -48,9 +48,16 @@ Resolved:
   answer as a missing trip.
 
 ## Open Questions
-Carbon factor/model is still unratified — `AVG_DISTANCE_KM` and
-`EMISSION_FACTOR_KG_PER_PASSENGER_KM` in `TripHistoryEngine.js` are a labelled
-estimate, and no ride carries a real distance.
+Distance is no longer guessed wherever Module 2 has routed one. Publishing
+requires a fresh route quote and stores its distance on the ride
+(`route_distance_meters` / `routeDistanceMeters`), so `tripDistanceKm()` reads
+that first and only falls back to the `AVG_DISTANCE_KM` table for rides that
+predate quotes. It reports which source it used, and the history card marks a
+table figure with a leading "~".
+
+`EMISSION_FACTOR_KG_PER_PASSENGER_KM` (0.12) is still an unratified estimate,
+and the fallback table still applies to older rides — so a carbon total can mix
+measured and estimated legs.
 
 Module 5 has no tables of its own. The eco half (FR-5.4-5.11) is blocked on a
 real `Completed` transition: `transition_verified_ride()` is `service_role`-only

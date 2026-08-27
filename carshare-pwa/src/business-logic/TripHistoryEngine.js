@@ -61,22 +61,41 @@ export function isHistoricalParticipantRequest(request) {
     || (request?.status === 'Expired' && Boolean(request.acceptedAt));
 }
 
-// ---------- Estimated carbon savings ----------
-// FR-5.4: "estimated based on distance and passengers carried." Ride records
-// carry no distance (no lat/lng columns, and D013 rules out billable Maps
-// SKUs), so this uses an average trip distance per journey scale times the
-// seats actually filled times a standard avoided-emissions factor.
-// The carbon model is still an open decision in docs/ai/DECISIONS.md - these
-// numbers are a labelled estimate, not a ratified formula.
+// ---------- Carbon savings ----------
+// FR-5.4: "estimated based on distance and passengers carried."
+//
+// The distance is REAL wherever Module 2 has one. Publishing requires a fresh
+// route quote (applyMockRouteQuote / route_distance_meters), and that quote's
+// routed distance is stored on the ride, so a trip that went through the
+// current publish flow carries a measured figure rather than a guess.
+//
+// AVG_DISTANCE_KM is the fallback for rides that predate route quotes. It is
+// deliberately kept rather than defaulting to zero: a labelled estimate is
+// more useful than a blank, and callers can tell the two apart because
+// tripDistanceKm reports which one it used. The emission factor itself is
+// still an open decision in docs/ai/DECISIONS.md.
 const AVG_DISTANCE_KM = { Urban: 18, Intercity: 340 };
 const EMISSION_FACTOR_KG_PER_PASSENGER_KM = 0.12;
 
+// { km, measured } - `measured` is false when the table supplied the number,
+// so the UI can mark it as approximate instead of quietly implying precision.
+export function tripDistanceKm(ride) {
+  const metres = Number(ride?.routeDistanceMeters);
+  if (Number.isFinite(metres) && metres > 0) {
+    return { km: round1(metres / 1000), measured: true };
+  }
+  return {
+    km: AVG_DISTANCE_KM[ride?.journeyScale] ?? AVG_DISTANCE_KM.Urban,
+    measured: false
+  };
+}
+
 export function estimateDistanceKm(ride) {
-  return AVG_DISTANCE_KM[ride.journeyScale] ?? AVG_DISTANCE_KM.Urban;
+  return tripDistanceKm(ride).km;
 }
 
 export function estimateCarbonSavedKg(ride) {
-  const distanceKm = estimateDistanceKm(ride);
+  const distanceKm = tripDistanceKm(ride).km;
   const passengers = Math.max(0, (ride.seatsTotal || 0) - (ride.seatsAvailable ?? 0));
   // UC5.4 C2 requires a distance greater than zero, and the whole premise of
   // the estimate is a shared ride - a trip that carried nobody saved nothing.
@@ -88,6 +107,7 @@ export function toHistoryCard(ride, role, now = new Date()) {
   const status = deriveDisplayStatus(ride, now);
   const { date, time } = departureParts(ride.departureAt);
   const completed = status === 'Completed';
+  const distance = tripDistanceKm(ride);
   return {
     id: ride.id,
     role, // 'Host' | 'Passenger'
@@ -103,7 +123,10 @@ export function toHistoryCard(ride, role, now = new Date()) {
     time,
     status,
     journeyScale: ride.journeyScale,
-    distanceKm: completed ? estimateDistanceKm(ride) : null,
+    distanceKm: completed ? distance.km : null,
+    // Lets the card show "340 km" for a routed trip and "~340 km" for one
+    // the table had to guess at.
+    distanceMeasured: completed ? distance.measured : null,
     carbonSavedKg: completed ? estimateCarbonSavedKg(ride) : null,
     host: ride.host || null,
     hostId: ride.hostId,
