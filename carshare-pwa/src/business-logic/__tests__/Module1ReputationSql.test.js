@@ -18,6 +18,14 @@ describe('Module 1 reputation and public-profile SQL contracts', () => {
     expect(sql).not.toMatch(/grant\s+(insert|update|delete|all).*reputation_events.*authenticated/i);
   });
 
+  it('uses only public.rides fields in the Ride status reputation trigger', async () => {
+    const sql = await read('../../../database/sql/074_m1_fix_ride_reputation_status_trigger.sql');
+    expect(sql).toContain('create or replace function private.reputation_from_ride_status()');
+    expect(sql).toContain('coalesce(new.recruitment_closed_at, new.updated_at, now())');
+    expect(sql).not.toContain('new.cancelled_at');
+    expect(sql).not.toContain('new.cancelled_by');
+  });
+
   it('exposes a privacy-filtered projection without private account fields', async () => {
     const sql = await read('../../../database/sql/073_m1_public_profile_visibility.sql');
     expect(sql).toMatch(/create table(?: if not exists)? public\.profile_visibility/i);

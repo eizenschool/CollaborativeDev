@@ -14,10 +14,10 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 search/favourites and favourite availability alerts
 Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m4, 068_m4,
-  069_project, 070_project, 072_m1, and 073_m1 as tracked Supabase
+  069_project, 070_project, 072_m1, 073_m1, and 074_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-073
+Repository SQL history: 001-074
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -628,6 +628,11 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   Dashboard SQL Editor; verified-event Reputation ledger, balanced deltas,
   per-Ride positive cap, provisional access, safety hold, owner summary RPC,
   and authoritative Driver-publish/Traveller-request thresholds.
+- `074_m1_fix_ride_reputation_status_trigger.sql` - deployed as tracked
+  migration `m1_fix_ride_reputation_status_trigger`; repairs the Ride-status
+  Reputation trigger to use `rides.recruitment_closed_at` and removes invalid
+  references to the request-only `cancelled_at`/`cancelled_by` fields, restoring
+  recruitment close and other Ride status transitions.
 - `073_m1_public_profile_visibility.sql` - deployed through the Dashboard
   SQL Editor; owner visibility switches, safe shortened-name public-profile
   RPC, raw profile-row narrowing, and explicit exclusion of private contact
