@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCallSession } from '../../../context/CallSessionContext.jsx';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
-import { IconMaximize, IconMicrophone, IconMinus, IconPhone, IconX } from '../icons.jsx';
+import { MessagingService } from '../../../business-logic/MessagingService.js';
+import {
+  IconCar,
+  IconMaximize,
+  IconMessage,
+  IconMicrophone,
+  IconMinus,
+  IconPhone,
+  IconRoute,
+  IconUser,
+  IconX,
+} from '../icons.jsx';
 import '../../styles/call.css';
 
 function getInitials(name = 'Member') {
@@ -44,6 +56,7 @@ function callStatusText(callState, durationSeconds) {
 }
 
 export default function CallOverlay() {
+  const navigate = useNavigate();
   const {
     callState,
     acceptCall,
@@ -62,10 +75,28 @@ export default function CallOverlay() {
   const dismissRef = useRef(dismissEndedCall);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [needsAudioTap, setNeedsAudioTap] = useState(false);
+  const [rideId, setRideId] = useState(null);
   const isOpen = callState.phase !== 'idle' && Boolean(callState.call);
   const isModalOpen = isOpen && !callState.isMinimized;
   phaseRef.current = callState.phase;
   dismissRef.current = dismissEndedCall;
+
+  useEffect(() => {
+    const conversationId = callState.call?.conversationId;
+    if (!conversationId) {
+      setRideId(null);
+      return undefined;
+    }
+    let active = true;
+    void MessagingService.getConversation(conversationId)
+      .then((conversation) => {
+        if (active) setRideId(conversation?.rideId || null);
+      })
+      .catch(() => {
+        if (active) setRideId(null);
+      });
+    return () => { active = false; };
+  }, [callState.call?.conversationId]);
 
   useEffect(() => {
     if (!isModalOpen) return undefined;
@@ -133,8 +164,33 @@ export default function CallOverlay() {
   const participant = callState.call.otherParticipant;
   const isIncoming = callState.phase === 'incoming';
   const isEnded = callState.phase === 'ended';
-  const showMute = ['connecting', 'connected', 'reconnecting'].includes(callState.phase);
+  const showMute = ['outgoing', 'connecting', 'connected', 'reconnecting'].includes(callState.phase);
   const canMinimize = showMute;
+  const browseTo = (path) => {
+    minimizeCall();
+    navigate(path);
+  };
+  const browseActions = [
+    {
+      key: 'chat',
+      label: 'Chat',
+      path: `/message/${callState.call.conversationId}`,
+      icon: IconMessage,
+    },
+    {
+      key: 'ride',
+      label: rideId ? 'Ride details' : 'Rides',
+      path: rideId ? `/ride/${rideId}` : '/ride',
+      icon: IconCar,
+    },
+    { key: 'trips', label: 'Trips', path: '/trip', icon: IconRoute },
+    ...(participant?.id ? [{
+      key: 'profile',
+      label: 'Profile',
+      path: `/users/${participant.id}`,
+      icon: IconUser,
+    }] : []),
+  ];
 
   if (callState.isMinimized && canMinimize) {
     return (
@@ -156,6 +212,14 @@ export default function CallOverlay() {
             <IconPhone size={19} aria-hidden="true" />
           </button>
         </div>
+        <nav className="call-mini-browse" aria-label="Browse during call">
+          {browseActions.slice(0, 3).map(({ key, label, path, icon: Icon }) => (
+            <button key={key} type="button" onClick={() => browseTo(path)}>
+              <Icon size={15} aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
       </aside>
     );
   }
@@ -219,6 +283,20 @@ export default function CallOverlay() {
         )}
 
         <audio ref={audioRef} autoPlay playsInline aria-label="Remote call audio" />
+
+        {!isIncoming && !isEnded && (
+          <nav className="call-browse-actions" aria-label="View information during call">
+            <span>View while calling</span>
+            <div>
+              {browseActions.map(({ key, label, path, icon: Icon }) => (
+                <button key={key} type="button" onClick={() => browseTo(path)}>
+                  <Icon size={17} aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </nav>
+        )}
 
         {isIncoming ? (
           <div className="call-overlay-actions call-overlay-incoming-actions">

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAlertSoundService, createRingtoneCoordinator } from '../AlertSoundService.js';
+import {
+  createAlertSoundService,
+  createRingtoneCoordinator,
+  normalizeAlertVolume,
+} from '../AlertSoundService.js';
 
 function soundHarness(state = 'running') {
   const oscillator = {
@@ -50,6 +54,29 @@ describe('AlertSoundService', () => {
     expect(harness.clearInterval).toHaveBeenCalledWith(42);
   });
 
+  it('scales notification and ringtone gain independently and treats zero as muted', async () => {
+    const harness = soundHarness();
+    const service = createAlertSoundService(harness.globalObject);
+    await service.unlock();
+
+    expect(service.playBell(0.5)).toBe(true);
+    expect(harness.context.createGain.mock.results[0].value.gain.exponentialRampToValueAtTime)
+      .toHaveBeenCalledWith(0.045, 10.02);
+    expect(service.previewRingtone(0.25)).toBe(true);
+    expect(harness.context.createGain.mock.results[2].value.gain.exponentialRampToValueAtTime)
+      .toHaveBeenCalledWith(0.03, 10.02);
+    expect(service.playBell(0)).toBe(false);
+    expect(service.previewRingtone(0)).toBe(false);
+    expect(harness.context.createOscillator).toHaveBeenCalledTimes(4);
+  });
+
+  it('normalizes stored and user-provided volume values', () => {
+    expect(normalizeAlertVolume('0.45')).toBe(0.45);
+    expect(normalizeAlertVolume(-1)).toBe(0);
+    expect(normalizeAlertVolume(4)).toBe(1);
+    expect(normalizeAlertVolume('invalid')).toBe(1);
+  });
+
   it('unlocks a suspended browser context and does not duplicate the same ringtone', async () => {
     const harness = soundHarness('suspended');
     const service = createAlertSoundService(harness.globalObject);
@@ -97,9 +124,9 @@ describe('ringtone coordination', () => {
     expect(coordinator.startSOS('event-1')).toBe(true);
     expect(coordinator.stopSOS('event-1')).toBe(true);
     expect(soundService.startRingtone.mock.calls).toEqual([
-      ['call:call-1'],
-      ['sos:event-1'],
-      ['call:call-1'],
+      ['call:call-1', 1],
+      ['sos:event-1', 1],
+      ['call:call-1', 1],
     ]);
   });
 
@@ -130,6 +157,27 @@ describe('ringtone coordination', () => {
     expect(coordinator.startCall('call-1', false)).toBe(false);
     expect(coordinator.startSOS('event-1')).toBe(true);
     expect(soundService.startRingtone).toHaveBeenCalledOnce();
-    expect(soundService.startRingtone).toHaveBeenCalledWith('sos:event-1');
+    expect(soundService.startRingtone).toHaveBeenCalledWith('sos:event-1', 1);
+  });
+
+  it('updates active call volume without changing the fixed SOS volume', () => {
+    const soundService = {
+      startRingtone: vi.fn(() => true),
+      stopRingtone: vi.fn(() => true),
+    };
+    const coordinator = createRingtoneCoordinator(soundService);
+
+    coordinator.startCall('call-1', true, 0.4);
+    coordinator.setCallVolume(0.2);
+    coordinator.startSOS('event-1');
+    coordinator.setCallVolume(0.7);
+    coordinator.stopSOS('event-1');
+
+    expect(soundService.startRingtone.mock.calls).toEqual([
+      ['call:call-1', 0.4],
+      ['call:call-1', 0.2],
+      ['sos:event-1', 1],
+      ['call:call-1', 0.7],
+    ]);
   });
 });

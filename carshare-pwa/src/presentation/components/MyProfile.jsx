@@ -28,6 +28,7 @@ import {
 import ImpactEntryCard from './trip/ImpactEntryCard.jsx';
 import AdaptiveDialog from './ui/AdaptiveDialog.jsx';
 import { Button } from './ui/Button.jsx';
+import SoundPreferences from './notifications/SoundPreferences.jsx';
 
 const RAIL_ITEMS = [
   { id: 'overview', label: 'Overview', Icon: IconLayers },
@@ -882,6 +883,8 @@ function AccountSettingsPanel({ user }) {
   return (
     <>
       <div className="panel-head"><h2>Account Settings</h2></div>
+
+      <SoundPreferences card />
 
       <ProfileVisibilityCard user={user} />
 

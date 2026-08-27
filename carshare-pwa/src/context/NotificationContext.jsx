@@ -8,7 +8,11 @@ import {
   useState,
 } from 'react';
 import { NotificationService, countUnread } from '../business-logic/NotificationService.js';
-import { AlertSoundService, createRingtoneCoordinator } from '../business-logic/AlertSoundService.js';
+import {
+  AlertSoundService,
+  createRingtoneCoordinator,
+  normalizeAlertVolume,
+} from '../business-logic/AlertSoundService.js';
 import { SOS_ACTIVATED_EVENT_TYPE } from '../business-logic/SOSAlertService.js';
 import { useAuth } from './AuthContext.jsx';
 
@@ -19,10 +23,22 @@ function soundPreferenceKey(userId) {
   return `m3-alert-sounds:${userId}`;
 }
 
+function volumePreferenceKey(userId, kind) {
+  return `m3-alert-${kind}-volume:${userId}`;
+}
+
 function readSoundPreference(userId) {
   if (!userId) return true;
   try { return localStorage.getItem(soundPreferenceKey(userId)) !== 'off'; }
   catch { return true; }
+}
+
+function readVolumePreference(userId, kind) {
+  if (!userId) return 1;
+  try {
+    const stored = localStorage.getItem(volumePreferenceKey(userId, kind));
+    return stored == null ? 1 : normalizeAlertVolume(stored);
+  } catch { return 1; }
 }
 
 export function NotificationProvider({ children }) {
@@ -34,6 +50,8 @@ export function NotificationProvider({ children }) {
   const [pushError, setPushError] = useState('');
   const [pushPending, setPushPending] = useState(false);
   const [alertSoundsEnabled, setAlertSoundsEnabled] = useState(true);
+  const [notificationVolume, setNotificationVolumeState] = useState(1);
+  const [callRingtoneVolume, setCallRingtoneVolumeState] = useState(1);
   const [soundBlocked, setSoundBlocked] = useState(false);
   const playedNotificationIdsRef = useRef(new Set());
   const ringtoneCoordinatorRef = useRef(null);
@@ -85,6 +103,10 @@ export function NotificationProvider({ children }) {
 
   useEffect(() => {
     setAlertSoundsEnabled(readSoundPreference(user?.id));
+    setNotificationVolumeState(readVolumePreference(user?.id, 'notification'));
+    const nextCallVolume = readVolumePreference(user?.id, 'call');
+    setCallRingtoneVolumeState(nextCallVolume);
+    ringtoneCoordinatorRef.current.setCallVolume(nextCallVolume);
     setSoundBlocked(false);
     playedNotificationIdsRef.current.clear();
     ringtoneCoordinatorRef.current.reset();
@@ -108,18 +130,18 @@ export function NotificationProvider({ children }) {
   }, [alertSoundsEnabled, unlockAlertSounds, user]);
 
   const playNotificationBell = useCallback(() => {
-    if (!alertSoundsEnabled) return false;
-    const played = AlertSoundService.playBell();
+    if (!alertSoundsEnabled || notificationVolume === 0) return false;
+    const played = AlertSoundService.playBell(notificationVolume);
     setSoundBlocked(!played);
     return played;
-  }, [alertSoundsEnabled]);
+  }, [alertSoundsEnabled, notificationVolume]);
 
   const startCallRingtone = useCallback((callId) => {
-    const played = ringtoneCoordinatorRef.current.startCall(callId, alertSoundsEnabled);
-    if (!alertSoundsEnabled) return false;
+    const played = ringtoneCoordinatorRef.current.startCall(callId, alertSoundsEnabled, callRingtoneVolume);
+    if (!alertSoundsEnabled || callRingtoneVolume === 0) return false;
     setSoundBlocked(!played);
     return played;
-  }, [alertSoundsEnabled]);
+  }, [alertSoundsEnabled, callRingtoneVolume]);
 
   const stopCallRingtone = useCallback(() => {
     ringtoneCoordinatorRef.current.stopCall();
@@ -151,6 +173,45 @@ export function NotificationProvider({ children }) {
       ringtoneCoordinatorRef.current.setCallSoundEnabled(false);
     }
   }, [unlockAlertSounds, user?.id]);
+
+  const saveVolumePreference = useCallback((kind, value) => {
+    const next = normalizeAlertVolume(value);
+    if (kind === 'notification') setNotificationVolumeState(next);
+    else {
+      setCallRingtoneVolumeState(next);
+      ringtoneCoordinatorRef.current.setCallVolume(next);
+    }
+    try {
+      if (user?.id) localStorage.setItem(volumePreferenceKey(user.id, kind), String(next));
+    } catch {
+      // The preference remains active for this session when storage is unavailable.
+    }
+    return next;
+  }, [user?.id]);
+
+  const setNotificationVolume = useCallback((value) => {
+    return saveVolumePreference('notification', value);
+  }, [saveVolumePreference]);
+
+  const setCallRingtoneVolume = useCallback((value) => {
+    return saveVolumePreference('call', value);
+  }, [saveVolumePreference]);
+
+  const previewNotificationSound = useCallback(async () => {
+    if (!alertSoundsEnabled || notificationVolume === 0) return false;
+    if (!await unlockAlertSounds()) return false;
+    const played = AlertSoundService.playBell(notificationVolume);
+    setSoundBlocked(!played);
+    return played;
+  }, [alertSoundsEnabled, notificationVolume, unlockAlertSounds]);
+
+  const previewCallRingtone = useCallback(async () => {
+    if (!alertSoundsEnabled || callRingtoneVolume === 0) return false;
+    if (!await unlockAlertSounds()) return false;
+    const played = AlertSoundService.previewRingtone(callRingtoneVolume);
+    setSoundBlocked(!played);
+    return played;
+  }, [alertSoundsEnabled, callRingtoneVolume, unlockAlertSounds]);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -238,8 +299,14 @@ export function NotificationProvider({ children }) {
     enablePush,
     disablePush,
     alertSoundsEnabled,
+    notificationVolume,
+    callRingtoneVolume,
     soundBlocked,
     setAlertSounds,
+    setNotificationVolume,
+    setCallRingtoneVolume,
+    previewNotificationSound,
+    previewCallRingtone,
     unlockAlertSounds,
     startCallRingtone,
     stopCallRingtone,
@@ -254,11 +321,17 @@ export function NotificationProvider({ children }) {
     markRead,
     notifications,
     alertSoundsEnabled,
+    notificationVolume,
+    callRingtoneVolume,
     pushError,
     pushPending,
     pushStatus,
     refreshNotifications,
     setAlertSounds,
+    setNotificationVolume,
+    setCallRingtoneVolume,
+    previewNotificationSound,
+    previewCallRingtone,
     soundBlocked,
     startCallRingtone,
     startSOSRingtone,

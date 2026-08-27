@@ -614,7 +614,7 @@ export function CallSessionProvider({ children }) {
   }, [updateState]);
 
   const minimizeCall = useCallback(() => {
-    if (!['connecting', 'connected', 'reconnecting'].includes(stateRef.current.phase)) return;
+    if (!['outgoing', 'connecting', 'connected', 'reconnecting'].includes(stateRef.current.phase)) return;
     updateState((current) => ({ ...current, isMinimized: true }));
   }, [updateState]);
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { IconBell, IconCheck, IconX } from '../icons.jsx';
 import { PageShell } from '../ui/Primitives.jsx';
+import SoundPreferences from './SoundPreferences.jsx';
 
 function relativeTime(value) {
   const milliseconds = Date.now() - new Date(value).getTime();
@@ -50,34 +51,6 @@ function PushControl({ compact = false }) {
   if (pushStatus === 'insecure') return <p className="notification-helper info">Device alerts need HTTPS. Open the deployed HTTPS app, or use localhost on this device. Your in-app notifications still work here.</p>;
   if (pushStatus === 'unsupported') return <p className="notification-helper info">This browser does not offer device alerts. Your in-app notifications still work here.</p>;
   return null;
-}
-
-function SoundControl({ compact = false }) {
-  const {
-    alertSoundsEnabled,
-    soundBlocked,
-    setAlertSounds,
-    unlockAlertSounds,
-  } = useNotifications();
-
-  return (
-    <div className="notification-sound-control">
-      {!compact && <span>Play a bell for new messages and notifications.</span>}
-      <button
-        type="button"
-        className="btn-link"
-        aria-pressed={alertSoundsEnabled}
-        onClick={() => { void setAlertSounds(!alertSoundsEnabled); }}
-      >
-        {alertSoundsEnabled ? 'Turn alert sounds off' : 'Turn alert sounds on'}
-      </button>
-      {alertSoundsEnabled && soundBlocked && (
-        <button type="button" className="notification-enable-push" onClick={() => { void unlockAlertSounds(); }}>
-          Enable sound in this browser
-        </button>
-      )}
-    </div>
-  );
 }
 
 function NotificationRows({ compact = false, onNavigate }) {
@@ -159,7 +132,7 @@ export function NotificationPopover({ onClose }) {
         <button className="icon-btn" type="button" onClick={onClose} aria-label="Close notifications" autoFocus><IconX size={17} /></button>
       </div>
       <PushControl compact />
-      <SoundControl compact />
+      <SoundPreferences compact />
       <NotificationRows compact onNavigate={(path) => { onClose(); navigate(path); }} />
       <button type="button" className="notification-view-all" onClick={() => { onClose(); navigate('/notifications'); }}>
         View all notifications
@@ -174,7 +147,7 @@ export default function NotificationCenter() {
     <PageShell as="main" className="notification-page" size="narrow">
       <div className="notification-page-head">
         <div><h1>Notifications</h1><p>Ride, request, reminder, and account updates.</p></div>
-        <div className="notification-page-controls"><PushControl /><SoundControl /></div>
+        <div className="notification-page-controls"><PushControl /><SoundPreferences /></div>
       </div>
       <section className="notification-card">
         <NotificationRows onNavigate={navigate} />

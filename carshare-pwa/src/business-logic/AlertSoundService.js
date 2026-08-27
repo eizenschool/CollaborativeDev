@@ -1,11 +1,18 @@
 const RING_INTERVAL_MS = 2_600;
 const RINGTONE_VOLUME = 0.12;
 
+export function normalizeAlertVolume(value, fallback = 1) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return fallback;
+  return Math.min(1, Math.max(0, numericValue));
+}
+
 export function createAlertSoundService(globalObject = globalThis) {
   let context = null;
   let ringtoneTimerId = null;
   let ringtoneId = null;
   let ringtoneAudible = false;
+  let ringtoneVolume = 1;
 
   function getContext() {
     if (context) return context;
@@ -43,15 +50,19 @@ export function createAlertSoundService(globalObject = globalThis) {
     return true;
   }
 
-  function playBell() {
-    const first = tone(880, 0, 0.22, 0.09);
-    const second = tone(1_320, 0.16, 0.34, 0.07);
+  function playBell(volume = 1) {
+    const normalizedVolume = normalizeAlertVolume(volume);
+    if (normalizedVolume === 0) return false;
+    const first = tone(880, 0, 0.22, 0.09 * normalizedVolume);
+    const second = tone(1_320, 0.16, 0.34, 0.07 * normalizedVolume);
     return first || second;
   }
 
-  function ringOnce() {
-    const first = tone(740, 0, 0.42, RINGTONE_VOLUME);
-    const second = tone(740, 0.58, 0.42, RINGTONE_VOLUME);
+  function ringOnce(volume = 1) {
+    const normalizedVolume = normalizeAlertVolume(volume);
+    if (normalizedVolume === 0) return false;
+    const first = tone(740, 0, 0.42, RINGTONE_VOLUME * normalizedVolume);
+    const second = tone(740, 0.58, 0.42, RINGTONE_VOLUME * normalizedVolume);
     return first || second;
   }
 
@@ -62,20 +73,28 @@ export function createAlertSoundService(globalObject = globalThis) {
     ringtoneTimerId = null;
     ringtoneId = null;
     ringtoneAudible = false;
+    ringtoneVolume = 1;
     return stopped;
   }
 
-  function startRingtone(nextRingtoneId) {
+  function startRingtone(nextRingtoneId, volume = 1) {
     if (!nextRingtoneId) return false;
+    const normalizedVolume = normalizeAlertVolume(volume);
+    if (normalizedVolume === 0) {
+      stopRingtone(nextRingtoneId);
+      return false;
+    }
     if (ringtoneId === nextRingtoneId && ringtoneTimerId != null) {
-      if (!ringtoneAudible && context?.state === 'running') ringtoneAudible = ringOnce();
+      ringtoneVolume = normalizedVolume;
+      if (!ringtoneAudible && context?.state === 'running') ringtoneAudible = ringOnce(ringtoneVolume);
       return ringtoneAudible;
     }
     stopRingtone();
     ringtoneId = nextRingtoneId;
-    ringtoneAudible = ringOnce();
+    ringtoneVolume = normalizedVolume;
+    ringtoneAudible = ringOnce(ringtoneVolume);
     ringtoneTimerId = globalObject.setInterval(() => {
-      ringtoneAudible = ringOnce() || ringtoneAudible;
+      ringtoneAudible = ringOnce(ringtoneVolume) || ringtoneAudible;
     }, RING_INTERVAL_MS);
     return ringtoneAudible;
   }
@@ -89,6 +108,7 @@ export function createAlertSoundService(globalObject = globalThis) {
   return {
     unlock,
     playBell,
+    previewRingtone: ringOnce,
     startRingtone,
     stopRingtone,
     dispose,
@@ -104,19 +124,21 @@ function ringtoneKey(kind, id) {
 export function createRingtoneCoordinator(soundService = AlertSoundService) {
   let callId = null;
   let callSoundEnabled = false;
+  let callVolume = 1;
   let sosEventId = null;
 
   return {
-    startCall(nextCallId, enabled = true) {
+    startCall(nextCallId, enabled = true, volume = callVolume) {
       if (!nextCallId) return false;
       callId = nextCallId;
       callSoundEnabled = Boolean(enabled);
-      if (!callSoundEnabled) {
+      callVolume = normalizeAlertVolume(volume);
+      if (!callSoundEnabled || callVolume === 0) {
         soundService.stopRingtone(ringtoneKey('call', callId));
         return false;
       }
       if (sosEventId) return true;
-      return soundService.startRingtone(ringtoneKey('call', callId));
+      return soundService.startRingtone(ringtoneKey('call', callId), callVolume);
     },
 
     stopCall() {
@@ -134,14 +156,25 @@ export function createRingtoneCoordinator(soundService = AlertSoundService) {
       if (!callSoundEnabled) {
         return soundService.stopRingtone(ringtoneKey('call', callId));
       }
+      if (callVolume === 0) return false;
       if (sosEventId) return true;
-      return soundService.startRingtone(ringtoneKey('call', callId));
+      return soundService.startRingtone(ringtoneKey('call', callId), callVolume);
+    },
+
+    setCallVolume(volume) {
+      callVolume = normalizeAlertVolume(volume);
+      if (!callId || !callSoundEnabled) return false;
+      if (callVolume === 0) {
+        return soundService.stopRingtone(ringtoneKey('call', callId));
+      }
+      if (sosEventId) return true;
+      return soundService.startRingtone(ringtoneKey('call', callId), callVolume);
     },
 
     startSOS(nextEventId) {
       if (!nextEventId) return false;
       sosEventId = nextEventId;
-      return soundService.startRingtone(ringtoneKey('sos', sosEventId));
+      return soundService.startRingtone(ringtoneKey('sos', sosEventId), 1);
     },
 
     stopSOS(requestedEventId = null) {
@@ -149,8 +182,8 @@ export function createRingtoneCoordinator(soundService = AlertSoundService) {
       const stoppedEventId = sosEventId;
       sosEventId = null;
       soundService.stopRingtone(ringtoneKey('sos', stoppedEventId));
-      if (callId && callSoundEnabled) {
-        return soundService.startRingtone(ringtoneKey('call', callId));
+      if (callId && callSoundEnabled && callVolume > 0) {
+        return soundService.startRingtone(ringtoneKey('call', callId), callVolume);
       }
       return true;
     },
@@ -158,6 +191,7 @@ export function createRingtoneCoordinator(soundService = AlertSoundService) {
     reset() {
       callId = null;
       callSoundEnabled = false;
+      callVolume = 1;
       sosEventId = null;
       return soundService.stopRingtone();
     },
