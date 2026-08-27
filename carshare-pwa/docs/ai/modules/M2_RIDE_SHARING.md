@@ -384,6 +384,17 @@ active trusted family receive shared notification-centre events
 Push payloads contain no coordinates. Android foreground services, Capacitor,
 FCM, SMS and iOS-native work remain out of scope.
 
+When the release flag is enabled, an unread foreground `sos_activated`
+notification also opens a global call-like alert for the Trusted Family
+recipient. It is not a voice call and never creates a Module 3 call session or
+requests microphone access. The shared Web Audio ringtone is attempted even
+when general Alert sounds are off, runs for at most 45 seconds, and then reduces
+to a persistent non-modal SOS bar. `View SOS` marks the activation notification
+read and opens the existing authorized page; Silence or Escape stops only the
+sound. Signal-loss, recovery, and resolution keep their ordinary notification
+behaviour, while resolution removes the matching foreground alert. Background
+or closed-PWA delivery remains operating-system-controlled Web Push.
+
 D024 supersedes the `043-049` Trust Admin/ride-dispute experiment. The deployed
 `055_m2_remove_trust_admin.sql` compensation migration removes its tables, RPCs,
 notifications and evidence holds without rewriting deployed history. The

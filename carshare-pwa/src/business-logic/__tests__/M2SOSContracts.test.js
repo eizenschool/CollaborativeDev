@@ -9,6 +9,8 @@ const sosPanel = new URL('../../presentation/components/ride/RideSOSPanel.jsx', 
 const invitePage = new URL('../../presentation/components/ride/TrustedFamilyInvite.jsx', import.meta.url);
 const familyPage = new URL('../../presentation/components/ride/SOSFamilyView.jsx', import.meta.url);
 const familyMapPanel = new URL('../../presentation/components/ride/FamilyLiveMapPanel.jsx', import.meta.url);
+const sosAlertOverlay = new URL('../../presentation/components/ride/SOSAlertOverlay.jsx', import.meta.url);
+const notificationContext = new URL('../../context/NotificationContext.jsx', import.meta.url);
 const serviceWorker = new URL('../../service-worker.js', import.meta.url);
 
 describe('Module 2 trusted family and SOS contracts', () => {
@@ -78,6 +80,24 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(matchesSOSSafeConfirmation('i am safe')).toBe(false);
     expect(matchesSOSSafeConfirmation("I'm safe")).toBe(false);
     expect(matchesSOSSafeConfirmation('')).toBe(false);
+  });
+
+  it('adds a privacy-safe, call-like foreground alert without creating a voice call', async () => {
+    const [overlay, context] = await Promise.all([
+      readFile(sosAlertOverlay, 'utf8'),
+      readFile(notificationContext, 'utf8'),
+    ]);
+    expect(overlay).toContain('role="alertdialog"');
+    expect(overlay).toContain('SOS_RING_TIMEOUT_MS');
+    expect(overlay).toContain('sessionStorage.setItem');
+    expect(overlay).toContain('RideSOSService.getFamilySnapshot');
+    expect(overlay).toContain('View SOS');
+    expect(overlay).toContain('Silence');
+    expect(overlay).not.toMatch(/CallService|startCall|call_sessions/);
+    expect(overlay).not.toMatch(/latitude|longitude|accuracyM|\blat\b|\blng\b/);
+    expect(context).toContain('startSOSRingtone');
+    expect(context).toContain('stopSOSRingtone');
+    expect(context).toContain("change.new?.event_type !== SOS_ACTIVATED_EVENT_TYPE");
   });
 
   it('keeps a geolocation watcher alive while hidden in SOS mode and retries on reconnect', async () => {

@@ -4,7 +4,8 @@ const RINGTONE_VOLUME = 0.12;
 export function createAlertSoundService(globalObject = globalThis) {
   let context = null;
   let ringtoneTimerId = null;
-  let ringtoneCallId = null;
+  let ringtoneId = null;
+  let ringtoneAudible = false;
 
   function getContext() {
     if (context) return context;
@@ -54,20 +55,29 @@ export function createAlertSoundService(globalObject = globalThis) {
     return first || second;
   }
 
-  function stopRingtone() {
-    if (ringtoneTimerId) globalObject.clearInterval(ringtoneTimerId);
+  function stopRingtone(requestedId = null) {
+    if (requestedId && requestedId !== ringtoneId) return false;
+    const stopped = Boolean(ringtoneId || ringtoneTimerId != null);
+    if (ringtoneTimerId != null) globalObject.clearInterval(ringtoneTimerId);
     ringtoneTimerId = null;
-    ringtoneCallId = null;
+    ringtoneId = null;
+    ringtoneAudible = false;
+    return stopped;
   }
 
-  function startRingtone(callId) {
-    if (!callId) return false;
-    if (ringtoneCallId === callId && ringtoneTimerId) return context?.state === 'running';
+  function startRingtone(nextRingtoneId) {
+    if (!nextRingtoneId) return false;
+    if (ringtoneId === nextRingtoneId && ringtoneTimerId != null) {
+      if (!ringtoneAudible && context?.state === 'running') ringtoneAudible = ringOnce();
+      return ringtoneAudible;
+    }
     stopRingtone();
-    ringtoneCallId = callId;
-    const played = ringOnce();
-    ringtoneTimerId = globalObject.setInterval(ringOnce, RING_INTERVAL_MS);
-    return played;
+    ringtoneId = nextRingtoneId;
+    ringtoneAudible = ringOnce();
+    ringtoneTimerId = globalObject.setInterval(() => {
+      ringtoneAudible = ringOnce() || ringtoneAudible;
+    }, RING_INTERVAL_MS);
+    return ringtoneAudible;
   }
 
   function dispose() {
@@ -86,3 +96,70 @@ export function createAlertSoundService(globalObject = globalThis) {
 }
 
 export const AlertSoundService = createAlertSoundService();
+
+function ringtoneKey(kind, id) {
+  return `${kind}:${id}`;
+}
+
+export function createRingtoneCoordinator(soundService = AlertSoundService) {
+  let callId = null;
+  let callSoundEnabled = false;
+  let sosEventId = null;
+
+  return {
+    startCall(nextCallId, enabled = true) {
+      if (!nextCallId) return false;
+      callId = nextCallId;
+      callSoundEnabled = Boolean(enabled);
+      if (!callSoundEnabled) {
+        soundService.stopRingtone(ringtoneKey('call', callId));
+        return false;
+      }
+      if (sosEventId) return true;
+      return soundService.startRingtone(ringtoneKey('call', callId));
+    },
+
+    stopCall() {
+      const stoppedCallId = callId;
+      callId = null;
+      callSoundEnabled = false;
+      return stoppedCallId
+        ? soundService.stopRingtone(ringtoneKey('call', stoppedCallId))
+        : false;
+    },
+
+    setCallSoundEnabled(enabled) {
+      callSoundEnabled = Boolean(enabled);
+      if (!callId) return false;
+      if (!callSoundEnabled) {
+        return soundService.stopRingtone(ringtoneKey('call', callId));
+      }
+      if (sosEventId) return true;
+      return soundService.startRingtone(ringtoneKey('call', callId));
+    },
+
+    startSOS(nextEventId) {
+      if (!nextEventId) return false;
+      sosEventId = nextEventId;
+      return soundService.startRingtone(ringtoneKey('sos', sosEventId));
+    },
+
+    stopSOS(requestedEventId = null) {
+      if (!sosEventId || (requestedEventId && requestedEventId !== sosEventId)) return false;
+      const stoppedEventId = sosEventId;
+      sosEventId = null;
+      soundService.stopRingtone(ringtoneKey('sos', stoppedEventId));
+      if (callId && callSoundEnabled) {
+        return soundService.startRingtone(ringtoneKey('call', callId));
+      }
+      return true;
+    },
+
+    reset() {
+      callId = null;
+      callSoundEnabled = false;
+      sosEventId = null;
+      return soundService.stopRingtone();
+    },
+  };
+}

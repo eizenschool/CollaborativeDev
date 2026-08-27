@@ -8,10 +8,12 @@ import {
   useState,
 } from 'react';
 import { NotificationService, countUnread } from '../business-logic/NotificationService.js';
-import { AlertSoundService } from '../business-logic/AlertSoundService.js';
+import { AlertSoundService, createRingtoneCoordinator } from '../business-logic/AlertSoundService.js';
+import { SOS_ACTIVATED_EVENT_TYPE } from '../business-logic/SOSAlertService.js';
 import { useAuth } from './AuthContext.jsx';
 
 const NotificationContext = createContext(null);
+const SOS_ALERT_ENABLED = import.meta.env.VITE_M2_SOS_ENABLED === 'true';
 
 function soundPreferenceKey(userId) {
   return `m3-alert-sounds:${userId}`;
@@ -34,6 +36,10 @@ export function NotificationProvider({ children }) {
   const [alertSoundsEnabled, setAlertSoundsEnabled] = useState(true);
   const [soundBlocked, setSoundBlocked] = useState(false);
   const playedNotificationIdsRef = useRef(new Set());
+  const ringtoneCoordinatorRef = useRef(null);
+  if (!ringtoneCoordinatorRef.current) {
+    ringtoneCoordinatorRef.current = createRingtoneCoordinator(AlertSoundService);
+  }
 
   const refreshNotifications = useCallback(async () => {
     if (!user) {
@@ -81,7 +87,7 @@ export function NotificationProvider({ children }) {
     setAlertSoundsEnabled(readSoundPreference(user?.id));
     setSoundBlocked(false);
     playedNotificationIdsRef.current.clear();
-    AlertSoundService.stopRingtone();
+    ringtoneCoordinatorRef.current.reset();
   }, [user?.id]);
 
   const unlockAlertSounds = useCallback(async () => {
@@ -91,7 +97,7 @@ export function NotificationProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!user || !alertSoundsEnabled) return undefined;
+    if (!user || (!alertSoundsEnabled && !SOS_ALERT_ENABLED)) return undefined;
     const unlock = () => { void unlockAlertSounds(); };
     globalThis.addEventListener?.('pointerdown', unlock, { once: true, capture: true });
     globalThis.addEventListener?.('keydown', unlock, { once: true, capture: true });
@@ -109,14 +115,24 @@ export function NotificationProvider({ children }) {
   }, [alertSoundsEnabled]);
 
   const startCallRingtone = useCallback((callId) => {
+    const played = ringtoneCoordinatorRef.current.startCall(callId, alertSoundsEnabled);
     if (!alertSoundsEnabled) return false;
-    const played = AlertSoundService.startRingtone(callId);
     setSoundBlocked(!played);
     return played;
   }, [alertSoundsEnabled]);
 
   const stopCallRingtone = useCallback(() => {
-    AlertSoundService.stopRingtone();
+    ringtoneCoordinatorRef.current.stopCall();
+  }, []);
+
+  const startSOSRingtone = useCallback((eventId) => {
+    const played = ringtoneCoordinatorRef.current.startSOS(eventId);
+    setSoundBlocked(!played);
+    return played;
+  }, []);
+
+  const stopSOSRingtone = useCallback((eventId) => {
+    return ringtoneCoordinatorRef.current.stopSOS(eventId);
   }, []);
 
   const setAlertSounds = useCallback(async (enabled) => {
@@ -128,8 +144,12 @@ export function NotificationProvider({ children }) {
     } catch {
       // The preference remains active for this session when storage is unavailable.
     }
-    if (next) await unlockAlertSounds();
-    else AlertSoundService.stopRingtone();
+    if (next) {
+      await unlockAlertSounds();
+      ringtoneCoordinatorRef.current.setCallSoundEnabled(true);
+    } else {
+      ringtoneCoordinatorRef.current.setCallSoundEnabled(false);
+    }
   }, [unlockAlertSounds, user?.id]);
 
   useEffect(() => {
@@ -138,6 +158,7 @@ export function NotificationProvider({ children }) {
       const notificationId = change?.new?.id;
       const isNewAudibleNotification = change?.eventType === 'INSERT'
         && change.new?.event_type !== 'voice_call'
+        && (!SOS_ALERT_ENABLED || change.new?.event_type !== SOS_ACTIVATED_EVENT_TYPE)
         && notificationId
         && !playedNotificationIdsRef.current.has(notificationId);
       if (isNewAudibleNotification) {
@@ -222,6 +243,8 @@ export function NotificationProvider({ children }) {
     unlockAlertSounds,
     startCallRingtone,
     stopCallRingtone,
+    startSOSRingtone,
+    stopSOSRingtone,
   }), [
     disablePush,
     enablePush,
@@ -238,7 +261,9 @@ export function NotificationProvider({ children }) {
     setAlertSounds,
     soundBlocked,
     startCallRingtone,
+    startSOSRingtone,
     stopCallRingtone,
+    stopSOSRingtone,
     unlockAlertSounds,
   ]);
 

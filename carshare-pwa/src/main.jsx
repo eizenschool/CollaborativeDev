@@ -7,11 +7,14 @@ import { MessagingSessionProvider } from './context/MessagingSessionContext.jsx'
 import { NotificationProvider } from './context/NotificationContext.jsx';
 import { CallSessionProvider } from './context/CallSessionContext.jsx';
 import CallOverlay from './presentation/components/messaging/CallOverlay.jsx';
+import SOSAlertOverlay from './presentation/components/ride/SOSAlertOverlay.jsx';
 import './presentation/styles/theme.css';
 
 // Registers the offline-resilience Service Worker described in 3.1(a).
 // vite-plugin-pwa injects this virtual module at build time.
 import { registerSW } from 'virtual:pwa-register';
+
+const SOS_ENABLED = import.meta.env.VITE_M2_SOS_ENABLED === 'true';
 
 async function clearDevelopmentPwaState() {
   if (!('serviceWorker' in navigator)) return;
@@ -53,6 +56,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <CallSessionProvider>
               <App />
               <CallOverlay />
+              {SOS_ENABLED && <SOSAlertOverlay />}
             </CallSessionProvider>
           </MessagingSessionProvider>
         </NotificationProvider>

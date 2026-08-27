@@ -100,6 +100,7 @@ export default function TopNav() {
                 to={target.to}
                 state={target.state}
                 aria-label={isMessageItem && unreadMessageCount > 0 ? `${label}, ${unreadMessageCount} unread messages` : label}
+                title={label}
                 className={({ isActive }) => 'topnav-item' + (isActive ? ' active' : '')}
               >
                 <span className="topnav-icon">

@@ -16,10 +16,20 @@ describe('Module 2 cancellation UX contract', () => {
     expect(rideStyles).toContain('.reason-list button { width: 100%;');
   });
 
+  it('uses the action rail gap instead of stacking extra button margins', () => {
+    expect(rideStyles).toContain('.ride-bottom-actions > .outline-action.full,');
+    expect(rideStyles).toContain('.ride-bottom-actions > .cancel-action { margin-top: 0; }');
+    expect(rideStyles).toContain('.ride-bottom-actions > .request-status-message { min-height: 48px; }');
+  });
+
   it('explains that requester cancellation is immediate and gives a success notice', () => {
     expect(myRequests).toContain('Cancellation takes effect immediately.');
     expect(myRequests).toContain('does not need to approve this cancellation');
     expect(myRequests).toContain('Request cancelled immediately.');
+    expect(rideDetail).toContain('Cancel request');
+    expect(rideDetail).toContain('RideRequestService.cancelRequest(activeRequest.id, reason)');
+    expect(rideDetail).toContain('Cancellation takes effect immediately.');
+    expect(rideDetail).toContain('Request cancelled immediately.');
   });
 
   it('does not label cancelled or historical requests as awaiting approval', () => {

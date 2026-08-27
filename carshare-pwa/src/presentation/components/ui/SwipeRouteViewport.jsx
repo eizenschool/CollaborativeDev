@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   AnimatePresence,
   animate,
@@ -25,19 +26,14 @@ const MIN_FLICK_VELOCITY_PX_MS = 0.55;
 const EDGE_GESTURE_INSET_PX = 20;
 const PHONE_MAX_WIDTH_PX = 700;
 const EXCLUDED_TARGETS = [
-  'a',
-  'button',
   'input',
   'select',
   'textarea',
-  'label',
-  'form',
   'iframe',
   'canvas',
   'video',
   'audio',
   '[contenteditable="true"]',
-  '[role="button"]',
   '[role="dialog"]',
   '[role="slider"]',
   '[role="textbox"]',
@@ -72,17 +68,17 @@ function routeVariants(reducedMotion) {
   return {
     enter: (direction) => {
       if (reducedMotion || !direction) return { x: 0 };
-      return { x: direction === 'next' ? 56 : -56 };
+      return { x: direction === 'next' ? '100%' : '-100%' };
     },
     center: {
       x: 0,
-      transition: { duration: reducedMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }
+      transition: { duration: reducedMotion ? 0 : 0.28, ease: [0.16, 1, 0.3, 1] }
     },
     exit: (direction) => {
       if (reducedMotion || !direction) return { x: 0, transition: { duration: 0 } };
       return {
-        x: direction === 'next' ? -64 : 64,
-        transition: { duration: 0.14, ease: [0.4, 0, 1, 1] }
+        x: direction === 'next' ? '-100%' : '100%',
+        transition: { duration: 0.2, ease: [0.4, 0, 1, 1] }
       };
     }
   };
@@ -198,15 +194,15 @@ function SwipeRouteFrame({ children, pathname, transitionDirection, onNavigate }
       springBack();
     };
 
-    surface.addEventListener('touchstart', handleTouchStart, { passive: true });
-    surface.addEventListener('touchmove', handleTouchMove, { passive: false });
-    surface.addEventListener('touchend', handleTouchEnd, { passive: true });
-    surface.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchCancel, { passive: true });
     return () => {
-      surface.removeEventListener('touchstart', handleTouchStart);
-      surface.removeEventListener('touchmove', handleTouchMove);
-      surface.removeEventListener('touchend', handleTouchEnd);
-      surface.removeEventListener('touchcancel', handleTouchCancel);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchCancel);
     };
   }, [dragX, isPresent, onNavigate, pathname, reducedMotion, springBack, user]);
 
@@ -232,15 +228,18 @@ function SwipeRouteFrame({ children, pathname, transitionDirection, onNavigate }
 export default function SwipeRouteViewport({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const pendingDirectionRef = useRef(null);
-  const transitionDirection = pendingDirectionRef.current;
+  const [transitionDirection, setTransitionDirection] = useState(null);
 
   useEffect(() => {
-    pendingDirectionRef.current = null;
-  }, [location.pathname]);
+    if (!transitionDirection) return undefined;
+    const timeout = window.setTimeout(() => setTransitionDirection(null), 420);
+    return () => window.clearTimeout(timeout);
+  }, [location.pathname, transitionDirection]);
 
   const handleNavigate = useCallback((target) => {
-    pendingDirectionRef.current = target.direction;
+    // Commit the direction before React Router swaps the keyed page. Otherwise
+    // the entering page can render once without knowing which side it came from.
+    flushSync(() => setTransitionDirection(target.direction));
     navigate(target.to, { state: target.state });
   }, [navigate]);
 
@@ -248,7 +247,11 @@ export default function SwipeRouteViewport({ children }) {
     <LazyMotion features={loadMotionFeatures} strict>
       <MotionConfig reducedMotion="user">
         <div className="ui-swipe-route-stage">
-          <AnimatePresence initial={false} custom={transitionDirection} mode="sync">
+          <AnimatePresence
+            initial={false}
+            custom={transitionDirection}
+            mode="sync"
+          >
             <SwipeRouteFrame
               key={location.pathname}
               pathname={location.pathname}

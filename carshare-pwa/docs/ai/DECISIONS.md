@@ -397,7 +397,7 @@ and non-Published pickup context remain private. Google photo URIs are fetched
 on demand, attributed, and never stored in the database.
 
 ## D028 — One-way Trusted Family and PWA SOS
-**Status:** Accepted; implementation authored, migration and release pending
+**Status:** Accepted; backend deployed, client release gated
 
 Trusted Family is an account-level, one-way relationship established by a
 hashed, one-use 24-hour invitation. It grants no ordinary Ride or location
@@ -417,6 +417,14 @@ This is a PWA best-effort foreground implementation. Page-hidden tracking may
 continue and reconnect retries the latest in-memory point, but browser process
 termination can stop GPS. Capacitor, native foreground services, FCM, SMS and
 iOS-native work are explicitly outside this decision.
+
+An unread `sos_activated` notification may use a global call-like foreground
+alert and the shared Web Audio ringtone, but it is not a Module 3 voice call and
+must not create call sessions, request microphone permission, or expose
+coordinates in notification state. SOS sound takes priority over a ringing
+call, ignores the general in-app sound preference, stops after 45 seconds, and
+then leaves a persistent View SOS bar. Browser autoplay policy, system silent
+mode, and background/closed-PWA Push audio remain outside application control.
 
 ## D029 — Terminal Ride republishing creates a separate Draft
 **Status:** Accepted and deployed

@@ -21,10 +21,6 @@
 //     billboard.
 import React, { useEffect, useRef, useState } from 'react';
 
-export const prefersReducedMotion = () =>
-  typeof window !== 'undefined' &&
-  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
 // Drawn around its own centre so a rotation applied by the caller pivots on the
 // car rather than swinging it around a corner.
 export function CarShape({ scale = 1 }) {
@@ -72,14 +68,9 @@ export function useRoadRunner(roadRef, carRef, { lapMs = 13000, resting = 0.32, 
       car.setAttribute('transform', `translate(${point.x} ${point.y}) rotate(${angle})`);
     }
 
-    // Park it first. This is also what a viewer sees when animation frames never
-    // arrive - a backgrounded tab, or a browser that is not compositing - rather
-    // than a car stuck off the left edge.
-    place(resting);
-    if (!drive || prefersReducedMotion()) return undefined;
-
     let frame = null;
-    const startedAt = performance.now();
+    let startedAt = null;
+    const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
     function tick(now) {
       // Constant speed: the seam of the loop happens off-canvas, so there is
@@ -88,8 +79,27 @@ export function useRoadRunner(roadRef, carRef, { lapMs = 13000, resting = 0.32, 
       frame = requestAnimationFrame(tick);
     }
 
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    function stop() {
+      if (frame != null) cancelAnimationFrame(frame);
+      frame = null;
+    }
+
+    function syncMotionPreference() {
+      stop();
+      // Keep a useful static scene for reduced motion, then resume from that
+      // exact position if the preference changes while the PWA stays open.
+      place(resting);
+      if (!drive || motionPreference?.matches) return;
+      startedAt = performance.now() - resting * lapMs;
+      frame = requestAnimationFrame(tick);
+    }
+
+    syncMotionPreference();
+    motionPreference?.addEventListener?.('change', syncMotionPreference);
+    return () => {
+      stop();
+      motionPreference?.removeEventListener?.('change', syncMotionPreference);
+    };
   }, [roadRef, carRef, lapMs, resting, drive]);
 }
 
@@ -362,7 +372,7 @@ export function JourneyStart({ label }) {
           <rect x="18" y="-39.5" width="24" height="5" rx="2.5" fill="#FFFFFF" opacity="0.85" />
         </g>
 
-        <g ref={carRef}>
+        <g ref={carRef} data-road-runner="journey-start">
           <CarShape scale={1.25} />
           <LeafPuffs x={-12} />
         </g>

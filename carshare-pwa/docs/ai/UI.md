@@ -68,8 +68,9 @@ not named devices, to decide when a component must reflow.
 Use the existing shared breakpoint family for new work:
 
 - `700px` - phone navigation and narrow single-column layouts.
-- `900px` - compact top navigation and medium-width layout changes.
-- `1100px` - wide grids or multi-column layouts that need more room.
+- `900px` - medium-width module layout changes and compact brand treatment.
+- `1100px` - compact top-navigation labels and wide grids or multi-column
+  layouts that need more room.
 
 Some existing module styles use nearby legacy breakpoints such as `860px` or
 `880px`. Do not launch an unrelated global rewrite. When a touched component can
@@ -172,13 +173,16 @@ other records them. On a 375px phone seven items leave 50px each, above the
 Use `TopNav.jsx`; do not implement a separate navigation bar inside a module.
 The current route determines the active state.
 
-On touch phone layouts, the seven exact top-level destinations also support
-horizontal swipe navigation in the same order: swipe left for the next
-destination and right for the previous destination. Home and Profile are hard boundaries.
-Detail, form, trip, and conversation routes keep their normal back behaviour;
-forms, dialogs, maps, horizontal rails, and other interactive regions must not
-be intercepted by the page gesture. The visible navigation remains the
-non-gesture and keyboard alternative.
+On touch phone layouts, the full app shell for the seven exact top-level
+destinations supports horizontal swipe navigation in the same order: swipe left
+for the next destination and right for the previous destination. Home and
+Profile are hard boundaries. A deliberate horizontal drag may begin on ordinary
+content, cards, form surfaces, buttons, or the persistent navigation; taps and
+vertical scrolling retain their normal behaviour. Text-entry controls, dialogs,
+maps/canvas, horizontal rails, media, selected text, and system-edge gestures
+remain excluded. Detail, form, trip, and conversation routes keep their normal
+back behaviour. The visible navigation remains the non-gesture and keyboard
+alternative.
 
 - The default website entry is public Home. Guests may browse Home, Search
   results, and Published Ride Detail without creating a session. `/search` is
@@ -221,6 +225,15 @@ non-gesture and keyboard alternative.
   use a distinct repeating two-pulse ringtone. Do not promise a custom sound
   for a background or closed PWA, where the operating system controls Push
   notification audio.
+- With Module 2 SOS release-enabled, only a new unread `sos_activated` event
+  uses a global emergency alertdialog and the repeating ringtone. SOS preempts
+  an incoming-call ringtone without ending its call state and ignores the
+  general Alert sounds preference; browser autoplay and system audio policy
+  still apply. Silence, Escape, or the 45-second limit reduces the alert to a
+  non-modal bar with a visible `View SOS` action. The bar remains until viewed
+  or resolved and must not obscure navigation, keyboard focus, safe areas, or
+  Module 3's desktop call bar. Signal-loss, recovery, and resolution events use
+  the normal notification path.
 - The desktop auth journey scene keeps the car animated on the complete KL
   Sentral-Genting-Ipoh route; the car must follow the SVG curve rather than use
   an unrelated screen position. Drive the car from the route's own SVG geometry

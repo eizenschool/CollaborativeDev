@@ -309,6 +309,10 @@ html:has(.trip-mode-page), body:has(.trip-mode-page) { overflow-x: clip; }
 .outline-action { flex: 1; border: 1px solid var(--teal); background: #fff; color: var(--teal); }
 .outline-action.full { width: 100%; margin-top: 8px; }
 .cancel-action { width: 100%; margin-top: 8px; border: 1px solid var(--danger); background: #fff; color: var(--danger); }
+.ride-bottom-actions > .outline-action.full,
+.ride-bottom-actions > .cancel-action { margin-top: 0; }
+.ride-bottom-actions > .request-sent,
+.ride-bottom-actions > .request-status-message { min-height: 48px; }
 .host-action-row { display: flex; gap: 8px; }
 
 /* Ride detail */

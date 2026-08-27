@@ -1,0 +1,239 @@
+.sos-alert-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-toast) + 10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  background: rgba(35, 8, 8, 0.78);
+  font-family: var(--font);
+  backdrop-filter: blur(8px);
+  animation: ui-backdrop-enter var(--motion-normal) var(--ease-enter) both;
+}
+
+.sos-alert-card {
+  width: min(100%, 430px);
+  min-width: 0;
+  padding: 34px 28px 28px;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  border-radius: 28px;
+  background: linear-gradient(165deg, var(--color-surface) 0%, var(--color-danger-soft) 155%);
+  box-shadow: 0 28px 80px rgba(25, 4, 4, 0.36);
+  color: var(--color-text);
+  text-align: center;
+  animation: ui-dialog-enter var(--motion-slow) var(--ease-enter) both;
+}
+
+.sos-alert-icon-ring {
+  display: grid;
+  width: 106px;
+  height: 106px;
+  margin: 0 auto 22px;
+  place-items: center;
+  border: 4px solid rgba(220, 38, 38, 0.2);
+  border-radius: 50%;
+  box-shadow: 0 0 0 10px rgba(220, 38, 38, 0.08);
+  animation: sos-alert-pulse 1.8s var(--ease-standard) infinite;
+}
+
+.sos-alert-icon-ring > span {
+  display: grid;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.sos-alert-heading { min-width: 0; }
+
+.sos-alert-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #991b1b;
+  font-size: var(--text-xs);
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sos-alert-heading h2 {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display);
+  font-size: clamp(24px, 7vw, 31px);
+  line-height: var(--line-tight);
+}
+
+.sos-alert-heading p {
+  max-width: 38ch;
+  margin: 10px auto 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: 1.55;
+}
+
+.sos-alert-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  color: #7f1d1d;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.sos-alert-status svg { flex: 0 0 auto; margin-top: 1px; }
+
+.sos-alert-queue,
+.sos-alert-help {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.sos-alert-queue { margin: 12px 0 0; font-weight: 700; }
+.sos-alert-help { margin: 14px 0 0; }
+
+.sos-alert-enable-sound {
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 9px 14px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: #991b1b;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sos-alert-enable-sound:hover { background: var(--color-danger-soft); }
+
+.sos-alert-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.sos-alert-actions .ui-button { width: 100%; min-height: 48px; }
+
+.sos-alert-mini {
+  position: fixed;
+  top: calc(76px + env(safe-area-inset-top, 0px));
+  left: 20px;
+  z-index: calc(var(--z-toast) + 5);
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: min(500px, calc(100vw - 40px));
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: 0 16px 44px rgba(64, 10, 10, 0.24);
+  color: var(--color-text);
+  backdrop-filter: blur(16px);
+  animation: ui-banner-enter var(--motion-slow) var(--ease-enter) both;
+}
+
+.sos-alert-mini-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.sos-alert-mini-copy { min-width: 0; text-align: left; }
+.sos-alert-mini-copy strong,
+.sos-alert-mini-copy span { display: block; }
+.sos-alert-mini-copy strong { overflow-wrap: anywhere; font-size: var(--text-sm); }
+.sos-alert-mini-copy span { margin-top: 2px; color: var(--color-text-muted); font-size: var(--text-xs); }
+
+.sos-alert-count {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-danger-soft);
+  color: #991b1b;
+  font-size: var(--text-xs);
+  font-weight: 850;
+}
+
+.sos-alert-backdrop button:focus-visible,
+.sos-alert-mini button:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+@keyframes sos-alert-pulse {
+  0%, 100% { box-shadow: 0 0 0 9px rgba(220, 38, 38, 0.07); }
+  50% { box-shadow: 0 0 0 18px rgba(220, 38, 38, 0.15); }
+}
+
+@media (max-width: 700px) {
+  .sos-alert-backdrop {
+    align-items: flex-end;
+    padding: env(safe-area-inset-top) 0 0;
+  }
+
+  .sos-alert-card {
+    width: 100%;
+    max-height: calc(100dvh - env(safe-area-inset-top));
+    overflow-y: auto;
+    padding: 30px 20px max(26px, calc(20px + env(safe-area-inset-bottom)));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 28px 28px 0 0;
+  }
+
+  .sos-alert-icon-ring { width: 94px; height: 94px; margin-bottom: 18px; }
+  .sos-alert-icon-ring > span { width: 76px; height: 76px; }
+
+  .sos-alert-mini {
+    top: auto;
+    right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    width: auto;
+    padding: 10px;
+  }
+
+  .sos-alert-mini-icon { width: 40px; height: 40px; }
+  .sos-alert-count { display: none; }
+}
+
+@media (max-width: 420px) {
+  .sos-alert-actions { grid-template-columns: 1fr; }
+  .sos-alert-mini .ui-button { min-width: 92px; padding-inline: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sos-alert-backdrop,
+  .sos-alert-card,
+  .sos-alert-mini,
+  .sos-alert-icon-ring {
+    animation: none !important;
+  }
+}
