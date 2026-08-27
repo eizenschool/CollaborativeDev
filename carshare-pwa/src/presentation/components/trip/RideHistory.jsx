@@ -300,7 +300,8 @@ function TripCard({ trip, onClick }) {
         </span>
         {trip.distanceKm != null && (
           <span className="m5-trip-fact">
-            <IconRoadSmall size={14} /> ~{trip.distanceKm} km
+            <IconRoadSmall size={14} />{' '}
+            {trip.distanceMeasured ? '' : '~'}{trip.distanceKm} km
           </span>
         )}
         {trip.contribution && <span className="m5-trip-fact">{trip.contribution}</span>}

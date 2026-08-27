@@ -2162,3 +2162,13 @@
   .m5-badge:not(.earned) .m5-badge-icon { animation: none; }
   .m5-badge-track::after { display: none; }
 }
+
+/* Stands where the month stepper would be when the board cannot be scoped to
+   a month. See liveLeaderboard in TripHistoryEngine.js. */
+.m5-lb-scope {
+  margin: 10px 0 0;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  color: rgba(226, 232, 240, 0.8);
+}
