@@ -9,10 +9,11 @@ import {
 } from '../../../business-logic/TripHistoryEngine.js';
 import { COLORS, STATUS_COLORS } from './tripTheme.js';
 import { useIsDesktop } from './useIsDesktop.js';
-import { IconLeafSmall, IconRoadSmall, IconUsersSmall } from './tripIcons.jsx';
+import { IconCarSmall, IconLeafSmall, IconRoadSmall, IconSteeringSmall, IconUsersSmall } from './tripIcons.jsx';
 import { ErrorState } from './tripStates.jsx';
 import MonthStepper from './MonthStepper.jsx';
 import StatTile from './StatTile.jsx';
+import { JourneyStart, RoadsideWaiting, StageEmpty } from './tripScenes.jsx';
 
 // The seven lifecycle states Module 2 actually stores on a ride. 'Expired'
 // belongs here too - a published ride nobody joined lapses rather than
@@ -87,10 +88,10 @@ export default function RideHistory({ userId, onOpenTrip }) {
       {/* Real counts, so the page opens with figures rather than a filter rail
           and empty space - and reads 0 rather than vanishing before any trip. */}
       <div className="m5-stat-grid cols-4">
-        <StatTile icon={<IconLeafSmall size={17} />} label="CO₂ saved" value={`${summary.carbonSavedKg} kg`} accent />
-        <StatTile label="Trips" value={summary.total} />
-        <StatTile label="Hosted" value={summary.hosted} />
-        <StatTile label="Joined" value={summary.joined} />
+        <StatTile icon={<IconLeafSmall size={17} />} label="CO₂ saved" value={summary.carbonSavedKg} unit="kg" accent />
+        <StatTile icon={<IconCarSmall size={17} />} label="Trips" value={summary.total} delay={70} />
+        <StatTile icon={<IconSteeringSmall size={17} />} label="Hosted" value={summary.hosted} delay={140} />
+        <StatTile icon={<IconUsersSmall size={17} />} label="Joined" value={summary.joined} delay={210} />
       </div>
 
       {/* One scrolling row rather than a narrow column: eight chips of unequal
@@ -139,19 +140,25 @@ export default function RideHistory({ userId, onOpenTrip }) {
           onPublishRide={() => navigate('/ride/publish')}
         />
       ) : (
-        months.map((group) => (
-          <section key={group.key} className="m5-month">
-            <h3 className="m5-section-title m5-month-heading">
-              {group.label}
-              <span>{group.trips.length} {group.trips.length === 1 ? 'trip' : 'trips'}</span>
-            </h3>
-            <div className="m5-trip-grid">
-              {group.trips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} onClick={() => onOpenTrip(trip.id)} />
-              ))}
-            </div>
-          </section>
-        ))
+        <>
+          {months.map((group) => (
+            <section key={group.key} className="m5-month">
+              <h3 className="m5-section-title m5-month-heading">
+                {group.label}
+                <span>{group.trips.length} {group.trips.length === 1 ? 'trip' : 'trips'}</span>
+              </h3>
+              <div className="m5-trip-grid">
+                {group.trips.map((trip) => (
+                  <TripCard key={trip.id} trip={trip} onClick={() => onOpenTrip(trip.id)} />
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {/* The list runs newest first, so the last group is the oldest and
+              the foot of the page is where this user actually started. */}
+          <JourneyStart label={months[months.length - 1]?.label} />
+        </>
       )}
     </div>
   );
@@ -335,7 +342,9 @@ function EmptyState({ stage, role, summary, onPickStage, onClearFilters, onFindR
   if (!filtered) {
     return (
       <div className="m5-card m5-blank">
-        <span className="m5-blank-icon"><IconLeafSmall size={26} /></span>
+        {/* Nothing to count yet, so the scene counts nothing: an empty kerb
+            and a car waiting for the first trip to exist. */}
+        <RoadsideWaiting />
         <h3>Your trips will live here</h3>
         <p>
           Every ride you host or join is kept here with its route, who came along, and the
@@ -358,7 +367,7 @@ function EmptyState({ stage, role, summary, onPickStage, onClearFilters, onFindR
 
   return (
     <div className="m5-card m5-blank">
-      <span className="m5-blank-icon muted"><IconLeafSmall size={26} /></span>
+      <StageEmpty label={stage === 'All' ? role : stage} />
       <h3>{stage === 'All' ? `No ${role.toLowerCase()} trips` : `No ${stage} trips`}</h3>
       <p>
         {summary.total === 0

@@ -2,14 +2,23 @@
 // Module 5 - the export panel for the monthly impact card: pick a palette,
 // see it redraw, then choose how it leaves the app.
 //
-// What each action can honestly do:
-//   - Share to apps  -> the device share sheet, the ONLY route that carries
-//     the image itself to Instagram, Messenger, Facebook and the rest. Mobile
-//     browsers only, so it is hidden where navigator.canShare is absent.
-//   - Copy image     -> clipboard, so the card can be pasted into any chat.
-//   - Download / Copy text -> always available.
-//   - WhatsApp / Telegram / X -> a URL can only carry TEXT. They are labelled
-//     accordingly and copy the image first so it can be pasted alongside.
+// TWO WAYS OUT, BECAUSE NEITHER ONE CAN DO BOTH JOBS.
+//
+//   - Share to apps       -> navigator.share({files}) hands the PNG itself to
+//     whichever app is chosen, so nothing has to be pasted. The catch is that
+//     the Web Share API has no way to name a target: it always opens the OS
+//     picker, and the app is chosen there. Hidden where canShare is absent.
+//
+//   - WhatsApp/Telegram/X -> open that one app directly, which is the whole
+//     point of a branded button. A URL can only carry text (wa.me, t.me and
+//     x.com take a text parameter and nothing else), so the card goes to the
+//     clipboard on the way out and the handoff banner says to paste it.
+//
+// Asking one button to do both is what made this confusing before: routing the
+// branded buttons through the share sheet meant "WhatsApp" opened a list of
+// forty apps instead of WhatsApp.
+//
+//   - Copy image / Save PNG / Copy caption -> the manual pieces.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CARD_FORMATS,
@@ -47,9 +56,19 @@ export default function ShareReportDialog({ content, onClose }) {
   const [preview, setPreview] = useState(null);
   const [blob, setBlob] = useState(null);
   const [note, setNote] = useState('');
+  // When a chat app has to be handed the card through the clipboard, saying so
+  // in the 12px status line at the bottom of a tall panel is the same as not
+  // saying it: people press the button, see text arrive in WhatsApp and
+  // conclude the picture was lost. This is that message, where it cannot be
+  // missed.
+  const [handoff, setHandoff] = useState(null);
 
   const canUseShareSheet =
     typeof navigator !== 'undefined' && typeof navigator.canShare === 'function';
+
+  const pasteKey = typeof navigator !== 'undefined' && /Mac|iP(hone|ad)/.test(navigator.platform || '')
+    ? '\u2318V'
+    : 'Ctrl + V';
 
   // Redraw whenever the palette changes. Webfonts must be ready first or the
   // canvas silently falls back to a system face.
@@ -68,6 +87,10 @@ export default function ShareReportDialog({ content, onClose }) {
     });
     return () => { active = false; };
   }, [content, themeId, formatId, trackUrl]);
+
+  // A redrawn card is not the one sitting on the clipboard, so the standing
+  // instruction to paste it would be wrong.
+  useEffect(() => { setHandoff(null); }, [themeId, formatId]);
 
   useEffect(() => {
     returnFocusRef.current = document.activeElement;
@@ -107,19 +130,37 @@ export default function ShareReportDialog({ content, onClose }) {
     }
   }
 
+  function pngFile() {
+    return new File([blob], filenameFor(content, formatId), { type: 'image/png' });
+  }
+
+  function canShareTheFile() {
+    return Boolean(blob) && Boolean(navigator.canShare?.({ files: [pngFile()] }));
+  }
+
   async function handleShareSheet() {
     try {
-      const file = new File([blob], filenameFor(content, formatId), { type: 'image/png' });
-      if (!navigator.canShare?.({ files: [file] })) {
+      if (!canShareTheFile()) {
         setNote('This browser cannot share files. Download or copy the image instead.');
         return;
       }
-      await navigator.share({ files: [file], title: content.shareTitle, text: content.shareText });
+      await navigator.share({ files: [pngFile()], title: content.shareTitle, text: content.shareText });
       setNote('Shared.');
     } catch (error) {
       // Dismissing the sheet is a choice, not a failure.
       if (error?.name !== 'AbortError') setNote('Sharing was not completed.');
     }
+  }
+
+  async function handleAppTarget(target) {
+    // Straight to the app the button names - no picker in between. The URL
+    // carries the caption; the picture rides the clipboard, because there is
+    // no third option. Copy BEFORE opening: window.open moves focus, and a
+    // clipboard write from an unfocused document is rejected.
+    const copied = await copyImage();
+    window.open(target.href, '_blank', 'noopener,noreferrer');
+    setNote('');
+    setHandoff({ label: target.label, copied });
   }
 
   function handleDownload() {
@@ -145,15 +186,6 @@ export default function ShareReportDialog({ content, onClose }) {
     }
   }
 
-  async function handleTextTarget(target) {
-    // Copy first so the image can be pasted next to the text that opens.
-    const copied = await copyImage();
-    window.open(target.href, '_blank', 'noopener,noreferrer');
-    setNote(copied
-      ? `${target.label} opened with your text - paste the copied image there too.`
-      : `${target.label} opened with your text. Download the image to attach it.`);
-  }
-
   return (
     <div
       className="m5-share-backdrop"
@@ -167,6 +199,26 @@ export default function ShareReportDialog({ content, onClose }) {
           <h3>Share your impact</h3>
           <button ref={closeRef} className="m5-icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
+
+        {handoff && (
+          <div className={'m5-share-handoff' + (handoff.copied ? '' : ' warn')} role="status">
+            <span className="m5-share-handoff-icon" aria-hidden="true">{handoff.copied ? '\u{1F5BC}' : '\u{2B07}'}</span>
+            {handoff.copied ? (
+              <p>
+                <strong>Your card is copied.</strong>
+                {` ${handoff.label} is open in another tab - click the message box there and press `}
+                <kbd>{pasteKey}</kbd>
+                {' to send the picture.'}
+              </p>
+            ) : (
+              <p>
+                <strong>{`${handoff.label} is open, but this browser blocked the copy.`}</strong>
+                {' Use Save PNG below, then attach the file there.'}
+              </p>
+            )}
+            <button className="m5-icon-btn" onClick={() => setHandoff(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
 
         <div className="m5-share-body">
           <div className="m5-share-preview">
@@ -219,13 +271,13 @@ export default function ShareReportDialog({ content, onClose }) {
               </button>
             )}
 
-            <p className="m5-share-label">Send as text</p>
+            <p className="m5-share-label">Send to</p>
             <div className="m5-share-targets">
               {buildTextShareTargets(content).map((target) => (
                 <button
                   key={target.id}
                   className="m5-share-target"
-                  onClick={() => handleTextTarget(target)}
+                  onClick={() => handleAppTarget(target)}
                   disabled={!blob}
                 >
                   <span className="m5-share-target-dot" style={{ background: target.brand }} aria-hidden="true" />
@@ -236,18 +288,10 @@ export default function ShareReportDialog({ content, onClose }) {
 
             <p className="m5-share-label">Save or copy</p>
             <div className="m5-share-actions">
-              <button className="m5-chip" onClick={handleDownload} disabled={!blob}>⬇ PNG</button>
               <button className="m5-chip" onClick={handleCopyImage} disabled={!blob}>🖼 Copy image</button>
-              <button className="m5-chip" onClick={handleCopyText}>🔗 Copy text</button>
+              <button className="m5-chip" onClick={handleDownload} disabled={!blob}>⬇ Save PNG</button>
+              <button className="m5-chip" onClick={handleCopyText}>✍ Copy caption</button>
             </div>
-
-            {!canUseShareSheet && (
-              <p className="m5-share-hint">
-                Instagram, Messenger and Facebook can only receive the picture through your
-                phone&apos;s share sheet. Open this page on your phone, or copy the image and
-                paste it there.
-              </p>
-            )}
 
             <p className="m5-share-note" role="status">{note}</p>
           </div>

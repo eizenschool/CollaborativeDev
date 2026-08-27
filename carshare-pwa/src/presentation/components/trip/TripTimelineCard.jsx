@@ -53,7 +53,7 @@ export default function TripTimelineCard({ timeline }) {
           const tone = TONE[item.state] || TONE[STEP_STATE.UPCOMING];
           const when = formatInstant(item.at);
           return (
-            <li key={item.id} className="m5-timeline-step">
+            <li key={item.id} className="m5-timeline-step" style={{ '--m5-delay': `${index * 90}ms` }}>
               <span className="m5-timeline-marker" aria-hidden="true">
                 <span
                   className={'m5-timeline-dot' + (item.state === STEP_STATE.DUE ? ' pulsing' : '')}
