@@ -77,4 +77,14 @@ describe('Module 4 SQL contract', () => {
     expect(source).toContain('host:profiles!rides_host_id_fkey');
     expect(source).not.toMatch(/host:profiles\(id, full_name/);
   });
+
+  it('indexes favourite lookups used by availability notifications', async () => {
+    const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../database/sql/040_m4_favourites_advisor_followup.sql', import.meta.url),
+      'utf8'
+    ));
+
+    expect(sql).toContain('ride_favourites_ride_id_idx');
+    expect(sql).toContain('on public.ride_favourites (ride_id)');
+  });
 });

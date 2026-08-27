@@ -62,14 +62,23 @@ easier to change now than after you have built against it.
   `035_m4_destination_proximity_search.sql`; authenticated favourite mutations,
   unavailable cards, and anonymous proximity search were live-verified on
   2026-08-20.
-- [ ] Review, then separately deploy and verify
+- [x] Review, then separately deploy and verify
   `039_m4_vehicle_language_filters.sql`. Until deployment, ordinary exact and
   proximity Search remain available; choosing vehicle or language reports the
   deployment dependency honestly.
-- [ ] Review and deploy `040_m4_favourites_advisor_followup.sql`, then rerun the
+- [x] Review and deploy `040_m4_favourites_advisor_followup.sql`, then rerun the
   performance advisor to clear the favourite ride foreign-key notice. The
   unused-index notice may remain until normal favourite traffic exercises the
   new table.
+- [x] Deploy `067_m4_favourite_unavailable_notifications.sql`; unavailable saved
+  rides now use the shared notification centre and Web Push path with a stable
+  per-transition dedupe key and safe alternative-search deep link.
+- [x] Deploy `068_m4_multi_leg_journey_search.sql`; Search falls back only after
+  direct results are exhausted and returns public-safe two-leg itineraries over
+  confirmed endpoints and approved catalogue transfer points.
+- [ ] Complete final Module 4 two-account/device acceptance: owner compatibility
+  edits, favourite isolation, one alert per availability transition, denied-push
+  in-app fallback, and a live seeded direct/proximity/multi-leg matrix.
 - [x] Deploy `041_m6_ride_available_notification.sql` (Module 6 becomes D020's
   second notification producer, after Message) and
   `042_m6_scheduled_ingestion.sql`, both live-verified 2026-08-24. Deploying
@@ -91,6 +100,8 @@ easier to change now than after you have built against it.
 - Several existing module branches are behind current `Development`.
 - Google Cloud Console setup remains unverified until the restricted Embed-only key is created. Billable Maps SKUs stay disabled except the Module 6 catalogue SKUs accepted in D018.
 - D018 needs Console work before Module 6 ingestion can run against live data: authorise Nearby/Text Search, Place Details and Place Photos, and create a **server-side** key (the two existing keys are website-restricted and unusable from an Edge Function). Store it as a Supabase secret with no `VITE_` prefix. Full request-by-request specification, including the field-mask tiers that decide the bill, is in `docs/MODULE6-API-SETUP.md`.
-- No `.env` or `.env.local` exists in this working copy, so `isSupabaseConfigured` is false and every module falls back to its mock adapter. Anyone who needs to work against the live project must copy `.env.example` themselves; "Supabase is connected" is true of the shared project, not of a fresh checkout.
+- This working copy has an ignored `.env.local` connected to the live project.
+  Fresh checkouts still require their own local configuration; the file and its
+  browser-safe public credentials must never be committed.
 - Module 6 caches Google place content that the Maps Platform terms say should not be stored (D018). Accepted as a prototype limitation; it must appear in the report's limitations section.
 - Google OAuth (D015): code is in place, but someone with Supabase Dashboard + Google Cloud Console access still needs to register the OAuth Client ID/Secret and enable the provider - see `docs/SUPABASE-SETUP.md`. Cannot demo "Continue with Google" against the live project until that's done.

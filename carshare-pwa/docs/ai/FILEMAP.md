@@ -37,6 +37,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/business-logic/RidePickupPhotoService.js` — validates, resizes, uploads, binds, replaces, removes, and signs the single private Ride pickup photo.
 - `src/business-logic/CompatibilityOptions.js` — shared validated vehicle-category and Host-language values used by Module 1 owner editors and Module 4 Search.
 - `src/business-logic/SmartSearchService.js` — Module 4 criteria normalization, URL state, filtering, sorting, and Module 2 ride-search delegation.
+- `src/business-logic/MultiLegJourneyEngine.js` — pure two-leg transfer, schedule, compatibility, privacy, and deterministic-sorting rules used by Module 4 fallback search.
 - `src/business-logic/FavouriteService.js` — Module 4 owner-scoped favourite adapter and safe unavailable-card mapping.
 - `src/business-logic/NotificationService.js` — shared notification mapping,
   safe action paths, unread count, and Web Push subscription orchestration.

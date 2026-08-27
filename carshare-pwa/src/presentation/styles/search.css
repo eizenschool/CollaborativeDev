@@ -552,6 +552,35 @@
 
 .search-proximity-match svg { flex: 0 0 auto; }
 
+.search-multileg-card { border-color: #bfdbfe; background: linear-gradient(145deg, #fff 0%, #f8fbff 100%); }
+.search-multileg-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.search-multileg-heading > span { display: inline-flex; align-items: center; gap: 6px; color: #1d4ed8; font-size: 10.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
+.search-multileg-heading small { padding: 5px 8px; border-radius: 999px; color: #1e40af; background: #dbeafe; font-size: 9.5px; font-weight: 750; }
+.search-transfer-summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; margin-top: 14px; padding: 11px; border: 1px solid #bfdbfe; border-radius: 12px; color: #1d4ed8; background: #eff6ff; }
+.search-transfer-summary > span { min-width: 0; display: grid; gap: 2px; }
+.search-transfer-summary small { color: #64748b; font-size: 9px; }
+.search-transfer-summary strong { overflow: hidden; color: #172554; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.search-transfer-summary b { color: #1e3a8a; font-size: 10px; }
+
+.search-itinerary { display: grid; gap: 14px; }
+.search-itinerary-summary { display: grid; gap: 6px; padding: 13px; border-radius: 13px; background: var(--teal-tint); }
+.search-itinerary-summary span { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 12px; font-weight: 750; }
+.search-itinerary-summary span:last-child { color: var(--danger); }
+.search-itinerary-summary i { width: 1px; height: 12px; margin-left: 8px; background: #a7cdb3; }
+.search-itinerary-leg { display: grid; gap: 13px; padding: 15px; border: 1px solid var(--border); border-radius: 15px; background: #fff; }
+.search-itinerary-leg header { display: grid; gap: 4px; }
+.search-itinerary-leg header span { color: var(--teal-dark); font-size: 9px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.search-itinerary-leg header strong { color: var(--ink); font: 650 13px/1.4 var(--font-display); }
+.search-itinerary-leg dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.search-itinerary-leg dl div { display: grid; gap: 2px; }
+.search-itinerary-leg dt { color: var(--muted); font-size: 9px; }
+.search-itinerary-leg dd { margin: 0; color: var(--ink); font-size: 10.5px; font-weight: 650; }
+.search-itinerary-leg button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #b7d9c0; border-radius: 10px; color: var(--teal-dark); background: #f7fcf8; font-weight: 750; }
+.search-itinerary-transfer { display: flex; align-items: flex-start; gap: 10px; margin: 10px 4px; padding: 12px; border-radius: 12px; color: #1d4ed8; background: #eff6ff; }
+.search-itinerary-transfer span { display: grid; gap: 3px; }
+.search-itinerary-transfer strong { color: #1e3a8a; font-size: 11px; }
+.search-itinerary-transfer small { color: #475569; font-size: 10px; line-height: 1.45; }
+
 .search-scale {
   padding: 5px 8px;
   border-radius: 999px;
@@ -995,6 +1024,7 @@
   .search-recommendation-list { grid-template-columns: 1fr; }
   .search-recommendation-footer { align-items: flex-start; flex-direction: column; padding: 10px 18px max(14px, env(safe-area-inset-bottom)); }
   .search-recommendation-footer button { align-self: flex-end; }
+  .search-itinerary-leg dl { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 380px) {

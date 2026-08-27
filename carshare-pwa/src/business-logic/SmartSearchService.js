@@ -2,6 +2,11 @@ import { RideService } from './RideService.js';
 import { calculateCompositeHostImpact } from './HostImpactEngine.js';
 import { PlaceQueryService } from './discovery/PlaceQueryService.js';
 import {
+  findMultiLegJourneys,
+  isMultiLegSearchEligible,
+  sortMultiLegJourneys
+} from './MultiLegJourneyEngine.js';
+import {
   SPOKEN_LANGUAGE_OPTIONS,
   VEHICLE_TYPE_OPTIONS,
   normalizeSpokenLanguage,
@@ -67,7 +72,7 @@ function toPublicSearchRide(ride) {
     waypoints,
     ...safeRide
   } = ride;
-  return safeRide;
+  return { ...safeRide, journeyType: 'direct' };
 }
 
 export function normalizeSmartSearchCriteria(criteria = {}) {
@@ -259,23 +264,40 @@ export const SmartSearchService = {
         : null
     });
 
-    if (!proximity || RideService.backend !== 'mock') {
-      return filterAndSortRides(candidates, normalized).map(toPublicSearchRide);
+    let distanceByPlaceId = new Map();
+    let directCandidates = candidates;
+    if (proximity && RideService.backend === 'mock') {
+      const nearbyPlaces = await PlaceQueryService.queryPlacesNearPoint({
+        lat: proximityCentre.lat,
+        lng: proximityCentre.lng,
+        radiusKm: proximity.radiusKm
+      });
+      distanceByPlaceId = new Map(nearbyPlaces.map((place) => [place.sourcePlaceId, place.distanceKm]));
+      directCandidates = candidates
+        .filter((ride) => distanceByPlaceId.has(ride.destinationLocation?.placeId))
+        .map((ride) => ({
+          ...ride,
+          proximityDistanceKm: distanceByPlaceId.get(ride.destinationLocation.placeId)
+        }));
     }
 
-    const nearbyPlaces = await PlaceQueryService.queryPlacesNearPoint({
-      lat: proximityCentre.lat,
-      lng: proximityCentre.lng,
-      radiusKm: proximity.radiusKm
-    });
-    const distanceByPlaceId = new Map(nearbyPlaces.map((place) => [place.sourcePlaceId, place.distanceKm]));
-    const nearbyCandidates = candidates
-      .filter((ride) => distanceByPlaceId.has(ride.destinationLocation?.placeId))
-      .map((ride) => ({
-        ...ride,
-        proximityDistanceKm: distanceByPlaceId.get(ride.destinationLocation.placeId)
-      }));
+    const directResults = filterAndSortRides(directCandidates, normalized).map(toPublicSearchRide);
+    if (directResults.length || !isMultiLegSearchEligible(normalized)) return directResults;
 
-    return filterAndSortRides(nearbyCandidates, normalized).map(toPublicSearchRide);
+    if (RideService.backend !== 'mock') {
+      if (typeof RideService.searchMultiLegRides !== 'function') return [];
+      return sortMultiLegJourneys(await RideService.searchMultiLegRides(normalized), normalized.sort);
+    }
+
+    const [allRides, transferPoints] = await Promise.all([
+      RideService.searchRides(),
+      PlaceQueryService.getTransferPoints()
+    ]);
+    return findMultiLegJourneys({
+      rides: allRides,
+      transferPoints,
+      destinationDistances: distanceByPlaceId,
+      criteria: normalized
+    });
   }
 };
