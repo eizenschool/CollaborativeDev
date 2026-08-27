@@ -149,8 +149,8 @@ export function assertVoiceCallAvailable(conversation, supported = true) {
   if (conversation.type !== 'direct') {
     throw new Error('Voice calls are currently available in private chats only.');
   }
-  if (conversation.isReadOnly || conversation.isArchived) {
-    throw new Error('Archived conversations cannot start voice calls.');
+  if (conversation.interactionBlocked) {
+    throw new Error('Private interaction is unavailable.');
   }
   const activeMembers = conversation.members?.filter((member) => !member.leftAt) || [];
   if (activeMembers.length !== 2) throw new Error('This private chat is unavailable for calling.');

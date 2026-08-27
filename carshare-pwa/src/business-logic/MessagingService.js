@@ -201,6 +201,7 @@ function mapMember(row) {
     joinedAt: row.joined_at,
     leftAt: row.left_at,
     archivedAt: row.archived_at,
+    deletedBefore: row.deleted_before,
     lastReadAt: row.last_read_at,
     name: row.profile?.full_name || 'Member',
     avatarUrl: row.profile?.profile_photo_url || null,
@@ -219,13 +220,37 @@ function messagePreview(message) {
   return message.kind === 'system' ? 'Group update' : 'Message';
 }
 
+function applyBlockState(conversation, blockState) {
+  const interactionBlocked = Boolean(blockState?.interaction_blocked);
+  return {
+    ...conversation,
+    blockedByMe: Boolean(blockState?.blocked_by_me),
+    interactionBlocked,
+    ...(interactionBlocked ? {
+      rideId: null,
+      rideContexts: [],
+      pickup: null,
+      destination: null,
+      tripRoute: null,
+      tripDate: '',
+      tripTime: '',
+    } : {}),
+  };
+}
+
 export function mapConversationRow(row, currentUserId) {
   const allMembers = (row.members || []).map(mapMember);
   const members = allMembers.filter((member) => !member.leftAt);
   const currentMembership = allMembers.find((member) => member.id === currentUserId);
   const otherMember = members.find((member) => member.id !== currentUserId);
+  const rideContexts = [...(row.ride_contexts || [])]
+    .sort((first, second) => new Date(second.added_at) - new Date(first.added_at));
+  const latestRideContext = rideContexts[0]?.ride || null;
+  const contextualRide = row.type === CONVERSATION_TYPE.GROUP
+    ? row.ride
+    : latestRideContext || row.ride;
   const route = row.trip_route
-    || [row.ride?.pickup, row.ride?.destination].filter(Boolean).join(' to ')
+    || [contextualRide?.pickup, contextualRide?.destination].filter(Boolean).join(' to ')
     || null;
   const title = row.type === CONVERSATION_TYPE.GROUP
     ? row.title || `${route || 'Ride'} Trip Group`
@@ -234,23 +259,34 @@ export function mapConversationRow(row, currentUserId) {
     ? row.last_message[0]
     : row.last_message;
   const lastAt = lastMessage?.created_at || row.last_message_at || row.created_at;
+  const deletedBefore = currentMembership?.deletedBefore;
+  const isHiddenByDelete = Boolean(
+    row.type === CONVERSATION_TYPE.DIRECT
+    && deletedBefore
+    && (!lastMessage
+      || lastMessage.sender_id === currentUserId
+      || new Date(lastMessage.created_at) <= new Date(deletedBefore)),
+  );
 
   return {
     id: row.id,
-    rideId: row.ride_id,
+    rideId: row.ride_id || latestRideContext?.id || null,
     type: row.type,
     title,
     members,
     currentMembership,
     isArchived: Boolean(currentMembership?.archivedAt),
-    isReadOnly: Boolean(currentMembership?.archivedAt),
-    rideStatus: row.ride_status,
-    expiresAt: row.expires_at,
-    pickup: row.ride?.pickup || null,
-    destination: row.ride?.destination || null,
+    isHiddenByDelete,
+    isReadOnly: false,
+    isClosed: Boolean(row.closed_at),
+    otherUserId: otherMember?.id || null,
+    rideContexts,
+    rideStatus: row.type === CONVERSATION_TYPE.GROUP ? row.ride_status : null,
+    pickup: contextualRide?.pickup || null,
+    destination: contextualRide?.destination || null,
     tripRoute: route,
-    tripDate: formatTripDate(row.trip_departure_at),
-    tripTime: formatTripTime(row.trip_departure_at),
+    tripDate: formatTripDate(row.trip_departure_at || contextualRide?.departure_at),
+    tripTime: formatTripTime(row.trip_departure_at || contextualRide?.departure_at),
     lastMessage: messagePreview(lastMessage),
     lastMessageAt: lastAt,
     lastTime: formatConversationTime(lastAt),
@@ -313,7 +349,8 @@ export function mapMessageRow(row, conversation, currentUserId) {
       && !row.deleted_at
       && !isRead
       && !attachments.some((attachment) => attachment.kind === MESSAGE_TYPE.AUDIO)
-      && !conversation?.isReadOnly,
+      && !conversation?.isReadOnly
+      && !conversation?.interactionBlocked,
     canDelete: row.sender_id === currentUserId
       && !row.deleted_at
       && !conversation?.isReadOnly,
@@ -385,7 +422,7 @@ export function getMessagingChangeConversationId(change) {
     : change?.old;
   if (!row) return null;
   if (change.table === 'conversations') return row.id || null;
-  if (['conversation_members', 'messages'].includes(change.table)) {
+  if (['conversation_members', 'conversation_ride_contexts', 'messages'].includes(change.table)) {
     return row.conversation_id || null;
   }
   if (change.table === 'call_sessions') return row.conversation_id || null;
@@ -402,14 +439,27 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       return repository.openRideDirectConversation(rideId);
     },
 
+    async resolveConversationId(conversationId) {
+      if (!conversationId) throw new Error('A conversation is required.');
+      return repository.resolveConversationId?.(conversationId) || conversationId;
+    },
+
     async listConversations(folder = 'active') {
       if (!['active', 'archived'].includes(folder)) {
         throw new Error('Unsupported conversation folder.');
       }
       const currentUserId = await repository.getCurrentUserId();
       const rows = await repository.listConversations();
-      return rows
-        .map((row) => mapConversationRow(row, currentUserId))
+      const conversations = await Promise.all(rows.map(async (row) => {
+        const conversation = mapConversationRow(row, currentUserId);
+        if (conversation.type !== CONVERSATION_TYPE.DIRECT || !conversation.otherUserId) {
+          return { ...conversation, blockedByMe: false, interactionBlocked: false };
+        }
+        const blockState = await repository.getUserBlockState?.(conversation.otherUserId);
+        return applyBlockState(conversation, blockState);
+      }));
+      return conversations
+        .filter((conversation) => !conversation.isHiddenByDelete)
         .filter((conversation) =>
           folder === 'archived' ? conversation.isArchived : !conversation.isArchived,
         )
@@ -421,7 +471,13 @@ export function createMessagingService(repository = supabaseMessagingRepository)
     async getConversation(conversationId) {
       const currentUserId = await repository.getCurrentUserId();
       const row = await repository.getConversation(conversationId);
-      return row ? mapConversationRow(row, currentUserId) : null;
+      if (!row) return null;
+      const conversation = mapConversationRow(row, currentUserId);
+      if (conversation.type !== CONVERSATION_TYPE.DIRECT || !conversation.otherUserId) {
+        return { ...conversation, blockedByMe: false, interactionBlocked: false };
+      }
+      const blockState = await repository.getUserBlockState?.(conversation.otherUserId);
+      return applyBlockState(conversation, blockState);
     },
 
     async listMessages(conversationId) {
@@ -620,6 +676,22 @@ export function createMessagingService(repository = supabaseMessagingRepository)
 
     async archiveConversation(conversationId) {
       return repository.archiveConversation(conversationId);
+    },
+
+    async unarchiveConversation(conversationId) {
+      return repository.unarchiveConversation(conversationId);
+    },
+
+    async deleteConversationForMe(conversationId) {
+      return repository.deleteConversationForMe(conversationId);
+    },
+
+    async blockUser(userId) {
+      return repository.blockUser(userId);
+    },
+
+    async unblockUser(userId) {
+      return repository.unblockUser(userId);
     },
 
     async leaveGroup(conversationId) {

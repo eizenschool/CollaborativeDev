@@ -10,6 +10,7 @@ import {
   createMessagingService,
   getMessagingChangeConversationId,
   isTerminalRideStatus,
+  mapConversationRow,
   mapMessageRow,
   validateMessageDraft,
 } from '../MessagingService.js';
@@ -62,6 +63,27 @@ describe('terminal conversation rules', () => {
 
   it.each(['Published', 'In Progress', null])('does not treat %s as terminal', (status) => {
     expect(isTerminalRideStatus(status)).toBe(false);
+  });
+});
+
+describe('legacy conversation compatibility', () => {
+  it('keeps the ride context from pre-075 direct conversations', () => {
+    const conversation = mapConversationRow(rawConversation({
+      ride_contexts: undefined,
+      ride: {
+        id: '20000000-0000-4000-8000-000000000001',
+        pickup: 'KL Sentral',
+        destination: 'Penang',
+        departure_at: '2026-08-15T00:00:00Z',
+      },
+    }), userId);
+
+    expect(conversation).toMatchObject({
+      rideId: '20000000-0000-4000-8000-000000000001',
+      pickup: 'KL Sentral',
+      destination: 'Penang',
+      tripRoute: 'KL Sentral to Penang',
+    });
   });
 });
 
@@ -160,6 +182,10 @@ function createRepository({ messages = [], failUploadName = null, failEdit = fal
     },
     markConversationRead: async () => true,
     archiveConversation: async () => true,
+    unarchiveConversation: async () => true,
+    deleteConversationForMe: async () => true,
+    blockUser: async () => true,
+    unblockUser: async () => true,
     leaveGroup: async () => true,
     subscribe: () => () => {},
   };
@@ -229,6 +255,16 @@ describe('composite message validation', () => {
 });
 
 describe('MessagingService repository orchestration', () => {
+  it('keeps archived conversations writable and maps personal deletion state', async () => {
+    const archived = mapConversationRow(rawConversation({
+      members: [
+        { user_id: userId, role: 'member', archived_at: '2026-08-10T02:00:00Z', deleted_before: null, profile: { full_name: 'Aina' } },
+        { user_id: otherId, role: 'member', profile: { full_name: 'Ahmad' } },
+      ],
+    }), userId);
+    expect(archived).toMatchObject({ isArchived: true, isReadOnly: false, isHiddenByDelete: false });
+  });
+
   it('validates supported translation languages and maps cached results', async () => {
     const service = createMessagingService(createRepository());
     await expect(service.translateMessage(rawMessage().id, 'zh')).resolves.toEqual({

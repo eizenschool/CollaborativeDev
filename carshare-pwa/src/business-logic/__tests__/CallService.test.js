@@ -72,7 +72,7 @@ describe('voice-call configuration', () => {
     expect(relayNotice('available')).toBe('');
   });
 
-  it('allows active private chats and rejects groups or archived chats', () => {
+  it('allows archived private chats and rejects groups or blocked interaction', () => {
     const direct = {
       id: conversationId,
       type: 'direct',
@@ -81,7 +81,8 @@ describe('voice-call configuration', () => {
     };
     expect(assertVoiceCallAvailable(direct, true)).toBe(true);
     expect(() => assertVoiceCallAvailable({ ...direct, type: 'group' }, true)).toThrow('private chats only');
-    expect(() => assertVoiceCallAvailable({ ...direct, isArchived: true }, true)).toThrow('Archived');
+    expect(assertVoiceCallAvailable({ ...direct, isArchived: true }, true)).toBe(true);
+    expect(() => assertVoiceCallAvailable({ ...direct, interactionBlocked: true }, true)).toThrow('unavailable');
     expect(() => assertVoiceCallAvailable(direct, false)).toThrow('not supported');
   });
 

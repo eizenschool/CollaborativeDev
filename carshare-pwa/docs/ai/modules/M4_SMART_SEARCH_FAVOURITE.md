@@ -104,6 +104,11 @@ verified), plus deployed `039_m4_vehicle_language_filters.sql`,
 Module 4 security finding. The new favourite/transfer indexes are initially
 reported as unused, which is expected before normal production traffic.
 
+Authored Module 3 migration `075` wraps the live proximity, compatibility,
+Favourite, and multi-leg projections with authenticated account-block filters.
+Anonymous results remain unchanged because an anonymous viewer has no account
+identity against which a personal block can be evaluated.
+
 ## Open Questions
 Remaining acceptance work is operational rather than another feature slice:
 two-account notification/push verification, owner-edit verification, and a

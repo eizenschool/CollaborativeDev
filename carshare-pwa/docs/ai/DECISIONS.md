@@ -156,7 +156,7 @@ Supabase provider and matching Redirect URLs - tracked in
 `docs/SUPABASE-SETUP.md` and `docs/ai/TODO.md`.
 
 ## D016 — Module 3 Supabase Messaging and Retention Contract
-**Status:** Accepted
+**Status:** Superseded by D031
 Published rides allow any signed-in non-Host to create/reuse one ride-bound
 direct chat without a ride request. The first Accepted request creates the one
 ride group transactionally; every accepted account holder joins and companions
@@ -462,6 +462,22 @@ companions are never included. An active Driver's minimum identity, rating and
 standing remain visible on Published Ride cards. Migration 066 stores the
 switches, exposes the filtered RPC, and narrows raw cross-profile visibility;
 until deployed, the app uses non-persistent defaults and labels that state.
+
+## D031 — People-own-private, Rides-own-groups Messaging Lifecycle
+**Status:** Accepted; migration 075 authored and pending deployment
+
+An unordered user pair owns one persistent private conversation. Rides may be
+recorded as context but never control private-chat availability. Archive is
+personal and reversible; Delete chat for me permanently hides history through
+a per-member timestamp without deleting the other participant's data. Blocking
+is an account-level future-contact and discovery boundary while signed in, but
+does not erase prior private history or revoke accepted-trip safety/history.
+
+Each Ride continues to own one Host-plus-accepted-Travellers group. Completed,
+Cancelled, and Expired groups remain messageable. Travellers leave
+individually; the final Traveller departure atomically removes the Host and
+closes the group. Archive never means Leave, and neither direct nor group
+conversation access expires seven days after a terminal Ride.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);

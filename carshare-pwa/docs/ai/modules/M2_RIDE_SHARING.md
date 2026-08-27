@@ -390,3 +390,10 @@ notifications and evidence holds without rewriting deployed history. The
 original browser-local `/safety` verification demo remains; `/safety/admin` and
 the two production Admin Edge Functions are removed. `m2-live-share` version 4
 is active and returns only the privacy-safe family snapshot.
+
+Authored migration `075` treats account blocking as a future Ride-interaction
+boundary: blocked pairs cannot discover each other's authenticated listings or
+create/accept new requests, and Pending requests are cancelled. Existing
+Accepted, In Transit, and terminal participation remains visible and keeps its
+ride-group, safety, and history access. Terminal Ride status no longer makes
+Module 3 conversations read-only or starts a seven-day messaging expiry.

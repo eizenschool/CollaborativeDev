@@ -99,6 +99,11 @@ vehicle registration, companion names and precise Ride data. Deployed migration
 `073` stores these choices and exposes `get_public_profile`. Home and desktop
 navigation use the owner's photo as a direct Profile shortcut.
 
+Authored migration `075` adds account-level blocking. While both accounts are
+signed in, a blocked pair cannot view each other's public profile unless an
+Accepted Ride relationship must preserve trip safety/history. Private-message
+history remains available, but its profile shortcut is hidden while blocked.
+
 ## Open Questions
 Host Impact formula and badge perks; hard account deletion; phone OTP; final
 Trust & Safety administrator path for applying confirmed conduct events.

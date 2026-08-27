@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { attachSignedUrls } from '../../data-access/supabaseMessagingRepository.js';
+import {
+  attachSignedUrls,
+  isMissingConversationLifecycleSchema,
+} from '../../data-access/supabaseMessagingRepository.js';
 
 function messageWithAttachments(paths) {
   return [{
@@ -78,5 +81,21 @@ describe('message media signed URLs', () => {
       signed_url: null,
       media_error: 'Access denied',
     });
+  });
+});
+
+describe('conversation lifecycle schema compatibility', () => {
+  it('recognizes the missing relationship shown by an un-migrated Supabase schema cache', () => {
+    expect(isMissingConversationLifecycleSchema({
+      code: 'PGRST200',
+      message: "Could not find a relationship between 'conversations' and 'conversation_ride_contexts' in the schema cache",
+    })).toBe(true);
+  });
+
+  it('does not hide unrelated conversation query failures behind the legacy fallback', () => {
+    expect(isMissingConversationLifecycleSchema({
+      code: '42501',
+      message: 'permission denied for table conversations',
+    })).toBe(false);
   });
 });

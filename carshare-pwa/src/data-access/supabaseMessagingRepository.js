@@ -5,9 +5,38 @@ const MEDIA_BUCKET = 'message-media';
 const SIGNED_URL_SECONDS = 60 * 60;
 // Attachment mutations are committed with a messages or conversations change,
 // so subscribing to them separately only produces duplicate refreshes.
-const REALTIME_TABLES = ['conversations', 'conversation_members', 'messages', 'call_sessions'];
+const CORE_REALTIME_TABLES = [
+  'conversations',
+  'conversation_members',
+  'messages',
+  'call_sessions',
+];
+const LIFECYCLE_REALTIME_TABLES = [
+  'conversation_ride_contexts',
+  'user_blocks',
+];
 
 const CONVERSATION_SELECT = `
+  *,
+  ride:rides(id, host_id, pickup, destination, departure_at, status),
+  members:conversation_members(
+    conversation_id, user_id, role, joined_at, left_at, archived_at, deleted_before, last_read_at,
+    profile:profiles(id, full_name, profile_photo_url)
+  ),
+  ride_contexts:conversation_ride_contexts(
+    ride_id, added_at,
+    ride:rides(id, host_id, pickup, destination, departure_at, status)
+  ),
+  last_message:messages!conversations_last_message_id_fkey(
+    id, sender_id, kind, text_content, created_at, edited_at, deleted_at,
+    attachments:message_attachments(id, kind, file_name)
+  )
+`;
+
+// Keep existing conversations readable while migration 075 is pending or
+// PostgREST is still refreshing its schema cache. This is the exact shape used
+// before conversation_ride_contexts and deleted_before were introduced.
+const LEGACY_CONVERSATION_SELECT = `
   *,
   ride:rides(id, host_id, pickup, destination, departure_at, status),
   members:conversation_members(
@@ -19,6 +48,8 @@ const CONVERSATION_SELECT = `
     attachments:message_attachments(id, kind, file_name)
   )
 `;
+
+let lifecycleConversationSchemaAvailable = null;
 
 const MESSAGE_SELECT = `
   *,
@@ -36,6 +67,45 @@ function requireSupabase() {
 function normalizeError(error, fallback) {
   const message = error?.message?.replace(/^.*?: /, '') || fallback;
   return Object.assign(new Error(message), { code: error?.code });
+}
+
+export function isMissingConversationLifecycleSchema(error) {
+  const details = [error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(' ');
+  return ['PGRST200', 'PGRST204', '42703', '42P01'].includes(error?.code)
+    && /conversation_ride_contexts|deleted_before|direct_participant_(?:low|high)_id|closed_at/i.test(details);
+}
+
+function isMissingLifecycleRpc(error) {
+  const details = [error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(' ');
+  return error?.code === 'PGRST202'
+    || /Could not find the function public\.(?:resolve_conversation_id|get_user_block_state)/i.test(details);
+}
+
+async function loadConversationRows(client, conversationId = null) {
+  const run = (select) => {
+    let query = client.from('conversations').select(select);
+    if (conversationId) return query.eq('id', conversationId).maybeSingle();
+    query = query.order('last_message_at', { ascending: false, nullsFirst: false });
+    return query.order('created_at', { ascending: false });
+  };
+
+  if (lifecycleConversationSchemaAvailable === false) {
+    return run(LEGACY_CONVERSATION_SELECT);
+  }
+
+  const result = await run(CONVERSATION_SELECT);
+  if (!result.error) {
+    lifecycleConversationSchemaAvailable = true;
+    return result;
+  }
+  if (!isMissingConversationLifecycleSchema(result.error)) return result;
+
+  lifecycleConversationSchemaAvailable = false;
+  return run(LEGACY_CONVERSATION_SELECT);
 }
 
 async function normalizeFunctionError(error, fallback) {
@@ -153,14 +223,32 @@ export const supabaseMessagingRepository = {
     return data;
   },
 
+  async resolveConversationId(conversationId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('resolve_conversation_id', {
+      p_conversation_id: conversationId,
+    });
+    if (error && isMissingLifecycleRpc(error)) return conversationId;
+    if (error) throw normalizeError(error, 'Unable to open this conversation.');
+    return data;
+  },
+
+  async getUserBlockState(userId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('get_user_block_state', {
+      p_user_id: userId,
+    });
+    if (error && isMissingLifecycleRpc(error)) {
+      return { blocked_by_me: false, interaction_blocked: false };
+    }
+    if (error) throw normalizeError(error, 'Unable to load privacy state.');
+    return (data || [])[0] || { blocked_by_me: false, interaction_blocked: false };
+  },
+
   async listConversations() {
     const client = requireSupabase();
     const userId = await requireUserId();
-    const { data, error } = await client
-      .from('conversations')
-      .select(CONVERSATION_SELECT)
-      .order('last_message_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false });
+    const { data, error } = await loadConversationRows(client);
     if (error) throw normalizeError(error, 'Unable to load conversations.');
     const conversations = data || [];
     if (!conversations.length) return conversations;
@@ -191,11 +279,7 @@ export const supabaseMessagingRepository = {
 
   async getConversation(conversationId) {
     const client = requireSupabase();
-    const { data, error } = await client
-      .from('conversations')
-      .select(CONVERSATION_SELECT)
-      .eq('id', conversationId)
-      .maybeSingle();
+    const { data, error } = await loadConversationRows(client, conversationId);
     if (error) throw normalizeError(error, 'Unable to load this conversation.');
     return data;
   },
@@ -320,6 +404,38 @@ export const supabaseMessagingRepository = {
     return data;
   },
 
+  async unarchiveConversation(conversationId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('unarchive_conversation', {
+      p_conversation_id: conversationId,
+    });
+    if (error) throw normalizeError(error, 'Unable to unarchive conversation.');
+    return data;
+  },
+
+  async deleteConversationForMe(conversationId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('delete_conversation_for_me', {
+      p_conversation_id: conversationId,
+    });
+    if (error) throw normalizeError(error, 'Unable to delete this chat for you.');
+    return data;
+  },
+
+  async blockUser(userId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('block_user', { p_user_id: userId });
+    if (error) throw normalizeError(error, 'Unable to block this user.');
+    return data;
+  },
+
+  async unblockUser(userId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('unblock_user', { p_user_id: userId });
+    if (error) throw normalizeError(error, 'Unable to unblock this user.');
+    return data;
+  },
+
   async leaveGroup(conversationId) {
     const client = requireSupabase();
     const { data, error } = await client.rpc('leave_group_conversation', {
@@ -334,18 +450,32 @@ export const supabaseMessagingRepository = {
       return () => {};
     }
     const client = supabase;
-    let channel = client.channel(`messaging-${Date.now()}-${Math.random()}`);
-    REALTIME_TABLES
+    let coreChannel = client.channel(`messaging-core-${Date.now()}-${Math.random()}`);
+    CORE_REALTIME_TABLES
       .forEach((table) => {
-        channel = channel.on(
+        coreChannel = coreChannel.on(
           'postgres_changes',
           { event: '*', schema: 'public', table },
           listener,
         );
       });
-    channel.subscribe();
+    coreChannel.subscribe();
+
+    // Optional lifecycle tables use a separate channel. If migration 075 has
+    // not reached the database yet, Realtime can reject this channel without
+    // taking down message/conversation refreshes on the core channel.
+    let lifecycleChannel = client.channel(`messaging-lifecycle-${Date.now()}-${Math.random()}`);
+    LIFECYCLE_REALTIME_TABLES.forEach((table) => {
+      lifecycleChannel = lifecycleChannel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        listener,
+      );
+    });
+    lifecycleChannel.subscribe();
     return () => {
-      void client.removeChannel(channel);
+      void client.removeChannel(coreChannel);
+      void client.removeChannel(lifecycleChannel);
     };
   },
 };

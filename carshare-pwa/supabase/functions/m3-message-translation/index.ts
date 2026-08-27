@@ -150,22 +150,22 @@ async function visibleMessage(admin: SupabaseClient, userId: string, messageId: 
 
   const [{ data: member, error: memberError }, { data: conversation, error: conversationError }] = await Promise.all([
     admin.from("conversation_members")
-      .select("user_id")
+      .select("user_id, deleted_before")
       .eq("conversation_id", message.conversation_id)
       .eq("user_id", userId)
       .is("left_at", null)
       .maybeSingle(),
     admin.from("conversations")
-      .select("expires_at")
+      .select("closed_at")
       .eq("id", message.conversation_id)
       .maybeSingle(),
   ]);
   if (memberError) throw memberError;
   if (conversationError) throw conversationError;
-  const expired = conversation?.expires_at
-    && new Date(conversation.expires_at).getTime() <= Date.now();
-  if (!member || !conversation || expired) {
-    throw new HttpError(403, "MESSAGE_UNAVAILABLE", "This conversation is unavailable or has expired.");
+  const hiddenByPersonalDeletion = member?.deleted_before
+    && new Date(message.created_at).getTime() <= new Date(member.deleted_before).getTime();
+  if (!member || !conversation || conversation.closed_at || hiddenByPersonalDeletion) {
+    throw new HttpError(403, "MESSAGE_UNAVAILABLE", "This conversation is unavailable.");
   }
   return message;
 }
