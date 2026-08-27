@@ -16,7 +16,7 @@
 // `departure_at` is the authoritative ride instant (D012). The `date`/`time`
 // columns were dropped in database/sql/013, so nothing here may read them.
 
-import { isSupabaseConfigured } from '../data-access/supabaseClient.js';
+import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 import { RideService } from './RideService.js';
 import { RideRequestService } from './RideRequestService.js';
@@ -27,10 +27,6 @@ import { buildTripTimeline } from './TripTimeline.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
-// Shown instead of a blank board when the app runs against Supabase. Says what
-// is missing and why, rather than implying the module is unfinished.
-export const LEADERBOARD_NEEDS_COMPLETED_TRIPS =
-  'The community leaderboard is not available on the live backend yet. Ranking hosts needs completed trips, and no ride has reached Completed on the connected database.';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -61,22 +57,41 @@ export function isHistoricalParticipantRequest(request) {
     || (request?.status === 'Expired' && Boolean(request.acceptedAt));
 }
 
-// ---------- Estimated carbon savings ----------
-// FR-5.4: "estimated based on distance and passengers carried." Ride records
-// carry no distance (no lat/lng columns, and D013 rules out billable Maps
-// SKUs), so this uses an average trip distance per journey scale times the
-// seats actually filled times a standard avoided-emissions factor.
-// The carbon model is still an open decision in docs/ai/DECISIONS.md - these
-// numbers are a labelled estimate, not a ratified formula.
+// ---------- Carbon savings ----------
+// FR-5.4: "estimated based on distance and passengers carried."
+//
+// The distance is REAL wherever Module 2 has one. Publishing requires a fresh
+// route quote (applyMockRouteQuote / route_distance_meters), and that quote's
+// routed distance is stored on the ride, so a trip that went through the
+// current publish flow carries a measured figure rather than a guess.
+//
+// AVG_DISTANCE_KM is the fallback for rides that predate route quotes. It is
+// deliberately kept rather than defaulting to zero: a labelled estimate is
+// more useful than a blank, and callers can tell the two apart because
+// tripDistanceKm reports which one it used. The emission factor itself is
+// still an open decision in docs/ai/DECISIONS.md.
 const AVG_DISTANCE_KM = { Urban: 18, Intercity: 340 };
 const EMISSION_FACTOR_KG_PER_PASSENGER_KM = 0.12;
 
+// { km, measured } - `measured` is false when the table supplied the number,
+// so the UI can mark it as approximate instead of quietly implying precision.
+export function tripDistanceKm(ride) {
+  const metres = Number(ride?.routeDistanceMeters);
+  if (Number.isFinite(metres) && metres > 0) {
+    return { km: round1(metres / 1000), measured: true };
+  }
+  return {
+    km: AVG_DISTANCE_KM[ride?.journeyScale] ?? AVG_DISTANCE_KM.Urban,
+    measured: false
+  };
+}
+
 export function estimateDistanceKm(ride) {
-  return AVG_DISTANCE_KM[ride.journeyScale] ?? AVG_DISTANCE_KM.Urban;
+  return tripDistanceKm(ride).km;
 }
 
 export function estimateCarbonSavedKg(ride) {
-  const distanceKm = estimateDistanceKm(ride);
+  const distanceKm = tripDistanceKm(ride).km;
   const passengers = Math.max(0, (ride.seatsTotal || 0) - (ride.seatsAvailable ?? 0));
   // UC5.4 C2 requires a distance greater than zero, and the whole premise of
   // the estimate is a shared ride - a trip that carried nobody saved nothing.
@@ -88,6 +103,7 @@ export function toHistoryCard(ride, role, now = new Date()) {
   const status = deriveDisplayStatus(ride, now);
   const { date, time } = departureParts(ride.departureAt);
   const completed = status === 'Completed';
+  const distance = tripDistanceKm(ride);
   return {
     id: ride.id,
     role, // 'Host' | 'Passenger'
@@ -103,7 +119,10 @@ export function toHistoryCard(ride, role, now = new Date()) {
     time,
     status,
     journeyScale: ride.journeyScale,
-    distanceKm: completed ? estimateDistanceKm(ride) : null,
+    distanceKm: completed ? distance.km : null,
+    // Lets the card show "340 km" for a routed trip and "~340 km" for one
+    // the table had to guess at.
+    distanceMeasured: completed ? distance.measured : null,
     carbonSavedKg: completed ? estimateCarbonSavedKg(ride) : null,
     host: ride.host || null,
     hostId: ride.hostId,
@@ -347,48 +366,101 @@ export const TripHistoryEngine = {
   // can write that status (transition_verified_ride, database/sql/014) is
   // service_role-only with no caller yet. Drop this branch and read live rides
   // once Module 6's verified-trip pipeline starts completing trips.
+  // `scope` tells the screen which question the board answers, because the two
+  // backends can answer different ones. See liveLeaderboard for why.
   async getLeaderboard(userId, year, month, now = new Date()) {
-    if (isSupabaseConfigured) throw new Error(LEADERBOARD_NEEDS_COMPLETED_TRIPS);
-
-    const period = year == null || month == null
-      ? { year: now.getFullYear(), month: now.getMonth() }
-      : { year, month };
-    const key = monthKey(period.year, period.month);
-
-    const [allRides, currentUser] = await Promise.all([mockDb.listAllRides(), mockDb.getCurrentUser()]);
-
-    const namesByHostId = new Map();
-    const eligibleHostIds = new Set();
-    for (const ride of allRides) {
-      if (ride.host) namesByHostId.set(ride.hostId, ride.host.fullName);
-      const card = toHistoryCard(ride, 'Host', now);
-      if (card.status === 'Completed' && card.date.slice(0, 7) === key) {
-        eligibleHostIds.add(ride.hostId);
-      }
-    }
-
-    const entries = await Promise.all(
-      Array.from(eligibleHostIds).map(async (id) => {
-        const summary = await HostImpactEngine.getImpactSummary(id);
-        const isCurrentUser = id === userId;
-        return {
-          id,
-          name: isCurrentUser
-            ? currentUser?.fullName || 'You'
-            : namesByHostId.get(id) || 'Host',
-          isCurrentUser,
-          compositeScore: summary.compositeScore,
-          badge: summary.badge
-        };
-      })
-    );
-
-    return {
-      year: period.year,
-      month: period.month,
-      entries: entries
-        .sort((a, b) => b.compositeScore - a.compositeScore)
-        .map((entry, index) => ({ ...entry, rank: index + 1 }))
-    };
+    return isSupabaseConfigured
+      ? liveLeaderboard(userId)
+      : mockLeaderboard(userId, year, month, now);
   }
 };
+
+function rankEntries(entries) {
+  return entries
+    .sort((a, b) => b.compositeScore - a.compositeScore)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
+// Supabase can only rank ALL TIME, and the board says so rather than printing
+// a month over lifetime figures.
+//
+// The rides RLS policy is `status = 'Published' or auth.uid() = host_id`
+// (database/sql/007), so a signed-in visitor cannot see anyone else's
+// Completed rides - there is no way to work out who completed a trip in a
+// given month. host_impact_stats IS readable (008 grants select to
+// authenticated) but carries lifetime totals with no month column.
+//
+// This replaces a hard throw that refused to run at all. Its stated reason -
+// that only a service_role function could write Completed - stopped being true
+// at migration 028, which added the check-in/start/arrival path that
+// authenticated users call and that sets the status themselves.
+async function liveLeaderboard(userId) {
+  const { data, error } = await supabase
+    .from('host_impact_stats')
+    .select('user_id')
+    .gt('completed_trips', 0);
+  if (error) throw new Error(error.message);
+
+  const hostIds = (data || []).map((row) => row.user_id).filter(Boolean);
+  if (hostIds.length === 0) return { scope: 'all-time', year: null, month: null, entries: [] };
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .in('id', hostIds);
+  const namesById = new Map((profiles || []).map((row) => [row.id, row.full_name]));
+
+  const entries = await Promise.all(hostIds.map(async (id) => {
+    // The host's own profile scores itself with this same engine, so a rank
+    // can never disagree with the number on that host's page.
+    const summary = await HostImpactEngine.getImpactSummary(id);
+    const isCurrentUser = id === userId;
+    return {
+      id,
+      // The mock board shows the real name and lets isCurrentUser drive the
+      // highlight. Same here, so the two backends read identically.
+      name: namesById.get(id) || (isCurrentUser ? 'You' : 'Host'),
+      isCurrentUser,
+      compositeScore: summary.compositeScore,
+      badge: summary.badge
+    };
+  }));
+
+  return { scope: 'all-time', year: null, month: null, entries: rankEntries(entries) };
+}
+
+// The demo store holds every ride, so it can answer the month the UI asks for.
+async function mockLeaderboard(userId, year, month, now) {
+  const period = year == null || month == null
+    ? { year: now.getFullYear(), month: now.getMonth() }
+    : { year, month };
+  const key = monthKey(period.year, period.month);
+
+  const [allRides, currentUser] = await Promise.all([mockDb.listAllRides(), mockDb.getCurrentUser()]);
+
+  const namesByHostId = new Map();
+  const eligibleHostIds = new Set();
+  for (const ride of allRides) {
+    if (ride.host) namesByHostId.set(ride.hostId, ride.host.fullName);
+    const card = toHistoryCard(ride, 'Host', now);
+    if (card.status === 'Completed' && card.date.slice(0, 7) === key) {
+      eligibleHostIds.add(ride.hostId);
+    }
+  }
+
+  const entries = await Promise.all(
+    Array.from(eligibleHostIds).map(async (id) => {
+      const summary = await HostImpactEngine.getImpactSummary(id);
+      const isCurrentUser = id === userId;
+      return {
+        id,
+        name: isCurrentUser ? (currentUser?.fullName || 'You') : (namesByHostId.get(id) || 'Host'),
+        isCurrentUser,
+        compositeScore: summary.compositeScore,
+        badge: summary.badge
+      };
+    })
+  );
+
+  return { scope: 'month', year: period.year, month: period.month, entries: rankEntries(entries) };
+}
