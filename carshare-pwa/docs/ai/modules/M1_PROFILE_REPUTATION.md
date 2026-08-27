@@ -28,6 +28,11 @@ adaptive deactivation confirmation, and the phone Sign out path are preserved
 without adding profile fields or changing authentication/service contracts.
 Module 1 is connected to the shared Supabase project. The deployed history is
 `database/sql/001-012`; security corrections for Module 1 are in `008-009`.
+Supabase session restoration now has one startup authority: AuthContext consumes
+the user supplied by `INITIAL_SESSION`, mounts a safe account shell immediately,
+and fetches the private Profile in the background. Initial `Preparing` is capped
+at eight seconds with a non-blocking retry notice; foreground token/profile
+events stay silent and never replace the mounted route with the startup screen.
 Public-safe profile fields are separate from owner-only phone/emergency data,
 email is sourced from Supabase Auth, avatars use an owner-folder policy, and
 vehicles are owner-only with one active vehicle per user. Email verification

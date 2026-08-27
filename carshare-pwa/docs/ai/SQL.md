@@ -560,6 +560,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   lets only the authenticated Host copy a Completed, Cancelled, or Expired
   Ride's editable settings into a new Draft ID without copying requests,
   lifecycle/route-quote state, live data, conversations, reviews, or photos.
+- `065_m2_fix_pickup_photo_storage_path_policy.sql` - deployed as tracked
+  migration `m2_fix_pickup_photo_storage_path_policy`; corrects the pickup
+  photo Storage policies to treat `user-id/ride-id/filename` as two folders,
+  matching `storage.foldername(name)` and the client upload path.
 - `023_m1_m2_public_ride_browsing.sql` - deployed through the Dashboard SQL Editor; anon read policies and minimum column grants for Published rides plus active Host safe profile/impact data; guest access excludes Place IDs, precise coordinates, and pickup instructions.
 - `024_m6_destination_discovery.sql` - deployed as `m6_destination_discovery`; Module 6 catalogue, interest, notification registrations, preferences, RLS, aggregate demand RPC, and cross-module near-point RPC.
 - `025_m3_add_voice_messages.sql` - deployed; standalone private voice attachments, duration/size/MIME constraints, RPC enforcement, edit rejection, and private bucket audio allowlist.

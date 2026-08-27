@@ -10,11 +10,13 @@ import { useAuth } from './context/AuthContext.jsx';
 import { resolveAuthReturnPath } from './business-logic/authAccess.js';
 import { legacyRideSearchUrlFromParams } from './business-logic/SmartSearchService.js';
 import TopNav from './presentation/components/nav/TopNav.jsx';
+import { Button } from './presentation/components/ui/Button.jsx';
 import {
   RouteBoundary,
   RouteFocusManager,
   RouteLoading,
 } from './presentation/components/ui/RouteState.jsx';
+const SwipeRouteViewport = lazy(() => import('./presentation/components/ui/SwipeRouteViewport.jsx'));
 
 const AuthPage = lazy(() => import('./presentation/components/AuthPage.jsx'));
 const HomeScreen = lazy(() => import('./presentation/components/HomeScreen.jsx'));
@@ -98,9 +100,10 @@ function AppShell() {
       <TopNav />
       <div id="main-content" className="app-main" tabIndex={-1}>
         <ServiceWorkerNotificationNavigation />
-        <div className="ui-route-transition" key={location.pathname}>
-          <RouteBoundary>
-            <Routes>
+        <SwipeRouteViewport>
+          <div className="ui-route-transition" key={location.pathname}>
+            <RouteBoundary>
+              <Routes location={location}>
         {/* Profile Settings, My Vehicles, Reputation, Host Dashboard, and Account
             Settings are consolidated into one "My Profile" page (hero + in-page
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
@@ -148,9 +151,10 @@ function AppShell() {
         <Route path="/discover/*" element={<DiscoverRoutes />} />
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
-            </Routes>
-          </RouteBoundary>
-        </div>
+              </Routes>
+            </RouteBoundary>
+          </div>
+        </SwipeRouteViewport>
       </div>
     </div>
   );
@@ -209,6 +213,27 @@ function OAuthErrorRedirect() {
   return null;
 }
 
+function AuthRecoveryNotice() {
+  const { authRecoveryError, retryAuth, retryingAuth } = useAuth();
+  if (!authRecoveryError) return null;
+
+  return (
+    <div className="auth-recovery-banner" role="alert" aria-live="assertive">
+      <span>{authRecoveryError} You can keep browsing public pages or retry.</span>
+      <Button
+        className="auth-recovery-banner__button"
+        loading={retryingAuth}
+        loadingLabel="Retrying"
+        onClick={retryAuth}
+        size="small"
+        variant="secondary"
+      >
+        Retry sign-in
+      </Button>
+    </div>
+  );
+}
+
 export default function App() {
   const { loading } = useAuth();
   const online = useOnlineStatus();
@@ -222,6 +247,7 @@ export default function App() {
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <OAuthErrorRedirect />
       <RouteFocusManager />
+      <AuthRecoveryNotice />
       {!online && (
         <div className="offline-banner" role="status" aria-live="polite">
           You&apos;re offline — viewing cached screens.
