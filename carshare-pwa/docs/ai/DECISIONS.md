@@ -264,7 +264,7 @@ inbox is the source of truth and the push payload is a convenience alert. The
 inbox retains 30 days and loads its newest 50 items by default.
 
 ## D021 — Module 4 Compatibility Classifications Are Optional and Public-Safe
-**Status:** Accepted; implementation authored, migration pending review
+**Status:** Accepted and deployed 2026-08-27
 
 Vehicle category belongs to each Module 1 vehicle; spoken languages belong to
 the Host profile and therefore apply to all that Host's rides. A traveller may
@@ -278,8 +278,8 @@ projection may expose only `vehicle_type` and `spoken_languages` in addition to
 its existing public fields. Vehicle make, model, plate, Ride Place IDs,
 coordinates, and private profile information remain excluded. The privileged
 database implementation lives in the non-exposed `private` schema and a narrow
-public invoker RPC is the only browser search entry point. Migration `039`
-remains undeployed until its separate review.
+public invoker RPC is the only browser search entry point. Migration `039` is
+deployed; unclassified legacy rows remain intentionally unchanged.
 
 ## D022 — Explicit Live Location Consent and Participant/Family Visibility
 **Status:** Accepted

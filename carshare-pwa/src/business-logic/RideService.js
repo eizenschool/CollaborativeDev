@@ -255,6 +255,29 @@ function mapProximityRideRow(row) {
   });
 }
 
+function mapMultiLegRow(row) {
+  const legs = (row.legs || []).map(mapRideRow);
+  return {
+    id: row.journey_id,
+    journeyType: 'multi-leg',
+    pickup: legs[0]?.pickup || '',
+    destination: legs[1]?.destination || '',
+    departureAt: legs[0]?.departureAt || null,
+    date: legs[0]?.date || '',
+    time: legs[0]?.time || '',
+    estimatedArrivalAt: row.estimated_arrival_at,
+    journeyScale: row.journey_scale,
+    seatsAvailable: row.seats_available,
+    transferPoint: {
+      name: row.transfer_point_name,
+      category: row.transfer_point_category
+    },
+    waitMinutes: row.wait_minutes,
+    proximityDistanceKm: row.proximity_distance_km,
+    legs
+  };
+}
+
 export function validateRideDraft(rideData, {
   publishing = false,
   requireConfirmedLocations = false,
@@ -423,6 +446,35 @@ export const RideService = {
       return attachDestinationPhotoPlaceIds(data.map(mapRideRow));
     }
     return attachDestinationPhotoPlaceIds(await mockDb.listRides({ from, to, date }));
+  },
+
+  async searchMultiLegRides(criteria = {}) {
+    if (!isSupabaseConfigured) return [];
+    const range = criteria.date ? klDayRange(criteria.date) : null;
+    const { data, error } = await supabase.rpc('search_public_multi_leg_journeys', {
+      p_pickup: criteria.pickup || null,
+      p_destination: criteria.destinationPlaceId ? null : (criteria.destination || null),
+      p_departure_start: range?.start || null,
+      p_departure_end: range?.end || null,
+      p_depart_after: criteria.departAfter || null,
+      p_destination_place_id: criteria.destinationPlaceId || null,
+      p_radius_km: criteria.destinationPlaceId ? criteria.proximityKm : null,
+      p_journey_scale: criteria.journeyScale || null,
+      p_min_seats: criteria.minSeats,
+      p_tags: criteria.tags,
+      p_contribution: criteria.contribution || null,
+      p_min_rating: criteria.minRating || null,
+      p_vehicle_type: criteria.vehicleType || null,
+      p_language: criteria.language || null
+    });
+    if (error) {
+      const detail = `${error.code || ''} ${error.message || ''} ${error.details || ''}`;
+      if (error.code === 'PGRST202' || /search_public_multi_leg_journeys/i.test(detail)) {
+        throw new Error('Multi-leg journey matching is not available in this environment yet.');
+      }
+      throw rpcError(error);
+    }
+    return (data || []).map(mapMultiLegRow);
   },
 
   async listMyRides(userId) {

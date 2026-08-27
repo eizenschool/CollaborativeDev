@@ -216,9 +216,8 @@ the safe public RPC authored in migration `039`, while existing callers retain
 the previous exact/proximity behaviour. Public cards may show only the selected
 vehicle category and Host spoken-language set when classified; vehicle
 make/model/plate, Place IDs, coordinates, and other private fields are never
-added to the public result. Migration `039` is not deployed pending review, so
-ordinary Search falls back to the deployed contracts and only an explicitly
-selected compatibility filter produces a deployment error.
+added to the public result. Migration `039` is deployed; the guarded fallback
+remains only for other environments that have not applied it.
 
 For FR-6.35, Module 2 consumes the optional `destination` and `date` query
 parameters on `/ride/publish` defined in `docs/ai/FR-6.35_PREFILL_CONTRACT.md`.

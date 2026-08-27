@@ -11,18 +11,19 @@ history lives in `database/sql/`; do not duplicate full migrations here.
 Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
 Project URL: https://pnetstmovctfwqcumodx.supabase.co
-Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 favourites/proximity
-Deployed SQL history: 001-026, 028, 033, 034, 036_m3, 045_m3, 057_m2,
-  060_m2, 061_m2, 062_m2, 064_m2, 065_m3, 066_m2, 067_m1, and 068_m1 as
-  tracked Supabase migrations, plus tracked 035_m4 and 023, 027, 029, 030,
-  031, 032, and 037_m2 applied through
-  the Dashboard SQL Editor (see below)
+Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 search/favourites and favourite availability alerts
+Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
+  045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m1,
+  and 068_m1 as tracked Supabase migrations, plus tracked 023, 027,
+  029, 030, 031, 032, and 037_m2 applied through the Dashboard SQL
+  Editor (see below)
 Repository SQL history: 001-071
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
   through the Dashboard SQL Editor; 038_m2 is deployed as
-  m2_ride_usability_notifications; 039 and 040 remain undeployed; the
+  m2_ride_usability_notifications; 039, 040, 067_m4, and 068_m4 are deployed;
+  065_m3 and 066_m2 are also deployed; the
   Module 6's `041_m6`-`042_m6` and Module 3's `043_m3`-`045_m3` retain their
   deployed numbering; Module 2's `041_m2`-`052_m2` sequence was renumbered to
   `046_m2`-`057_m2` during this merge to keep the shared history unambiguous.
@@ -32,30 +33,30 @@ Repository SQL history: 001-071
   `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
   `063_m2` remains authored locally and undeployed; `065_m3` is deployed as
   `m3_terminal_chat_and_call_history`; `066_m2` is deployed as
-  `m2_fix_pickup_photo_storage_path_policy`. Module 1 migrations `067_m1`
-  and `068_m1` are deployed through the Dashboard SQL Editor (verified
-  2026-08-27: `reputation_events`, `profile_visibility`,
-  `get_reputation_summary`, and `get_public_profile` all exist live), but
-  `067_m1` reset the shared `private` schema's ACL without re-granting
-  `usage` afterward (unlike `016_m3`/`034_m4`/`035_m4`/`039_m4`, which all
-  do), breaking anon/authenticated access to every private-schema object -
-  Module 3 messaging and Module 4 search/favourites included, not just
-  Module 1. `069_project_restore_private_schema_grants.sql` restores that
-  grant plus the matching `private.profile_is_relevant_to_viewer` execute
-  grant `068_m1` revoked, but re-running `068_m1` re-revokes it every time
-  (068_m1 must never be re-run - it is a one-way regression against 069;
-  069 needs re-running again any time 068_m1 accidentally is).
-  `070_project_reassert_profile_visibility_table_grants.sql` is deployed
-  through the Dashboard SQL Editor (verified live via
-  `information_schema.role_column_grants`) and re-applies
-  `profile_visibility`'s column-restricted table grants in isolation so
-  that gap can be closed without touching 068_m1 again, but Postgres
-  rejects that column-restricted `update` grant for the
-  `INSERT ... ON CONFLICT DO UPDATE` supabase-js's `.upsert()` generates -
-  confirmed live via the exact `42501 permission denied for table
-  profile_visibility` PostgREST error, whose own hint asks for a plain
-  table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
-  is authored locally, not yet deployed, and grants that.)
+`m2_fix_pickup_photo_storage_path_policy`. Module 1 migrations `067_m1`
+and `068_m1` are deployed through the Dashboard SQL Editor (verified
+2026-08-27: `reputation_events`, `profile_visibility`,
+`get_reputation_summary`, and `get_public_profile` all exist live), but
+`067_m1` reset the shared `private` schema's ACL without re-granting
+`usage` afterward (unlike `016_m3`/`034_m4`/`035_m4`/`039_m4`, which all
+do), breaking anon/authenticated access to every private-schema object -
+Module 3 messaging and Module 4 search/favourites included, not just
+Module 1. `069_project_restore_private_schema_grants.sql` restores that
+grant plus the matching `private.profile_is_relevant_to_viewer` execute
+grant `068_m1` revoked, but re-running `068_m1` re-revokes it every time
+(068_m1 must never be re-run - it is a one-way regression against 069;
+069 needs re-running again any time 068_m1 accidentally is).
+`070_project_reassert_profile_visibility_table_grants.sql` is deployed
+through the Dashboard SQL Editor (verified live via
+`information_schema.role_column_grants`) and re-applies
+`profile_visibility`'s column-restricted table grants in isolation so
+that gap can be closed without touching 068_m1 again, but Postgres
+rejects that column-restricted `update` grant for the
+`INSERT ... ON CONFLICT DO UPDATE` supabase-js's `.upsert()` generates -
+confirmed live via the exact `42501 permission denied for table
+`profile_visibility` PostgREST error, whose own hint asks for a plain
+table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
+is authored locally, not yet deployed, and grants that.)
 ```
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
@@ -232,20 +233,40 @@ departure catch-up is limited to 30 minutes. It creates no public table or
 client RPC and does not change Push subscriptions, Edge Functions, VAPID,
 service workers, or webhooks.
 
-`039_m4_vehicle_language_filters.sql` is **written but not deployed** pending a
-separate review. It adds nullable, validated vehicle categories and validated
+`039_m4_vehicle_language_filters.sql` was deployed on 2026-08-27 as
+`m4_vehicle_language_filters`. It adds nullable, validated vehicle categories and validated
 Host language sets without guessing classifications for existing rows. Its
 safe public search RPC preserves exact/proximity filtering and may return only
 the category and language set alongside existing card fields. Privileged logic
 remains in `private`; the `public` entry point is an invoker wrapper. Existing
-Search contracts remain available before deployment, while explicitly selecting
-a compatibility filter reports the missing migration honestly.
+Search contracts retain an honest compatibility-deployment error for other
+environments that have not applied it.
 
-The post-deployment advisors reported no Module 4 security findings. Performance
-reported the expected unused-index notice for the new favourites table and one
-missing covering index on `ride_favourites.ride_id`. The latter is addressed by
-`040_m4_favourites_advisor_followup.sql`, authored but not deployed so the
-deployed `034` remains immutable.
+`040_m4_favourites_advisor_followup.sql` was deployed on 2026-08-27 as
+`m4_favourites_advisor_followup`. It adds the `ride_favourites(ride_id)` covering
+index without rewriting deployed migration `034`; the missing-foreign-key-index
+advisor notice cleared. An unused-index notice is expected until normal traffic
+exercises the new lookup.
+
+`067_m4_favourite_unavailable_notifications.sql` was deployed on 2026-08-27 as
+`m4_favourite_unavailable_notifications`. Its private trigger detects only an
+available-to-unavailable transition and calls the shared notification producer.
+The transition timestamp forms part of the dedupe key, so a reopened ride can
+produce one later alert without duplicate updates. The action path is an encoded
+public Search URL and the payload contains no private location data.
+
+`068_m4_multi_leg_journey_search.sql` was deployed on 2026-08-27 as
+`m4_multi_leg_journey_search`. Its public invoker RPC wraps private matching of
+confirmed endpoints through recommendable cultural destinations or catalogue
+rest stops. Both legs must remain Published, have seats and stored ETAs, and
+satisfy every selected filter. Urban transfers require chronological ordering;
+an Intercity leg raises the minimum transfer to three hours. Only safe JSON ride
+cards, the transfer display name/category, wait, and final ETA are returned.
+
+These two Module 4 source files were renumbered from the original repository
+slots `065`/`066` to `067`/`068` after deployment because newer Development
+work had already claimed `065_m3` and `066_m2`. This repository-only rename
+does not require either deployed migration to be executed again.
 
 `041_m6_ride_available_notification.sql` is **deployed and live-verified,
 2026-08-24**
@@ -417,11 +438,11 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 
 ### Tables
 
-- `profiles`: authenticated-visible safe fields only (`full_name`, photo, status); `spoken_languages` is authored in undeployed `039`. Undeployed `066` narrows raw cross-profile rows and adds a privacy-filtered public RPC.
+- `profiles`: authenticated-visible safe fields plus deployed owner-managed `spoken_languages` from `039`; `profile_visibility` (authored in undeployed `066`) narrows raw cross-profile rows and adds a privacy-filtered public RPC; private profile fields remain separate.
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
 - `profile_visibility` (authored in undeployed `066`): owner-managed switches for public photo, languages, completed-trip count, and CO2 impact.
-- `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, and at most one active vehicle per owner; nullable `vehicle_type` is authored in undeployed `039`.
-- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average. Undeployed `065` adds a 70-point default, safety hold, and reputation update timestamp.
+- `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, at most one active vehicle per owner, and deployed nullable `vehicle_type` from `039`.
+- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Undeployed `065` adds a 70-point default, safety hold, and reputation update timestamp.
 - `reputation_events` (authored in undeployed `065`): owner-readable, trigger-written, idempotent verified-Ride reputation ledger with a +3 positive cap per Ride.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, pickup instructions, one nullable private pickup-photo path after undeployed `059`, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
@@ -441,8 +462,8 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 - `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration. Read (in deployed `041_m6`) by a `public.rides` trigger that dispatches through `private.create_user_notification(...)` and flips matched rows to `fulfilled`; a daily Cron job expires past-date rows still `active`.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
-Module 4 (deployed `034`; deployed `035` adds no table; `039` changes the two
-classification columns above but is not deployed):
+Module 4 (deployed `034`; deployed `035`, `040`, `067`, and `068` add no public
+table; deployed `039` changes the two classification columns above):
 
 - `ride_favourites`: one owner-scoped saved reference per user and ride. The
   reference survives ride lifecycle changes and is deleted with either parent.
@@ -529,8 +550,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `038_m2_ride_usability_notifications.sql` - deployed as
   `m2_ride_usability_notifications`; private Module 2 notification triggers
   and deduplicated minute-Cron reminders only.
-- `039_m4_vehicle_language_filters.sql` - not deployed pending separate review; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
-- `040_m4_favourites_advisor_followup.sql` - not deployed; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
+- `039_m4_vehicle_language_filters.sql` - deployed 2026-08-27; nullable validated vehicle categories, validated Host language sets, owner updates, and a safe exact/proximity compatibility-search RPC.
+- `040_m4_favourites_advisor_followup.sql` - deployed 2026-08-27; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
+- `067_m4_favourite_unavailable_notifications.sql` - deployed 2026-08-27; shared in-app/Web Push producer for deduplicated unavailable-favourite transitions and safe similar-search links.
+- `068_m4_multi_leg_journey_search.sql` - deployed 2026-08-27; public-safe two-leg fallback over confirmed endpoints, approved catalogue transfers, stored schedules, and existing Module 4 filters.
 - `041_m6_ride_available_notification.sql` - deployed and live-verified 2026-08-24; FR-6.33/UC6.12 `public.rides` trigger dispatching through `private.create_user_notification(...)` to matching `ride_notify_registration` rows, plus a daily Cron job expiring past-date active registrations.
 - `042_m6_scheduled_ingestion.sql` - deployed and live-verified 2026-08-24; weekly pg_cron + pg_net sweep calling `m6-ingest` with `maxDetails: 0`. Its FR-6.3/6.4/6.5 auto-decay counterpart in the Edge Function was found unsafe and removed the same day - see this file's `042_m6` entry above.
 - `043_m3_add_voice_calls.sql` - applied outside tracked migration history on 2026-08-24; one-to-one call-session rows, locked participant RPCs, busy-call serialization, Realtime publication, and caller/callee-only private Broadcast signalling policies. WebRTC audio remains peer-to-peer.

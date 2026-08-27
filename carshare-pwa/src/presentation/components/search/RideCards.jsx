@@ -9,9 +9,11 @@ import {
   IconAlertTriangle,
   IconArrowRight,
   IconCalendar,
+  IconClock,
   IconHeart,
   IconMapPin,
   IconMedal,
+  IconRoute,
   IconStar,
   IconUsers
 } from '../icons.jsx';
@@ -28,6 +30,13 @@ function formatDeparture(ride) {
     hour: 'numeric',
     minute: '2-digit'
   }).format(new Date(instant));
+}
+
+function formatWait(minutes) {
+  const hours = Math.floor(Number(minutes) / 60);
+  const remainder = Number(minutes) % 60;
+  if (!hours) return `${remainder} min`;
+  return remainder ? `${hours} hr ${remainder} min` : `${hours} hr`;
 }
 
 function formatArrival(value) {
@@ -159,5 +168,83 @@ export function SearchRideCard({
         )}
       </footer>
     </article>
+  );
+}
+
+export function MultiLegJourneyCard({ journey, proximityLabel = '', onView }) {
+  return (
+    <article className="search-ride-card search-multileg-card">
+      <div className="search-ride-card-body">
+        <div className="search-multileg-heading">
+          <span><IconRoute size={16} aria-hidden="true" />Two-leg alternative</span>
+          <small>{journey.legs.length} rides</small>
+        </div>
+        <div className="search-route" aria-label={`${journey.pickup} to ${journey.destination}`}>
+          <span><IconMapPin size={15} aria-hidden="true" /><strong>{journey.pickup}</strong></span>
+          <i aria-hidden="true" />
+          <span className="destination"><IconMapPin size={15} aria-hidden="true" /><strong>{journey.destination}</strong></span>
+        </div>
+
+        <div className="search-ride-facts">
+          <span><IconCalendar size={14} aria-hidden="true" />{formatDeparture(journey)}</span>
+          <span><IconUsers size={14} aria-hidden="true" />{journey.seatsAvailable} seat{journey.seatsAvailable === 1 ? '' : 's'} across both</span>
+          <span className={`search-scale ${journey.journeyScale?.toLowerCase()}`}>{journey.journeyScale}</span>
+        </div>
+
+        <div className="search-transfer-summary">
+          <IconClock size={16} aria-hidden="true" />
+          <span><small>Transfer at</small><strong>{journey.transferPoint.name}</strong></span>
+          <b>{formatWait(journey.waitMinutes)} wait</b>
+        </div>
+
+        <p className="search-arrival"><span>Final estimated arrival</span><strong>{formatArrival(journey.estimatedArrivalAt)}</strong></p>
+        {proximityLabel && Number.isFinite(Number(journey.proximityDistanceKm)) && (
+          <p className="search-proximity-match">
+            <IconMapPin size={14} aria-hidden="true" />
+            Final destination {Number(journey.proximityDistanceKm).toFixed(1)} km from {proximityLabel}.
+          </p>
+        )}
+      </div>
+      <footer className="search-ride-card-footer">
+        <span>Book each leg separately</span>
+        <button type="button" onClick={onView}>View itinerary <IconArrowRight size={14} aria-hidden="true" /></button>
+      </footer>
+    </article>
+  );
+}
+
+export function MultiLegItinerary({ journey, onViewLeg }) {
+  if (!journey) return null;
+  return (
+    <div className="search-itinerary">
+      <div className="search-itinerary-summary">
+        <span><IconMapPin size={16} aria-hidden="true" />{journey.pickup}</span>
+        <i aria-hidden="true" />
+        <span><IconMapPin size={16} aria-hidden="true" />{journey.destination}</span>
+      </div>
+
+      {journey.legs.map((leg, index) => (
+        <div key={leg.id}>
+          <article className="search-itinerary-leg">
+            <header><span>Leg {index + 1}</span><strong>{leg.pickup} → {leg.destination}</strong></header>
+            <dl>
+              <div><dt>Departure</dt><dd>{formatDeparture(leg)}</dd></div>
+              <div><dt>Estimated arrival</dt><dd>{formatArrival(leg.estimatedArrivalAt)}</dd></div>
+              <div><dt>Host</dt><dd>{leg.host?.fullName || 'Host'}{leg.host?.rating != null ? ` · ${Number(leg.host.rating).toFixed(1)}★` : ''}</dd></div>
+              <div><dt>Seats</dt><dd>{leg.seatsAvailable} available</dd></div>
+              <div><dt>Contribution</dt><dd>{leg.contribution || 'None requested'}</dd></div>
+              <div><dt>Requirements</dt><dd>{leg.restrictionTags?.join(', ') || 'None listed'}</dd></div>
+            </dl>
+            <button type="button" onClick={() => onViewLeg(leg)}>View leg {index + 1} details <IconArrowRight size={14} aria-hidden="true" /></button>
+          </article>
+          {index === 0 && (
+            <div className="search-itinerary-transfer" role="note">
+              <IconClock size={18} aria-hidden="true" />
+              <span><strong>Transfer at {journey.transferPoint.name}</strong><small>Change rides here. You have {formatWait(journey.waitMinutes)} between the first ETA and the next departure.</small></span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

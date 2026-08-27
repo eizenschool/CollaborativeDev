@@ -40,6 +40,7 @@ Shared / cross-module navigation only. Detailed module files belong in `docs/ai/
 - `src/business-logic/PublicProfilePolicy.js` — privacy defaults and the reusable safe public-profile projection consumed by mock/live adapters.
 - `src/presentation/components/PublicProfile.jsx` — `/users/:userId` public trust profile linked by Modules 2-4.
 - `src/business-logic/SmartSearchService.js` — Module 4 criteria normalization, URL state, filtering, sorting, and Module 2 ride-search delegation.
+- `src/business-logic/MultiLegJourneyEngine.js` — pure two-leg transfer, schedule, compatibility, privacy, and deterministic-sorting rules used by Module 4 fallback search.
 - `src/business-logic/FavouriteService.js` — Module 4 owner-scoped favourite adapter and safe unavailable-card mapping.
 - `src/business-logic/NotificationService.js` — shared notification mapping,
   safe action paths, unread count, and Web Push subscription orchestration.

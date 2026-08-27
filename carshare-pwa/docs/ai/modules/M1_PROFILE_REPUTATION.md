@@ -72,12 +72,11 @@ shows whether each recipient has at least one Push-ready device, creates a
 hashed one-use 24-hour invitation, and requires confirmation before revocation.
 The card never exposes Push endpoints or grants ordinary location access;
 Module 2 owns the service and database contract.
-Module 4's reviewed-but-undeployed migration `039` adds optional owner-managed
+Module 4's deployed migration `039` adds optional owner-managed
 classification fields: one `vehicles.vehicle_type` per vehicle and a set of
 `profiles.spoken_languages` for the Host. The profile and vehicle screens and
 mock adapter support these fields now. Existing rows are intentionally not
-backfilled, and the live save actions report the deployment requirement until
-`039` is reviewed and applied. These classifications are the only new fields
+backfilled, and the live save actions report the deployment requirement until `039` is reviewed and applied. These classifications are the only new fields
 allowed into Module 4's public card projection; vehicle make/model/plate and
 other private profile data remain owner-only.
 
