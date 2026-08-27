@@ -194,6 +194,16 @@ export const liveDiscoveryDb = {
     return data ? mapRegistration(data) : null;
   },
 
+  /** Demo-only: fires 075's notification trigger via 076's narrow RPC. */
+  async setPlaceLifecycleState(placeId, state) {
+    const client = requireClient();
+    const { error } = await client.rpc('m6_demo_set_place_lifecycle_state', {
+      p_place_id: placeId,
+      p_state: state
+    });
+    if (error) throw error;
+  },
+
   __reset() {
     throw new Error('Live discovery data cannot be reset from the browser.');
   }

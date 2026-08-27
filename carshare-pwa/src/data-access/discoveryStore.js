@@ -498,6 +498,9 @@ const seedPlaces = [
 const defaults = {
   absenceCounter: 0,
   stateBeforeDemotion: null,
+  // Fixture stand-in for what the live scheduled ingestion sweep
+  // (042_m6_scheduled_ingestion.sql) actually keeps current on every place.
+  updatedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
   // { name, start, end } for a registered VM2026 event; null where the place is
   // not one. See SeasonalCalendar.resolveSeason().
   vm2026Event: null,
@@ -639,6 +642,13 @@ const fixtureDiscoveryDb = {
       save(state);
     }
     return found ? { ...found } : null;
+  },
+
+  // The demo toggle exists to exercise 075's Postgres trigger and 076's RLS
+  // check - there is nothing in fixture mode for either to run against.
+  async setPlaceLifecycleState() {
+    await delay();
+    throw new Error('The place-status demo needs a live connection - it exercises a real database trigger.');
   },
 
   // Test hook: restores the seed so one test's writes cannot leak into another.

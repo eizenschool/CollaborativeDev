@@ -220,6 +220,7 @@ export default function DiscoverHub() {
           travelDate={travelDate}
           onTravelDateChange={(date) => { setDateAdjusted(true); setTravelDate(date); }}
           onChanged={() => load(travelDate)}
+          userId={user?.id}
         />
       )}
 
