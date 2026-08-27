@@ -172,8 +172,15 @@ export default function CallOverlay() {
         tabIndex={-1}
       >
         {canMinimize && (
-          <button type="button" className="call-overlay-minimize" onClick={minimizeCall} aria-label="Minimize call">
+          <button
+            type="button"
+            className="call-overlay-minimize"
+            onClick={minimizeCall}
+            aria-label="Minimize call and continue browsing"
+            title="Minimize call and continue browsing"
+          >
             <IconMinus size={20} aria-hidden="true" />
+            <span>Minimize &amp; browse</span>
           </button>
         )}
         {isEnded && (
