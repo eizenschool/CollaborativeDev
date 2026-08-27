@@ -29,7 +29,7 @@ export function Rating({ rating, reviewCount }) {
 // current (042_m6_scheduled_ingestion.sql), not serving stale data
 // indefinitely. Hidden entirely rather than shown wrong when a place has no
 // updatedAt yet, since that is silently true of any record predating this.
-function freshnessLabel(updatedAt) {
+export function freshnessLabel(updatedAt) {
   if (!updatedAt) return null;
   const then = new Date(updatedAt).getTime();
   if (!Number.isFinite(then)) return null;

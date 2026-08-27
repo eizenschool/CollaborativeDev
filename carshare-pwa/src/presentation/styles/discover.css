@@ -168,6 +168,38 @@
   min-height: 44px;
 }
 
+/* Full width on phone (its own row above the date field), a bounded flexible
+   width on desktop alongside the other controls - matches .dsc-field's input
+   sizing (16px to avoid iOS zoom, 44px touch target) but needs align-self:
+   stretch since, unlike .dsc-field, it should always fill its row. */
+.dsc-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--muted);
+  min-height: 44px;
+}
+
+.dsc-search-field input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: transparent;
+  min-height: 44px;
+}
+
+@media (min-width: 701px) {
+  .dsc-search-field { flex: 1 1 220px; max-width: 320px; }
+}
+
 /* The sanctioned scrolling-chip idiom (search.css's
    .search-recommendation-categories): nowrap + overflow-x + flex: 0 0 auto on
    each chip, rather than wrapping five chips into a column narrower than any
