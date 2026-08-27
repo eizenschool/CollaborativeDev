@@ -16,7 +16,7 @@
 // `departure_at` is the authoritative ride instant (D012). The `date`/`time`
 // columns were dropped in database/sql/013, so nothing here may read them.
 
-import { isSupabaseConfigured } from '../data-access/supabaseClient.js';
+import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 import { RideService } from './RideService.js';
 import { RideRequestService } from './RideRequestService.js';
@@ -27,10 +27,6 @@ import { buildTripTimeline } from './TripTimeline.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
-// Shown instead of a blank board when the app runs against Supabase. Says what
-// is missing and why, rather than implying the module is unfinished.
-export const LEADERBOARD_NEEDS_COMPLETED_TRIPS =
-  'The community leaderboard is not available on the live backend yet. Ranking hosts needs completed trips, and no ride has reached Completed on the connected database.';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -370,48 +366,101 @@ export const TripHistoryEngine = {
   // can write that status (transition_verified_ride, database/sql/014) is
   // service_role-only with no caller yet. Drop this branch and read live rides
   // once Module 6's verified-trip pipeline starts completing trips.
+  // `scope` tells the screen which question the board answers, because the two
+  // backends can answer different ones. See liveLeaderboard for why.
   async getLeaderboard(userId, year, month, now = new Date()) {
-    if (isSupabaseConfigured) throw new Error(LEADERBOARD_NEEDS_COMPLETED_TRIPS);
-
-    const period = year == null || month == null
-      ? { year: now.getFullYear(), month: now.getMonth() }
-      : { year, month };
-    const key = monthKey(period.year, period.month);
-
-    const [allRides, currentUser] = await Promise.all([mockDb.listAllRides(), mockDb.getCurrentUser()]);
-
-    const namesByHostId = new Map();
-    const eligibleHostIds = new Set();
-    for (const ride of allRides) {
-      if (ride.host) namesByHostId.set(ride.hostId, ride.host.fullName);
-      const card = toHistoryCard(ride, 'Host', now);
-      if (card.status === 'Completed' && card.date.slice(0, 7) === key) {
-        eligibleHostIds.add(ride.hostId);
-      }
-    }
-
-    const entries = await Promise.all(
-      Array.from(eligibleHostIds).map(async (id) => {
-        const summary = await HostImpactEngine.getImpactSummary(id);
-        const isCurrentUser = id === userId;
-        return {
-          id,
-          name: isCurrentUser
-            ? currentUser?.fullName || 'You'
-            : namesByHostId.get(id) || 'Host',
-          isCurrentUser,
-          compositeScore: summary.compositeScore,
-          badge: summary.badge
-        };
-      })
-    );
-
-    return {
-      year: period.year,
-      month: period.month,
-      entries: entries
-        .sort((a, b) => b.compositeScore - a.compositeScore)
-        .map((entry, index) => ({ ...entry, rank: index + 1 }))
-    };
+    return isSupabaseConfigured
+      ? liveLeaderboard(userId)
+      : mockLeaderboard(userId, year, month, now);
   }
 };
+
+function rankEntries(entries) {
+  return entries
+    .sort((a, b) => b.compositeScore - a.compositeScore)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
+// Supabase can only rank ALL TIME, and the board says so rather than printing
+// a month over lifetime figures.
+//
+// The rides RLS policy is `status = 'Published' or auth.uid() = host_id`
+// (database/sql/007), so a signed-in visitor cannot see anyone else's
+// Completed rides - there is no way to work out who completed a trip in a
+// given month. host_impact_stats IS readable (008 grants select to
+// authenticated) but carries lifetime totals with no month column.
+//
+// This replaces a hard throw that refused to run at all. Its stated reason -
+// that only a service_role function could write Completed - stopped being true
+// at migration 028, which added the check-in/start/arrival path that
+// authenticated users call and that sets the status themselves.
+async function liveLeaderboard(userId) {
+  const { data, error } = await supabase
+    .from('host_impact_stats')
+    .select('user_id')
+    .gt('completed_trips', 0);
+  if (error) throw new Error(error.message);
+
+  const hostIds = (data || []).map((row) => row.user_id).filter(Boolean);
+  if (hostIds.length === 0) return { scope: 'all-time', year: null, month: null, entries: [] };
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .in('id', hostIds);
+  const namesById = new Map((profiles || []).map((row) => [row.id, row.full_name]));
+
+  const entries = await Promise.all(hostIds.map(async (id) => {
+    // The host's own profile scores itself with this same engine, so a rank
+    // can never disagree with the number on that host's page.
+    const summary = await HostImpactEngine.getImpactSummary(id);
+    const isCurrentUser = id === userId;
+    return {
+      id,
+      // The mock board shows the real name and lets isCurrentUser drive the
+      // highlight. Same here, so the two backends read identically.
+      name: namesById.get(id) || (isCurrentUser ? 'You' : 'Host'),
+      isCurrentUser,
+      compositeScore: summary.compositeScore,
+      badge: summary.badge
+    };
+  }));
+
+  return { scope: 'all-time', year: null, month: null, entries: rankEntries(entries) };
+}
+
+// The demo store holds every ride, so it can answer the month the UI asks for.
+async function mockLeaderboard(userId, year, month, now) {
+  const period = year == null || month == null
+    ? { year: now.getFullYear(), month: now.getMonth() }
+    : { year, month };
+  const key = monthKey(period.year, period.month);
+
+  const [allRides, currentUser] = await Promise.all([mockDb.listAllRides(), mockDb.getCurrentUser()]);
+
+  const namesByHostId = new Map();
+  const eligibleHostIds = new Set();
+  for (const ride of allRides) {
+    if (ride.host) namesByHostId.set(ride.hostId, ride.host.fullName);
+    const card = toHistoryCard(ride, 'Host', now);
+    if (card.status === 'Completed' && card.date.slice(0, 7) === key) {
+      eligibleHostIds.add(ride.hostId);
+    }
+  }
+
+  const entries = await Promise.all(
+    Array.from(eligibleHostIds).map(async (id) => {
+      const summary = await HostImpactEngine.getImpactSummary(id);
+      const isCurrentUser = id === userId;
+      return {
+        id,
+        name: isCurrentUser ? (currentUser?.fullName || 'You') : (namesByHostId.get(id) || 'Host'),
+        isCurrentUser,
+        compositeScore: summary.compositeScore,
+        badge: summary.badge
+      };
+    })
+  );
+
+  return { scope: 'month', year: period.year, month: period.month, entries: rankEntries(entries) };
+}

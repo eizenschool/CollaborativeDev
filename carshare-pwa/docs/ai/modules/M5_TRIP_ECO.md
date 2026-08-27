@@ -59,15 +59,31 @@ table figure with a leading "~".
 and the fallback table still applies to older rides — so a carbon total can mix
 measured and estimated legs.
 
-Module 5 has no tables of its own. The eco half (FR-5.4-5.11) is blocked on a
-real `Completed` transition: `transition_verified_ride()` is `service_role`-only
-with no caller in `src/`. Verified on 2026-08-13 against the connected project —
-the database holds 4 rides (3 Published, 1 Draft), **zero Completed**, and every
-`host_impact_stats` row still has `completed_trips = 0` and `co2_saved_kg = 0`.
-So on Supabase the impact, report, and carbon surfaces correctly render their
-empty states, and `getLeaderboard()` throws
-`LEADERBOARD_NEEDS_COMPLETED_TRIPS` rather than feeding demo host ids into a
-Supabase uuid column. Drop that guard and read live rides once completions exist.
+Module 5 has no tables of its own.
+
+**Corrected 2026-08-28.** This section used to say the eco half was blocked
+because `transition_verified_ride()` is `service_role`-only with no caller.
+That was true of migration 014 and stopped being true at 028, which added the
+path authenticated users actually walk — `check_in_ride_request`,
+`start_ride`, `confirm_driver_arrival`, `confirm_passenger_arrival` — all
+granted to `authenticated`, all called from `src/`, and the last of which runs
+`update public.rides set status = 'Completed'`. Nothing is missing in code.
+
+What is missing is **data**: checked against the connected project on
+2026-08-28, it holds 3 rides, all `Published`, and **zero `Completed`** — no
+one has driven a ride through check-in → start → arrival yet. Until somebody
+does, Impact, Monthly Report and the milestones correctly render zeros on the
+live backend.
+
+`getLeaderboard()` no longer throws. On Supabase it ranks every host in
+`host_impact_stats` with `completed_trips > 0` (008 grants `select` to
+`authenticated`), scored by the same `HostImpactEngine` a host sees on their
+own profile. That board is **all-time**, and says so: the `rides` RLS policy is
+`status = 'Published' or auth.uid() = host_id` (007), so another host's
+`Completed` rides are invisible and no month can be scoped honestly.
+`getLeaderboard` returns `scope: 'all-time' | 'month'` and the screen drops
+the month stepper rather than printing a month over lifetime figures. The demo
+store still answers per month, because it can see every ride.
 
 The Module 2 lifecycle processor owns real `In Transit`/`Completed` writes and
 the 30-minute unstarted-Ride expiry contract (D025). Module 5 never repairs or

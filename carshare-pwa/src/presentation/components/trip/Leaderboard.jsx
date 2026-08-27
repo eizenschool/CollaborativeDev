@@ -63,17 +63,28 @@ export default function Leaderboard({ userId }) {
     };
   }, [userId, period.year, period.month, reloadToken]);
 
+  // Read from the engine rather than from state.board so the control does not
+  // appear for one frame and then vanish: the scope is fixed by the backend,
+  // and the board it returns will always agree with this.
+  const allTime = TripHistoryEngine.backend === 'supabase';
+
   // Kept outside the phase branches: paging months must not make the control
   // vanish under the reader's cursor while the next month loads.
   const header = (
     <div className="m5-lb-header">
       <p className="m5-lb-eyebrow"><IconSparkSmall size={13} /> Season standings</p>
       <h2>Community Leaderboard</h2>
-      <MonthStepper
-        year={period.year}
-        month={period.month}
-        onChange={(y, m) => setPeriod({ year: y, month: m })}
-      />
+      {allTime ? (
+        // A month stepper here would be a lie: on the live backend the board
+        // cannot be scoped to one. See liveLeaderboard in TripHistoryEngine.
+        <p className="m5-lb-scope">All time</p>
+      ) : (
+        <MonthStepper
+          year={period.year}
+          month={period.month}
+          onChange={(y, m) => setPeriod({ year: y, month: m })}
+        />
+      )}
     </div>
   );
 
@@ -115,14 +126,16 @@ export default function Leaderboard({ userId }) {
       <div className="m5-arena">
         <p className="m5-arena-caption">
           {entries.length === 0
-            ? `No host has completed a trip in ${MONTH_NAMES[month]} yet - all three places are open.`
+            ? (allTime
+              ? 'No host has completed a trip yet - all three places are open.'
+              : `No host has completed a trip in ${MONTH_NAMES[month]} yet - all three places are open.`)
             : `${entries.length} host${entries.length === 1 ? '' : 's'} ranked` +
               (openPlaces > 0
                 ? ` · ${openPlaces} podium place${openPlaces === 1 ? '' : 's'} still open`
                 : ' · podium complete')}
         </p>
 
-        <div className="m5-podium" key={`${state.board.year}-${month}`}>
+        <div className="m5-podium" key={`${state.board.scope}-${state.board.year}-${month}`}>
           {podium.map((place) => <PodiumPlace key={place.rank} {...place} />)}
         </div>
 
