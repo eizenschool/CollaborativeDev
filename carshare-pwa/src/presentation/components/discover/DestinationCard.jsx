@@ -7,7 +7,7 @@
 // shows a low-confidence indicator instead of a number (FR-6.16), and a place
 // with no fetchable photograph falls to the category illustration (FR-6.17).
 import { useState } from 'react';
-import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin } from '../icons.jsx';
+import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin, IconClock } from '../icons.jsx';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/constants.js';
 import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import { PHOTO_WIDTH_CARD } from '../../../business-logic/discovery/placePhotos.js';
@@ -25,6 +25,20 @@ export function Rating({ rating, reviewCount }) {
   );
 }
 
+// Shows the scheduled ingestion sweep is actually keeping the catalogue
+// current (042_m6_scheduled_ingestion.sql), not serving stale data
+// indefinitely. Hidden entirely rather than shown wrong when a place has no
+// updatedAt yet, since that is silently true of any record predating this.
+export function freshnessLabel(updatedAt) {
+  if (!updatedAt) return null;
+  const then = new Date(updatedAt).getTime();
+  if (!Number.isFinite(then)) return null;
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days < 1) return 'Updated today';
+  if (days < 30) return `Updated ${days}d ago`;
+  return `Updated ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(then)}`;
+}
+
 export default function DestinationCard({ candidate, onOpen }) {
   const place = candidate.place;
   const [photoShown, setPhotoShown] = useState(false);
@@ -38,6 +52,7 @@ export default function DestinationCard({ candidate, onOpen }) {
   // Falls back to the stored description when there are too few reviews to
   // describe the place from them (FR-6.10).
   const described = buildPlaceDescription(place, { distanceKm: candidate.distanceKm });
+  const freshness = freshnessLabel(place.updatedAt);
 
   return (
     <button
@@ -66,6 +81,9 @@ export default function DestinationCard({ candidate, onOpen }) {
           <span className="dsc-meta-item"><IconMapPin size={14} /> {place.state}</span>
           {Number.isFinite(candidate.distanceKm) && (
             <span className="dsc-meta-item">{Math.round(candidate.distanceKm)} km</span>
+          )}
+          {freshness && (
+            <span className="dsc-meta-item"><IconClock size={14} /> {freshness}</span>
           )}
         </span>
 

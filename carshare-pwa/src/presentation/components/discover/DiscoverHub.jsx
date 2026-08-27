@@ -12,7 +12,7 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
-import { IconAlertTriangle, IconStar, IconArrowRight, IconEye, IconEyeOff } from '../icons.jsx';
+import { IconAlertTriangle, IconStar, IconArrowRight, IconEye, IconEyeOff, IconSearch } from '../icons.jsx';
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
 import { PHOTO_WIDTH_LARGE } from '../../../business-logic/discovery/placePhotos.js';
@@ -87,6 +87,7 @@ export default function DiscoverHub() {
   const [failed, setFailed] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [dateAdjusted, setDateAdjusted] = useState(false);
   const [showAllWithheld, setShowAllWithheld] = useState(false);
   const [primaryLimit, setPrimaryLimit] = useState(RESULT_PAGE_SIZE);
@@ -175,9 +176,13 @@ export default function DiscoverHub() {
     navigate(`/discover/${placeId}?date=${travelDate}${demo ? '&demo=1' : ''}`);
   };
 
-  const filter = useCallback((list) => (
-    categoryFilter === 'all' ? list : list.filter((c) => c.place?.category === categoryFilter)
-  ), [categoryFilter]);
+  const filter = useCallback((list) => {
+    const query = searchQuery.trim().toLowerCase();
+    return list
+      .filter((c) => categoryFilter === 'all' || c.place?.category === categoryFilter)
+      .filter((c) => !query || [c.place?.name, c.place?.state, c.place?.category]
+        .some((field) => field?.toLowerCase().includes(query)));
+  }, [categoryFilter, searchQuery]);
 
   const primary = useMemo(() => filter(result?.primary || []), [result, filter]);
   const unserved = useMemo(() => filter(result?.unserved || []), [result, filter]);
@@ -198,7 +203,7 @@ export default function DiscoverHub() {
     setUnservedLimit(RESULT_PAGE_SIZE);
     setCategoryLimit(RESULT_PAGE_SIZE);
     setWithheldLimit(RESULT_PAGE_SIZE);
-  }, [categoryFilter, result]);
+  }, [categoryFilter, searchQuery, result]);
 
   // The hero is the strongest served candidate; the grid below then starts from
   // the second, so the same place is never shown twice on one screen.
@@ -220,12 +225,24 @@ export default function DiscoverHub() {
           travelDate={travelDate}
           onTravelDateChange={(date) => { setDateAdjusted(true); setTravelDate(date); }}
           onChanged={() => load(travelDate)}
+          userId={user?.id}
         />
       )}
 
       {showPrompt && <PreferencePrompt onSave={savePreferences} onDismiss={dismissPrompt} />}
 
       <div className="dsc-controls">
+        <label className="dsc-search-field">
+          <IconSearch size={16} />
+          <input
+            type="text"
+            placeholder="Search by name, state, or category"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label="Search destinations"
+          />
+        </label>
+
         <label className="dsc-field">
           <span>Travel date</span>
           <input

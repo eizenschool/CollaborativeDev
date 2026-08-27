@@ -16,9 +16,10 @@ import { REVIEW_CONFIDENCE_SATURATION } from '../../../business-logic/discovery/
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
 import {
   IconArrowLeft, IconArrowRight, IconStar, IconMapPin, IconCar,
-  IconUsers, IconAlertTriangle, IconBell, IconRoute
+  IconUsers, IconAlertTriangle, IconBell, IconRoute, IconClock
 } from '../icons.jsx';
 import PlaceImage from './PlaceImage.jsx';
+import { freshnessLabel } from './DestinationCard.jsx';
 import StreetViewFrame from './StreetViewFrame.jsx';
 import { PHOTO_WIDTH_LARGE } from '../../../business-logic/discovery/placePhotos.js';
 import { hasStreetViewEmbedKey } from '../../../business-logic/discovery/StreetView.js';
@@ -201,6 +202,7 @@ export default function DestinationDetail() {
   const seatsLeft = rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
   const showRating = place.rating && place.reviewCount >= REVIEW_CONFIDENCE_SATURATION;
   const described = buildPlaceDescription(place, { distanceKm });
+  const freshness = freshnessLabel(place.updatedAt);
 
   const notifyMe = async () => {
     if (!user) {
@@ -245,6 +247,9 @@ export default function DestinationDetail() {
               </span>
             ) : (
               <span className="dsc-rating dsc-rating-low">Too few reviews to rate</span>
+            )}
+            {freshness && (
+              <span className="dsc-meta-item"><IconClock size={14} /> {freshness}</span>
             )}
           </div>
 

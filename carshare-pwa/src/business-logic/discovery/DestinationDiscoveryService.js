@@ -261,6 +261,15 @@ export const DestinationDiscoveryService = {
     return discoveryDb.cancelRegistration(userId, registrationId);
   },
 
+  async getPlace(placeId) {
+    return discoveryDb.getPlace(placeId);
+  },
+
+  /** Demo aid for the notification a place's lifecycle_state degrading triggers. */
+  async setPlaceLifecycleState(placeId, state) {
+    return discoveryDb.setPlaceLifecycleState(placeId, state);
+  },
+
   /** FR-6.21 / UC6.4 - stated preferences, superseded by history as it accumulates. */
   async getPreferences(userId) {
     return userId ? discoveryDb.getPreferences(userId) : null;
