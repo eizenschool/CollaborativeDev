@@ -54,17 +54,17 @@ describe('AlertSoundService', () => {
     expect(harness.clearInterval).toHaveBeenCalledWith(42);
   });
 
-  it('scales notification and ringtone gain independently and treats zero as muted', async () => {
+  it('applies the three-times sound boost while keeping user volume normalized', async () => {
     const harness = soundHarness();
     const service = createAlertSoundService(harness.globalObject);
     await service.unlock();
 
     expect(service.playBell(0.5)).toBe(true);
     expect(harness.context.createGain.mock.results[0].value.gain.exponentialRampToValueAtTime)
-      .toHaveBeenCalledWith(0.045, 10.02);
+      .toHaveBeenCalledWith(0.135, 10.02);
     expect(service.previewRingtone(0.25)).toBe(true);
     expect(harness.context.createGain.mock.results[2].value.gain.exponentialRampToValueAtTime)
-      .toHaveBeenCalledWith(0.03, 10.02);
+      .toHaveBeenCalledWith(0.09, 10.02);
     expect(service.playBell(0)).toBe(false);
     expect(service.previewRingtone(0)).toBe(false);
     expect(harness.context.createOscillator).toHaveBeenCalledTimes(4);

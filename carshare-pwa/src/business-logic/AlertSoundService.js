@@ -1,5 +1,8 @@
 const RING_INTERVAL_MS = 2_600;
-const RINGTONE_VOLUME = 0.12;
+const ALERT_VOLUME_BOOST = 3;
+const BELL_FIRST_VOLUME = 0.09 * ALERT_VOLUME_BOOST;
+const BELL_SECOND_VOLUME = 0.07 * ALERT_VOLUME_BOOST;
+const RINGTONE_VOLUME = 0.12 * ALERT_VOLUME_BOOST;
 
 export function normalizeAlertVolume(value, fallback = 1) {
   const numericValue = Number(value);
@@ -53,8 +56,8 @@ export function createAlertSoundService(globalObject = globalThis) {
   function playBell(volume = 1) {
     const normalizedVolume = normalizeAlertVolume(volume);
     if (normalizedVolume === 0) return false;
-    const first = tone(880, 0, 0.22, 0.09 * normalizedVolume);
-    const second = tone(1_320, 0.16, 0.34, 0.07 * normalizedVolume);
+    const first = tone(880, 0, 0.22, BELL_FIRST_VOLUME * normalizedVolume);
+    const second = tone(1_320, 0.16, 0.34, BELL_SECOND_VOLUME * normalizedVolume);
     return first || second;
   }
 
