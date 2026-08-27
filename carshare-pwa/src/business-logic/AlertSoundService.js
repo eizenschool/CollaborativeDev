@@ -1,4 +1,5 @@
 const RING_INTERVAL_MS = 2_600;
+const RINGTONE_VOLUME = 0.12;
 
 export function createAlertSoundService(globalObject = globalThis) {
   let context = null;
@@ -42,14 +43,14 @@ export function createAlertSoundService(globalObject = globalThis) {
   }
 
   function playBell() {
-    const first = tone(880, 0, 0.22, 0.045);
-    const second = tone(1_320, 0.16, 0.34, 0.035);
+    const first = tone(880, 0, 0.22, 0.09);
+    const second = tone(1_320, 0.16, 0.34, 0.07);
     return first || second;
   }
 
   function ringOnce() {
-    const first = tone(740, 0, 0.42, 0.06);
-    const second = tone(740, 0.58, 0.42, 0.06);
+    const first = tone(740, 0, 0.42, RINGTONE_VOLUME);
+    const second = tone(740, 0.58, 0.42, RINGTONE_VOLUME);
     return first || second;
   }
 
