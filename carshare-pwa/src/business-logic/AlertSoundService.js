@@ -1,5 +1,7 @@
 const RING_INTERVAL_MS = 2_600;
 const RINGTONE_VOLUME = 0.12;
+export const SOS_RINGTONE_VOLUME_MULTIPLIER = 3;
+export const SOS_RINGTONE_VOLUME = RINGTONE_VOLUME * SOS_RINGTONE_VOLUME_MULTIPLIER;
 
 export function normalizeAlertVolume(value, fallback = 1) {
   const numericValue = Number(value);
@@ -13,6 +15,7 @@ export function createAlertSoundService(globalObject = globalThis) {
   let ringtoneId = null;
   let ringtoneAudible = false;
   let ringtoneVolume = 1;
+  let ringtonePeakVolume = RINGTONE_VOLUME;
 
   function getContext() {
     if (context) return context;
@@ -58,11 +61,12 @@ export function createAlertSoundService(globalObject = globalThis) {
     return first || second;
   }
 
-  function ringOnce(volume = 1) {
+  function ringOnce(volume = 1, peakVolume = RINGTONE_VOLUME) {
     const normalizedVolume = normalizeAlertVolume(volume);
     if (normalizedVolume === 0) return false;
-    const first = tone(740, 0, 0.42, RINGTONE_VOLUME * normalizedVolume);
-    const second = tone(740, 0.58, 0.42, RINGTONE_VOLUME * normalizedVolume);
+    const normalizedPeakVolume = normalizeAlertVolume(peakVolume, RINGTONE_VOLUME);
+    const first = tone(740, 0, 0.42, normalizedPeakVolume * normalizedVolume);
+    const second = tone(740, 0.58, 0.42, normalizedPeakVolume * normalizedVolume);
     return first || second;
   }
 
@@ -74,27 +78,31 @@ export function createAlertSoundService(globalObject = globalThis) {
     ringtoneId = null;
     ringtoneAudible = false;
     ringtoneVolume = 1;
+    ringtonePeakVolume = RINGTONE_VOLUME;
     return stopped;
   }
 
-  function startRingtone(nextRingtoneId, volume = 1) {
+  function startRingtone(nextRingtoneId, volume = 1, peakVolume = RINGTONE_VOLUME) {
     if (!nextRingtoneId) return false;
     const normalizedVolume = normalizeAlertVolume(volume);
+    const normalizedPeakVolume = normalizeAlertVolume(peakVolume, RINGTONE_VOLUME);
     if (normalizedVolume === 0) {
       stopRingtone(nextRingtoneId);
       return false;
     }
     if (ringtoneId === nextRingtoneId && ringtoneTimerId != null) {
       ringtoneVolume = normalizedVolume;
-      if (!ringtoneAudible && context?.state === 'running') ringtoneAudible = ringOnce(ringtoneVolume);
+      ringtonePeakVolume = normalizedPeakVolume;
+      if (!ringtoneAudible && context?.state === 'running') ringtoneAudible = ringOnce(ringtoneVolume, ringtonePeakVolume);
       return ringtoneAudible;
     }
     stopRingtone();
     ringtoneId = nextRingtoneId;
     ringtoneVolume = normalizedVolume;
-    ringtoneAudible = ringOnce(ringtoneVolume);
+    ringtonePeakVolume = normalizedPeakVolume;
+    ringtoneAudible = ringOnce(ringtoneVolume, ringtonePeakVolume);
     ringtoneTimerId = globalObject.setInterval(() => {
-      ringtoneAudible = ringOnce(ringtoneVolume) || ringtoneAudible;
+      ringtoneAudible = ringOnce(ringtoneVolume, ringtonePeakVolume) || ringtoneAudible;
     }, RING_INTERVAL_MS);
     return ringtoneAudible;
   }
@@ -174,7 +182,7 @@ export function createRingtoneCoordinator(soundService = AlertSoundService) {
     startSOS(nextEventId) {
       if (!nextEventId) return false;
       sosEventId = nextEventId;
-      return soundService.startRingtone(ringtoneKey('sos', sosEventId), 1);
+      return soundService.startRingtone(ringtoneKey('sos', sosEventId), 1, SOS_RINGTONE_VOLUME);
     },
 
     stopSOS(requestedEventId = null) {

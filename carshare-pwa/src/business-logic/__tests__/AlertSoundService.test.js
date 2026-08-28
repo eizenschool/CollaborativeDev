@@ -3,6 +3,8 @@ import {
   createAlertSoundService,
   createRingtoneCoordinator,
   normalizeAlertVolume,
+  SOS_RINGTONE_VOLUME,
+  SOS_RINGTONE_VOLUME_MULTIPLIER,
 } from '../AlertSoundService.js';
 
 function soundHarness(state = 'running') {
@@ -70,6 +72,22 @@ describe('AlertSoundService', () => {
     expect(harness.context.createOscillator).toHaveBeenCalledTimes(4);
   });
 
+  it('uses a three-times peak gain for SOS without changing the regular ringtone', async () => {
+    const harness = soundHarness();
+    const service = createAlertSoundService(harness.globalObject);
+    await service.unlock();
+
+    service.startRingtone('call-1');
+    expect(harness.context.createGain.mock.results[0].value.gain.exponentialRampToValueAtTime)
+      .toHaveBeenCalledWith(0.12, 10.02);
+
+    service.startRingtone('sos:event-1', 1, SOS_RINGTONE_VOLUME);
+    expect(SOS_RINGTONE_VOLUME_MULTIPLIER).toBe(3);
+    expect(SOS_RINGTONE_VOLUME).toBeCloseTo(0.36);
+    expect(harness.context.createGain.mock.results[2].value.gain.exponentialRampToValueAtTime)
+      .toHaveBeenCalledWith(0.36, 10.02);
+  });
+
   it('normalizes stored and user-provided volume values', () => {
     expect(normalizeAlertVolume('0.45')).toBe(0.45);
     expect(normalizeAlertVolume(-1)).toBe(0);
@@ -125,7 +143,7 @@ describe('ringtone coordination', () => {
     expect(coordinator.stopSOS('event-1')).toBe(true);
     expect(soundService.startRingtone.mock.calls).toEqual([
       ['call:call-1', 1],
-      ['sos:event-1', 1],
+      ['sos:event-1', 1, SOS_RINGTONE_VOLUME],
       ['call:call-1', 1],
     ]);
   });
@@ -157,7 +175,7 @@ describe('ringtone coordination', () => {
     expect(coordinator.startCall('call-1', false)).toBe(false);
     expect(coordinator.startSOS('event-1')).toBe(true);
     expect(soundService.startRingtone).toHaveBeenCalledOnce();
-    expect(soundService.startRingtone).toHaveBeenCalledWith('sos:event-1', 1);
+    expect(soundService.startRingtone).toHaveBeenCalledWith('sos:event-1', 1, SOS_RINGTONE_VOLUME);
   });
 
   it('updates active call volume without changing the fixed SOS volume', () => {
@@ -176,7 +194,7 @@ describe('ringtone coordination', () => {
     expect(soundService.startRingtone.mock.calls).toEqual([
       ['call:call-1', 0.4],
       ['call:call-1', 0.2],
-      ['sos:event-1', 1],
+      ['sos:event-1', 1, SOS_RINGTONE_VOLUME],
       ['call:call-1', 0.7],
     ]);
   });
