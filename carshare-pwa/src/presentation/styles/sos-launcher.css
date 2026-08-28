@@ -73,14 +73,20 @@
 
 .sos-dock-side-control {
   display: none;
-  align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+.sos-dock-position-actions {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
 }
 
 .global-sos-ride-summary {
@@ -149,18 +155,19 @@
 
   .global-sos-launcher {
     position: fixed;
-    top: clamp(calc(76px + env(safe-area-inset-top)), 58dvh, calc(100dvh - 156px - env(safe-area-inset-bottom)));
+    top: calc(76px + env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    bottom: calc(100px + env(safe-area-inset-bottom));
+    left: max(16px, env(safe-area-inset-left));
     z-index: calc(var(--z-nav) + 5);
     display: block;
-    width: 56px;
-    height: 56px;
     pointer-events: none;
   }
 
-  .global-sos-launcher.dock-right { right: max(10px, env(safe-area-inset-right)); left: auto; }
-  .global-sos-launcher.dock-left { right: auto; left: max(10px, env(safe-area-inset-left)); }
-
   .global-sos-button {
+    position: absolute;
+    top: 0;
+    left: 0;
     z-index: 0;
     width: 56px;
     height: 56px;
@@ -174,6 +181,16 @@
     border-radius: 50%;
     box-shadow: 0 8px 26px rgba(127, 29, 29, .34);
     pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transform: translate3d(calc(100vw - 88px), 58%, 0);
+    transition: transform var(--motion-fast) ease, background-color var(--motion-fast) ease;
+  }
+
+  .global-sos-button.is-dragging {
+    cursor: grabbing;
+    transition: none;
   }
 
   .global-sos-button__compact-label {
@@ -224,10 +241,12 @@
   }
 
   .dock-left .sos-launcher-warning-marker { right: auto; left: -2px; }
-  .sos-dock-side-control { display: flex; }
+  .sos-dock-side-control { display: grid; }
+  .sos-dock-position-actions { justify-content: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .global-sos-button,
   .global-sos-button__compact-label,
   .global-sos-button__expanded-label { transition-duration: .01ms; }
 }

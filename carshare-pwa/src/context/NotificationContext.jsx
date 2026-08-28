@@ -54,6 +54,7 @@ export function NotificationProvider({ children }) {
   const [callRingtoneVolume, setCallRingtoneVolumeState] = useState(1);
   const [soundBlocked, setSoundBlocked] = useState(false);
   const playedNotificationIdsRef = useRef(new Set());
+  const requestedSOSEventRef = useRef(null);
   const ringtoneCoordinatorRef = useRef(null);
   if (!ringtoneCoordinatorRef.current) {
     ringtoneCoordinatorRef.current = createRingtoneCoordinator(AlertSoundService);
@@ -117,6 +118,16 @@ export function NotificationProvider({ children }) {
   }, [refreshNotifications, user]);
 
   useEffect(() => {
+    if (!user || !globalThis.navigator?.serviceWorker) return undefined;
+    const handleServiceWorkerMessage = (eventValue) => {
+      if (eventValue.data?.type !== 'sos-push' || typeof eventValue.data?.eventId !== 'string') return;
+      void refreshNotifications({ silent: true });
+    };
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+  }, [refreshNotifications, user]);
+
+  useEffect(() => {
     setAlertSoundsEnabled(readSoundPreference(user?.id));
     setNotificationVolumeState(readVolumePreference(user?.id, 'notification'));
     const nextCallVolume = readVolumePreference(user?.id, 'call');
@@ -124,6 +135,7 @@ export function NotificationProvider({ children }) {
     ringtoneCoordinatorRef.current.setCallVolume(nextCallVolume);
     setSoundBlocked(false);
     playedNotificationIdsRef.current.clear();
+    requestedSOSEventRef.current = null;
     ringtoneCoordinatorRef.current.reset();
   }, [user?.id]);
 
@@ -163,12 +175,21 @@ export function NotificationProvider({ children }) {
   }, []);
 
   const startSOSRingtone = useCallback((eventId) => {
+    requestedSOSEventRef.current = eventId || null;
     const played = ringtoneCoordinatorRef.current.startSOS(eventId);
     setSoundBlocked(!played);
+    if (!played && eventId) {
+      void unlockAlertSounds().then((unlocked) => {
+        if (!unlocked || requestedSOSEventRef.current !== eventId) return;
+        const retryPlayed = ringtoneCoordinatorRef.current.startSOS(eventId);
+        setSoundBlocked(!retryPlayed);
+      });
+    }
     return played;
-  }, []);
+  }, [unlockAlertSounds]);
 
   const stopSOSRingtone = useCallback((eventId) => {
+    if (!eventId || requestedSOSEventRef.current === eventId) requestedSOSEventRef.current = null;
     return ringtoneCoordinatorRef.current.stopSOS(eventId);
   }, []);
 

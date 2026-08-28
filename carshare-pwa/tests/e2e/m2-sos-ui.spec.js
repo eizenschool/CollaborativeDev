@@ -13,6 +13,28 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+async function dispatchTouch(page, selector, start, end) {
+  await page.locator(selector).first().evaluate((element, points) => {
+    const emit = (type, touches, changedTouches = touches) => {
+      const eventValue = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperties(eventValue, {
+        touches: { value: touches },
+        changedTouches: { value: changedTouches },
+      });
+      element.dispatchEvent(eventValue);
+    };
+    const touch = (point) => ({
+      identifier: 1,
+      target: element,
+      clientX: point.x,
+      clientY: point.y,
+    });
+    emit('touchstart', [touch(points.start)]);
+    emit('touchmove', [touch(points.end)]);
+    emit('touchend', [], [touch(points.end)]);
+  }, { start, end });
+}
+
 test('trusted family routes preserve invitation privacy and mobile layout', async ({ page }) => {
   await page.goto('/profile');
   await expect(page.getByRole('heading', { name: 'My profile' })).toBeVisible();
@@ -138,7 +160,7 @@ test('eligible rides expose a global confirmed SOS launcher outside Trip Mode', 
 
   await page.goto('/home');
   const viewportWidth = page.viewportSize()?.width || 0;
-  const launcher = page.getByRole('button', { name: 'Open emergency SOS' });
+  const launcher = page.getByRole('button', { name: /Open emergency SOS/ });
   await expect(launcher).toBeVisible();
   const launcherBox = await launcher.boundingBox();
   expect(launcherBox?.height || 0).toBeGreaterThanOrEqual(viewportWidth <= 700 ? 56 : 44);
@@ -146,7 +168,21 @@ test('eligible rides expose a global confirmed SOS launcher outside Trip Mode', 
 
   if (viewportWidth <= 700) {
     await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-right/);
-    await expect(launcher).toHaveClass(/is-expanded/);
+    await expect(launcher).toHaveClass(/is-compact/);
+    await dispatchTouch(page, '.global-sos-button', { x: 310, y: 420 }, { x: 60, y: 420 });
+    await expect(page).toHaveURL(/\/home$/);
+    const beforeDrag = await launcher.boundingBox();
+    await page.mouse.move(beforeDrag.x + 28, beforeDrag.y + 28);
+    await page.mouse.down();
+    await page.mouse.move(32, Math.max(120, beforeDrag.y - 100), { steps: 6 });
+    await page.mouse.up();
+    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-left/);
+    const afterDrag = await launcher.boundingBox();
+    expect(afterDrag.y).toBeLessThan(beforeDrag.y);
+    await expect.poll(() => page.evaluate(() => [...Array(localStorage.length).keys()]
+      .map((index) => localStorage.key(index))
+      .filter((key) => key?.startsWith('m2-sos-launcher-position:'))
+      .map((key) => JSON.parse(localStorage.getItem(key))))).toContainEqual(expect.objectContaining({ side: 'left' }));
   } else {
     await expect(page.locator('.topnav-actions').getByRole('button', { name: 'Open emergency SOS' })).toBeVisible();
     await expect(page.locator('.global-sos-launcher')).toBeHidden();
@@ -157,28 +193,23 @@ test('eligible rides expose a global confirmed SOS launcher outside Trip Mode', 
   await expect(page.getByRole('heading', { name: 'Activate SOS?' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Activate SOS now' })).toBeVisible();
   if (viewportWidth <= 700) {
-    await page.getByRole('button', { name: 'Move SOS to left side' }).click();
-    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-left/);
-    await expect.poll(() => page.evaluate(() => [...Array(localStorage.length).keys()]
-      .map((index) => localStorage.key(index))
-      .filter((key) => key?.startsWith('m2-sos-launcher-side:'))
-      .map((key) => localStorage.getItem(key)))).toContain('left');
+    await expect(page.getByRole('button', { name: 'Move SOS up' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Move SOS down' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reset SOS position' })).toBeVisible();
+    await page.getByRole('button', { name: 'Move SOS to right side' }).click();
+    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-right/);
   }
   await page.getByRole('button', { name: 'Cancel' }).click();
 
-  if (viewportWidth <= 700) {
-    await expect(launcher).toHaveClass(/is-compact/, { timeout: 5_000 });
-  }
-
   await page.goto('/search');
-  await expect(page.getByRole('button', { name: 'Open emergency SOS' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open emergency SOS/ })).toBeVisible();
   if (viewportWidth <= 700) {
-    await expect(page.getByRole('button', { name: 'Open emergency SOS' })).toHaveClass(/is-compact/);
-    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-left/);
+    await expect(page.getByRole('button', { name: /Open emergency SOS/ })).toHaveClass(/is-compact/);
+    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-right/);
   }
 
   await page.goto('/ride/r_5?view=trip');
-  await expect(page.getByRole('button', { name: 'Open emergency SOS' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Open emergency SOS/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Hold for SOS' })).toBeVisible();
 
   const width = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));

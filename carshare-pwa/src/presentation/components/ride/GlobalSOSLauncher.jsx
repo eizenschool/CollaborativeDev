@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,10 +11,14 @@ import {
 import { useLocation } from 'react-router-dom';
 import { SOSLauncherService } from '../../../business-logic/SOSLauncherService.js';
 import {
-  hasShownSOSDockIntro,
-  markSOSDockIntroShown,
-  readSOSDockSide,
-  writeSOSDockSide,
+  clampSOSDockPoint,
+  hasExceededSOSDragThreshold,
+  moveSOSDockPosition,
+  readSOSDockPosition,
+  SOS_DOCK_DEFAULT_POSITION,
+  sosDockPointFromPosition,
+  sosDockPositionFromPoint,
+  writeSOSDockPosition,
 } from '../../../business-logic/SOSLauncherPreferences.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { IconAlertTriangle } from '../icons.jsx';
@@ -27,7 +32,6 @@ import useRideSOSController, {
 import '../../styles/sos-launcher.css';
 
 export const SOS_LAUNCHER_REFRESH_MS = 15_000;
-export const SOS_DOCK_INTRO_MS = 4_000;
 
 const SOSLauncherContext = createContext(null);
 
@@ -61,12 +65,10 @@ export function SOSLauncherProvider({ children, enabled = true }) {
   const [selectionRideId, setSelectionRideId] = useState('');
   const [dialog, setDialog] = useState(null);
   const [loadError, setLoadError] = useState('');
-  const [dockSide, setDockSide] = useState('right');
-  const [introExpanded, setIntroExpanded] = useState(false);
+  const [dockPosition, setDockPosition] = useState(SOS_DOCK_DEFAULT_POSITION);
   const selectedRideIdRef = useRef(selectedRideId);
   const refreshSequenceRef = useRef(0);
   const triggerRef = useRef(null);
-  const introFallbackRef = useRef(new Set());
   selectedRideIdRef.current = selectedRideId;
 
   const refreshCandidates = useCallback(async () => {
@@ -102,7 +104,7 @@ export function SOSLauncherProvider({ children, enabled = true }) {
   }, [enabled, user?.id]);
 
   useEffect(() => {
-    setDockSide(readSOSDockSide(user?.id));
+    setDockPosition(readSOSDockPosition(user?.id));
   }, [user?.id]);
 
   useEffect(() => {
@@ -139,63 +141,27 @@ export function SOSLauncherProvider({ children, enabled = true }) {
     if (controller.event && dialog === 'activate') setDialog('manage');
   }, [controller.event, dialog]);
 
-  useEffect(() => {
-    setIntroExpanded(false);
-    if (!visible || !user?.id || controller.event) return undefined;
-    const fallbackKey = String(user.id);
-    if (introFallbackRef.current.has(fallbackKey) || hasShownSOSDockIntro(user.id)) return undefined;
-
-    let remainingMs = SOS_DOCK_INTRO_MS;
-    let startedAt = null;
-    let timeoutId = null;
-    let introStarted = false;
-
-    const pause = () => {
-      if (timeoutId == null || startedAt == null) return;
-      window.clearTimeout(timeoutId);
-      timeoutId = null;
-      remainingMs = Math.max(0, remainingMs - (Date.now() - startedAt));
-      startedAt = null;
-    };
-
-    const start = () => {
-      if (document.visibilityState === 'hidden' || timeoutId != null || remainingMs <= 0) return;
-      if (!introStarted) {
-        introStarted = true;
-        introFallbackRef.current.add(fallbackKey);
-        markSOSDockIntroShown(user.id);
-        setIntroExpanded(true);
-      }
-      startedAt = Date.now();
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null;
-        remainingMs = 0;
-        startedAt = null;
-        setIntroExpanded(false);
-      }, remainingMs);
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') pause();
-      else start();
-    };
-
-    start();
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      if (timeoutId != null) window.clearTimeout(timeoutId);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      setIntroExpanded(false);
-    };
-  }, [Boolean(controller.event), user?.id, visible]);
-
-  const changeDockSide = useCallback((side) => {
-    setDockSide(writeSOSDockSide(user?.id, side));
+  const changeDockPosition = useCallback((nextPosition) => {
+    setDockPosition((current) => writeSOSDockPosition(
+      user?.id,
+      typeof nextPosition === 'function' ? nextPosition(current) : nextPosition,
+    ));
   }, [user?.id]);
 
   const toggleDockSide = useCallback(() => {
-    changeDockSide(dockSide === 'right' ? 'left' : 'right');
-  }, [changeDockSide, dockSide]);
+    changeDockPosition((current) => ({
+      ...current,
+      side: current.side === 'right' ? 'left' : 'right',
+    }));
+  }, [changeDockPosition]);
+
+  const moveDockVertically = useCallback((direction) => {
+    changeDockPosition((current) => moveSOSDockPosition(current, direction));
+  }, [changeDockPosition]);
+
+  const resetDockPosition = useCallback(() => {
+    changeDockPosition(SOS_DOCK_DEFAULT_POSITION);
+  }, [changeDockPosition]);
 
   const openLauncher = useCallback((triggerElement) => {
     triggerRef.current = triggerElement || null;
@@ -227,26 +193,26 @@ export function SOSLauncherProvider({ children, enabled = true }) {
     dialog,
     setDialog,
     loadError,
-    dockSide,
-    introExpanded,
+    dockPosition,
     visible,
     controller,
     triggerRef,
     refreshCandidates,
-    changeDockSide,
+    changeDockPosition,
     toggleDockSide,
+    moveDockVertically,
+    resetDockPosition,
     openLauncher,
     closeDialog,
     confirmCandidateSelection,
   }), [
     candidates,
-    changeDockSide,
+    changeDockPosition,
     closeDialog,
     confirmCandidateSelection,
     controller,
     dialog,
-    dockSide,
-    introExpanded,
+    dockPosition,
     loadError,
     openLauncher,
     refreshCandidates,
@@ -254,6 +220,8 @@ export function SOSLauncherProvider({ children, enabled = true }) {
     selectedRideId,
     selectionRideId,
     toggleDockSide,
+    moveDockVertically,
+    resetDockPosition,
     visible,
   ]);
 
@@ -280,11 +248,21 @@ function SOSRefreshWarning() {
 }
 
 function SOSDockSideControl() {
-  const { dockSide, toggleDockSide } = useSOSLauncher();
-  const nextSide = dockSide === 'right' ? 'left' : 'right';
+  const {
+    dockPosition,
+    toggleDockSide,
+    moveDockVertically,
+    resetDockPosition,
+  } = useSOSLauncher();
+  const nextSide = dockPosition.side === 'right' ? 'left' : 'right';
   return <div className="sos-dock-side-control">
     <span>Button position is saved on this device.</span>
-    <button type="button" className="btn-link" onClick={toggleDockSide}>Move SOS to {nextSide} side</button>
+    <div className="sos-dock-position-actions" aria-label="SOS button position controls">
+      <button type="button" className="btn-link" onClick={toggleDockSide}>Move SOS to {nextSide} side</button>
+      <button type="button" className="btn-link" onClick={() => moveDockVertically('up')}>Move SOS up</button>
+      <button type="button" className="btn-link" onClick={() => moveDockVertically('down')}>Move SOS down</button>
+      <button type="button" className="btn-link" onClick={resetDockPosition}>Reset SOS position</button>
+    </div>
   </div>;
 }
 
@@ -462,25 +440,147 @@ export function TopNavSOSLauncher() {
 export default function GlobalSOSLauncher() {
   const {
     visible,
-    dockSide,
-    introExpanded,
+    dockPosition,
+    changeDockPosition,
     controller,
     loadError,
     openLauncher,
   } = useSOSLauncher();
+  const regionRef = useRef(null);
+  const buttonRef = useRef(null);
+  const dragRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const pendingPointRef = useRef(null);
+  const suppressClickRef = useRef(false);
+  const [dragging, setDragging] = useState(false);
+
+  const applyPoint = useCallback((point) => {
+    if (buttonRef.current && point) {
+      buttonRef.current.style.transform = `translate3d(${point.x}px, ${point.y}px, 0)`;
+    }
+  }, []);
+
+  const renderPoint = useCallback((point) => {
+    pendingPointRef.current = point;
+    if (animationFrameRef.current != null) return;
+    animationFrameRef.current = window.requestAnimationFrame(() => {
+      animationFrameRef.current = null;
+      const nextPoint = pendingPointRef.current;
+      applyPoint(nextPoint);
+    });
+  }, [applyPoint]);
+
+  const placeFromPreference = useCallback(() => {
+    const bounds = regionRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    applyPoint(sosDockPointFromPosition(dockPosition, bounds));
+  }, [applyPoint, dockPosition]);
+
+  useLayoutEffect(() => {
+    if (!visible) return undefined;
+    placeFromPreference();
+    const region = regionRef.current;
+    const observer = typeof ResizeObserver === 'function' && region
+      ? new ResizeObserver(placeFromPreference)
+      : null;
+    observer?.observe(region);
+    window.addEventListener('resize', placeFromPreference);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', placeFromPreference);
+      if (animationFrameRef.current != null) window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    };
+  }, [placeFromPreference, visible]);
+
+  const pointFromPointer = useCallback((eventValue, drag) => {
+    const bounds = regionRef.current?.getBoundingClientRect();
+    if (!bounds) return null;
+    return clampSOSDockPoint({
+      x: eventValue.clientX - bounds.left - drag.offsetX,
+      y: eventValue.clientY - bounds.top - drag.offsetY,
+    }, bounds);
+  }, []);
+
+  const handlePointerDown = useCallback((eventValue) => {
+    if (!eventValue.isPrimary || eventValue.button !== 0) return;
+    const buttonBounds = buttonRef.current?.getBoundingClientRect();
+    if (!buttonBounds) return;
+    dragRef.current = {
+      pointerId: eventValue.pointerId,
+      startX: eventValue.clientX,
+      startY: eventValue.clientY,
+      offsetX: eventValue.clientX - buttonBounds.left,
+      offsetY: eventValue.clientY - buttonBounds.top,
+      dragging: false,
+      point: null,
+    };
+    eventValue.currentTarget.setPointerCapture?.(eventValue.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((eventValue) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== eventValue.pointerId) return;
+    if (!drag.dragging && !hasExceededSOSDragThreshold(
+      eventValue.clientX - drag.startX,
+      eventValue.clientY - drag.startY,
+    )) return;
+    if (!drag.dragging) {
+      drag.dragging = true;
+      setDragging(true);
+    }
+    eventValue.preventDefault();
+    drag.point = pointFromPointer(eventValue, drag);
+    if (drag.point) renderPoint(drag.point);
+  }, [pointFromPointer, renderPoint]);
+
+  const finishPointerInteraction = useCallback((eventValue, cancelled = false) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== eventValue.pointerId) return;
+    eventValue.currentTarget.releasePointerCapture?.(eventValue.pointerId);
+    dragRef.current = null;
+    setDragging(false);
+    if (!drag.dragging || cancelled) {
+      if (cancelled) placeFromPreference();
+      return;
+    }
+    eventValue.preventDefault();
+    suppressClickRef.current = true;
+    const bounds = regionRef.current?.getBoundingClientRect();
+    if (!bounds || !drag.point) return;
+    const nextPosition = sosDockPositionFromPoint(drag.point, bounds);
+    changeDockPosition(nextPosition);
+  }, [changeDockPosition, placeFromPreference]);
+
   if (!visible) return null;
   const active = Boolean(controller.event);
-  const expanded = active || introExpanded;
-  const label = active ? 'SOS active. Open SOS management.' : `Open emergency SOS${loadError ? '. Ride status may be out of date.' : ''}`;
+  const label = active
+    ? 'SOS active. Open SOS management. Drag to reposition.'
+    : `Open emergency SOS. Drag to reposition${loadError ? '. Ride status may be out of date.' : ''}`;
 
   return <>
-    <div className={`global-sos-launcher dock-${dockSide}`}>
+    <div
+      ref={regionRef}
+      className={`global-sos-launcher dock-${dockPosition.side}`}
+      data-swipe-ignore
+    >
       <button
+        ref={buttonRef}
         type="button"
-        className={`global-sos-button ${active ? 'is-active' : ''} ${expanded ? 'is-expanded' : 'is-compact'}`}
+        className={`global-sos-button ${active ? 'is-active is-expanded' : 'is-compact'} ${dragging ? 'is-dragging' : ''}`}
         aria-label={label}
-        aria-expanded={expanded}
-        onClick={(eventValue) => openLauncher(eventValue.currentTarget)}
+        aria-expanded={active}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={(eventValue) => finishPointerInteraction(eventValue)}
+        onPointerCancel={(eventValue) => finishPointerInteraction(eventValue, true)}
+        onClick={(eventValue) => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false;
+            return;
+          }
+          openLauncher(eventValue.currentTarget);
+        }}
       >
         <IconAlertTriangle size={21} aria-hidden="true" />
         <span className="global-sos-button__compact-label" aria-hidden="true">SOS</span>

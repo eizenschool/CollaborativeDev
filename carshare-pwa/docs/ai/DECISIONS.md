@@ -414,11 +414,11 @@ the actor's confirmed “I'm safe” or terminal Ride transition. Resolution
 immediately removes coordinates and keeps only a coordinate-free 24-hour shell.
 
 That same eligibility window controls one adaptive authenticated SOS launcher
-on pages outside the current Ride's Trip Mode. Phones use a 56 px edge dock,
-default right, with a user-scoped local left/right preference changed from the
-SOS dialogs; arbitrary dragging and vertical coordinates are excluded. The
-full label appears for four visible seconds once per PWA session, and an active
-SOS never compacts. Tablets and desktops place a minimum-44 px SOS action before
+on pages outside the current Ride's Trip Mode. Phones use a compact 56 px edge
+dock, default right. After an 8 px threshold it tracks a primary pointer, then
+snaps to the nearest edge and saves a clamped vertical ratio in a user-scoped
+local preference. SOS dialogs retain non-drag side, up/down, and reset controls.
+An active SOS never compacts. Tablets and desktops place a minimum-44 px SOS action before
 Notifications in TopNav. A tap opens confirmation, multiple eligible Rides
 require an explicit choice, and an active launcher exposes GPS state, recipient
 counts, degraded warnings, and the existing typed `I am safe` resolution flow.
@@ -437,14 +437,17 @@ An unread `sos_activated` notification may use a global call-like foreground
 alert and the shared Web Audio ringtone, but it is not a Module 3 voice call and
 must not create call sessions, request microphone permission, or expose
 coordinates in notification state. SOS sound takes priority over a ringing
-call, ignores the general in-app sound preference, stops after 45 seconds, and
-then leaves a persistent View SOS bar. Browser autoplay policy, system silent
-mode, and background/closed-PWA Push audio remain outside application control.
-Only activation Push requests persistent/vibrating/renotified system treatment
-and a View SOS action. All SOS events share a stable event notification tag so
-resolution can replace activation, while signal changes and resolution remain
-ordinary notifications. A visible/focused PWA silently refreshes unread
-notifications and may then start the existing foreground SOS alert and ringtone.
+call, ignores the general in-app sound preference, and leaves a persistent View
+SOS bar after its 45-second server-timestamp window. Only activation Push
+requests persistent/vibrating/renotified system treatment and a View SOS action.
+All SOS events share a stable event notification tag so resolution can replace
+activation, while signal changes and resolution remain ordinary notifications.
+A visible/focused PWA silently refreshes unread notifications. After showing an
+activation Push, the Service Worker additionally posts the event ID to all
+existing PWA windows so a hidden but runnable client can refresh and attempt
+the same foreground ringtone. Frozen or terminated clients, autoplay policy,
+system silent mode, and locked-screen Push audio remain outside application
+control.
 
 ## D029 — Terminal Ride republishing creates a separate Draft
 **Status:** Accepted and deployed

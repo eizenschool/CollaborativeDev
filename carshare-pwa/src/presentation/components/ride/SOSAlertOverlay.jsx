@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { RideSOSService } from '../../../business-logic/RideSOSService.js';
-import { selectPendingSOSAlerts, SOS_RING_TIMEOUT_MS } from '../../../business-logic/SOSAlertService.js';
+import { selectPendingSOSAlerts, sosRingRemainingMs } from '../../../business-logic/SOSAlertService.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { IconAlertTriangle, IconBell, IconMapPin } from '../icons.jsx';
@@ -127,26 +127,29 @@ export default function SOSAlertOverlay() {
   useEffect(() => {
     if (!modalAlert) return undefined;
     let timeoutId = null;
-    const startWhenVisible = () => {
-      if (document.visibilityState === 'hidden') return;
-      startSOSRingtone(modalAlert.eventId);
-      if (timeoutId == null) {
-        timeoutId = window.setTimeout(
-          () => silenceAlert(modalAlert.eventId),
-          SOS_RING_TIMEOUT_MS,
-        );
+    const startForRemainingWindow = () => {
+      const remainingMs = sosRingRemainingMs(modalAlert.createdAt);
+      if (remainingMs <= 0) {
+        silenceAlert(modalAlert.eventId);
+        return;
       }
+      startSOSRingtone(modalAlert.eventId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(
+        () => silenceAlert(modalAlert.eventId),
+        remainingMs,
+      );
     };
-    startWhenVisible();
-    window.addEventListener('focus', startWhenVisible);
-    document.addEventListener('visibilitychange', startWhenVisible);
+    startForRemainingWindow();
+    window.addEventListener('focus', startForRemainingWindow);
+    document.addEventListener('visibilitychange', startForRemainingWindow);
     return () => {
       if (timeoutId != null) window.clearTimeout(timeoutId);
-      window.removeEventListener('focus', startWhenVisible);
-      document.removeEventListener('visibilitychange', startWhenVisible);
+      window.removeEventListener('focus', startForRemainingWindow);
+      document.removeEventListener('visibilitychange', startForRemainingWindow);
       stopSOSRingtone(modalAlert.eventId);
     };
-  }, [modalAlert?.eventId, silenceAlert, startSOSRingtone, stopSOSRingtone]);
+  }, [modalAlert?.createdAt, modalAlert?.eventId, silenceAlert, startSOSRingtone, stopSOSRingtone]);
 
   useEffect(() => {
     if (!modalAlert) return undefined;

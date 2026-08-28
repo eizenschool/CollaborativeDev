@@ -370,10 +370,13 @@ departure until a terminal Ride. Trip Mode keeps the two-second pointer hold
 and five-second cancellation window; keyboard and assistive-technology
 activation uses a normal confirmation dialog. Outside the current Ride's Trip
 Mode, the authenticated app shell exposes one adaptive SOS entry across pages
-during the same eligibility window. Phones use a 56 px left/right edge dock;
-the right side is the default and the user-scoped device preference is changed
-from any SOS dialog, never by free dragging. Its full label appears for four
-visible seconds once per PWA session, while active SOS always stays expanded.
+during the same eligibility window. Phones use a compact 56 px edge dock. It
+starts on the right, follows an 8 px-threshold pointer drag in real time, snaps
+to the nearest edge, and saves a clamped vertical ratio per user on that device.
+The dock is excluded from the app shell's horizontal route-swipe recognizer, so
+repositioning it cannot navigate to another page.
+Every SOS dialog also exposes side, up/down, and reset controls so dragging is
+never required. Active SOS always stays expanded.
 Tablets and desktops place the action before Notifications in TopNav with a
 minimum 44 px target. The tap-first flow always confirms, requires a Ride
 selection when more than one is eligible, and exposes GPS state, recipient
@@ -416,8 +419,13 @@ Service Worker requests persistent, vibrating, renotified presentation only for
 later resolution can replace it. Signal-loss, recovery, and resolution remain
 ordinary system notifications. Focus/visibility return silently refreshes the
 notification centre, allowing an unread active SOS to start the foreground
-overlay and ringtone after the PWA resumes; custom background ringing is not
-promised.
+overlay and ringtone after the PWA resumes. After displaying an activation
+Push, the Service Worker posts the event ID to existing PWA windows so a hidden
+but runnable page can silently refresh and attempt Web Audio immediately. The
+45-second ring budget is calculated from the server notification timestamp; a
+frozen page that resumes after that budget shows `View SOS` without restarting
+the ringtone. Android may still freeze or terminate the PWA, and browser
+autoplay or system audio policy can still block custom sound.
 
 D024 supersedes the `043-049` Trust Admin/ride-dispute experiment. The deployed
 `055_m2_remove_trust_admin.sql` compensation migration removes its tables, RPCs,

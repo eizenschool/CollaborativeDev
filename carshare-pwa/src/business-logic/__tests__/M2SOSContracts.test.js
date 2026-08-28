@@ -53,9 +53,12 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(worker).toContain("payload.eventType.startsWith('sos_')");
     expect(worker).toContain("payload.eventType === 'sos_activated'");
     expect(worker).toContain('requireInteraction: isVoiceCall || isSOSActivation');
+    expect(worker).toContain('silent: isSOSActivation ? false : undefined');
     expect(worker).toContain('renotify: isSOSActivation || undefined');
     expect(worker).toContain('`sos-${sosEventId}`');
     expect(worker).toContain("{ action: 'view-sos', title: 'View SOS' }");
+    expect(worker).toContain("client.postMessage({ type: 'sos-push', eventId })");
+    expect(worker).toContain('isSOSActivation ? broadcastSOSActivation(sosEventId) : undefined');
   });
 
   it('provides accessible SOS confirmation and truthful degraded states', async () => {
@@ -94,10 +97,13 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(mainSource).toContain('<GlobalSOSLauncher />');
     expect(topNavSource).toContain('<TopNavSOSLauncher />');
     expect(launcher).toContain('SOS_LAUNCHER_REFRESH_MS = 15_000');
-    expect(launcher).toContain('SOS_DOCK_INTRO_MS = 4_000');
-    expect(launcher).toContain("document.visibilityState === 'hidden'");
-    expect(launcher).toContain('remainingMs = Math.max(0, remainingMs - (Date.now() - startedAt))');
-    expect(launcher).toContain('const expanded = active || introExpanded');
+    expect(launcher).not.toContain('SOS_DOCK_INTRO_MS');
+    expect(launcher).not.toContain('introExpanded');
+    expect(launcher).toContain('hasExceededSOSDragThreshold');
+    expect(launcher).toContain('data-swipe-ignore');
+    expect(launcher).toContain('setPointerCapture');
+    expect(launcher).toContain('requestAnimationFrame');
+    expect(launcher).toContain('sosDockPositionFromPoint');
     expect(launcher).toContain('rideId: visible ? selectedCandidate?.ride.id || null : null');
     expect(launcher.match(/useRideSOSController\(/g)).toHaveLength(1);
     expect(launcher).toContain("get('view') !== 'trip'");
@@ -106,12 +112,16 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(launcher).toContain('Activate SOS now');
     expect(launcher).toContain('global-sos-safe-confirm-form');
     expect(launcher).toContain('Move SOS to {nextSide} side');
+    expect(launcher).toContain('Move SOS up');
+    expect(launcher).toContain('Move SOS down');
+    expect(launcher).toContain('Reset SOS position');
     expect(launcher).toContain('Ride status may be out of date');
     expect(controller).toContain('if (!rideId || watcherRef.current) return');
     expect(styles).toContain('.global-sos-launcher { display: none; }');
     expect(styles).toContain('min-height: 44px');
     expect(styles).toContain('min-height: 56px');
     expect(styles).toContain('env(safe-area-inset-bottom)');
+    expect(styles).toContain('touch-action: none');
     expect(styles).toContain('z-index: calc(var(--z-nav) + 5)');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
   });
@@ -131,17 +141,19 @@ describe('Module 2 trusted family and SOS contracts', () => {
       readFile(notificationContext, 'utf8'),
     ]);
     expect(overlay).toContain('role="alertdialog"');
-    expect(overlay).toContain('SOS_RING_TIMEOUT_MS');
+    expect(overlay).toContain('sosRingRemainingMs');
     expect(overlay).toContain('sessionStorage.setItem');
     expect(overlay).toContain('RideSOSService.getFamilySnapshot');
     expect(overlay).toContain('View SOS');
     expect(overlay).toContain('Silence');
-    expect(overlay).toContain("document.visibilityState === 'hidden'");
-    expect(overlay).toContain("document.addEventListener('visibilitychange', startWhenVisible)");
+    expect(overlay).not.toContain("document.visibilityState === 'hidden'");
+    expect(overlay).toContain("document.addEventListener('visibilitychange', startForRemainingWindow)");
     expect(overlay).not.toMatch(/CallService|startCall|call_sessions/);
     expect(overlay).not.toMatch(/latitude|longitude|accuracyM|\blat\b|\blng\b/);
     expect(context).toContain('startSOSRingtone');
     expect(context).toContain('stopSOSRingtone');
+    expect(context).toContain("eventValue.data?.type !== 'sos-push'");
+    expect(context).toContain('requestedSOSEventRef.current !== eventId');
     expect(context).toContain("change.new?.event_type !== SOS_ACTIVATED_EVENT_TYPE");
   });
 

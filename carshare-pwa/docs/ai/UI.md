@@ -179,8 +179,9 @@ for the next destination and right for the previous destination. Home and
 Profile are hard boundaries. A deliberate horizontal drag may begin on ordinary
 content, cards, form surfaces, buttons, or the persistent navigation; taps and
 vertical scrolling retain their normal behaviour. Text-entry controls, dialogs,
-maps/canvas, horizontal rails, media, selected text, and system-edge gestures
-remain excluded. Detail, form, trip, and conversation routes keep their normal
+maps/canvas, horizontal rails, media, selected text, the draggable SOS dock,
+and system-edge gestures remain excluded. Detail, form, trip, and conversation
+routes keep their normal
 back behaviour. The visible navigation remains the non-gesture and keyboard
 alternative.
 
@@ -237,11 +238,12 @@ alternative.
 - During Module 2's existing SOS availability window, the authenticated app
   shell exposes one adaptive SOS entry outside the current Ride's Trip Mode.
   Phones use a 56 px edge-docked control that clears the app bars, safe areas,
-  bottom navigation, and system gesture edges. It starts on the right and may
-  be switched left/right from any SOS dialog; that preference is scoped to the
-  user and saved only on the device. Its full label appears for four visible
-  seconds once per PWA session, then becomes compact. It is not freely
-  draggable. Tablets and desktops place SOS before Notifications in the top
+  bottom navigation, and system gesture edges. It starts compact on the right,
+  tracks a primary pointer after an 8 px drag threshold, and snaps to the
+  nearest edge on release while preserving its clamped vertical position. The
+  user-scoped `{ side, yRatio }` preference is saved only on the device, with
+  dialog controls to switch sides, move up/down, or reset without dragging.
+  Tablets and desktops place SOS before Notifications in the top
   navigation action area, with a 44 px minimum target and a compact tablet
   variant. An active SOS always stays expanded on phones. A tap always opens
   confirmation before activation; if several Rides are eligible, the dialog
@@ -252,10 +254,13 @@ alternative.
 - Only `sos_activated` Web Push requests urgent/persistent presentation,
   vibration, renotify, and a `View SOS` action. SOS notifications use one stable
   event tag so a later resolution can replace the urgent activation; signal
-  loss, recovery, and resolution are ordinary system notifications. Returning
-  to a visible PWA silently refreshes notifications so a still-unread active
-  SOS can start the foreground alert/ringtone. The operating system remains the
-  authority for background/locked-screen notification audio and vibration.
+  loss, recovery, and resolution are ordinary system notifications. After an
+  activation Push is displayed, the Service Worker also tells every existing
+  PWA window to refresh notifications silently and attempt the foreground
+  ringtone immediately, including while page-hidden. Its 45-second window is
+  measured from the notification server timestamp, so resuming late does not
+  restart stale ringing. Frozen, terminated, locked-screen, and autoplay-
+  blocked cases remain under browser/operating-system audio policy.
 - The desktop auth journey scene keeps the car animated on the complete KL
   Sentral-Genting-Ipoh route; the car must follow the SVG curve rather than use
   an unrelated screen position. Drive the car from the route's own SVG geometry

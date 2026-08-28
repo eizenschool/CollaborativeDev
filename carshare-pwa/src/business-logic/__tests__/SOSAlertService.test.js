@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { selectPendingSOSAlerts, SOS_RING_TIMEOUT_MS, sosEventId } from '../SOSAlertService.js';
+import {
+  selectPendingSOSAlerts,
+  SOS_RING_TIMEOUT_MS,
+  sosEventId,
+  sosRingRemainingMs,
+} from '../SOSAlertService.js';
 
 const EVENT_A = '00000000-0000-4000-8000-000000000001';
 const EVENT_B = '00000000-0000-4000-8000-000000000002';
@@ -20,6 +25,10 @@ function notification(overrides = {}) {
 describe('SOS alert selection', () => {
   it('uses the fixed 45-second foreground ringtone window', () => {
     expect(SOS_RING_TIMEOUT_MS).toBe(45_000);
+    const createdAt = '2026-08-28T00:00:00.000Z';
+    expect(sosRingRemainingMs(createdAt, Date.parse(createdAt) + 12_000)).toBe(33_000);
+    expect(sosRingRemainingMs(createdAt, Date.parse(createdAt) + 50_000)).toBe(0);
+    expect(sosRingRemainingMs('invalid', Date.parse(createdAt))).toBe(45_000);
   });
 
   it('accepts only valid unread activation notifications with matching safe paths', () => {

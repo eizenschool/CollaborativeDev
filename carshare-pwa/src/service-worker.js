@@ -54,6 +54,12 @@ function sosEventIdFromPath(actionPath) {
   return match?.[1] || null;
 }
 
+async function broadcastSOSActivation(eventId) {
+  if (!eventId) return;
+  const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+  windows.forEach((client) => client.postMessage({ type: 'sos-push', eventId }));
+}
+
 self.addEventListener('push', (event) => {
   const payload = safePushPayload(event);
   const isVoiceCall = payload.eventType === 'voice_call';
@@ -70,6 +76,7 @@ self.addEventListener('push', (event) => {
         ? `sos-${sosEventId}`
       : payload.notificationId ? `notification-${payload.notificationId}` : undefined,
     requireInteraction: isVoiceCall || isSOSActivation,
+    silent: isSOSActivation ? false : undefined,
     renotify: isSOSActivation || undefined,
     vibrate: isVoiceCall ? [300, 150, 300, 150, 500] : isSOSActivation ? [250, 100, 250, 100, 600] : undefined,
     actions: isSOSActivation ? [{ action: 'view-sos', title: 'View SOS' }] : undefined,
@@ -79,7 +86,7 @@ self.addEventListener('push', (event) => {
       callId: payload.callId,
       sosEventId,
     },
-  }));
+  }).then(() => (isSOSActivation ? broadcastSOSActivation(sosEventId) : undefined)));
 });
 
 self.addEventListener('notificationclick', (event) => {

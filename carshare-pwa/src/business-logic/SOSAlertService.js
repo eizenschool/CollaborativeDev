@@ -14,6 +14,13 @@ function createdTime(notification) {
   return Number.isFinite(value) ? value : 0;
 }
 
+export function sosRingRemainingMs(createdAt, now = Date.now()) {
+  const createdAtMs = new Date(createdAt || 0).getTime();
+  if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return SOS_RING_TIMEOUT_MS;
+  const elapsedMs = Math.max(0, Number(now) - createdAtMs);
+  return Math.max(0, SOS_RING_TIMEOUT_MS - elapsedMs);
+}
+
 export function selectPendingSOSAlerts(notifications = []) {
   const resolvedEventIds = new Set(
     notifications
