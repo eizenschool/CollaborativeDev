@@ -114,6 +114,77 @@ test('Trip Mode presents a responsive control overview and compact safety suppor
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
 });
 
+test('eligible rides expose a global confirmed SOS launcher outside Trip Mode', async ({ page }) => {
+  await page.goto('/home');
+  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    const departure = new Date(Date.now() + (30 * 60 * 1000));
+    Object.assign(database.rides.r_5, {
+      status: 'Matched',
+      date: departure.toLocaleDateString('en-CA'),
+      time: departure.toTimeString().slice(0, 5),
+      departureAt: departure.toISOString(),
+      expiredAt: null,
+    });
+    Object.assign(database.rideRequests.rq_2, {
+      status: 'Accepted',
+      boardingStatus: 'Checked In',
+      checkedInAt: new Date().toISOString(),
+    });
+    database.rideRequests.rq_1.status = 'Rejected';
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+
+  await page.goto('/home');
+  const viewportWidth = page.viewportSize()?.width || 0;
+  const launcher = page.getByRole('button', { name: 'Open emergency SOS' });
+  await expect(launcher).toBeVisible();
+  const launcherBox = await launcher.boundingBox();
+  expect(launcherBox?.height || 0).toBeGreaterThanOrEqual(viewportWidth <= 700 ? 56 : 44);
+  expect(launcherBox?.x || 0).toBeGreaterThanOrEqual(0);
+
+  if (viewportWidth <= 700) {
+    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-right/);
+    await expect(launcher).toHaveClass(/is-expanded/);
+  } else {
+    await expect(page.locator('.topnav-actions').getByRole('button', { name: 'Open emergency SOS' })).toBeVisible();
+    await expect(page.locator('.global-sos-launcher')).toBeHidden();
+    await expect(page.locator('.topnav-links .topnav-item')).toHaveCount(7);
+  }
+
+  await launcher.click();
+  await expect(page.getByRole('heading', { name: 'Activate SOS?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Activate SOS now' })).toBeVisible();
+  if (viewportWidth <= 700) {
+    await page.getByRole('button', { name: 'Move SOS to left side' }).click();
+    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-left/);
+    await expect.poll(() => page.evaluate(() => [...Array(localStorage.length).keys()]
+      .map((index) => localStorage.key(index))
+      .filter((key) => key?.startsWith('m2-sos-launcher-side:'))
+      .map((key) => localStorage.getItem(key)))).toContain('left');
+  }
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  if (viewportWidth <= 700) {
+    await expect(launcher).toHaveClass(/is-compact/, { timeout: 5_000 });
+  }
+
+  await page.goto('/search');
+  await expect(page.getByRole('button', { name: 'Open emergency SOS' })).toBeVisible();
+  if (viewportWidth <= 700) {
+    await expect(page.getByRole('button', { name: 'Open emergency SOS' })).toHaveClass(/is-compact/);
+    await expect(page.locator('.global-sos-launcher')).toHaveClass(/dock-left/);
+  }
+
+  await page.goto('/ride/r_5?view=trip');
+  await expect(page.getByRole('button', { name: 'Open emergency SOS' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Hold for SOS' })).toBeVisible();
+
+  const width = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+  expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+});
+
 test('accepted Passenger keeps the Family Link creation action in Trip Mode', async ({ page }) => {
   test.skip(process.env.VITE_M2_LIVE_TRACKING_ENABLED !== 'true', 'Family Link is release-gated with live tracking.');
 

@@ -49,23 +49,35 @@ function safePushPayload(event) {
   }
 }
 
+function sosEventIdFromPath(actionPath) {
+  const match = String(actionPath || '').match(/^\/sos\/([^/?#]+)/);
+  return match?.[1] || null;
+}
+
 self.addEventListener('push', (event) => {
   const payload = safePushPayload(event);
   const isVoiceCall = payload.eventType === 'voice_call';
   const isSOS = payload.eventType.startsWith('sos_');
+  const isSOSActivation = payload.eventType === 'sos_activated';
+  const sosEventId = isSOS ? sosEventIdFromPath(payload.actionPath) : null;
   event.waitUntil(self.registration.showNotification(payload.title, {
     body: payload.body,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: isVoiceCall && payload.callId
       ? `voice-call-${payload.callId}`
+      : sosEventId
+        ? `sos-${sosEventId}`
       : payload.notificationId ? `notification-${payload.notificationId}` : undefined,
-    requireInteraction: isVoiceCall || isSOS,
-    vibrate: isVoiceCall ? [300, 150, 300, 150, 500] : isSOS ? [250, 100, 250, 100, 600] : undefined,
+    requireInteraction: isVoiceCall || isSOSActivation,
+    renotify: isSOSActivation || undefined,
+    vibrate: isVoiceCall ? [300, 150, 300, 150, 500] : isSOSActivation ? [250, 100, 250, 100, 600] : undefined,
+    actions: isSOSActivation ? [{ action: 'view-sos', title: 'View SOS' }] : undefined,
     data: {
       actionPath: payload.actionPath,
       eventType: payload.eventType,
       callId: payload.callId,
+      sosEventId,
     },
   }));
 });

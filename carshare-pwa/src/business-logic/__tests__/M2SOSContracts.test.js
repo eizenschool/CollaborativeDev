@@ -6,6 +6,11 @@ import { matchesSOSSafeConfirmation, SOS_SAFE_CONFIRMATION } from '../../present
 const migration = new URL('../../../database/sql/061_m2_sos_trusted_family.sql', import.meta.url);
 const advisorMigration = new URL('../../../database/sql/062_m2_sos_advisor_followup.sql', import.meta.url);
 const sosPanel = new URL('../../presentation/components/ride/RideSOSPanel.jsx', import.meta.url);
+const sosController = new URL('../../presentation/components/ride/useRideSOSController.js', import.meta.url);
+const globalLauncher = new URL('../../presentation/components/ride/GlobalSOSLauncher.jsx', import.meta.url);
+const globalLauncherStyles = new URL('../../presentation/styles/sos-launcher.css', import.meta.url);
+const topNav = new URL('../../presentation/components/nav/TopNav.jsx', import.meta.url);
+const main = new URL('../../main.jsx', import.meta.url);
 const invitePage = new URL('../../presentation/components/ride/TrustedFamilyInvite.jsx', import.meta.url);
 const familyPage = new URL('../../presentation/components/ride/SOSFamilyView.jsx', import.meta.url);
 const familyMapPanel = new URL('../../presentation/components/ride/FamilyLiveMapPanel.jsx', import.meta.url);
@@ -46,20 +51,24 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(sql).toContain("jsonb_build_object('eventId', p_event_id)");
     expect(sql).not.toMatch(/jsonb_build_object\('eventId', p_event_id[^)]*(?:lat|lng|latitude|longitude)/i);
     expect(worker).toContain("payload.eventType.startsWith('sos_')");
-    expect(worker).toContain('requireInteraction: isVoiceCall || isSOS');
+    expect(worker).toContain("payload.eventType === 'sos_activated'");
+    expect(worker).toContain('requireInteraction: isVoiceCall || isSOSActivation');
+    expect(worker).toContain('renotify: isSOSActivation || undefined');
+    expect(worker).toContain('`sos-${sosEventId}`');
+    expect(worker).toContain("{ action: 'view-sos', title: 'View SOS' }");
   });
 
   it('provides accessible SOS confirmation and truthful degraded states', async () => {
-    const [panel, invite, family, mapPanel] = await Promise.all([
-      readFile(sosPanel, 'utf8'), readFile(invitePage, 'utf8'), readFile(familyPage, 'utf8'), readFile(familyMapPanel, 'utf8')
+    const [panel, controller, invite, family, mapPanel] = await Promise.all([
+      readFile(sosPanel, 'utf8'), readFile(sosController, 'utf8'), readFile(invitePage, 'utf8'), readFile(familyPage, 'utf8'), readFile(familyMapPanel, 'utf8')
     ]);
-    expect(panel).toContain('SOS_HOLD_MS = 2_000');
-    expect(panel).toContain('SOS_CANCEL_SECONDS = 5');
+    expect(controller).toContain('SOS_HOLD_MS = 2_000');
+    expect(controller).toContain('SOS_CANCEL_SECONDS = 5');
     expect(panel).toContain('eventValue.detail === 0');
-    expect(panel).toContain('SOS is active, but GPS could not start');
-    expect(panel).toContain('No trusted family members will receive this alert.');
+    expect(controller).toContain('SOS is active, but GPS could not start');
+    expect(controller).toContain('No trusted family members will receive this alert.');
     expect(panel).toContain('form="sos-safe-confirm-form"');
-    expect(panel).toContain('disabled={!safeConfirmationMatches}');
+    expect(panel).toContain('disabled={!controller.safeConfirmationMatches}');
     expect(panel).toContain('aria-describedby="sos-safe-confirmation-hint"');
     expect(invite).toContain("sessionStorage.setItem(STORAGE_KEY");
     expect(invite).toContain('sessionStorage.removeItem(STORAGE_KEY)');
@@ -71,6 +80,40 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(mapPanel).toContain("import '../../styles/ride.css';");
     expect(mapPanel).toContain('aria-atomic="true"');
     expect(family).not.toContain('resolve_m2_sos');
+  });
+
+  it('adds a global, confirm-before-activate SOS launcher without duplicating Trip Mode tracking', async () => {
+    const [launcher, controller, styles, mainSource, topNavSource] = await Promise.all([
+      readFile(globalLauncher, 'utf8'),
+      readFile(sosController, 'utf8'),
+      readFile(globalLauncherStyles, 'utf8'),
+      readFile(main, 'utf8'),
+      readFile(topNav, 'utf8'),
+    ]);
+    expect(mainSource).toContain('<SOSLauncherProvider enabled={SOS_ENABLED}>');
+    expect(mainSource).toContain('<GlobalSOSLauncher />');
+    expect(topNavSource).toContain('<TopNavSOSLauncher />');
+    expect(launcher).toContain('SOS_LAUNCHER_REFRESH_MS = 15_000');
+    expect(launcher).toContain('SOS_DOCK_INTRO_MS = 4_000');
+    expect(launcher).toContain("document.visibilityState === 'hidden'");
+    expect(launcher).toContain('remainingMs = Math.max(0, remainingMs - (Date.now() - startedAt))');
+    expect(launcher).toContain('const expanded = active || introExpanded');
+    expect(launcher).toContain('rideId: visible ? selectedCandidate?.ride.id || null : null');
+    expect(launcher.match(/useRideSOSController\(/g)).toHaveLength(1);
+    expect(launcher).toContain("get('view') !== 'trip'");
+    expect(launcher).toContain('Choose the ride for SOS');
+    expect(launcher).toContain('disabled={!selectionRideId}');
+    expect(launcher).toContain('Activate SOS now');
+    expect(launcher).toContain('global-sos-safe-confirm-form');
+    expect(launcher).toContain('Move SOS to {nextSide} side');
+    expect(launcher).toContain('Ride status may be out of date');
+    expect(controller).toContain('if (!rideId || watcherRef.current) return');
+    expect(styles).toContain('.global-sos-launcher { display: none; }');
+    expect(styles).toContain('min-height: 44px');
+    expect(styles).toContain('min-height: 56px');
+    expect(styles).toContain('env(safe-area-inset-bottom)');
+    expect(styles).toContain('z-index: calc(var(--z-nav) + 5)');
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
   it('requires the exact typed safety phrase before SOS can be resolved', () => {
@@ -93,6 +136,8 @@ describe('Module 2 trusted family and SOS contracts', () => {
     expect(overlay).toContain('RideSOSService.getFamilySnapshot');
     expect(overlay).toContain('View SOS');
     expect(overlay).toContain('Silence');
+    expect(overlay).toContain("document.visibilityState === 'hidden'");
+    expect(overlay).toContain("document.addEventListener('visibilitychange', startWhenVisible)");
     expect(overlay).not.toMatch(/CallService|startCall|call_sessions/);
     expect(overlay).not.toMatch(/latitude|longitude|accuracyM|\blat\b|\blng\b/);
     expect(context).toContain('startSOSRingtone');
@@ -137,6 +182,52 @@ describe('Module 2 trusted family and SOS contracts', () => {
       listeners.online();
       await vi.waitFor(() => expect(RideLiveTrackingService.publishLocation).toHaveBeenCalledTimes(2));
       await watcher.stop();
+    } finally {
+      Object.assign(RideLiveTrackingService, originals);
+    }
+  });
+
+  it('does not attach a GPS watcher when cleanup wins a pending server start', async () => {
+    const originals = {
+      startSharing: RideLiveTrackingService.startSharing,
+      stopSharing: RideLiveTrackingService.stopSharing,
+    };
+    let finishStart;
+    const pendingStart = new Promise((resolve) => { finishStart = resolve; });
+    const geolocation = {
+      watchPosition: vi.fn(() => 7),
+      clearWatch: vi.fn(),
+    };
+    const documentObject = {
+      visibilityState: 'visible',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    const windowObject = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      setInterval: vi.fn(() => 9),
+      clearInterval: vi.fn(),
+    };
+    RideLiveTrackingService.startSharing = vi.fn(() => pendingStart);
+    RideLiveTrackingService.stopSharing = vi.fn().mockResolvedValue(true);
+    try {
+      const watcher = RideLiveTrackingService.createWatcher({
+        rideId: 'ride-pending',
+        sosMode: true,
+        geolocation,
+        documentObject,
+        windowObject,
+      });
+      const startPromise = watcher.start();
+      const stopPromise = watcher.stop();
+      finishStart('session');
+      await Promise.all([startPromise, stopPromise]);
+
+      expect(geolocation.watchPosition).not.toHaveBeenCalled();
+      expect(documentObject.addEventListener).not.toHaveBeenCalled();
+      expect(windowObject.addEventListener).not.toHaveBeenCalled();
+      expect(RideLiveTrackingService.stopSharing).toHaveBeenCalledTimes(2);
     } finally {
       Object.assign(RideLiveTrackingService, originals);
     }

@@ -126,13 +126,24 @@ export default function SOSAlertOverlay() {
 
   useEffect(() => {
     if (!modalAlert) return undefined;
-    startSOSRingtone(modalAlert.eventId);
-    const timeoutId = window.setTimeout(
-      () => silenceAlert(modalAlert.eventId),
-      SOS_RING_TIMEOUT_MS,
-    );
+    let timeoutId = null;
+    const startWhenVisible = () => {
+      if (document.visibilityState === 'hidden') return;
+      startSOSRingtone(modalAlert.eventId);
+      if (timeoutId == null) {
+        timeoutId = window.setTimeout(
+          () => silenceAlert(modalAlert.eventId),
+          SOS_RING_TIMEOUT_MS,
+        );
+      }
+    };
+    startWhenVisible();
+    window.addEventListener('focus', startWhenVisible);
+    document.addEventListener('visibilitychange', startWhenVisible);
     return () => {
-      window.clearTimeout(timeoutId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+      window.removeEventListener('focus', startWhenVisible);
+      document.removeEventListener('visibilitychange', startWhenVisible);
       stopSOSRingtone(modalAlert.eventId);
     };
   }, [modalAlert?.eventId, silenceAlert, startSOSRingtone, stopSOSRingtone]);
