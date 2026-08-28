@@ -13,6 +13,7 @@ import { useMessagingSession } from '../../../context/MessagingSessionContext.js
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { IconCar, IconBell, IconLogOut } from '../icons.jsx';
 import { IconButton } from '../ui/Button.jsx';
+import { TopNavSOSLauncher } from '../ride/GlobalSOSLauncher.jsx';
 import { PRIMARY_NAV_ITEMS } from './primaryNavigation.js';
 
 const NotificationPopover = lazy(() => import('../notifications/NotificationCenter.jsx')
@@ -119,6 +120,7 @@ export default function TopNav() {
 
         <div className="topnav-actions">
           {user ? <>
+            <TopNavSOSLauncher />
             <div className="notification-nav-wrap" ref={notificationRef}>
               <IconButton
                 ref={notificationButtonRef}

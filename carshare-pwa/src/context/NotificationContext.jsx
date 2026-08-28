@@ -59,13 +59,13 @@ export function NotificationProvider({ children }) {
     ringtoneCoordinatorRef.current = createRingtoneCoordinator(AlertSoundService);
   }
 
-  const refreshNotifications = useCallback(async () => {
+  const refreshNotifications = useCallback(async ({ silent = false } = {}) => {
     if (!user) {
       setNotifications([]);
       setError('');
       return [];
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError('');
     try {
       const next = await NotificationService.listNotifications();
@@ -75,7 +75,7 @@ export function NotificationProvider({ children }) {
       setError(requestError.message || 'Unable to load notifications.');
       return [];
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [user]);
 
@@ -100,6 +100,21 @@ export function NotificationProvider({ children }) {
     refreshNotifications();
     refreshPushStatus();
   }, [refreshNotifications, refreshPushStatus]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const refreshVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshNotifications({ silent: true });
+      }
+    };
+    globalThis.addEventListener?.('focus', refreshVisible);
+    document.addEventListener?.('visibilitychange', refreshVisible);
+    return () => {
+      globalThis.removeEventListener?.('focus', refreshVisible);
+      document.removeEventListener?.('visibilitychange', refreshVisible);
+    };
+  }, [refreshNotifications, user]);
 
   useEffect(() => {
     setAlertSoundsEnabled(readSoundPreference(user?.id));
@@ -230,7 +245,7 @@ export function NotificationProvider({ children }) {
         }
         playNotificationBell();
       }
-      void refreshNotifications();
+      void refreshNotifications({ silent: true });
     });
   }, [playNotificationBell, refreshNotifications, user]);
 

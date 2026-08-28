@@ -254,6 +254,10 @@ export const RideLiveTrackingService = {
           throw new Error('This browser cannot provide live location updates.');
         }
         await RideLiveTrackingService.startSharing(rideId);
+        if (stopped) {
+          try { await RideLiveTrackingService.stopSharing(rideId); } catch { /* server TTL remains the safety net */ }
+          return;
+        }
         documentObject?.addEventListener?.('visibilitychange', onVisibility);
         windowObject?.addEventListener?.('focus', onVisibility);
         if (sosMode) windowObject?.addEventListener?.('online', retryLatest);

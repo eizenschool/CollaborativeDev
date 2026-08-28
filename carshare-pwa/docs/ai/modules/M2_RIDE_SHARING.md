@@ -365,15 +365,32 @@ times. The page uses the same responsive live-map presentation as Trip Mode,
 while clearly labelling stale or signal-lost points as last known rather than
 live. Resolved deep links remain coordinate-free for 24 hours.
 
-Trip Mode exposes SOS to the Driver and Accepted passengers only from one hour
-before departure until a terminal Ride. Pointer users hold for two seconds and
-receive a five-second cancellation window; keyboard and assistive-technology
-activation uses a normal confirmation dialog. The server event is created even
-when GPS is denied, no trusted family exists, or no recipient has Web Push, and
-the UI reports those degraded states. While SOS is active, ordinary Stop
-Sharing is locked; only the actor's “I'm safe” flow or a terminal Ride resolves
-it. The manual flow requires the actor to type the case-sensitive phrase
-`I am safe` before its final confirmation button becomes available.
+The Driver and Accepted passengers can use SOS only from one hour before
+departure until a terminal Ride. Trip Mode keeps the two-second pointer hold
+and five-second cancellation window; keyboard and assistive-technology
+activation uses a normal confirmation dialog. Outside the current Ride's Trip
+Mode, the authenticated app shell exposes one adaptive SOS entry across pages
+during the same eligibility window. Phones use a 56 px left/right edge dock;
+the right side is the default and the user-scoped device preference is changed
+from any SOS dialog, never by free dragging. Its full label appears for four
+visible seconds once per PWA session, while active SOS always stays expanded.
+Tablets and desktops place the action before Notifications in TopNav with a
+minimum 44 px target. The tap-first flow always confirms, requires a Ride
+selection when more than one is eligible, and exposes GPS state, recipient
+counts, warnings, and the complete resolution flow when active. All triggers
+use one shared launcher controller. It receives no Ride while the current
+Ride's Trip Mode is open, leaving Trip Mode as the sole SOS GPS watcher owner.
+
+The server event is created even when GPS is denied, no trusted family exists,
+or no recipient has Web Push, and the UI reports those degraded states. While
+SOS is active, ordinary Stop Sharing is locked; only the actor's “I'm safe” flow
+or a terminal Ride resolves it. The manual flow requires the actor to type the
+case-sensitive phrase `I am safe` before its final confirmation button becomes
+available. Eligible Ride state refreshes on entry, every 15 seconds while
+visible, on focus/visibility return, and after local SOS mutations. A failed
+refresh preserves the last known entry with a small warning marker rather than
+silently hiding the safety action; the specific error and Retry remain inside
+the launcher dialog so they do not cover page content.
 
 The PWA keeps the geolocation watcher when the page is hidden and retries the
 latest in-memory point after reconnect, but makes no background-GPS guarantee.
@@ -393,7 +410,14 @@ to a persistent non-modal SOS bar. `View SOS` marks the activation notification
 read and opens the existing authorized page; Silence or Escape stops only the
 sound. Signal-loss, recovery, and resolution keep their ordinary notification
 behaviour, while resolution removes the matching foreground alert. Background
-or closed-PWA delivery remains operating-system-controlled Web Push.
+or closed-PWA delivery remains operating-system-controlled Web Push. The
+Service Worker requests persistent, vibrating, renotified presentation only for
+`sos_activated`, includes a `View SOS` action, and uses a stable event tag so a
+later resolution can replace it. Signal-loss, recovery, and resolution remain
+ordinary system notifications. Focus/visibility return silently refreshes the
+notification centre, allowing an unread active SOS to start the foreground
+overlay and ringtone after the PWA resumes; custom background ringing is not
+promised.
 
 D024 supersedes the `043-049` Trust Admin/ride-dispute experiment. The deployed
 `055_m2_remove_trust_admin.sql` compensation migration removes its tables, RPCs,

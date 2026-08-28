@@ -234,6 +234,28 @@ alternative.
   or resolved and must not obscure navigation, keyboard focus, safe areas, or
   Module 3's desktop call bar. Signal-loss, recovery, and resolution events use
   the normal notification path.
+- During Module 2's existing SOS availability window, the authenticated app
+  shell exposes one adaptive SOS entry outside the current Ride's Trip Mode.
+  Phones use a 56 px edge-docked control that clears the app bars, safe areas,
+  bottom navigation, and system gesture edges. It starts on the right and may
+  be switched left/right from any SOS dialog; that preference is scoped to the
+  user and saved only on the device. Its full label appears for four visible
+  seconds once per PWA session, then becomes compact. It is not freely
+  draggable. Tablets and desktops place SOS before Notifications in the top
+  navigation action area, with a 44 px minimum target and a compact tablet
+  variant. An active SOS always stays expanded on phones. A tap always opens
+  confirmation before activation; if several Rides are eligible, the dialog
+  requires an explicit Ride choice. Refresh failure keeps the last known entry
+  with a small warning marker, while details and Retry stay inside the dialog.
+  Trip Mode keeps its two-second hold plus five-second cancellation control and
+  takes over from the shared controller so only one SOS GPS watcher exists.
+- Only `sos_activated` Web Push requests urgent/persistent presentation,
+  vibration, renotify, and a `View SOS` action. SOS notifications use one stable
+  event tag so a later resolution can replace the urgent activation; signal
+  loss, recovery, and resolution are ordinary system notifications. Returning
+  to a visible PWA silently refreshes notifications so a still-unread active
+  SOS can start the foreground alert/ringtone. The operating system remains the
+  authority for background/locked-screen notification audio and vibration.
 - The desktop auth journey scene keeps the car animated on the complete KL
   Sentral-Genting-Ipoh route; the car must follow the SVG curve rather than use
   an unrelated screen position. Drive the car from the route's own SVG geometry

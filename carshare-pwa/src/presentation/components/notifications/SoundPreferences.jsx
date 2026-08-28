@@ -111,7 +111,7 @@ export default function SoundPreferences({ compact = false, card = false }) {
           Enable sound in this browser
         </button>
       )}
-      <p className="notification-sound-note">SOS safety alerts keep their standard volume.</p>
+      <p className="notification-sound-note">SOS rings at its safety volume while this PWA is active. In the background, your phone controls notification sound and vibration.</p>
     </section>
   );
 }

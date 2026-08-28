@@ -7,6 +7,7 @@ import { MessagingSessionProvider } from './context/MessagingSessionContext.jsx'
 import { NotificationProvider } from './context/NotificationContext.jsx';
 import { CallSessionProvider } from './context/CallSessionContext.jsx';
 import CallOverlay from './presentation/components/messaging/CallOverlay.jsx';
+import GlobalSOSLauncher, { SOSLauncherProvider } from './presentation/components/ride/GlobalSOSLauncher.jsx';
 import SOSAlertOverlay from './presentation/components/ride/SOSAlertOverlay.jsx';
 import './presentation/styles/theme.css';
 
@@ -54,9 +55,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <NotificationProvider>
           <MessagingSessionProvider>
             <CallSessionProvider>
-              <App />
-              <CallOverlay />
-              {SOS_ENABLED && <SOSAlertOverlay />}
+              <SOSLauncherProvider enabled={SOS_ENABLED}>
+                <App />
+                <CallOverlay />
+                <GlobalSOSLauncher />
+                {SOS_ENABLED && <SOSAlertOverlay />}
+              </SOSLauncherProvider>
             </CallSessionProvider>
           </MessagingSessionProvider>
         </NotificationProvider>

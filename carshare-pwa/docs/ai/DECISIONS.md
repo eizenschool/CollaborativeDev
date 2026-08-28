@@ -413,6 +413,21 @@ last private point, marks signal loss after 120 seconds, and resolves only by
 the actor's confirmed “I'm safe” or terminal Ride transition. Resolution
 immediately removes coordinates and keeps only a coordinate-free 24-hour shell.
 
+That same eligibility window controls one adaptive authenticated SOS launcher
+on pages outside the current Ride's Trip Mode. Phones use a 56 px edge dock,
+default right, with a user-scoped local left/right preference changed from the
+SOS dialogs; arbitrary dragging and vertical coordinates are excluded. The
+full label appears for four visible seconds once per PWA session, and an active
+SOS never compacts. Tablets and desktops place a minimum-44 px SOS action before
+Notifications in TopNav. A tap opens confirmation, multiple eligible Rides
+require an explicit choice, and an active launcher exposes GPS state, recipient
+counts, degraded warnings, and the existing typed `I am safe` resolution flow.
+All triggers share one controller. It is given no Ride in the current Ride's
+Trip Mode, so Trip Mode retains its two-second hold, five-second cancellation,
+and sole watcher ownership. Candidate state refreshes every 15 seconds while
+visible and on app return; a transient failure preserves the last known entry
+with a warning marker while error detail and Retry stay inside the dialog.
+
 This is a PWA best-effort foreground implementation. Page-hidden tracking may
 continue and reconnect retries the latest in-memory point, but browser process
 termination can stop GPS. Capacitor, native foreground services, FCM, SMS and
@@ -425,6 +440,11 @@ coordinates in notification state. SOS sound takes priority over a ringing
 call, ignores the general in-app sound preference, stops after 45 seconds, and
 then leaves a persistent View SOS bar. Browser autoplay policy, system silent
 mode, and background/closed-PWA Push audio remain outside application control.
+Only activation Push requests persistent/vibrating/renotified system treatment
+and a View SOS action. All SOS events share a stable event notification tag so
+resolution can replace activation, while signal changes and resolution remain
+ordinary notifications. A visible/focused PWA silently refreshes unread
+notifications and may then start the existing foreground SOS alert and ringtone.
 
 ## D029 — Terminal Ride republishing creates a separate Draft
 **Status:** Accepted and deployed
