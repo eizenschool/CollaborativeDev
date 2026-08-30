@@ -3,7 +3,7 @@
 -- can be demonstrated from the app itself instead of the SQL Editor.
 -- Depends on 024_m6_destination_discovery.sql (public.places,
 -- public.place_interest, public.ride_notify_registration) and
--- 075_m6_place_lifecycle_notification.sql (the trigger this update fires).
+-- 078_m6_place_lifecycle_notification.sql (the trigger this update fires).
 --
 -- 024 deliberately left public.places with no user-facing write path
 -- ("no administrative actor and no user-facing path that edits a place").

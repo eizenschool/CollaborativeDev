@@ -12,7 +12,8 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
 import { todayIso } from '../../../business-logic/discovery/localDate.js';
-import { IconAlertTriangle, IconStar, IconArrowRight, IconEye, IconEyeOff, IconSearch } from '../icons.jsx';
+import { GUIDE_FEATURE_ENABLED } from '../../../business-logic/guide/constants.js';
+import { IconAlertTriangle, IconStar, IconArrowRight, IconEye, IconEyeOff, IconSearch, IconMessage } from '../icons.jsx';
 import DestinationCard from './DestinationCard.jsx';
 import PreferencePrompt from './PreferencePrompt.jsx';
 import { PHOTO_WIDTH_LARGE } from '../../../business-logic/discovery/placePhotos.js';
@@ -215,6 +216,14 @@ export default function DiscoverHub() {
       <header className="dsc-header">
         <h1>Where should you go?</h1>
         <p>Ranked by how well each place suits you and how easily you can get there.</p>
+        {GUIDE_FEATURE_ENABLED && <button type="button" className="dsc-guide-cta" onClick={() => navigate('/assistant')}>
+          <span className="dsc-guide-cta__icon"><IconMessage size={19} /></span>
+          <span className="dsc-guide-cta__copy">
+            <strong>Tumpang Guide</strong>
+            <small>Not sure where to begin? Describe the day you want and compare verified catalogue places.</small>
+          </span>
+          <span className="dsc-guide-cta__action">Plan my day <IconArrowRight size={16} /></span>
+        </button>}
       </header>
 
       <AudienceSwitch active="explore" travelDate={travelDate} demo={demo} />

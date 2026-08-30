@@ -46,6 +46,18 @@ shows at most six cards initially and `Show more` adds six while stating the
 remaining count. Category/audience controls wrap or expose a clear scroll cue,
 and the existing FR-6.35 handoff into Search is unchanged.
 
+### Tumpang Guide feature-branch status
+
+`/assistant` is now implemented on the Module 6 branch as a rollout-gated,
+controlled-RAG layer over this same catalogue. It does not create a parallel
+place or Ride store. Guests are not persisted; signed-in history is private and
+expires after 90 days. Gemini can compare only server-retrieved Place IDs and
+verified reason codes, while deterministic rules handle offline/timeout/invalid
+output. Full architecture, API inventory, deployment order and the second
+testing checkpoint are in `docs/TUMPANG-GUIDE.md` and
+`docs/TUMPANG-GUIDE-TODO.md`. Migration `079` and the function are written but
+not yet deployed or test-executed.
+
 ## Core Design Decisions
 
 **The recommendation unit is the (Place, User, Travel Window) triple**, not the

@@ -128,6 +128,55 @@
   font-size: 14px;
 }
 
+/* This CTA belongs to Discover and must be styled by Discover's own lazy
+   stylesheet. Keeping it in guide.css left the entry point unstyled until the
+   Assistant route had already been opened. The entire card is one accessible
+   button, so the heading, supporting copy and action affordance all navigate. */
+.dsc-guide-cta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 720px);
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid #86efac;
+  border-radius: var(--radius-card);
+  color: var(--ink);
+  background: linear-gradient(120deg, #ecfdf5 0%, #ffffff 58%, #fef3c7 100%);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.dsc-guide-cta:hover {
+  transform: translateY(-2px);
+  border-color: var(--teal);
+  box-shadow: var(--shadow-card);
+}
+
+.dsc-guide-cta:focus-visible { outline: 3px solid color-mix(in srgb, var(--teal) 28%, transparent); outline-offset: 3px; }
+.dsc-guide-cta__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  color: var(--teal-dark);
+  background: #dcfce7;
+}
+.dsc-guide-cta__copy { display: grid; min-width: 0; gap: 3px; }
+.dsc-guide-cta__copy strong { color: var(--teal-dark); font-size: 15px; }
+.dsc-guide-cta__copy small { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.dsc-guide-cta__action { display: inline-flex; align-items: center; gap: 6px; color: var(--teal-dark); font-size: 13px; font-weight: 800; white-space: nowrap; }
+
+@media (max-width: 700px) {
+  .dsc-guide-cta { grid-template-columns: auto minmax(0, 1fr); }
+  .dsc-guide-cta__action { grid-column: 2; }
+}
+
 /* Phone-first: a column stacks the date field, the filter chips and the
    media toggle onto their own rows instead of the two-column squeeze that
    used to result from flex-wrap alone (the chips wrapped into a cramped
