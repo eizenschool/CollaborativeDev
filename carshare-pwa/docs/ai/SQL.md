@@ -33,7 +33,7 @@ Repository SQL history: 001-077
   `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
   `063_m2` remains authored locally and undeployed; `065_m3` is deployed as
   `m3_terminal_chat_and_call_history`; `066_m2` is deployed as
-`m2_fix_pickup_photo_storage_path_policy`; `075_m3` and `077_m3` are authored
+`m2_fix_pickup_photo_storage_path_policy`; `075_m3`, `077_m3`, and `078_m1` are authored
 locally and pending deployment. Module 1 migrations `072_m1`
 and `073_m1` are deployed through the Dashboard SQL Editor (verified
 2026-08-27: `reputation_events`, `profile_visibility`,
@@ -635,6 +635,12 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   caller-device ownership, participant heartbeat timestamps, 90-second orphan
   expiry, same-device refresh recovery, and compatible one-/two-argument call
   start RPCs without granting browser roles direct call-session mutations.
+- `078_m1_conduct_outcome_and_hold_reversal.sql` - authored, not deployed;
+  adds `private.apply_conduct_outcome` and `private.clear_reputation_hold`,
+  service-role-only functions (no grant to `anon`/`authenticated`) that make
+  `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
+  `reputation_hold` reachable for the first time since `072_m1` defined them,
+  without a client-facing admin surface.
 - `066_m2_fix_pickup_photo_storage_path_policy.sql` - deployed as tracked
   migration `m2_fix_pickup_photo_storage_path_policy`; corrects the pickup
   photo Storage policies to treat `user-id/ride-id/filename` as two folders,

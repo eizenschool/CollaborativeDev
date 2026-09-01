@@ -105,5 +105,12 @@ Accepted Ride relationship must preserve trip safety/history. Private-message
 history remains available, but its profile shortcut is hidden while blocked.
 
 ## Open Questions
-Host Impact formula and badge perks; hard account deletion; phone OTP; final
-Trust & Safety administrator path for applying confirmed conduct events.
+Hard account deletion; phone OTP. Authored migration `078_m1` adds a
+service-role-only path (`private.apply_conduct_outcome`,
+`private.clear_reputation_hold`) so confirmed conduct events and safety holds
+are reachable without a client-facing admin surface; a shared Trust & Safety
+admin UI is still an open, whole-team decision per
+`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`. Host Impact formula and badge
+tiers are implemented (`HostImpactEngine.js`); badge "reduced platform fee"
+perks are display labels only - no fee/payment system exists yet to enforce
+them.

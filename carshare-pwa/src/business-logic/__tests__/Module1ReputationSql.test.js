@@ -34,4 +34,17 @@ describe('Module 1 reputation and public-profile SQL contracts', () => {
     expect(sql).toMatch(/case\s+when v_visibility\.show_profile_photo then v_profile\.profile_photo_url\s+else null\s+end/i);
     expect(sql).not.toMatch(/emergency_contact|profile_private|\bemail\b|\bphone\b/i);
   });
+
+  it('applies confirmed conduct outcomes and safety holds through service-role-only functions', async () => {
+    const sql = await read('../../../database/sql/078_m1_conduct_outcome_and_hold_reversal.sql');
+    expect(sql).toContain('create or replace function private.apply_conduct_outcome(');
+    expect(sql).toContain('create or replace function private.clear_reputation_hold(p_user_id uuid)');
+    expect(sql).toContain('private.record_reputation_event(');
+    expect(sql).toMatch(/'Safety'/);
+    expect(sql).toContain("case p_event_type when 'confirmed_minor_conduct' then -8 else -20 end");
+    expect(sql).toContain('set reputation_hold = true');
+    expect(sql).toContain('set reputation_hold = false');
+    expect(sql).not.toMatch(/grant\s+execute.*apply_conduct_outcome.*(anon|authenticated)/i);
+    expect(sql).not.toMatch(/grant\s+execute.*clear_reputation_hold.*(anon|authenticated)/i);
+  });
 });
