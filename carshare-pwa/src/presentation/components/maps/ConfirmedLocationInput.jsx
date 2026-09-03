@@ -15,6 +15,7 @@ export default function ConfirmedLocationInput({
   location,
   onChange,
   disabled = false,
+  searchOnFocusOnly = false,
   allowCurrentLocation = false,
   currentLocationPreview = null,
   loadNearbySuggestions = null
@@ -32,6 +33,7 @@ export default function ConfirmedLocationInput({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [currentCandidate, setCurrentCandidate] = useState(null);
   const [currentLocationSession, setCurrentLocationSession] = useState(null);
+  const [focused, setFocused] = useState(false);
 
   const confirmed = GooglePlacesService.isConfirmedLocation(location);
 
@@ -48,6 +50,14 @@ export default function ConfirmedLocationInput({
       setStatus('idle');
       setMessage('');
       setCurrentLocationSession(null);
+      return undefined;
+    }
+    if (searchOnFocusOnly && !focused) {
+      requestSequence.current += 1;
+      setSuggestions([]);
+      setActiveIndex(-1);
+      setStatus('idle');
+      setMessage('');
       return undefined;
     }
     if (currentLocationSession) return undefined;
@@ -89,7 +99,7 @@ export default function ConfirmedLocationInput({
     }, LOCATION_SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [confirmed, currentCandidate, currentLocationPreview, currentLocationSession, disabled, query, value]);
+  }, [confirmed, currentCandidate, currentLocationPreview, currentLocationSession, disabled, focused, query, searchOnFocusOnly, value]);
 
   function changeText(nextValue) {
     requestSequence.current += 1;
@@ -243,6 +253,16 @@ export default function ConfirmedLocationInput({
             placeholder={placeholder}
             value={query}
             disabled={disabled}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              if (!searchOnFocusOnly) return;
+              requestSequence.current += 1;
+              setFocused(false);
+              setSuggestions([]);
+              setActiveIndex(-1);
+              setStatus('idle');
+              setMessage('');
+            }}
             onChange={(event) => changeText(event.target.value)}
             onKeyDown={handleKeyDown}
           />

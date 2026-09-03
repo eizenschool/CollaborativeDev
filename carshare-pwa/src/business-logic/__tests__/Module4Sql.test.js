@@ -94,4 +94,24 @@ describe('Module 4 SQL contract', () => {
     expect(sql).toContain('ride_favourites_ride_id_idx');
     expect(sql).toContain('on public.ride_favourites (ride_id)');
   });
+
+  it('matches confirmed Search locations privately without returning Ride endpoint IDs', async () => {
+    const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../database/sql/079_m4_confirmed_location_search.sql', import.meta.url),
+      'utf8'
+    ));
+    const directColumns = sql.match(/returns table\s*\(([\s\S]*?)\)\s*language/i)?.[1] || '';
+
+    expect(sql).toMatch(/create function private\.search_public_rides_with_confirmed_locations[\s\S]*?security definer/i);
+    expect(sql).toMatch(/create function public\.search_public_rides_with_confirmed_locations[\s\S]*?security invoker/i);
+    expect(sql).toMatch(/create function private\.search_public_multi_leg_journeys_with_confirmed_locations[\s\S]*?security definer/i);
+    expect(sql).toMatch(/create function public\.search_public_multi_leg_journeys_with_confirmed_locations[\s\S]*?security invoker/i);
+    expect(sql).toContain("set search_path = ''");
+    expect(sql).toContain('r.pickup_place_id = v_pickup_place_id');
+    expect(sql).toContain('r.destination_place_id = v_destination_search_place_id');
+    expect(sql).toContain('r.pickup_place_id is null');
+    expect(sql).toContain('r.destination_place_id is null');
+    expect(sql).toContain('to anon, authenticated');
+    expect(directColumns).not.toMatch(/place_id|latitude|longitude|pickup_instructions|waypoints|route_geometry/i);
+  });
 });

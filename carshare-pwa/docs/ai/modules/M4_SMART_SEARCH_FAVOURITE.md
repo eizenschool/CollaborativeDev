@@ -30,6 +30,16 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   Host language, and Host Impact sorting. Vehicle and language criteria are
   optional exact compatibility filters and remain URL-backed as `vehicleType`
   and `language`.
+- Pickup and ordinary destination text now use the shared Google Places
+  combobox. Suggestions begin after a one-second pause, remain Malaysia-only,
+  and an entered value must be chosen from the list before Search runs. The
+  selected input IDs round-trip as `pickupPlaceId` and
+  `destinationSearchPlaceId`; Module 6's existing `destinationPlaceId` remains
+  a separate catalogue hint that alone enables the 5/10/25 km radius mode.
+  Configured Supabase environments require undeployed migration `079` to
+  compare those inputs privately against confirmed Ride endpoints. A Ride with
+  a different stored endpoint cannot match by text; only legacy rows with no
+  stored endpoint ID may use the confirmed display text as fallback.
 - `/favourite` is authenticated and uses `FavouriteService`. The mock adapter
   persists per-user favourites. Migration `034` defines Supabase persistence,
   owner RLS, safe RPCs, and unavailable-ride cards. Its hardened private-helper
@@ -100,14 +110,18 @@ Database: `database/sql/034_m4_smart_search_favourites.sql` and
 verified), plus deployed `039_m4_vehicle_language_filters.sql`,
 `040_m4_favourites_advisor_followup.sql`,
 `067_m4_favourite_unavailable_notifications.sql`, and
-`068_m4_multi_leg_journey_search.sql`. Post-deployment advisors reported no new
+`068_m4_multi_leg_journey_search.sql`. Authored
+`079_m4_confirmed_location_search.sql` adds the exact endpoint RPCs and is not
+yet deployed. Post-deployment advisors for the deployed migrations reported no new
 Module 4 security finding. The new favourite/transfer indexes are initially
 reported as unused, which is expected before normal production traffic.
 
 ## Open Questions
 Remaining acceptance work is operational rather than another feature slice:
 two-account notification/push verification, owner-edit verification, and a
-live dataset containing a valid two-leg chain. Route-corridor matching remains
+live dataset containing a valid two-leg chain. Migration `079` must be reviewed,
+deployed, anonymously smoke-tested, and followed by security/performance
+advisors before confirmed-location Search is accepted live. Route-corridor matching remains
 outside Module 4, and multi-leg matching deliberately uses stored schedules
 rather than paid Routes/Distance Matrix calls.
 
