@@ -110,18 +110,18 @@ Database: `database/sql/034_m4_smart_search_favourites.sql` and
 verified), plus deployed `039_m4_vehicle_language_filters.sql`,
 `040_m4_favourites_advisor_followup.sql`,
 `067_m4_favourite_unavailable_notifications.sql`, and
-`068_m4_multi_leg_journey_search.sql`. Authored
-`079_m4_confirmed_location_search.sql` adds the exact endpoint RPCs and is not
-yet deployed. Post-deployment advisors for the deployed migrations reported no new
+`068_m4_multi_leg_journey_search.sql`, and deployed
+`079_m4_confirmed_location_search.sql`, which adds the exact endpoint RPCs.
+Post-deployment advisors for the deployed migrations reported no new
 Module 4 security finding. The new favourite/transfer indexes are initially
 reported as unused, which is expected before normal production traffic.
 
 ## Open Questions
 Remaining acceptance work is operational rather than another feature slice:
 two-account notification/push verification, owner-edit verification, and a
-live dataset containing a valid two-leg chain. Migration `079` must be reviewed,
-deployed, anonymously smoke-tested, and followed by security/performance
-advisors before confirmed-location Search is accepted live. Route-corridor matching remains
+live dataset containing a valid two-leg chain and confirmed-location exact/
+legacy-fallback cases. Migration `079` is deployed, anonymously smoke-tested,
+and followed by security/performance advisors. Route-corridor matching remains
 outside Module 4, and multi-leg matching deliberately uses stored schedules
 rather than paid Routes/Distance Matrix calls.
 

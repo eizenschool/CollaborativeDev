@@ -76,10 +76,12 @@ easier to change now than after you have built against it.
 - [x] Deploy `068_m4_multi_leg_journey_search.sql`; Search falls back only after
   direct results are exhausted and returns public-safe two-leg itineraries over
   confirmed endpoints and approved catalogue transfer points.
-- [ ] Review and deploy `079_m4_confirmed_location_search.sql`; verify an
-  anonymous exact Pickup/Destination search, recommendation radius with a
-  confirmed Pickup, legacy null-ID fallback, and no Ride endpoint leakage,
-  then run Supabase security/performance advisors.
+- [x] Deploy `079_m4_confirmed_location_search.sql`; both direct and multi-leg
+  RPCs execute under `anon`, migration history is recorded, and the
+  post-deployment advisors report no new Module 4 security finding.
+- [ ] Complete the seeded live matrix for exact Pickup/Destination search,
+  recommendation radius with a confirmed Pickup, legacy null-ID fallback, and
+  no Ride endpoint leakage.
 - [ ] Complete final Module 4 two-account/device acceptance: owner compatibility
   edits, favourite isolation, one alert per availability transition, denied-push
   in-app fallback, and a live seeded direct/proximity/multi-leg matrix.

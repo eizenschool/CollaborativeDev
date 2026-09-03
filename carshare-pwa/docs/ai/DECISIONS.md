@@ -530,7 +530,7 @@ reserve a seat, or bypass Driver approval. That card is explicitly outside the
 current release.
 
 ## D032 — Module 4 Search Requires Confirmed Google Suggestions
-**Status:** Accepted; implementation authored, migration pending
+**Status:** Accepted and deployed 2026-09-03
 
 An entered Pickup or ordinary Destination on public Search must be selected
 from the existing Malaysia-only Google Places combobox after its one-second
@@ -548,7 +548,7 @@ has not deployed `079` reports the dependency rather than silently reverting
 to loose text matching.
 
 ## Open Decisions
-- database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039` are deployed and `079` awaits review; Module 6's `024` schema is deployed);
+- database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`079` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;
