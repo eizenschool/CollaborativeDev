@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   IconArchive,
+  IconArrowLeft,
+  IconBell,
   IconMessage,
   IconMoreVertical,
   IconRoute,
@@ -44,6 +46,7 @@ function ConversationAvatar({ conversation, currentUserId }) {
 }
 
 function ConversationRow({ conversation, currentUserId, isSelected, onSelect, onManage }) {
+  const isFriendChat = conversation.scope === 'friend';
   return (
     <article className={`message-conversation-row ${isSelected ? 'message-conversation-row-selected' : ''}`}>
       <button
@@ -76,11 +79,26 @@ function ConversationRow({ conversation, currentUserId, isSelected, onSelect, on
             </span>
           )}
           <div className="message-conversation-badges">
-            <span className="message-trip-badge message-trip-badge-status">
-              <span className="message-status-dot" aria-hidden="true" />
-              {conversation.rideStatus || 'Ride chat'}
-            </span>
-            {conversation.type === 'group' && <span className="message-trip-badge">Group</span>}
+            {isFriendChat ? (
+              <span className={`message-trip-badge ${conversation.isReadOnly ? 'message-trip-badge-read-only' : 'message-trip-badge-friend'}`}>
+                <IconUsers size={10} aria-hidden="true" />
+                {conversation.isReadOnly
+                  ? conversation.friendshipStatus === 'accepted'
+                    ? 'Friend unavailable · Read-only'
+                    : 'Not friends · Read-only'
+                  : 'Friend'}
+              </span>
+            ) : (
+              <>
+                <span className="message-trip-badge message-trip-badge-status">
+                  <span className="message-status-dot" aria-hidden="true" />
+                  {conversation.rideStatus || 'Ride chat'}
+                </span>
+                {conversation.type === 'group' && <span className="message-trip-badge">Group</span>}
+                {conversation.isFormerMember && <span className="message-trip-badge">Left group · Read-only</span>}
+              </>
+            )}
+            {conversation.isMuted && <span className="message-trip-badge"><IconBell size={10} /> Muted</span>}
             {conversation.isArchived && <span className="message-trip-badge"><IconArchive size={10} /> Archived</span>}
           </div>
         </div>
@@ -98,19 +116,24 @@ function ConversationRow({ conversation, currentUserId, isSelected, onSelect, on
   );
 }
 
-function EmptyConversationState({ folder, hasSearchQuery, searchQuery, onBrowseRides }) {
+function EmptyConversationState({ folder, messageScope, hasSearchQuery, searchQuery, onBrowseRides }) {
+  const emptyTitle = messageScope === 'friend' ? 'No friend messages yet' : 'No ride messages yet';
+  const emptyText = messageScope === 'friend'
+    ? 'Accept a friend request to start a permanent conversation.'
+    : 'Open a published ride to message its host or accepted trip group.';
+
   return (
     <div className="message-conversation-empty">
       <div className="message-conversation-empty-icon">
-        {hasSearchQuery ? <IconSearch size={28} /> : folder === 'archived' ? <IconArchive size={28} /> : <IconUsers size={28} />}
+        {hasSearchQuery ? <IconSearch size={28} /> : messageScope === 'friend' ? <IconUsers size={28} /> : <IconRoute size={28} />}
       </div>
       <h3 className="message-conversation-empty-title">
-        {hasSearchQuery ? `No results for "${searchQuery}"` : folder === 'archived' ? 'No archived conversations' : 'No conversations yet'}
+        {hasSearchQuery ? `No results for "${searchQuery}"` : folder === 'archived' ? `No archived ${messageScope === 'friend' ? 'friend' : 'ride'} messages` : emptyTitle}
       </h3>
       <p className="message-conversation-empty-text">
-        {hasSearchQuery ? 'Try searching with another name, route or message.' : folder === 'archived' ? 'Terminal private chats you archive will appear here.' : 'Open a published ride to message its Host.'}
+        {hasSearchQuery ? 'Try searching with another name, route or message.' : folder === 'archived' ? 'Conversations you archive will appear here.' : emptyText}
       </p>
-      {!hasSearchQuery && folder === 'active' && (
+      {!hasSearchQuery && folder === 'active' && messageScope === 'ride' && (
         <button type="button" className="message-empty-primary-action" onClick={onBrowseRides}>
           Browse available rides
         </button>
@@ -145,43 +168,70 @@ export default function ConversationList({
   error,
   onRetry,
   onBrowseRides,
+  incomingFriendCount = 0,
+  onOpenFriends,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [messageScope, setMessageScope] = useState('ride');
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  useEffect(() => {
+    if (!selectedConversationId) return;
+    const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId);
+    if (selectedConversation) setMessageScope(selectedConversation.scope === 'friend' ? 'friend' : 'ride');
+  }, [conversations, selectedConversationId]);
+
+  const scopedConversations = useMemo(
+    () => conversations.filter((conversation) => (messageScope === 'friend') === (conversation.scope === 'friend')),
+    [conversations, messageScope],
+  );
+
+  const messageCounts = useMemo(() => ({
+    ride: conversations.filter((conversation) => conversation.scope !== 'friend').length,
+    friend: conversations.filter((conversation) => conversation.scope === 'friend').length,
+  }), [conversations]);
+
   const filteredConversations = useMemo(() => {
-    if (!normalizedSearchQuery) return conversations;
-    return conversations.filter((conversation) =>
+    if (!normalizedSearchQuery) return scopedConversations;
+    return scopedConversations.filter((conversation) =>
       conversation.title.toLowerCase().includes(normalizedSearchQuery)
       || conversation.lastMessage.toLowerCase().includes(normalizedSearchQuery)
       || conversation.tripRoute?.toLowerCase().includes(normalizedSearchQuery),
     );
-  }, [conversations, normalizedSearchQuery]);
+  }, [normalizedSearchQuery, scopedConversations]);
 
   return (
     <section className="message-conversation-list" aria-label="Conversations">
       <header className="message-conversation-list-header">
         <div className="message-conversation-title-row">
-          <div className="message-conversation-page-icon"><IconMessage size={20} /></div>
-          <div>
-            <h1 className="message-conversation-page-title">Messages</h1>
+          <div className="message-conversation-page-icon">
+            {folder === 'archived' ? <IconArchive size={20} /> : <IconMessage size={20} />}
+          </div>
+          <div className="message-conversation-heading-copy">
+            <h1 className="message-conversation-page-title">{folder === 'archived' ? 'Archived' : 'Messages'}</h1>
             <p className="message-conversation-page-subtitle">
-              {isLoading ? 'Syncing your ride conversations' : `${conversations.length} ${folder} conversation${conversations.length === 1 ? '' : 's'}`}
+              {isLoading ? 'Syncing your conversations' : `${conversations.length} ${folder} conversation${conversations.length === 1 ? '' : 's'}`}
             </p>
           </div>
-        </div>
-
-        <div className="message-folder-tabs" role="group" aria-label="Conversation folders">
-          {['active', 'archived'].map((item) => (
-            <button
-              key={item}
-              type="button"
-              aria-pressed={folder === item}
-              className={folder === item ? 'message-folder-tab-active' : ''}
-              onClick={() => onFolderChange(item)}
-            >
-              {item === 'active' ? 'Active' : 'Archived'}
-            </button>
-          ))}
+          <button
+            type="button"
+            className="message-friends-button"
+            onClick={onOpenFriends}
+            aria-label={incomingFriendCount ? `Friends, ${incomingFriendCount} incoming requests` : 'Friends'}
+          >
+            <IconUsers size={17} aria-hidden="true" />
+            <span>Friends</span>
+            {incomingFriendCount > 0 && <span className="message-friends-count">{incomingFriendCount}</span>}
+          </button>
+          <button
+            type="button"
+            className="message-folder-icon-button"
+            onClick={() => onFolderChange(folder === 'archived' ? 'active' : 'archived')}
+            aria-label={folder === 'archived' ? 'Back to active conversations' : 'Open archived conversations'}
+            title={folder === 'archived' ? 'Back to messages' : 'Archived conversations'}
+          >
+            {folder === 'archived' ? <IconArrowLeft size={20} /> : <IconArchive size={20} />}
+          </button>
         </div>
 
         <div className="message-conversation-search">
@@ -199,6 +249,26 @@ export default function ConversationList({
               <IconX size={15} />
             </button>
           )}
+        </div>
+
+        <div className="message-scope-tabs" role="tablist" aria-label="Message type">
+          {[
+            { id: 'ride', label: 'Ride messages', icon: IconRoute },
+            { id: 'friend', label: 'Friend messages', icon: IconUsers },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={messageScope === id}
+              className={messageScope === id ? 'message-scope-tab-active' : ''}
+              onClick={() => setMessageScope(id)}
+            >
+              <Icon size={14} aria-hidden="true" />
+              <span>{label}</span>
+              <strong>{messageCounts[id]}</strong>
+            </button>
+          ))}
         </div>
       </header>
 
@@ -225,6 +295,7 @@ export default function ConversationList({
         ) : !error && (
           <EmptyConversationState
             folder={folder}
+            messageScope={messageScope}
             hasSearchQuery={Boolean(normalizedSearchQuery)}
             searchQuery={searchQuery}
             onBrowseRides={onBrowseRides}

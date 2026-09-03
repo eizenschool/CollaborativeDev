@@ -12,6 +12,7 @@ import {
   CALL_STATUS,
   CallService,
   incomingCallIdFromUrl,
+  isCurrentCallParticipantAccepted,
   isTerminalCallStatus,
   relayNotice,
   remainingCallDurationMs,
@@ -21,7 +22,7 @@ import { useNotifications } from './NotificationContext.jsx';
 
 const CallSessionContext = createContext(null);
 const CALL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CALL_HEARTBEAT_INTERVAL_MS = 20_000;
+const CALL_HEARTBEAT_INTERVAL_MS = 15_000;
 
 function clearIncomingCallFromUrl() {
   if (!globalThis.location?.href || !globalThis.history?.replaceState) return;
@@ -41,6 +42,7 @@ const EMPTY_STATE = Object.freeze({
   isMuted: false,
   isPending: false,
   remoteStream: null,
+  remoteStreams: [],
   connectedAt: null,
   endedReason: '',
   error: '',
@@ -83,15 +85,17 @@ function createActiveCall(call, role) {
     role,
     localStream: null,
     remoteStream: null,
-    peer: null,
+    remoteStreams: new Map(),
+    peers: new Map(),
     signalChannel: null,
-    pendingCandidates: [],
+    pendingCandidates: new Map(),
     ringTimerId: null,
-    disconnectTimerId: null,
+    disconnectTimerIds: new Map(),
     maxDurationTimerId: null,
     heartbeatTimerId: null,
+    heartbeatCleanup: null,
     iceServers: null,
-    offerStarted: false,
+    offerStarted: new Set(),
     finishing: false,
   };
 }
@@ -99,17 +103,18 @@ function createActiveCall(call, role) {
 function releaseResources(active) {
   if (!active) return;
   if (active.ringTimerId) globalThis.clearTimeout(active.ringTimerId);
-  if (active.disconnectTimerId) globalThis.clearTimeout(active.disconnectTimerId);
+  active.disconnectTimerIds?.forEach((timerId) => globalThis.clearTimeout(timerId));
   if (active.maxDurationTimerId) globalThis.clearTimeout(active.maxDurationTimerId);
   if (active.heartbeatTimerId) globalThis.clearInterval(active.heartbeatTimerId);
+  active.heartbeatCleanup?.();
   stopStream(active.localStream);
-  stopStream(active.remoteStream);
-  if (active.peer) {
-    active.peer.ontrack = null;
-    active.peer.onicecandidate = null;
-    active.peer.onconnectionstatechange = null;
-    active.peer.close();
-  }
+  active.remoteStreams?.forEach((stream) => stopStream(stream));
+  active.peers?.forEach((peer) => {
+    peer.ontrack = null;
+    peer.onicecandidate = null;
+    peer.onconnectionstatechange = null;
+    peer.close();
+  });
   void active.signalChannel?.unsubscribe?.();
 }
 
@@ -187,7 +192,7 @@ export function CallSessionProvider({ children }) {
 
     globalThis.navigator?.vibrate?.(0);
     if (broadcast && active.signalChannel) {
-      await sendSignal('hangup', { reason }).catch(() => {});
+      await sendSignal('participant-left', { reason }).catch(() => {});
     }
     if (persist) {
       await CallService.endCall(call.id, persistOutcome).catch(() => {});
@@ -219,12 +224,27 @@ export function CallSessionProvider({ children }) {
 
   const startHeartbeat = useCallback((active) => {
     if (active.heartbeatTimerId) globalThis.clearInterval(active.heartbeatTimerId);
+    active.heartbeatCleanup?.();
     const heartbeat = () => {
       if (activeRef.current !== active || active.finishing) return;
       void CallService.heartbeatCall(active.call.id, deviceIdRef.current).catch(() => {});
     };
+    const heartbeatWhenActive = () => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') heartbeat();
+    };
     heartbeat();
     active.heartbeatTimerId = globalThis.setInterval(heartbeat, CALL_HEARTBEAT_INTERVAL_MS);
+    globalThis.addEventListener?.('online', heartbeatWhenActive);
+    globalThis.addEventListener?.('focus', heartbeatWhenActive);
+    globalThis.addEventListener?.('pageshow', heartbeatWhenActive);
+    globalThis.document?.addEventListener?.('visibilitychange', heartbeatWhenActive);
+    active.heartbeatCleanup = () => {
+      globalThis.removeEventListener?.('online', heartbeatWhenActive);
+      globalThis.removeEventListener?.('focus', heartbeatWhenActive);
+      globalThis.removeEventListener?.('pageshow', heartbeatWhenActive);
+      globalThis.document?.removeEventListener?.('visibilitychange', heartbeatWhenActive);
+      active.heartbeatCleanup = null;
+    };
   }, []);
 
   const loadIceConfiguration = useCallback(async (active) => {
@@ -237,45 +257,86 @@ export function CallSessionProvider({ children }) {
     return configuration;
   }, [updateState]);
 
-  const flushCandidates = useCallback(async (active) => {
-    if (!active.peer?.remoteDescription) return;
-    const candidates = active.pendingCandidates.splice(0);
+  const publishRemoteStreams = useCallback((active) => {
+    const remoteStreams = [...active.remoteStreams.entries()].map(([remoteUserId, stream]) => ({
+      userId: remoteUserId,
+      stream,
+    }));
+    active.remoteStream = remoteStreams[0]?.stream || null;
+    updateState((current) => ({
+      ...current,
+      remoteStream: active.remoteStream,
+      remoteStreams,
+    }));
+  }, [updateState]);
+
+  const removePeer = useCallback((active, remoteUserId) => {
+    const timerId = active.disconnectTimerIds.get(remoteUserId);
+    if (timerId) globalThis.clearTimeout(timerId);
+    active.disconnectTimerIds.delete(remoteUserId);
+    const peer = active.peers.get(remoteUserId);
+    if (peer) {
+      peer.ontrack = null;
+      peer.onicecandidate = null;
+      peer.onconnectionstatechange = null;
+      peer.close();
+    }
+    active.peers.delete(remoteUserId);
+    active.offerStarted.delete(remoteUserId);
+    active.pendingCandidates.delete(remoteUserId);
+    const stream = active.remoteStreams.get(remoteUserId);
+    if (stream) stopStream(stream);
+    active.remoteStreams.delete(remoteUserId);
+    publishRemoteStreams(active);
+  }, [publishRemoteStreams]);
+
+  const flushCandidates = useCallback(async (active, remoteUserId) => {
+    const peer = active.peers.get(remoteUserId);
+    if (!peer?.remoteDescription) return;
+    const candidates = active.pendingCandidates.get(remoteUserId) || [];
+    active.pendingCandidates.set(remoteUserId, []);
     for (const candidate of candidates) {
-      await active.peer.addIceCandidate(candidate).catch(() => {});
+      await peer.addIceCandidate(candidate).catch(() => {});
     }
   }, []);
 
-  const ensurePeer = useCallback((active) => {
-    if (active.peer) return active.peer;
+  const ensurePeer = useCallback((active, remoteUserId) => {
+    if (!remoteUserId || remoteUserId === userId) throw new Error('A remote call member is required.');
+    if (active.peers.has(remoteUserId)) return active.peers.get(remoteUserId);
     if (!active.localStream) throw new Error('The microphone is not ready.');
     const peer = new RTCPeerConnection({
       iceServers: active.iceServers || CallService.getFallbackIceServers(),
     });
-    active.peer = peer;
+    active.peers.set(remoteUserId, peer);
+    active.pendingCandidates.set(remoteUserId, []);
     active.localStream.getTracks().forEach((track) => peer.addTrack(track, active.localStream));
 
     peer.onicecandidate = (event) => {
       if (!event.candidate) return;
       void sendSignal('ice-candidate', {
+        targetUserId: remoteUserId,
         candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
       }).catch(() => {});
     };
 
     peer.ontrack = (event) => {
       if (activeRef.current !== active) return;
-      const remoteStream = event.streams?.[0] || active.remoteStream || new MediaStream();
+      const remoteStream = event.streams?.[0]
+        || active.remoteStreams.get(remoteUserId)
+        || new MediaStream();
       if (!event.streams?.[0] && !remoteStream.getTracks().includes(event.track)) {
         remoteStream.addTrack(event.track);
       }
-      active.remoteStream = remoteStream;
-      updateState((current) => ({ ...current, remoteStream }));
+      active.remoteStreams.set(remoteUserId, remoteStream);
+      publishRemoteStreams(active);
     };
 
     peer.onconnectionstatechange = () => {
       if (activeRef.current !== active || active.finishing) return;
       if (peer.connectionState === 'connected') {
-        if (active.disconnectTimerId) globalThis.clearTimeout(active.disconnectTimerId);
-        active.disconnectTimerId = null;
+        const timerId = active.disconnectTimerIds.get(remoteUserId);
+        if (timerId) globalThis.clearTimeout(timerId);
+        active.disconnectTimerIds.delete(remoteUserId);
         updateState((current) => ({
           ...current,
           phase: 'connected',
@@ -283,75 +344,118 @@ export function CallSessionProvider({ children }) {
           error: '',
         }));
       } else if (peer.connectionState === 'disconnected') {
-        updateState((current) => ({ ...current, phase: 'reconnecting' }));
-        if (active.disconnectTimerId) globalThis.clearTimeout(active.disconnectTimerId);
-        active.disconnectTimerId = globalThis.setTimeout(() => {
-          if (peer.connectionState === 'disconnected') {
+        if (![...active.peers.values()].some((item) => item !== peer && item.connectionState === 'connected')) {
+          updateState((current) => ({ ...current, phase: 'reconnecting' }));
+        }
+        const previousTimer = active.disconnectTimerIds.get(remoteUserId);
+        if (previousTimer) globalThis.clearTimeout(previousTimer);
+        active.disconnectTimerIds.set(remoteUserId, globalThis.setTimeout(() => {
+          if (peer.connectionState !== 'disconnected') return;
+          removePeer(active, remoteUserId);
+          if (!active.call.isGroup) {
             void finishCallRef.current?.('failed', { persist: true, broadcast: true });
           }
-        }, 10_000);
-      } else if (peer.connectionState === 'failed') {
-        void finishCallRef.current?.('failed', { persist: true, broadcast: true });
+        }, 10_000));
+      } else if (peer.connectionState === 'failed' || peer.connectionState === 'closed') {
+        removePeer(active, remoteUserId);
+        if (!active.call.isGroup && peer.connectionState === 'failed') {
+          void finishCallRef.current?.('failed', { persist: true, broadcast: true });
+        }
       }
     };
     return peer;
-  }, [sendSignal, updateState]);
+  }, [publishRemoteStreams, removePeer, sendSignal, updateState, userId]);
 
-  const createAndSendOffer = useCallback(async (active) => {
-    if (active.offerStarted || active.finishing) return;
-    active.offerStarted = true;
+  const createAndSendOffer = useCallback(async (active, remoteUserId) => {
+    if (active.offerStarted.has(remoteUserId) || active.finishing) return;
+    active.offerStarted.add(remoteUserId);
     try {
-      const peer = ensurePeer(active);
+      const peer = ensurePeer(active, remoteUserId);
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      await sendSignal('offer', { description: peer.localDescription });
-    } catch (error) {
-      await finishCallRef.current?.('failed', {
-        persist: true,
-        broadcast: true,
-        error: error.message || 'Unable to connect the call.',
+      await sendSignal('offer', {
+        targetUserId: remoteUserId,
+        description: peer.localDescription,
       });
+    } catch (error) {
+      active.offerStarted.delete(remoteUserId);
+      removePeer(active, remoteUserId);
+      if (!active.call.isGroup) {
+        await finishCallRef.current?.('failed', {
+          persist: true,
+          broadcast: true,
+          error: error.message || 'Unable to connect the call.',
+        });
+        return;
+      }
+      updateState((current) => ({
+        ...current,
+        error: error.message || 'Unable to connect to one group member.',
+      }));
     }
-  }, [ensurePeer, sendSignal]);
+  }, [ensurePeer, removePeer, sendSignal, updateState]);
+
+  const greetPeer = useCallback(async (active, remoteUserId) => {
+    await sendSignal('peer-present', { targetUserId: remoteUserId });
+    if (String(userId).localeCompare(String(remoteUserId)) < 0) {
+      await createAndSendOffer(active, remoteUserId);
+    }
+  }, [createAndSendOffer, sendSignal, userId]);
 
   const handleSignal = useCallback(async (signal) => {
     const active = activeRef.current;
     if (!active || active.finishing || signal?.callId !== active.call.id) return;
-    if (signal.fromUserId === userId) return;
+    if (!signal.fromUserId || signal.fromUserId === userId) return;
+    if (signal.targetUserId && signal.targetUserId !== userId) return;
+    const remoteUserId = signal.fromUserId;
 
     try {
-      if (signal.type === 'ready-request' && active.role === 'callee') {
-        await sendSignal('ready');
-      } else if (signal.type === 'ready' && active.role === 'caller') {
-        await createAndSendOffer(active);
-      } else if (signal.type === 'offer' && active.role === 'callee') {
-        const peer = ensurePeer(active);
+      if (signal.type === 'peer-ready') {
+        if (active.localStream) await greetPeer(active, remoteUserId);
+      } else if (signal.type === 'peer-present') {
+        if (active.localStream && String(userId).localeCompare(String(remoteUserId)) < 0) {
+          await createAndSendOffer(active, remoteUserId);
+        }
+      } else if (signal.type === 'offer') {
+        const peer = ensurePeer(active, remoteUserId);
         if (peer.remoteDescription) return;
         await peer.setRemoteDescription(signal.description);
-        await flushCandidates(active);
+        await flushCandidates(active, remoteUserId);
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
-        await sendSignal('answer', { description: peer.localDescription });
-      } else if (signal.type === 'answer' && active.role === 'caller') {
-        const peer = ensurePeer(active);
+        await sendSignal('answer', {
+          targetUserId: remoteUserId,
+          description: peer.localDescription,
+        });
+      } else if (signal.type === 'answer') {
+        const peer = ensurePeer(active, remoteUserId);
         if (peer.remoteDescription) return;
         await peer.setRemoteDescription(signal.description);
-        await flushCandidates(active);
+        await flushCandidates(active, remoteUserId);
       } else if (signal.type === 'ice-candidate' && signal.candidate) {
-        const peer = ensurePeer(active);
+        const peer = ensurePeer(active, remoteUserId);
         if (peer.remoteDescription) await peer.addIceCandidate(signal.candidate);
-        else active.pendingCandidates.push(signal.candidate);
-      } else if (signal.type === 'hangup') {
-        await finishCallRef.current?.(signal.reason || 'ended');
+        else active.pendingCandidates.get(remoteUserId)?.push(signal.candidate);
+      } else if (signal.type === 'participant-left' || signal.type === 'hangup') {
+        removePeer(active, remoteUserId);
+        if (!active.call.isGroup) await finishCallRef.current?.(signal.reason || 'ended');
       }
     } catch (error) {
-      await finishCallRef.current?.('failed', {
-        persist: true,
-        broadcast: true,
-        error: error.message || 'Unable to connect the call.',
-      });
+      removePeer(active, remoteUserId);
+      if (!active.call.isGroup) {
+        await finishCallRef.current?.('failed', {
+          persist: true,
+          broadcast: true,
+          error: error.message || 'Unable to connect the call.',
+        });
+        return;
+      }
+      updateState((current) => ({
+        ...current,
+        error: error.message || 'Unable to connect to one group member.',
+      }));
     }
-  }, [createAndSendOffer, ensurePeer, flushCandidates, sendSignal, userId]);
+  }, [createAndSendOffer, ensurePeer, flushCandidates, greetPeer, removePeer, sendSignal, updateState, userId]);
   handleSignalRef.current = handleSignal;
 
   const openSignalChannel = useCallback((callId) => (
@@ -383,18 +487,39 @@ export function CallSessionProvider({ children }) {
     active.call = call;
     updateState((current) => ({ ...current, call }));
 
-    if (call.status === CALL_STATUS.ACCEPTED) {
+    const sessionStatus = call.sessionStatus || call.status;
+    if (isTerminalCallStatus(sessionStatus)) {
+      void finishCallRef.current?.(sessionStatus);
+      return;
+    }
+    const selfStatus = call.selfParticipant?.status || call.status;
+    if (['declined', 'missed', 'left', 'failed'].includes(selfStatus)) {
+      void finishCallRef.current?.(selfStatus === 'left' ? 'ended' : selfStatus);
+      return;
+    }
+
+    // A group session becomes accepted as soon as the first invitee answers.
+    // Other invitees must remain on their incoming screen until their own
+    // participant row is accepted; otherwise their Answer button disappears.
+    if (isCurrentCallParticipantAccepted(call)) {
       if (active.ringTimerId) globalThis.clearTimeout(active.ringTimerId);
       active.ringTimerId = null;
       scheduleCallLimit(active);
-      if (active.role === 'callee' && call.answerDeviceId !== deviceIdRef.current) {
+      if (active.role === 'callee' && call.answerDeviceId
+          && call.answerDeviceId !== deviceIdRef.current) {
         void finishCallRef.current?.('answered-elsewhere');
         return;
       }
-      updateState((current) => ({ ...current, phase: 'connecting', isPending: false }));
-      if (active.role === 'caller') void sendSignal('ready-request').catch(() => {});
-    } else if (isTerminalCallStatus(call.status)) {
-      void finishCallRef.current?.(call.status);
+      const hasConnectedPeer = [...active.peers.values()]
+        .some((peer) => peer.connectionState === 'connected');
+      updateState((current) => ({
+        ...current,
+        phase: hasConnectedPeer ? 'connected' : 'connecting',
+        isPending: false,
+      }));
+      if (active.localStream && active.signalChannel) {
+        void sendSignal('peer-ready').catch(() => {});
+      }
     }
   }, [scheduleCallLimit, sendSignal, updateState]);
 
@@ -485,14 +610,18 @@ export function CallSessionProvider({ children }) {
     };
   }, [clearTerminalTimer, handleCallChange, updateState, userId]);
 
-  const startCall = useCallback(async (conversation) => {
+  const startCall = useCallback(async (conversation, inviteeIds = null) => {
     CallService.assertAvailable(conversation);
     if (activeRef.current) throw new Error('Finish the current call before starting another.');
     clearTerminalTimer();
     const localStream = await CallService.requestMicrophone();
     let active = null;
     try {
-      const call = await CallService.startCall(conversation.id, deviceIdRef.current);
+      const call = await CallService.startCall(
+        conversation.id,
+        deviceIdRef.current,
+        inviteeIds,
+      );
       active = createActiveCall(call, 'caller');
       active.localStream = localStream;
       activeRef.current = active;
@@ -506,13 +635,14 @@ export function CallSessionProvider({ children }) {
         void active.signalChannel.unsubscribe();
         return call;
       }
-      const wasAnswered = active.call.status === CALL_STATUS.ACCEPTED;
+      const wasAnswered = active.call.sessionStatus === CALL_STATUS.ACCEPTED
+        || active.call.status === CALL_STATUS.ACCEPTED;
       updateState((current) => ({
         ...current,
         phase: wasAnswered ? 'connecting' : current.phase,
         isPending: false,
       }));
-      if (wasAnswered) await sendSignal('ready-request');
+      await sendSignal('peer-ready');
       return call;
     } catch (error) {
       if (activeRef.current === active && active) {
@@ -567,7 +697,7 @@ export function CallSessionProvider({ children }) {
         call,
         isPending: false,
       }));
-      await sendSignal('ready');
+      await sendSignal('peer-ready');
     } catch (error) {
       if (accepted) {
         await finishCallRef.current?.('failed', {

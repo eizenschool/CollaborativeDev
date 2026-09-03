@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import {
   IconCalendar,
   IconMapPin,
@@ -100,26 +101,48 @@ function ParticipantList({ conversation, currentUserId }) {
         <span className="message-trip-card-heading-icon"><IconUsers size={16} aria-hidden="true" /></span>
         <h4>{heading}</h4>
       </header>
+      {conversation.type === 'group' && (
+        <p className="message-group-members-note">Select a member to view their profile and friendship options.</p>
+      )}
       <div className="message-trip-member-list">
-        {conversation.members.map((member) => (
-          <div key={member.id} className="message-trip-member-row">
-            <ParticipantAvatar member={member} />
-            <div className="message-trip-member-content">
-              <span className="message-trip-member-name">{member.name}</span>
-              <span className="message-trip-member-role">
-                {member.role === 'host' ? 'Host' : member.role === 'traveller' ? 'Traveller' : 'Ride contact'}
-              </span>
-            </div>
-            {member.id === currentUserId && <span className="message-trip-member-you-badge">You</span>}
-          </div>
-        ))}
+        {conversation.members.map((member) => {
+          const isCurrentUser = member.id === currentUserId;
+          const content = (
+            <>
+              <ParticipantAvatar member={member} />
+              <div className="message-trip-member-content">
+                <span className="message-trip-member-name">{member.name}</span>
+                <span className="message-trip-member-role">
+                  {member.role === 'host' ? 'Host' : member.role === 'traveller' ? 'Traveller' : member.role === 'friend' ? 'Friend' : 'Ride contact'}
+                </span>
+              </div>
+              {isCurrentUser
+                ? <span className="message-trip-member-you-badge">You</span>
+                : <span className="message-trip-member-action">View profile</span>}
+            </>
+          );
+
+          return conversation.type === 'group' && !isCurrentUser ? (
+            <Link
+              key={member.id}
+              className="message-trip-member-row message-trip-member-link"
+              to={`/users/${member.id}`}
+              aria-label={`View ${member.name}'s profile and friendship options`}
+            >
+              {content}
+            </Link>
+          ) : (
+            <div key={member.id} className="message-trip-member-row">{content}</div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
 export default function ConversationDetailsContent({ conversation, currentUserId }) {
-  const title = conversation.type === 'group' ? 'Trip Information' : 'Contact Information';
+  const isFriend = conversation.scope === 'friend';
+  const title = isFriend ? 'Friend Information' : conversation.type === 'group' ? 'Trip Information' : 'Contact Information';
 
   return (
     <div className="message-conversation-details">
@@ -127,7 +150,21 @@ export default function ConversationDetailsContent({ conversation, currentUserId
         <span>Conversation details</span>
         <h3>{title}</h3>
       </div>
-      <TripSummaryCard conversation={conversation} />
+      {isFriend ? (
+        <section className="message-friend-summary-card">
+          <span className="message-trip-card-heading-icon"><IconUsers size={17} aria-hidden="true" /></span>
+          <div>
+            <strong>{conversation.isReadOnly
+              ? conversation.friendshipStatus === 'accepted' ? 'Friend unavailable · Read-only' : 'Not friends · Read-only'
+              : 'Permanent friend chat'}</strong>
+            <p>{conversation.isReadOnly
+              ? conversation.friendshipStatus === 'accepted'
+                ? 'This account is unavailable, so new messages and calls are disabled.'
+                : 'History stays visible, but new messages and calls require an accepted friendship.'
+              : 'This conversation is linked to your friendship and does not expire with a ride.'}</p>
+          </div>
+        </section>
+      ) : <TripSummaryCard conversation={conversation} />}
       <ParticipantList conversation={conversation} currentUserId={currentUserId} />
     </div>
   );

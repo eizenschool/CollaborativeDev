@@ -25,9 +25,10 @@ describe('Module 3 translation security contract', () => {
     expect(edgeFunction).toContain('CLOUDFLARE_AI_TOKEN');
     expect(edgeFunction).not.toContain('VITE_CLOUDFLARE');
     expect(edgeFunction).toContain('.eq("user_id", userId)');
-    expect(edgeFunction).toContain('conversation.closed_at');
+    expect(edgeFunction).toContain('conversation?.expires_at');
+    expect(edgeFunction).toContain('member?.access_expires_at');
+    expect(edgeFunction).toContain('member?.left_at');
     expect(edgeFunction).toContain('member?.deleted_before');
-    expect(edgeFunction).not.toContain('conversation.expires_at');
     expect(edgeFunction).toContain('message.deleted_at');
     expect(edgeFunction).toContain('FREE_TIER_EXHAUSTED');
     expect(edgeFunction).toContain('completionText(result)');

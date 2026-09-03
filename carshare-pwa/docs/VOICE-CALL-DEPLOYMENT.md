@@ -1,9 +1,10 @@
 # Voice-call production deployment
 
-This runbook deploys Module 3 one-to-one WebRTC voice calls with Cloudflare
-TURN, server-issued 75-minute credentials, a 60-minute call limit, and a
-900 GB monthly relay cutoff. Long-lived TURN credentials belong only in
-Supabase Edge Function secrets.
+This runbook deploys Module 3 direct and group WebRTC voice calls with
+Cloudflare TURN, server-issued 75-minute credentials, a 60-minute call limit,
+and a 900 GB monthly relay cutoff. Group calls use a small-room peer mesh and
+are capped at eight active conversation members. Long-lived TURN credentials
+belong only in Supabase Edge Function secrets.
 
 ## 1. Create the Cloudflare TURN credentials
 
@@ -27,6 +28,12 @@ apply these files once and in order:
 1. `database/sql/043_m3_add_voice_calls.sql`
 2. `database/sql/044_m3_turn_guard.sql`
 3. `database/sql/045_m3_reliable_voice_call_delivery.sql`
+4. `database/sql/065_m3_terminal_chat_and_call_history.sql`
+5. `database/sql/075_m3_conversation_lifecycle_redesign.sql`
+6. `database/sql/077_m3_voice_call_presence_recovery.sql`
+7. `database/sql/079_m3_friendships_and_persistent_chat.sql`
+8. `database/sql/080_m3_group_voice_calls.sql`
+9. `database/sql/081_m3_selective_group_voice_calls.sql`
 
 `043` is not rerunnable. If `call_sessions already exists` appears, stop and
 inspect the current schema rather than dropping anything.
@@ -34,7 +41,8 @@ inspect the current schema rather than dropping anything.
 Verify the result:
 
 ```sql
-select to_regclass('public.call_sessions');
+select to_regclass('public.call_sessions'),
+       to_regclass('public.call_participants');
 
 select routine_name
 from information_schema.routines
@@ -49,24 +57,24 @@ where routine_schema = 'public'
 
 select schemaname, tablename, policyname, cmd
 from pg_policies
-where (schemaname = 'public' and tablename = 'call_sessions')
+where (schemaname = 'public' and tablename in ('call_sessions', 'call_participants'))
    or (schemaname = 'realtime' and tablename = 'messages');
 
 select tablename
 from pg_publication_tables
 where pubname = 'supabase_realtime'
   and schemaname = 'public'
-  and tablename = 'call_sessions';
+  and tablename in ('call_sessions', 'call_participants');
 
 select singleton, period_start, egress_bytes, cutoff_bytes,
        automatic_blocked, manual_blocked, last_checked_at
 from public.turn_usage_guard;
 ```
 
-Expected: the call table and five functions exist, private signalling policies
-exist, `call_sessions` is published, the incoming-call notification trigger is
-enabled, and the guard cutoff is `900000000000`. Run the Supabase security and
-performance advisors after the deployment.
+Expected: both call tables and the listed functions exist, private signalling
+policies exist, both call tables are published, the per-participant incoming
+call notification trigger is enabled, and the guard cutoff is `900000000000`.
+Run the Supabase security and performance advisors after the deployment.
 
 ## 3. Configure and deploy the Edge Functions
 
@@ -171,9 +179,14 @@ available without redeploying the function.
 
 ## 6. Acceptance and quota drill
 
-Use two real accounts. Put the phone on mobile data and the computer on Wi-Fi,
-then test both calling directions, answer, reject, 45-second timeout, mute,
-hang-up, microphone denial, and reconnect failure. In desktop Chrome,
+Use at least three real accounts for the group flow, with one phone on mobile
+data and another device on Wi-Fi. Select only one of the two other members and
+confirm the unselected account receives no invitation or push. Confirm each
+selected member can independently answer or reject, accepted members hear every
+other accepted member, one member
+leaving does not end a three-person call, the call ends below two connected
+members, and the 45-second unanswered timeout remains correct. Also test direct
+calls in both directions, mute, microphone denial, and reconnect failure. In desktop Chrome,
 `chrome://webrtc-internals` should show a selected candidate with type `relay`
 for the cross-network call.
 

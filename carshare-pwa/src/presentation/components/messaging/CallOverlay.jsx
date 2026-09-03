@@ -1,17 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCallSession } from '../../../context/CallSessionContext.jsx';
 import { useNotifications } from '../../../context/NotificationContext.jsx';
 import { MessagingService } from '../../../business-logic/MessagingService.js';
 import {
-  IconCar,
   IconMaximize,
-  IconMessage,
   IconMicrophone,
   IconMinus,
   IconPhone,
-  IconRoute,
-  IconUser,
   IconX,
 } from '../icons.jsx';
 import '../../styles/call.css';
@@ -40,6 +35,17 @@ function CallAvatar({ participant }) {
   );
 }
 
+function RemoteAudio({ entry, onBlocked }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const audio = ref.current;
+    if (!audio || !entry?.stream) return;
+    audio.srcObject = entry.stream;
+    void audio.play().catch(() => onBlocked?.());
+  }, [entry.stream, onBlocked]);
+  return <audio ref={ref} className="call-remote-audio" autoPlay playsInline aria-label="Remote call audio" />;
+}
+
 function formatDuration(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -47,8 +53,8 @@ function formatDuration(totalSeconds) {
 }
 
 function callStatusText(callState, durationSeconds) {
-  if (callState.phase === 'incoming') return 'Incoming voice call';
-  if (callState.phase === 'outgoing') return 'Calling…';
+  if (callState.phase === 'incoming') return callState.call?.isGroup ? 'Incoming group voice call' : 'Incoming voice call';
+  if (callState.phase === 'outgoing') return callState.call?.isGroup ? 'Calling group…' : 'Calling…';
   if (callState.phase === 'connecting') return 'Connecting securely…';
   if (callState.phase === 'reconnecting') return 'Reconnecting…';
   if (callState.phase === 'connected') return formatDuration(durationSeconds);
@@ -56,7 +62,6 @@ function callStatusText(callState, durationSeconds) {
 }
 
 export default function CallOverlay() {
-  const navigate = useNavigate();
   const {
     callState,
     acceptCall,
@@ -68,14 +73,14 @@ export default function CallOverlay() {
     dismissEndedCall,
   } = useCallSession();
   const { soundBlocked, unlockAlertSounds } = useNotifications();
-  const audioRef = useRef(null);
   const dialogRef = useRef(null);
   const returnFocusRef = useRef(null);
   const phaseRef = useRef(callState.phase);
   const dismissRef = useRef(dismissEndedCall);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [needsAudioTap, setNeedsAudioTap] = useState(false);
-  const [rideId, setRideId] = useState(null);
+  const [conversationInfo, setConversationInfo] = useState(null);
+  const handleAudioBlocked = useCallback(() => setNeedsAudioTap(true), []);
   const isOpen = callState.phase !== 'idle' && Boolean(callState.call);
   const isModalOpen = isOpen && !callState.isMinimized;
   phaseRef.current = callState.phase;
@@ -84,16 +89,16 @@ export default function CallOverlay() {
   useEffect(() => {
     const conversationId = callState.call?.conversationId;
     if (!conversationId) {
-      setRideId(null);
+      setConversationInfo(null);
       return undefined;
     }
     let active = true;
     void MessagingService.getConversation(conversationId)
       .then((conversation) => {
-        if (active) setRideId(conversation?.rideId || null);
+        if (active) setConversationInfo(conversation || null);
       })
       .catch(() => {
-        if (active) setRideId(null);
+        if (active) setConversationInfo(null);
       });
     return () => { active = false; };
   }, [callState.call?.conversationId]);
@@ -150,55 +155,32 @@ export default function CallOverlay() {
     return () => window.clearInterval(timerId);
   }, [callState.connectedAt, callState.phase]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !callState.remoteStream) return;
-    audio.srcObject = callState.remoteStream;
-    void audio.play()
-      .then(() => setNeedsAudioTap(false))
-      .catch(() => setNeedsAudioTap(true));
-  }, [callState.isMinimized, callState.remoteStream]);
-
   if (callState.phase === 'idle' || !callState.call) return null;
 
   const participant = callState.call.otherParticipant;
+  const isGroup = callState.call.isGroup;
+  const displayName = isGroup
+    ? (conversationInfo?.title || 'Group voice call')
+    : (participant?.name || 'Member');
+  const visibleParticipants = callState.call.participants || [];
+  const acceptedCount = visibleParticipants.filter((member) => member.status === 'accepted').length;
+  const ringingCount = visibleParticipants.filter((member) => member.status === 'ringing').length;
+  const declinedCount = visibleParticipants.filter((member) => member.status === 'declined').length;
+  const remoteStreams = callState.remoteStreams?.length
+    ? callState.remoteStreams
+    : callState.remoteStream ? [{ userId: participant?.id || 'remote', stream: callState.remoteStream }] : [];
   const isIncoming = callState.phase === 'incoming';
   const isEnded = callState.phase === 'ended';
   const showMute = ['outgoing', 'connecting', 'connected', 'reconnecting'].includes(callState.phase);
   const canMinimize = showMute;
-  const browseTo = (path) => {
-    minimizeCall();
-    navigate(path);
-  };
-  const browseActions = [
-    {
-      key: 'chat',
-      label: 'Chat',
-      path: `/message/${callState.call.conversationId}`,
-      icon: IconMessage,
-    },
-    {
-      key: 'ride',
-      label: rideId ? 'Ride details' : 'Rides',
-      path: rideId ? `/ride/${rideId}` : '/ride',
-      icon: IconCar,
-    },
-    { key: 'trips', label: 'Trips', path: '/trip', icon: IconRoute },
-    ...(participant?.id ? [{
-      key: 'profile',
-      label: 'Profile',
-      path: `/users/${participant.id}`,
-      icon: IconUser,
-    }] : []),
-  ];
 
   if (callState.isMinimized && canMinimize) {
     return (
-      <aside className="call-mini-bar" aria-label={`Active call with ${participant?.name || 'Member'}`}>
-        <audio ref={audioRef} autoPlay playsInline aria-label="Remote call audio" />
+      <aside className="call-mini-bar" aria-label={`Active call with ${displayName}`}>
+        {remoteStreams.map((entry) => <RemoteAudio key={entry.userId} entry={entry} onBlocked={handleAudioBlocked} />)}
         <CallAvatar participant={participant} />
         <button type="button" className="call-mini-copy" onClick={expandCall} aria-label="Expand call controls">
-          <strong>{participant?.name || 'Member'}</strong>
+          <strong>{displayName}</strong>
           <span>{callStatusText(callState, durationSeconds)}</span>
         </button>
         <div className="call-mini-actions">
@@ -212,14 +194,6 @@ export default function CallOverlay() {
             <IconPhone size={19} aria-hidden="true" />
           </button>
         </div>
-        <nav className="call-mini-browse" aria-label="Browse during call">
-          {browseActions.slice(0, 3).map(({ key, label, path, icon: Icon }) => (
-            <button key={key} type="button" onClick={() => browseTo(path)}>
-              <Icon size={15} aria-hidden="true" />
-              <span>{label}</span>
-            </button>
-          ))}
-        </nav>
       </aside>
     );
   }
@@ -244,7 +218,6 @@ export default function CallOverlay() {
             title="Minimize call and continue browsing"
           >
             <IconMinus size={20} aria-hidden="true" />
-            <span>Minimize &amp; browse</span>
           </button>
         )}
         {isEnded && (
@@ -252,13 +225,24 @@ export default function CallOverlay() {
             <IconX size={19} />
           </button>
         )}
-        <div className="call-overlay-avatar-ring"><CallAvatar participant={participant} /></div>
+        <div className={`call-overlay-avatar-ring ${isGroup ? 'call-overlay-avatar-group' : ''}`}>
+          {(isGroup ? visibleParticipants.slice(0, 3) : [participant]).map((member, index) => (
+            <span className="call-overlay-avatar-slot" key={member?.id || index}>
+              <CallAvatar participant={member} />
+            </span>
+          ))}
+        </div>
         <div className="call-overlay-copy">
-          <span className="call-overlay-eyebrow">Private ride chat</span>
-          <h2 id="call-overlay-title">{participant?.name || 'Member'}</h2>
+          <span className="call-overlay-eyebrow">{isGroup ? 'Group voice call' : 'Private voice call'}</span>
+          <h2 id="call-overlay-title">{displayName}</h2>
           <p id="call-overlay-status" role="status" aria-live="polite">
             {callStatusText(callState, durationSeconds)}
           </p>
+          {isGroup && !isEnded && (
+            <p className="call-overlay-participant-status">
+              {acceptedCount} joined{ringingCount ? ` · ${ringingCount} ringing` : ''}{declinedCount ? ` · ${declinedCount} declined` : ''}
+            </p>
+          )}
         </div>
 
         {callState.error && <p className="call-overlay-error" role="alert">{callState.error}</p>}
@@ -270,33 +254,23 @@ export default function CallOverlay() {
             Tap to enable ring sound
           </button>
         )}
-        {needsAudioTap && callState.remoteStream && (
+        {needsAudioTap && remoteStreams.length > 0 && (
           <button
             type="button"
             className="call-overlay-audio-permission"
             onClick={() => {
-              void audioRef.current?.play().then(() => setNeedsAudioTap(false));
+              const audioElements = [...document.querySelectorAll('.call-remote-audio')];
+              void Promise.all(audioElements.map((audio) => audio.play()))
+                .then(() => setNeedsAudioTap(false));
             }}
           >
             Tap to hear the call
           </button>
         )}
 
-        <audio ref={audioRef} autoPlay playsInline aria-label="Remote call audio" />
-
-        {!isIncoming && !isEnded && (
-          <nav className="call-browse-actions" aria-label="View information during call">
-            <span>View while calling</span>
-            <div>
-              {browseActions.map(({ key, label, path, icon: Icon }) => (
-                <button key={key} type="button" onClick={() => browseTo(path)}>
-                  <Icon size={17} aria-hidden="true" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </nav>
-        )}
+        {remoteStreams.map((entry) => (
+          <RemoteAudio key={entry.userId} entry={entry} onBlocked={handleAudioBlocked} />
+        ))}
 
         {isIncoming ? (
           <div className="call-overlay-actions call-overlay-incoming-actions">

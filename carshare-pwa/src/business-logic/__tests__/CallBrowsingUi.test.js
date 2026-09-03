@@ -14,14 +14,29 @@ describe('voice-call browsing UI', () => {
     expect(context).toContain('isMinimized: true');
   });
 
-  it('provides chat, ride, trip, and profile navigation while the call remains global', async () => {
+  it('uses one icon to minimize every call without a dedicated browse menu', async () => {
     const overlay = await read('../../presentation/components/messaging/CallOverlay.jsx');
-    expect(overlay).toContain('View while calling');
-    expect(overlay).toContain('path: `/message/${callState.call.conversationId}`');
-    expect(overlay).toContain("path: rideId ? `/ride/${rideId}` : '/ride'");
-    expect(overlay).toContain("{ key: 'trips', label: 'Trips', path: '/trip'");
-    expect(overlay).toContain('Browse during call');
-    expect(overlay).toContain('minimizeCall();');
-    expect(overlay).toContain('navigate(path);');
+    expect(overlay).not.toContain('View while calling');
+    expect(overlay).not.toContain('Browse during call');
+    expect(overlay).toContain('onClick={minimizeCall}');
+    expect(overlay).toContain('<IconMinus size={20}');
+    expect(overlay).toContain("'Group voice call'");
+    expect(overlay).toContain('remoteStreams.map');
+  });
+
+  it('opens a group-member picker and calls only selected members', async () => {
+    const chatWindow = await read('../../presentation/components/messaging/ChatWindow.jsx');
+    expect(chatWindow).toContain('Choose people to call');
+    expect(chatWindow).toContain('Only selected people will receive the call.');
+    expect(chatWindow).toContain('beginVoiceCall(selectedCallMemberIds)');
+    expect(chatWindow).toContain('member.id !== currentUser.id');
+  });
+
+  it('keeps each unanswered invitee ringing after another group member answers', async () => {
+    const context = await read('../../context/CallSessionContext.jsx');
+    expect(context).toContain('if (isCurrentCallParticipantAccepted(call))');
+    expect(context).not.toContain(
+      'call.sessionStatus === CALL_STATUS.ACCEPTED || call.status === CALL_STATUS.ACCEPTED',
+    );
   });
 });

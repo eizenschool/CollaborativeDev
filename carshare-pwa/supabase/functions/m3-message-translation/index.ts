@@ -150,13 +150,12 @@ async function visibleMessage(admin: SupabaseClient, userId: string, messageId: 
 
   const [{ data: member, error: memberError }, { data: conversation, error: conversationError }] = await Promise.all([
     admin.from("conversation_members")
-      .select("user_id, deleted_before")
+      .select("user_id, left_at, deleted_before, access_expires_at")
       .eq("conversation_id", message.conversation_id)
       .eq("user_id", userId)
-      .is("left_at", null)
       .maybeSingle(),
     admin.from("conversations")
-      .select("closed_at")
+      .select("expires_at")
       .eq("id", message.conversation_id)
       .maybeSingle(),
   ]);
@@ -164,7 +163,15 @@ async function visibleMessage(admin: SupabaseClient, userId: string, messageId: 
   if (conversationError) throw conversationError;
   const hiddenByPersonalDeletion = member?.deleted_before
     && new Date(message.created_at).getTime() <= new Date(member.deleted_before).getTime();
-  if (!member || !conversation || conversation.closed_at || hiddenByPersonalDeletion) {
+  const now = Date.now();
+  const globallyExpired = conversation?.expires_at
+    && now >= new Date(conversation.expires_at).getTime();
+  const personallyExpired = member?.access_expires_at
+    && now >= new Date(member.access_expires_at).getTime();
+  const sentAfterLeaving = member?.left_at
+    && new Date(message.created_at).getTime() > new Date(member.left_at).getTime();
+  if (!member || !conversation || globallyExpired || personallyExpired
+      || sentAfterLeaving || hiddenByPersonalDeletion) {
     throw new HttpError(403, "MESSAGE_UNAVAILABLE", "This conversation is unavailable.");
   }
   return message;

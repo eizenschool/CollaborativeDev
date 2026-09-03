@@ -5,60 +5,50 @@ async function migration() {
   return readFile(new URL('../../../database/sql/075_m3_conversation_lifecycle_redesign.sql', import.meta.url), 'utf8');
 }
 
-describe('persistent conversation lifecycle migration', () => {
-  it('makes direct conversations pair-owned and migrates duplicate timelines', async () => {
+describe('ride-bound conversation lifecycle migration', () => {
+  it('retains terminal ride conversations for seven days', async () => {
     const sql = await migration();
-    expect(sql).toContain('conversations_one_direct_per_pair_idx');
-    expect(sql).toContain('m3_direct_merge_map');
-    expect(sql).toContain('update public.messages m');
-    expect(sql).toContain('update public.call_sessions cs');
-    expect(sql).toContain('conversation_aliases');
-    expect(sql).toContain('conversation_ride_contexts');
-    expect(sql).toContain("set ride_id = null");
-  });
-
-  it('uses personal archive/delete state without expiry or terminal write gates', async () => {
-    const sql = await migration();
-    expect(sql).toContain('deleted_before timestamptz');
-    expect(sql).toContain('public.unarchive_conversation');
-    expect(sql).toContain('public.delete_conversation_for_me');
-    expect(sql).toContain('set archived_at = null');
+    expect(sql).toContain('c.expires_at > now()');
+    expect(sql).toContain("access_expires_at = v_left_at + interval '7 days'");
+    expect(sql).toContain('private.conversation_is_visible');
     expect(sql).toContain('private.message_is_visible');
-    expect(sql).not.toContain("+ interval '7 days'");
-    expect(sql).not.toContain('expires_at > now()');
+    expect(sql).toContain('private.call_is_visible');
   });
 
-  it('keeps ended groups writable and closes atomically after the final traveller', async () => {
+  it('restricts all personal controls to terminal rides', async () => {
     const sql = await migration();
-    expect(sql).toContain("c.ride_status in ('Completed', 'Cancelled', 'Expired')");
-    expect(sql).toContain("role = 'traveller' and left_at is null");
-    expect(sql).toContain("role = 'host' and left_at is null");
-    expect(sql).toContain('set closed_at = now()');
-    expect(sql).toContain("|| ' left the group.'");
-  });
-
-  it('enforces symmetric account blocking while preserving accepted rides', async () => {
-    const sql = await migration();
-    expect(sql).toContain('create table public.user_blocks');
-    expect(sql).toContain('private.users_are_blocked');
-    expect(sql).toContain('private.users_share_accepted_ride');
-    expect(sql).toContain("status = 'Cancelled', cancelled_by = 'System'");
-    expect(sql).toContain('guard_blocked_ride_request');
-    expect(sql).toContain('blocked accounts restrict ride visibility');
-    expect(sql).toContain('search_public_multi_leg_journeys');
-  });
-
-  it('revokes default RPC access and explicitly enables RLS tables', async () => {
-    const sql = await migration();
-    for (const table of ['user_blocks', 'conversation_ride_contexts', 'conversation_aliases']) {
-      expect(sql).toContain(`alter table public.${table} enable row level security`);
+    for (const name of ['archive_conversation', 'unarchive_conversation', 'delete_conversation_for_me', 'set_conversation_muted']) {
+      expect(sql).toContain(`public.${name}`);
     }
-    for (const signature of [
-      'public.block_user(uuid)',
-      'public.unblock_user(uuid)',
-      'public.delete_conversation_for_me(uuid)',
-      'public.unarchive_conversation(uuid)',
-    ]) {
+    expect(sql.match(/c\.ride_status in \('Completed', 'Cancelled', 'Expired'\)/g)).toHaveLength(4);
+    expect(sql).toContain('deleted_before timestamptz');
+    expect(sql).toContain('muted_at timestamptz');
+  });
+
+  it('removes a requester from the group while retaining only earlier history', async () => {
+    const sql = await migration();
+    expect(sql).toContain("old.status = 'Accepted'");
+    expect(sql).toContain("new.status = 'Cancelled'");
+    expect(sql).toContain("new.cancelled_by = 'Requester'");
+    expect(sql).toContain('m.created_at <= cm.left_at');
+    expect(sql).toContain('sync_cancelled_request_group_membership');
+    expect(sql).toContain('set left_at = null, access_expires_at = null');
+  });
+
+  it('keeps completed groups writable but makes cancelled and expired groups read-only', async () => {
+    const sql = await migration();
+    expect(sql).toContain("c.type = 'group'");
+    expect(sql).toContain("c.ride_status in ('Cancelled', 'Expired')");
+    expect(sql).toContain('private.reject_read_only_group_message_mutation');
+    expect(sql).toContain('revoke all on function public.leave_group_conversation(uuid)');
+  });
+
+  it('suppresses message notifications for muted members and secures lifecycle RPCs', async () => {
+    const sql = await migration();
+    expect(sql).toContain("new.event_type = 'message'");
+    expect(sql).toContain('cm.muted_at is not null');
+    expect(sql).toContain('return null');
+    for (const signature of ['public.archive_conversation(uuid)', 'public.unarchive_conversation(uuid)', 'public.delete_conversation_for_me(uuid)', 'public.set_conversation_muted(uuid, boolean)']) {
       expect(sql).toContain(`revoke all on function ${signature} from public, anon, authenticated`);
       expect(sql).toContain(`grant execute on function ${signature} to authenticated`);
     }

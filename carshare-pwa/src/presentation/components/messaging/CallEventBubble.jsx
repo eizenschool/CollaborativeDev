@@ -52,6 +52,7 @@ function callResult(status) {
     declined: 'Declined',
     cancelled: 'Cancelled',
     failed: 'Failed',
+    left: 'Left',
   }[status] || 'Call';
 }
 
@@ -59,6 +60,9 @@ export default function CallEventBubble({ call }) {
   const duration = formatDuration(call.durationSeconds);
   const failed = ['missed', 'failed', 'declined'].includes(call.status);
   const isOutgoing = call.direction === 'outgoing';
+  const directionLabel = call.isGroup
+    ? (isOutgoing ? 'Started group call' : 'Group call')
+    : (call.direction === 'incoming' ? 'Incoming' : 'Outgoing');
   const sender = call.caller || (isOutgoing
     ? { id: call.callerId, name: 'You', avatarUrl: null }
     : call.otherParticipant);
@@ -67,7 +71,7 @@ export default function CallEventBubble({ call }) {
     <div
       id={`call-${call.id}`}
       className={`message-call-event-row ${isOutgoing ? 'message-call-event-row-current-user' : 'message-call-event-row-other-user'} ${failed ? 'message-call-event-alert' : ''}`}
-      aria-label={`${call.label}. ${call.direction === 'incoming' ? 'Incoming' : 'Outgoing'} call, ${callResult(call.status)}, ${formatTime(call.createdAt)}${duration ? `, duration ${duration}` : ''}`}
+      aria-label={`${call.label}. ${directionLabel}, ${callResult(call.status)}, ${formatTime(call.createdAt)}${duration ? `, duration ${duration}` : ''}`}
     >
       <CallSenderAvatar participant={sender} />
       <div className={`message-call-event-column ${isOutgoing ? 'message-call-event-column-current-user' : ''}`}>
@@ -76,7 +80,7 @@ export default function CallEventBubble({ call }) {
           <div className="message-call-event-icon"><IconPhone size={17} aria-hidden="true" /></div>
           <div className="message-call-event-copy">
             <strong>{call.label}</strong>
-            <small>{call.direction === 'incoming' ? 'Incoming' : 'Outgoing'} · {callResult(call.status)}</small>
+            <small>{directionLabel} · {callResult(call.status)}</small>
           </div>
           {duration && <span className="message-call-event-duration">{duration}</span>}
         </article>

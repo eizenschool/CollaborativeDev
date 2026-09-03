@@ -32,6 +32,7 @@ const MyRequests = lazy(() => import('./presentation/components/ride/MyRequests.
 const EditRide = lazy(() => import('./presentation/components/ride/EditRide.jsx'));
 const RateReview = lazy(() => import('./presentation/components/ride/RateReview.jsx'));
 const MessageModule = lazy(() => import('./presentation/components/messaging/MessageModule.jsx'));
+const FriendCenter = lazy(() => import('./presentation/components/messaging/FriendCenter.jsx'));
 const TripModule = lazy(() => import('./presentation/components/trip/TripModule.jsx'));
 const TripDetail = lazy(() => import('./presentation/components/trip/TripDetail.jsx'));
 const NotificationCenter = lazy(() => import('./presentation/components/notifications/NotificationCenter.jsx'));
@@ -127,6 +128,7 @@ function AppShell({ routeLocation }) {
         <Route path="/search" element={<SearchModule />} />
         {/* Module 3 - Messaging */}
         <Route path="/message" element={<RequireAuth reason="Sign in to open your messages."><MessageModule /></RequireAuth>} />
+        <Route path="/message/friends" element={<RequireAuth reason="Sign in to manage your friends."><FriendCenter /></RequireAuth>} />
         <Route path="/message/:conversationId" element={<RequireAuth reason="Sign in to open this conversation."><MessageModule /></RequireAuth>} />
         <Route path="/message/:conversationId/history" element={<RequireAuth reason="Sign in to view message history."><MessageModule /></RequireAuth>} />
         <Route path="/notifications" element={<RequireAuth reason="Sign in to view your notifications."><NotificationCenter /></RequireAuth>} />

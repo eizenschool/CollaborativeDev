@@ -112,4 +112,35 @@ describe('Module 3 voice-call security contract', () => {
     expect(sql).toContain('grant execute on function public.start_voice_call(uuid, text) to authenticated');
     expect(sql).not.toMatch(/grant\s+(insert|update|delete|all).*call_sessions.*authenticated/i);
   });
+
+  it('lets every invited group member answer or decline independently', async () => {
+    const sql = await read('../../../database/sql/080_m3_group_voice_calls.sql');
+    expect(sql).toContain('create table public.call_participants');
+    expect(sql).toContain("status in ('ringing', 'accepted', 'declined', 'missed', 'left', 'failed')");
+    expect(sql).toContain("array_length(v_member_ids, 1) > 8");
+    expect(sql).toContain("set status = 'declined'");
+    expect(sql).toContain('private.call_participant_can_signal');
+    expect(sql).toContain('p_user_id = (select auth.uid())');
+    expect(sql).toContain('grant select on table public.call_participants to authenticated');
+    expect(sql).not.toMatch(/grant\s+(insert|update|delete|all).*call_participants.*authenticated/i);
+    expect(sql).toContain('notify_incoming_voice_call_participant');
+    expect(sql).toContain('alter publication supabase_realtime add table public.call_participants');
+  });
+
+  it('lets callers choose which active group members receive the invitation', async () => {
+    const sql = await read('../../../database/sql/081_m3_selective_group_voice_calls.sql');
+    expect(sql).toContain('p_invitee_ids uuid[]');
+    expect(sql).toContain('Select at least one group member to call');
+    expect(sql).toContain('not (invitee_id = any(v_all_member_ids))');
+    expect(sql).toContain('from unnest(v_call_member_ids) member_id');
+    expect(sql).toContain('public.start_selective_voice_call(uuid, text, uuid[])');
+    expect(sql).toContain('to authenticated');
+  });
+
+  it('allows mobile group members time to recover from background timer throttling', async () => {
+    const sql = await read('../../../supabase/migrations/20260903164328_harden_group_call_mobile_presence.sql');
+    expect(sql.match(/interval '5 minutes'/g)).toHaveLength(2);
+    expect(sql).toContain('create or replace function private.refresh_voice_call_status');
+    expect(sql).toContain('create or replace function public.release_voice_call_device');
+  });
 });

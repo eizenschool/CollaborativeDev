@@ -12,6 +12,7 @@ import { VehicleService } from '../../business-logic/VehicleService.js';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
 import { ReputationService } from '../../business-logic/ReputationService.js';
 import { describeReputationEvent, REPUTATION_POLICY } from '../../business-logic/ReputationPolicy.js';
+import { sharePublicProfile } from '../../business-logic/ProfileShareService.js';
 import TrustedFamilyCard from './profile/TrustedFamilyCard.jsx';
 import {
   SPOKEN_LANGUAGE_OPTIONS,
@@ -796,6 +797,7 @@ function ProfileVisibilityCard({ user }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [shareMessage, setShareMessage] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -808,6 +810,7 @@ function ProfileVisibilityCard({ user }) {
   async function save() {
     setSaving(true);
     setMessage('');
+    setShareMessage('');
     setError('');
     try {
       const saved = await ProfileService.updateProfileVisibility(user.id, visibility);
@@ -820,6 +823,21 @@ function ProfileVisibilityCard({ user }) {
     }
   }
 
+  async function shareProfile() {
+    setShareMessage('');
+    setError('');
+    try {
+      const result = await sharePublicProfile({
+        userId: user.id,
+        displayName: user.fullName || user.name || 'My profile',
+      });
+      if (result.method === 'copied') setShareMessage('Profile link copied.');
+      if (result.method === 'shared') setShareMessage('Profile shared.');
+    } catch (shareError) {
+      setError(shareError.message || 'Unable to share your profile.');
+    }
+  }
+
   return (
     <div className="card profile-visibility-card">
       <div className="profile-visibility-head">
@@ -827,7 +845,10 @@ function ProfileVisibilityCard({ user }) {
           <p className="card-title">Public profile visibility</p>
           <p className="card-subtitle">Only your shortened name, rating, reputation and member status are always shown. Email, phone and emergency contact are never public.</p>
         </div>
-        <Link className="btn-outline" to={`/users/${user.id}`}>Preview</Link>
+        <div className="profile-visibility-actions">
+          <button className="btn-outline" type="button" onClick={() => { void shareProfile(); }}>Share profile</button>
+          <Link className="btn-outline" to={`/users/${user.id}`}>Preview</Link>
+        </div>
       </div>
       {!visibility ? <p className="card-subtitle">Loading visibility settings…</p> : (
         <div className="profile-visibility-list">
@@ -850,6 +871,7 @@ function ProfileVisibilityCard({ user }) {
       <p className="profile-visibility-note">For safety, an active Driver’s name, reputation, rating and ride-card identity remain visible on published rides.</p>
       {visibility?.deploymentPending && <div className="alert alert-info">These controls are previewing defaults until database migration 073 is deployed.</div>}
       {message && <div className="alert alert-success" role="status">{message}</div>}
+      {shareMessage && <div className="alert alert-success" role="status">{shareMessage}</div>}
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       <Button onClick={save} loading={saving} loadingLabel="Saving" disabled={!visibility}>Save visibility</Button>
     </div>

@@ -99,10 +99,14 @@ vehicle registration, companion names and precise Ride data. Deployed migration
 `073` stores these choices and exposes `get_public_profile`. Home and desktop
 navigation use the owner's photo as a direct Profile shortcut.
 
-Authored migration `075` adds account-level blocking. While both accounts are
-signed in, a blocked pair cannot view each other's public profile unless an
-Accepted Ride relationship must preserve trip safety/history. Private-message
-history remains available, but its profile shortcut is hidden while blocked.
+The same safe public profile is now the privacy-preserving friendship discovery
+surface: other members see Add friend, pending-response, or Message actions,
+while guests authenticate and return to the same profile. Owners can invoke the
+system share sheet for `/users/:userId`, with clipboard fallback and visible
+feedback. There is no username/directory search. Authored migration `079_m3`
+extends raw safe-profile relevance only to current or retained friend-chat
+co-members; Auth email and `profile_private` phone/emergency contact remain
+outside that policy.
 
 ## Open Questions
 Hard account deletion; phone OTP. Authored migration `078_m1` adds a

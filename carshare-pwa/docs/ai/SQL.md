@@ -17,7 +17,7 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, and 074_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-077
+Repository SQL history: 001-081
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -33,8 +33,8 @@ Repository SQL history: 001-077
   `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
   `063_m2` remains authored locally and undeployed; `065_m3` is deployed as
   `m3_terminal_chat_and_call_history`; `066_m2` is deployed as
-`m2_fix_pickup_photo_storage_path_policy`; `075_m3`, `077_m3`, and `078_m1` are authored
-locally and pending deployment. Module 1 migrations `072_m1`
+`m2_fix_pickup_photo_storage_path_policy`; `077_m3`, `078_m1`, and `079_m3`
+are authored locally and pending deployment. Module 1 migrations `072_m1`
 and `073_m1` are deployed through the Dashboard SQL Editor (verified
 2026-08-27: `reputation_events`, `profile_visibility`,
 `get_reputation_summary`, and `get_public_profile` all exist live), but
@@ -59,6 +59,12 @@ confirmed live via the exact `42501 permission denied for table
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that.)
 ```
+
+The repository has one documented historical numbering collision at `075`
+(`075_m3_conversation_lifecycle_redesign.sql` and the deployed
+`075_m6_place_lifecycle_notification.sql`). Neither file is renamed or
+overwritten; new work continues at the next unused number, which is why the
+friendship migration is `079`.
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
 `011-012` are deployed follow-ups for advisor findings and the confirmed
@@ -448,15 +454,18 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, pickup instructions, one nullable private pickup-photo path after undeployed `059`, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
 - `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
-- `conversations`: after authored `075`, one persistent row per unordered direct-user pair plus one group per Ride; groups alone retain `ride_id`/ride status and close when their final Traveller leaves.
-- `conversation_members`: role, join/leave, reversible personal archive, personal `deleted_before` history boundary, and trusted read cursor.
-- `conversation_ride_contexts` (authored `075`): optional Ride references for persistent direct conversations; context never controls conversation lifecycle.
-- `conversation_aliases` (authored `075`): authenticated legacy ride-chat ID redirects to the canonical pair conversation.
-- `user_blocks` (authored `075`): blocker-owned account relationship used by narrow helpers/RPCs for private contact and authenticated profile/Ride/request visibility.
+- `friendships` (in authored `079`): one canonical account pair with a
+  versioned pending/accepted/declined/removed state. Participants have SELECT
+  only; every transition is an authenticated RPC.
+- `conversations`: one ride/traveller direct chat, one ride group, and (after
+  `079`) at most one separate non-expiring direct chat per friendship.
+- `conversation_members`: ride/friend role, join/retained-leave, personal
+  archive/delete/mute state, access expiry, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
 - `message_translations` (in deployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
-- `call_sessions` (in live `043`): direct-chat caller/callee invitation and lifecycle rows; authored `075` applies personal deletion boundaries and membership/closure visibility without Ride-age expiry, while authored `077` adds device-bound heartbeats and orphan recovery.
+- `call_sessions` (in live `043`, extended by deployed `080`): direct/group call lifecycle rows; participants receive SELECT only and mutate through authenticated RPCs. Deployed `065_m3` requires current conversation visibility, the live `077` schema adds device-bound heartbeats and orphan recovery, and deployed `080` adds independent per-member state.
+- `call_participants` (in deployed `080`): one caller/invitee row per call member with ringing, accepted, declined, missed, left, or failed state; browser roles receive RLS-filtered SELECT only.
 - `turn_usage_guard` and `turn_credential_issues` (in live `044`): service-only relay cutoff state and revocable temporary-username metadata; no TURN password or long-lived provider token is stored.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
@@ -490,7 +499,11 @@ table; deployed `039` changes the two classification columns above):
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
 - Deployed `072_m1` makes reputation authoritative in database triggers: three evidence Rides are provisional, then publishing requires 65 and requesting 50; a safety hold overrides score. Browser clients receive SELECT-only ledger access and cannot manufacture events.
 - Deployed `073_m1` exposes only the privacy-filtered `get_public_profile(uuid)` projection to `anon`/`authenticated`; owner-private contact data is never selected.
-- Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Messaging mutations are RPC-only; lifecycle, membership, terminal-only personal controls, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Authored `079` serializes friendship-pair transitions, rejects self/duplicate/
+  unauthorized/inactive-account requests, and lets friend-chat message/media/
+  call writes pass only while the relationship is accepted and both profiles
+  are active. Removed-friend history remains participant-readable.
 - Translation-cache browser access is SELECT-only and follows the same visible-conversation/tombstone boundary; the authenticated Edge Function rechecks access before using its server credential to cache a result.
 - Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
 - All four messaging tables and `call_sessions` are in the `supabase_realtime` publication. Private call-signal Broadcast topics authorize only the active row's caller and callee.
@@ -515,6 +528,9 @@ table; deployed `039` changes the two classification columns above):
 - `reputation_events_ride_user_idx` (in deployed `072_m1`)
 - `conversations_one_direct_per_ride_user_idx`
 - `conversations_one_group_per_ride_idx`
+- `conversations_one_friend_per_friendship_idx` (in authored `079`)
+- `friendships_unique_pair` (in authored `079`)
+- `friendships_member_high_status_idx` (in authored `079`)
 - `conversations_direct_user_id_idx`
 - `conversation_members_user_active_idx`
 - `messages_conversation_created_idx`
@@ -625,12 +641,11 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   Realtime system message, and tightens call-history SELECT with current
   conversation visibility.
 - `075_m3_conversation_lifecycle_redesign.sql` - authored, not deployed;
-  migrates ride-bound direct duplicates into one persistent pair conversation,
-  adds contextual Ride links and legacy aliases, personal archive/delete state,
-  account blocks, terminal-but-messageable groups, final-Traveller atomic group
-  closure, updated call/translation/media RLS, and block-aware profile/Ride/search
-  boundaries. It supersedes `016`/`065` lifecycle behavior without rewriting
-  deployed history.
+  keeps conversations Ride-bound, adds terminal-only archive/unarchive,
+  delete-for-me, mute/unmute for direct and group conversations, suppresses only
+  muted message notifications, removes manual group leave, retains a requester
+  who cancels an Accepted request as a read-only former member for seven days,
+  and applies the earliest personal or Ride-terminal expiry through RLS.
 - `077_m3_voice_call_presence_recovery.sql` - authored, not deployed; adds
   caller-device ownership, participant heartbeat timestamps, 90-second orphan
   expiry, same-device refresh recovery, and compatible one-/two-argument call
@@ -641,6 +656,23 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
   `reputation_hold` reachable for the first time since `072_m1` defined them,
   without a client-facing admin surface.
+- `079_m3_friendships_and_persistent_chat.sql` - authored, not deployed;
+  adds mutually confirmed account-pair friendships, authenticated RPC-only
+  transitions, one separate permanent direct conversation per friendship,
+  friend-member profile relevance, accepted/active-account message and call
+  gates, read-only retained history after removal, Realtime publication, and
+  deduplicated request/acceptance notifications. It depends on authored `075`
+  and `077` and does not alter existing Ride chat identities or seven-day rules.
+- `080_m3_group_voice_calls.sql` - deployed 2026-09-03 as tracked migration
+  `m3_group_voice_calls`; adds direct/group
+  call types, per-member invitations and lifecycle state, independent
+  answer/reject/leave behavior, max-eight peer-mesh rooms, per-invitee push
+  notifications, participant-scoped TURN authorization, and participant-table
+  Realtime publication. It depends on authored `075`, `077`, and `079`.
+- `081_m3_selective_group_voice_calls.sql` - deployed 2026-09-03 as tracked
+  migration `m3_selective_group_voice_calls`; adds a separately named RPC that
+  validates and rings only the active group members selected by the caller,
+  while preserving the existing direct-call RPC.
 - `066_m2_fix_pickup_photo_storage_path_policy.sql` - deployed as tracked
   migration `m2_fix_pickup_photo_storage_path_policy`; corrects the pickup
   photo Storage policies to treat `user-id/ride-id/filename` as two folders,

@@ -1,5 +1,6 @@
 // ===== BUSINESS LOGIC LAYER (MessagingService) =====
 import { supabaseMessagingRepository } from '../data-access/supabaseMessagingRepository.js';
+import { callHistoryLabel } from './CallService.js';
 
 export const MESSAGE_TYPE = {
   TEXT: 'text',
@@ -13,6 +14,11 @@ export const MESSAGE_TYPE = {
 export const CONVERSATION_TYPE = {
   DIRECT: 'direct',
   GROUP: 'group',
+};
+
+export const CONVERSATION_SCOPE = {
+  RIDE: 'ride',
+  FRIEND: 'friend',
 };
 
 export const TERMINAL_RIDE_STATUSES = Object.freeze([
@@ -202,7 +208,11 @@ function mapMember(row) {
     leftAt: row.left_at,
     archivedAt: row.archived_at,
     deletedBefore: row.deleted_before,
+    accessExpiresAt: row.access_expires_at,
+    mutedAt: row.muted_at,
     lastReadAt: row.last_read_at,
+    profileAvailable: Boolean(row.profile),
+    accountActive: row.profile?.status === 'active',
     name: row.profile?.full_name || 'Member',
     avatarUrl: row.profile?.profile_photo_url || null,
   };
@@ -220,35 +230,20 @@ function messagePreview(message) {
   return message.kind === 'system' ? 'Group update' : 'Message';
 }
 
-function applyBlockState(conversation, blockState) {
-  const interactionBlocked = Boolean(blockState?.interaction_blocked);
-  return {
-    ...conversation,
-    blockedByMe: Boolean(blockState?.blocked_by_me),
-    interactionBlocked,
-    ...(interactionBlocked ? {
-      rideId: null,
-      rideContexts: [],
-      pickup: null,
-      destination: null,
-      tripRoute: null,
-      tripDate: '',
-      tripTime: '',
-    } : {}),
-  };
-}
-
 export function mapConversationRow(row, currentUserId) {
   const allMembers = (row.members || []).map(mapMember);
   const members = allMembers.filter((member) => !member.leftAt);
   const currentMembership = allMembers.find((member) => member.id === currentUserId);
   const otherMember = members.find((member) => member.id !== currentUserId);
-  const rideContexts = [...(row.ride_contexts || [])]
-    .sort((first, second) => new Date(second.added_at) - new Date(first.added_at));
-  const latestRideContext = rideContexts[0]?.ride || null;
-  const contextualRide = row.type === CONVERSATION_TYPE.GROUP
-    ? row.ride
-    : latestRideContext || row.ride;
+  const contextualRide = row.ride;
+  const scope = row.scope === CONVERSATION_SCOPE.FRIEND
+    ? CONVERSATION_SCOPE.FRIEND
+    : CONVERSATION_SCOPE.RIDE;
+  const friendship = Array.isArray(row.friendship) ? row.friendship[0] : row.friendship;
+  const rawFriendshipStatus = friendship?.status;
+  const friendshipStatus = scope === CONVERSATION_SCOPE.FRIEND
+    ? rawFriendshipStatus === 'accepted' ? 'accepted' : 'removed'
+    : null;
   const route = row.trip_route
     || [contextualRide?.pickup, contextualRide?.destination].filter(Boolean).join(' to ')
     || null;
@@ -258,36 +253,74 @@ export function mapConversationRow(row, currentUserId) {
   const lastMessage = Array.isArray(row.last_message)
     ? row.last_message[0]
     : row.last_message;
-  const lastAt = lastMessage?.created_at || row.last_message_at || row.created_at;
+  const lastCall = Array.isArray(row.latest_call) ? row.latest_call[0] : row.latest_call;
+  const messageAt = lastMessage?.created_at || null;
+  const callAt = lastCall?.created_at || null;
+  const isCallLatest = Boolean(
+    callAt && (!messageAt || new Date(callAt).getTime() >= new Date(messageAt).getTime()),
+  );
+  const latestVisibleActivityAt = isCallLatest ? callAt : messageAt;
+  const lastAt = latestVisibleActivityAt || row.last_message_at || row.created_at;
   const deletedBefore = currentMembership?.deletedBefore;
   const isHiddenByDelete = Boolean(
-    row.type === CONVERSATION_TYPE.DIRECT
-    && deletedBefore
-    && (!lastMessage
-      || lastMessage.sender_id === currentUserId
-      || new Date(lastMessage.created_at) <= new Date(deletedBefore)),
+    deletedBefore
+    && (!latestVisibleActivityAt
+      || new Date(latestVisibleActivityAt) <= new Date(deletedBefore)),
   );
+  const rideStatus = row.ride_status || contextualRide?.status || null;
+  const isFormerMember = Boolean(currentMembership?.leftAt);
+  const friendAccountsAvailable = scope !== CONVERSATION_SCOPE.FRIEND
+    || members.every((member) => member.profileAvailable && member.accountActive);
+  const isReadOnly = isFormerMember
+    || (scope === CONVERSATION_SCOPE.FRIEND
+      ? friendshipStatus !== 'accepted' || !friendAccountsAvailable
+      : (row.type === CONVERSATION_TYPE.GROUP
+        && ['Cancelled', 'Expired'].includes(rideStatus)));
+  const expiryDates = scope === CONVERSATION_SCOPE.FRIEND ? [] : [row.expires_at, currentMembership?.accessExpiresAt]
+    .filter(Boolean)
+    .map((value) => new Date(value));
+  const effectiveExpiresAt = expiryDates.length
+    ? new Date(Math.min(...expiryDates)).toISOString()
+    : null;
 
   return {
     id: row.id,
-    rideId: row.ride_id || latestRideContext?.id || null,
+    rideId: row.ride_id || null,
     type: row.type,
+    scope,
+    friendshipStatus,
     title,
     members,
     currentMembership,
     isArchived: Boolean(currentMembership?.archivedAt),
+    isMuted: Boolean(currentMembership?.mutedAt),
     isHiddenByDelete,
-    isReadOnly: false,
-    isClosed: Boolean(row.closed_at),
+    isReadOnly,
+    isFormerMember,
+    isTerminal: isTerminalRideStatus(rideStatus),
+    expiresAt: row.expires_at || null,
+    accessExpiresAt: currentMembership?.accessExpiresAt || null,
+    effectiveExpiresAt,
+    interactionBlocked: scope === CONVERSATION_SCOPE.FRIEND && friendshipStatus !== 'accepted',
+    friendAccountsAvailable,
+    blockedByMe: false,
     otherUserId: otherMember?.id || null,
-    rideContexts,
-    rideStatus: row.type === CONVERSATION_TYPE.GROUP ? row.ride_status : null,
+    rideStatus,
     pickup: contextualRide?.pickup || null,
     destination: contextualRide?.destination || null,
     tripRoute: route,
     tripDate: formatTripDate(row.trip_departure_at || contextualRide?.departure_at),
     tripTime: formatTripTime(row.trip_departure_at || contextualRide?.departure_at),
-    lastMessage: messagePreview(lastMessage),
+    hasMessages: Boolean(lastMessage),
+    hasCalls: Boolean(lastCall),
+    hasActivity: Boolean(lastMessage || lastCall),
+    lastMessage: isCallLatest
+      ? callHistoryLabel(
+        lastCall.status,
+        lastCall.caller_id === currentUserId ? 'outgoing' : 'incoming',
+        lastCall.call_type || 'direct',
+      )
+      : messagePreview(lastMessage),
     lastMessageAt: lastAt,
     lastTime: formatConversationTime(lastAt),
     unreadCount: row.unread_count || 0,
@@ -422,7 +455,7 @@ export function getMessagingChangeConversationId(change) {
     : change?.old;
   if (!row) return null;
   if (change.table === 'conversations') return row.id || null;
-  if (['conversation_members', 'conversation_ride_contexts', 'messages'].includes(change.table)) {
+  if (['conversation_members', 'messages'].includes(change.table)) {
     return row.conversation_id || null;
   }
   if (change.table === 'call_sessions') return row.conversation_id || null;
@@ -439,27 +472,20 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       return repository.openRideDirectConversation(rideId);
     },
 
-    async resolveConversationId(conversationId) {
-      if (!conversationId) throw new Error('A conversation is required.');
-      return repository.resolveConversationId?.(conversationId) || conversationId;
-    },
-
     async listConversations(folder = 'active') {
       if (!['active', 'archived'].includes(folder)) {
         throw new Error('Unsupported conversation folder.');
       }
       const currentUserId = await repository.getCurrentUserId();
       const rows = await repository.listConversations();
-      const conversations = await Promise.all(rows.map(async (row) => {
-        const conversation = mapConversationRow(row, currentUserId);
-        if (conversation.type !== CONVERSATION_TYPE.DIRECT || !conversation.otherUserId) {
-          return { ...conversation, blockedByMe: false, interactionBlocked: false };
-        }
-        const blockState = await repository.getUserBlockState?.(conversation.otherUserId);
-        return applyBlockState(conversation, blockState);
-      }));
+      const conversations = rows.map((row) => mapConversationRow(row, currentUserId));
       return conversations
         .filter((conversation) => !conversation.isHiddenByDelete)
+        .filter((conversation) =>
+          conversation.scope === CONVERSATION_SCOPE.FRIEND
+          || conversation.type === CONVERSATION_TYPE.GROUP
+          || conversation.hasActivity,
+        )
         .filter((conversation) =>
           folder === 'archived' ? conversation.isArchived : !conversation.isArchived,
         )
@@ -472,12 +498,7 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       const currentUserId = await repository.getCurrentUserId();
       const row = await repository.getConversation(conversationId);
       if (!row) return null;
-      const conversation = mapConversationRow(row, currentUserId);
-      if (conversation.type !== CONVERSATION_TYPE.DIRECT || !conversation.otherUserId) {
-        return { ...conversation, blockedByMe: false, interactionBlocked: false };
-      }
-      const blockState = await repository.getUserBlockState?.(conversation.otherUserId);
-      return applyBlockState(conversation, blockState);
+      return mapConversationRow(row, currentUserId);
     },
 
     async listMessages(conversationId) {
@@ -686,16 +707,8 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       return repository.deleteConversationForMe(conversationId);
     },
 
-    async blockUser(userId) {
-      return repository.blockUser(userId);
-    },
-
-    async unblockUser(userId) {
-      return repository.unblockUser(userId);
-    },
-
-    async leaveGroup(conversationId) {
-      return repository.leaveGroup(conversationId);
+    async setConversationMuted(conversationId, muted) {
+      return repository.setConversationMuted(conversationId, Boolean(muted));
     },
 
     subscribeToMessaging(listener) {

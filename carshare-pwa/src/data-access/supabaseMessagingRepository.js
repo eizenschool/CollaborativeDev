@@ -11,21 +11,30 @@ const CORE_REALTIME_TABLES = [
   'messages',
   'call_sessions',
 ];
-const LIFECYCLE_REALTIME_TABLES = [
-  'conversation_ride_contexts',
-  'user_blocks',
-];
+const LIFECYCLE_REALTIME_TABLES = ['friendships'];
+
+const FRIEND_CONVERSATION_SELECT = `
+  *,
+  friendship:friendships!conversations_friendship_id_fkey(id, status, updated_at),
+  ride:rides(id, host_id, pickup, destination, departure_at, status),
+  members:conversation_members(
+    conversation_id, user_id, role, joined_at, left_at, archived_at, deleted_before,
+    access_expires_at, muted_at, last_read_at,
+    profile:profiles(id, full_name, profile_photo_url, status)
+  ),
+  last_message:messages!conversations_last_message_id_fkey(
+    id, sender_id, kind, text_content, created_at, edited_at, deleted_at,
+    attachments:message_attachments(id, kind, file_name)
+  )
+`;
 
 const CONVERSATION_SELECT = `
   *,
   ride:rides(id, host_id, pickup, destination, departure_at, status),
   members:conversation_members(
-    conversation_id, user_id, role, joined_at, left_at, archived_at, deleted_before, last_read_at,
-    profile:profiles(id, full_name, profile_photo_url)
-  ),
-  ride_contexts:conversation_ride_contexts(
-    ride_id, added_at,
-    ride:rides(id, host_id, pickup, destination, departure_at, status)
+    conversation_id, user_id, role, joined_at, left_at, archived_at, deleted_before,
+    access_expires_at, muted_at, last_read_at,
+    profile:profiles(id, full_name, profile_photo_url, status)
   ),
   last_message:messages!conversations_last_message_id_fkey(
     id, sender_id, kind, text_content, created_at, edited_at, deleted_at,
@@ -35,13 +44,13 @@ const CONVERSATION_SELECT = `
 
 // Keep existing conversations readable while migration 075 is pending or
 // PostgREST is still refreshing its schema cache. This is the exact shape used
-// before conversation_ride_contexts and deleted_before were introduced.
+// before the personal conversation-state columns were introduced.
 const LEGACY_CONVERSATION_SELECT = `
   *,
   ride:rides(id, host_id, pickup, destination, departure_at, status),
   members:conversation_members(
     conversation_id, user_id, role, joined_at, left_at, archived_at, last_read_at,
-    profile:profiles(id, full_name, profile_photo_url)
+    profile:profiles(id, full_name, profile_photo_url, status)
   ),
   last_message:messages!conversations_last_message_id_fkey(
     id, kind, text_content, created_at, edited_at, deleted_at,
@@ -50,6 +59,7 @@ const LEGACY_CONVERSATION_SELECT = `
 `;
 
 let lifecycleConversationSchemaAvailable = null;
+let friendshipConversationSchemaAvailable = null;
 
 const MESSAGE_SELECT = `
   *,
@@ -74,15 +84,15 @@ export function isMissingConversationLifecycleSchema(error) {
     .filter(Boolean)
     .join(' ');
   return ['PGRST200', 'PGRST204', '42703', '42P01'].includes(error?.code)
-    && /conversation_ride_contexts|deleted_before|direct_participant_(?:low|high)_id|closed_at/i.test(details);
+    && /deleted_before|access_expires_at|muted_at/i.test(details);
 }
 
-function isMissingLifecycleRpc(error) {
+export function isMissingFriendshipConversationSchema(error) {
   const details = [error?.message, error?.details, error?.hint]
     .filter(Boolean)
     .join(' ');
-  return error?.code === 'PGRST202'
-    || /Could not find the function public\.(?:resolve_conversation_id|get_user_block_state)/i.test(details);
+  return ['PGRST200', 'PGRST204', 'PGRST205', '42703', '42P01'].includes(error?.code)
+    && /friendships|friendship_id|scope|conversations_friendship_id_fkey/i.test(details);
 }
 
 async function loadConversationRows(client, conversationId = null) {
@@ -92,6 +102,24 @@ async function loadConversationRows(client, conversationId = null) {
     query = query.order('last_message_at', { ascending: false, nullsFirst: false });
     return query.order('created_at', { ascending: false });
   };
+
+  if (friendshipConversationSchemaAvailable !== false) {
+    const friendshipResult = await run(FRIEND_CONVERSATION_SELECT);
+    if (!friendshipResult.error) {
+      friendshipConversationSchemaAvailable = true;
+      lifecycleConversationSchemaAvailable = true;
+      return friendshipResult;
+    }
+    if (isMissingConversationLifecycleSchema(friendshipResult.error)) {
+      friendshipConversationSchemaAvailable = false;
+      lifecycleConversationSchemaAvailable = false;
+      return run(LEGACY_CONVERSATION_SELECT);
+    }
+    if (!isMissingFriendshipConversationSchema(friendshipResult.error)) {
+      return friendshipResult;
+    }
+    friendshipConversationSchemaAvailable = false;
+  }
 
   if (lifecycleConversationSchemaAvailable === false) {
     return run(LEGACY_CONVERSATION_SELECT);
@@ -207,6 +235,33 @@ export async function attachSignedUrls(rows, client = requireSupabase()) {
   }));
 }
 
+export async function attachLatestCallActivity(rows, client = requireSupabase()) {
+  const conversations = Array.isArray(rows) ? rows : rows ? [rows] : [];
+  if (!conversations.length) return rows;
+
+  const { data, error } = await client
+    .from('call_sessions')
+    .select('id, conversation_id, caller_id, callee_id, call_type, status, created_at')
+    .in('conversation_id', conversations.map((conversation) => conversation.id))
+    .order('created_at', { ascending: false });
+
+  // Voice calling was introduced after messaging. Keep older deployments able
+  // to load their conversation list when call_sessions is not available yet.
+  if (error) return rows;
+
+  const latestByConversation = new Map();
+  (data || []).forEach((call) => {
+    if (!latestByConversation.has(call.conversation_id)) {
+      latestByConversation.set(call.conversation_id, call);
+    }
+  });
+  const enriched = conversations.map((conversation) => ({
+    ...conversation,
+    latest_call: latestByConversation.get(conversation.id) || null,
+  }));
+  return Array.isArray(rows) ? enriched : enriched[0];
+}
+
 export const supabaseMessagingRepository = {
   backend: isSupabaseConfigured ? 'supabase' : 'unconfigured',
 
@@ -223,28 +278,6 @@ export const supabaseMessagingRepository = {
     return data;
   },
 
-  async resolveConversationId(conversationId) {
-    const client = requireSupabase();
-    const { data, error } = await client.rpc('resolve_conversation_id', {
-      p_conversation_id: conversationId,
-    });
-    if (error && isMissingLifecycleRpc(error)) return conversationId;
-    if (error) throw normalizeError(error, 'Unable to open this conversation.');
-    return data;
-  },
-
-  async getUserBlockState(userId) {
-    const client = requireSupabase();
-    const { data, error } = await client.rpc('get_user_block_state', {
-      p_user_id: userId,
-    });
-    if (error && isMissingLifecycleRpc(error)) {
-      return { blocked_by_me: false, interaction_blocked: false };
-    }
-    if (error) throw normalizeError(error, 'Unable to load privacy state.');
-    return (data || [])[0] || { blocked_by_me: false, interaction_blocked: false };
-  },
-
   async listConversations() {
     const client = requireSupabase();
     const userId = await requireUserId();
@@ -253,15 +286,19 @@ export const supabaseMessagingRepository = {
     const conversations = data || [];
     if (!conversations.length) return conversations;
 
-    const { data: messageMeta, error: messageError } = await client
-      .from('messages')
-      .select('conversation_id, sender_id, created_at')
-      .in('conversation_id', conversations.map((conversation) => conversation.id));
+    const [messageResult, conversationsWithCalls] = await Promise.all([
+      client
+        .from('messages')
+        .select('conversation_id, sender_id, created_at')
+        .in('conversation_id', conversations.map((conversation) => conversation.id)),
+      attachLatestCallActivity(conversations, client),
+    ]);
+    const { data: messageMeta, error: messageError } = messageResult;
     if (messageError) {
       throw normalizeError(messageError, 'Unable to load unread messages.');
     }
 
-    return conversations.map((conversation) => {
+    return conversationsWithCalls.map((conversation) => {
       const membership = (conversation.members || []).find(
         (member) => member.user_id === userId,
       );
@@ -281,7 +318,7 @@ export const supabaseMessagingRepository = {
     const client = requireSupabase();
     const { data, error } = await loadConversationRows(client, conversationId);
     if (error) throw normalizeError(error, 'Unable to load this conversation.');
-    return data;
+    return attachLatestCallActivity(data, client);
   },
 
   async listMessages(conversationId) {
@@ -419,29 +456,18 @@ export const supabaseMessagingRepository = {
       p_conversation_id: conversationId,
     });
     if (error) throw normalizeError(error, 'Unable to delete this chat for you.');
-    return data;
+    return attachLatestCallActivity(data, client);
   },
 
-  async blockUser(userId) {
+  async setConversationMuted(conversationId, muted) {
     const client = requireSupabase();
-    const { data, error } = await client.rpc('block_user', { p_user_id: userId });
-    if (error) throw normalizeError(error, 'Unable to block this user.');
-    return data;
-  },
-
-  async unblockUser(userId) {
-    const client = requireSupabase();
-    const { data, error } = await client.rpc('unblock_user', { p_user_id: userId });
-    if (error) throw normalizeError(error, 'Unable to unblock this user.');
-    return data;
-  },
-
-  async leaveGroup(conversationId) {
-    const client = requireSupabase();
-    const { data, error } = await client.rpc('leave_group_conversation', {
+    const { data, error } = await client.rpc('set_conversation_muted', {
       p_conversation_id: conversationId,
+      p_muted: Boolean(muted),
     });
-    if (error) throw normalizeError(error, 'Unable to leave group.');
+    if (error) throw normalizeError(error, muted
+      ? 'Unable to mute this conversation.'
+      : 'Unable to unmute this conversation.');
     return data;
   },
 
@@ -461,7 +487,7 @@ export const supabaseMessagingRepository = {
       });
     coreChannel.subscribe();
 
-    // Optional lifecycle tables use a separate channel. If migration 075 has
+    // Optional friendship tables use a separate channel. If migration 079 has
     // not reached the database yet, Realtime can reject this channel without
     // taking down message/conversation refreshes on the core channel.
     let lifecycleChannel = client.channel(`messaging-lifecycle-${Date.now()}-${Math.random()}`);

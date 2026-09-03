@@ -156,16 +156,21 @@ Supabase provider and matching Redirect URLs - tracked in
 `docs/SUPABASE-SETUP.md` and `docs/ai/TODO.md`.
 
 ## D016 — Module 3 Supabase Messaging and Retention Contract
-**Status:** Superseded by D031
+**Status:** Accepted
 Published rides allow any signed-in non-Host to create/reuse one ride-bound
 direct chat without a ride request. The first Accepted request creates the one
 ride group transactionally; every accepted account holder joins and companions
 do not. A message is one atomic text/media/location bundle with up to ten mixed
 photos/videos and one coordinate pair. Sender-only edits are allowed only before
 another member reads the message; sender-only deletion always tombstones the
-whole bundle. Completed private chats can be archived per user, Completed group
-travellers can leave, and Hosts cannot leave. Completed, Cancelled, and Expired
-conversation access ends permanently seven days after the terminal timestamp,
+whole bundle. Archive, unarchive, delete-for-me, mute, and unmute are personal
+controls available to both direct and group conversations only after the Ride is
+Completed, Cancelled, or Expired. Archive is a reversible folder state; deletion
+hides only the member's existing history, and muting suppresses message alerts
+without suppressing delivery or unread state. A requester who cancels an Accepted
+request immediately leaves the group but retains read-only access to messages sent
+before cancellation for at most seven days. Manual group leave is removed.
+Completed, Cancelled, and Expired conversation access ends permanently seven days after the terminal timestamp,
 overriding UC3.8's older permanent archive wording. Translation/UC3.6 is an
 explicit, on-demand four-language action for English, Simplified Chinese,
 Bahasa Melayu, and Tamil. An authenticated Supabase Edge Function resolves the
@@ -494,21 +499,35 @@ standing remain visible on Published Ride cards. Migration 066 stores the
 switches, exposes the filtered RPC, and narrows raw cross-profile visibility;
 until deployed, the app uses non-persistent defaults and labels that state.
 
-## D031 — People-own-private, Rides-own-groups Messaging Lifecycle
-**Status:** Accepted; migration 075 authored and pending deployment
+## D031 — Confirmed Friendships and Separate Permanent Direct Chats
+**Status:** Accepted in application; migration 079 authored and not deployed
 
-An unordered user pair owns one persistent private conversation. Rides may be
-recorded as context but never control private-chat availability. Archive is
-personal and reversible; Delete chat for me permanently hides history through
-a per-member timestamp without deleting the other participant's data. Blocking
-is an account-level future-contact and discovery boundary while signed in, but
-does not erase prior private history or revoke accepted-trip safety/history.
+A friendship is one normalized account pair and requires explicit acceptance.
+It is not inferred from a Ride, request, message, contact list, or profile view.
+Discovery is limited to privacy-filtered `/users/:userId` profiles and shared
+profile links; this release has no global search, contact import, or blocking.
 
-Each Ride continues to own one Host-plus-accepted-Travellers group. Completed,
-Cancelled, and Expired groups remain messageable. Travellers leave
-individually; the final Traveller departure atomically removes the Host and
-closes the group. Archive never means Leave, and neither direct nor group
-conversation access expires seven days after a terminal Ride.
+Each accepted pair owns at most one `friend`-scoped direct conversation. This
+conversation is separate from every Ride direct/group conversation, has no Ride
+or seven-day expiry, and reuses the existing text, media, location, voice
+message, translation, and one-to-one call paths. Removing a friend immediately
+blocks server-side message/media/call writes, ends an active call, and leaves the
+conversation in Messages as read-only without automatically archiving or
+deleting it. A later accepted request restores writes to the same conversation
+and preserves its history and each member's delete boundary.
+
+Friend requests notify only the recipient and open `/message/friends`;
+acceptance notifies only the requester and opens the permanent chat. Decline,
+cancel, and removal are silent. Request counts belong to the Friends entry and
+shared notification centre, not the Message unread count. `079_m3` implements
+the pair locks, RLS, RPCs, Realtime publication, safe profile relevance, and
+friend-chat write gate while preserving all Ride-chat IDs and lifecycle rules.
+
+A future co-ride invitation may be a structured friend-chat message storing
+only `ride_id` and resolving live Ride state when displayed. It will open the
+existing Ride Detail and `Request to join` flow; it must not auto-request,
+reserve a seat, or bypass Driver approval. That card is explicitly outside the
+current release.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);

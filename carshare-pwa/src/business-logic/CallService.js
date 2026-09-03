@@ -12,6 +12,7 @@ export const CALL_STATUS = Object.freeze({
 
 export const CALL_RING_TIMEOUT_MS = 45_000;
 export const CALL_MAX_DURATION_MS = 60 * 60 * 1000;
+export const MAX_GROUP_CALL_PARTICIPANTS = 8;
 const CALL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function incomingCallIdFromUrl(value, baseUrl = 'http://localhost') {
@@ -89,6 +90,10 @@ export function isTerminalCallStatus(status) {
   return TERMINAL_STATUSES.has(status);
 }
 
+export function isCurrentCallParticipantAccepted(call) {
+  return (call?.selfParticipant?.status || call?.status) === CALL_STATUS.ACCEPTED;
+}
+
 function mapProfile(profile) {
   if (!profile) return { id: null, name: 'Member', avatarUrl: null };
   return {
@@ -98,7 +103,34 @@ function mapProfile(profile) {
   };
 }
 
-export function callHistoryLabel(status, direction) {
+function mapParticipant(row) {
+  if (!row) return null;
+  const profile = mapProfile(row.profile);
+  return {
+    ...profile,
+    id: row.user_id || profile.id,
+    role: row.role,
+    status: row.status,
+    deviceId: row.device_id || null,
+    invitedAt: row.invited_at,
+    answeredAt: row.answered_at || null,
+    leftAt: row.left_at || null,
+  };
+}
+
+export function callHistoryLabel(status, direction, callType = 'direct') {
+  if (callType === 'group') {
+    return {
+      ringing: direction === 'incoming' ? 'Incoming group call' : 'Group call',
+      accepted: 'Ongoing group call',
+      declined: direction === 'incoming' ? 'Declined group call' : 'Group call declined',
+      cancelled: 'Cancelled group call',
+      ended: 'Group voice call',
+      missed: direction === 'incoming' ? 'Missed group call' : 'No answer',
+      failed: 'Group call failed',
+      left: 'Group voice call',
+    }[status] || 'Group voice call';
+  }
   const incoming = direction === 'incoming';
   return {
     ringing: incoming ? 'Incoming call' : 'Outgoing call',
@@ -122,6 +154,34 @@ export function mapCallRow(row, currentUserId) {
   if (!row) return null;
   const isCaller = row.caller_id === currentUserId;
   const direction = isCaller ? 'outgoing' : 'incoming';
+  const callType = row.call_type || (row.callee_id ? 'direct' : 'group');
+  const fallbackParticipants = [
+    row.caller && {
+      user_id: row.caller_id,
+      role: 'caller',
+      status: row.status === 'ringing' ? 'accepted' : row.status,
+      profile: row.caller,
+      invited_at: row.created_at,
+      answered_at: row.created_at,
+    },
+    row.callee && {
+      user_id: row.callee_id,
+      role: 'invitee',
+      status: row.status,
+      device_id: row.answer_device_id,
+      profile: row.callee,
+      invited_at: row.created_at,
+      answered_at: row.answered_at,
+    },
+  ].filter(Boolean);
+  const participantRows = row.participants?.length ? row.participants : fallbackParticipants;
+  const participants = participantRows.map(mapParticipant).filter(Boolean);
+  const selfParticipant = participants.find((participant) => participant.id === currentUserId) || null;
+  const otherParticipants = participants.filter((participant) => participant.id !== currentUserId);
+  const effectiveStatus = !isCaller && selfParticipant
+    && ['ringing', 'declined', 'missed', 'left', 'failed'].includes(selfParticipant.status)
+    ? selfParticipant.status
+    : row.status;
   return {
     itemType: 'call',
     id: row.id,
@@ -129,9 +189,12 @@ export function mapCallRow(row, currentUserId) {
     callerId: row.caller_id,
     calleeId: row.callee_id,
     direction,
-    status: row.status,
-    label: callHistoryLabel(row.status, direction),
-    answerDeviceId: row.answer_device_id || null,
+    callType,
+    isGroup: callType === 'group',
+    status: effectiveStatus,
+    sessionStatus: row.status,
+    label: callHistoryLabel(effectiveStatus, direction, callType),
+    answerDeviceId: selfParticipant?.deviceId || row.answer_device_id || null,
     createdAt: row.created_at,
     answeredAt: row.answered_at || null,
     endedAt: row.ended_at || null,
@@ -139,21 +202,32 @@ export function mapCallRow(row, currentUserId) {
     sortAt: row.created_at,
     caller: mapProfile(row.caller),
     callee: mapProfile(row.callee),
-    otherParticipant: mapProfile(isCaller ? row.callee : row.caller),
+    participants,
+    selfParticipant,
+    otherParticipants,
+    otherParticipant: callType === 'group'
+      ? (isCaller ? otherParticipants[0] : mapProfile(row.caller))
+      : mapProfile(isCaller ? row.callee : row.caller),
   };
 }
 
 export function assertVoiceCallAvailable(conversation, supported = true) {
   if (!supported) throw new Error('Voice calls are not supported by this browser.');
-  if (!conversation?.id) throw new Error('Open a private conversation before calling.');
-  if (conversation.type !== 'direct') {
-    throw new Error('Voice calls are currently available in private chats only.');
-  }
+  if (!conversation?.id) throw new Error('Open a conversation before calling.');
+  if (!['direct', 'group'].includes(conversation.type)) throw new Error('This conversation cannot start a voice call.');
   if (conversation.interactionBlocked) {
-    throw new Error('Private interaction is unavailable.');
+    throw new Error('Calling is unavailable in this conversation.');
   }
   const activeMembers = conversation.members?.filter((member) => !member.leftAt) || [];
-  if (activeMembers.length !== 2) throw new Error('This private chat is unavailable for calling.');
+  if (conversation.type === 'direct' && activeMembers.length !== 2) {
+    throw new Error('This private chat is unavailable for calling.');
+  }
+  if (conversation.type === 'group' && activeMembers.length < 2) {
+    throw new Error('At least two active members are required for a group call.');
+  }
+  if (conversation.type === 'group' && activeMembers.length > MAX_GROUP_CALL_PARTICIPANTS) {
+    throw new Error(`Group voice calls support up to ${MAX_GROUP_CALL_PARTICIPANTS} active members.`);
+  }
   return true;
 }
 
@@ -252,9 +326,12 @@ export function createCallService(repository = supabaseCallRepository) {
       return mapCallRow(row, userId);
     },
 
-    async startCall(conversationId, callerDeviceId) {
+    async startCall(conversationId, callerDeviceId, inviteeIds = null) {
       const userId = await repository.getCurrentUserId();
-      return mapCallRow(await repository.startCall(conversationId, callerDeviceId), userId);
+      return mapCallRow(
+        await repository.startCall(conversationId, callerDeviceId, inviteeIds),
+        userId,
+      );
     },
 
     async respondToCall(callId, accepted, answerDeviceId) {
@@ -293,8 +370,9 @@ export function createCallService(repository = supabaseCallRepository) {
       let active = true;
       const unsubscribe = repository.subscribeToCalls((change) => {
         const row = change?.new && Object.keys(change.new).length ? change.new : change?.old;
-        if (!row?.id) return;
-        this.getCall(row.id)
+        const callId = change?.table === 'call_participants' ? row?.call_id : row?.id;
+        if (!callId) return;
+        this.getCall(callId)
           .then((call) => {
             if (active && call) listener({ eventType: change.eventType, call });
           })

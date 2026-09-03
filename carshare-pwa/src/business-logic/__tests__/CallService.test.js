@@ -8,6 +8,7 @@ import {
   callHistoryLabel,
   createCallService,
   incomingCallIdFromUrl,
+  isCurrentCallParticipantAccepted,
   isTerminalCallStatus,
   mapCallRow,
   relayNotice,
@@ -72,7 +73,7 @@ describe('voice-call configuration', () => {
     expect(relayNotice('available')).toBe('');
   });
 
-  it('allows archived private chats and rejects groups or blocked interaction', () => {
+  it('allows direct and bounded group calls while rejecting blocked interaction', () => {
     const direct = {
       id: conversationId,
       type: 'direct',
@@ -80,7 +81,16 @@ describe('voice-call configuration', () => {
       members: [{ id: userId }, { id: otherId }],
     };
     expect(assertVoiceCallAvailable(direct, true)).toBe(true);
-    expect(() => assertVoiceCallAvailable({ ...direct, type: 'group' }, true)).toThrow('private chats only');
+    expect(assertVoiceCallAvailable({
+      ...direct,
+      type: 'group',
+      members: [{ id: userId }, { id: otherId }, { id: 'member-3' }],
+    }, true)).toBe(true);
+    expect(() => assertVoiceCallAvailable({
+      ...direct,
+      type: 'group',
+      members: Array.from({ length: 9 }, (_, index) => ({ id: `member-${index}` })),
+    }, true)).toThrow('up to 8');
     expect(assertVoiceCallAvailable({ ...direct, isArchived: true }, true)).toBe(true);
     expect(() => assertVoiceCallAvailable({ ...direct, interactionBlocked: true }, true)).toThrow('unavailable');
     expect(() => assertVoiceCallAvailable(direct, false)).toThrow('not supported');
@@ -115,6 +125,56 @@ describe('voice-call configuration', () => {
       durationSeconds: 125,
       sortAt: '2026-08-24T00:00:00Z',
     });
+  });
+
+  it('maps group participants and keeps each invitee response independent', () => {
+    const thirdId = '00000000-0000-4000-8000-000000000003';
+    const group = rawCall({
+      call_type: 'group',
+      callee_id: null,
+      callee: null,
+      status: 'accepted',
+      participants: [
+        {
+          user_id: userId,
+          role: 'caller',
+          status: 'accepted',
+          invited_at: '2026-08-24T00:00:00Z',
+          profile: { id: userId, full_name: 'Aina', profile_photo_url: null },
+        },
+        {
+          user_id: otherId,
+          role: 'invitee',
+          status: 'declined',
+          invited_at: '2026-08-24T00:00:00Z',
+          profile: { id: otherId, full_name: 'Daniel', profile_photo_url: null },
+        },
+        {
+          user_id: thirdId,
+          role: 'invitee',
+          status: 'accepted',
+          invited_at: '2026-08-24T00:00:00Z',
+          profile: { id: thirdId, full_name: 'Mei', profile_photo_url: null },
+        },
+      ],
+    });
+    expect(mapCallRow(group, otherId)).toMatchObject({
+      isGroup: true,
+      status: 'declined',
+      sessionStatus: 'accepted',
+      label: 'Declined group call',
+      selfParticipant: { id: otherId, status: 'declined' },
+    });
+    expect(mapCallRow(group, userId)).toMatchObject({
+      isGroup: true,
+      status: 'accepted',
+      otherParticipants: expect.arrayContaining([
+        expect.objectContaining({ id: otherId, status: 'declined' }),
+        expect.objectContaining({ id: thirdId, status: 'accepted' }),
+      ]),
+    });
+    expect(isCurrentCallParticipantAccepted(mapCallRow(group, otherId))).toBe(false);
+    expect(isCurrentCallParticipantAccepted(mapCallRow(group, thirdId))).toBe(true);
   });
 });
 
@@ -183,7 +243,7 @@ describe('CallService repository orchestration', () => {
       releaseDeviceCalls: vi.fn().mockResolvedValue(1),
     };
     const service = createCallService(repository);
-    await expect(service.startCall(conversationId, 'caller-device')).resolves.toMatchObject({
+    await expect(service.startCall(conversationId, 'caller-device', [otherId])).resolves.toMatchObject({
       id: callId,
       direction: 'outgoing',
     });
@@ -192,7 +252,7 @@ describe('CallService repository orchestration', () => {
       answerDeviceId: 'device-1',
     });
     await expect(service.endCall(callId, 'ended')).resolves.toBe(callId);
-    expect(repository.startCall).toHaveBeenCalledWith(conversationId, 'caller-device');
+    expect(repository.startCall).toHaveBeenCalledWith(conversationId, 'caller-device', [otherId]);
     expect(repository.respondToCall).toHaveBeenCalledWith({
       callId,
       accepted: true,

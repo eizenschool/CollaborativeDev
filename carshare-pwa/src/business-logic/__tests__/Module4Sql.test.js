@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 describe('Module 4 SQL contract', () => {
-  it('keeps migration sequence numbers unique', async () => {
+  it('keeps only the documented historical 075 merge collision', async () => {
     const migrations = await import('node:fs/promises').then(({ readdir }) => readdir(
       new URL('../../../database/sql/', import.meta.url)
     ));
@@ -9,7 +9,14 @@ describe('Module 4 SQL contract', () => {
       .map((fileName) => fileName.match(/^(\d{3})_.*\.sql$/)?.[1])
       .filter(Boolean);
 
-    expect(new Set(sequenceNumbers).size).toBe(sequenceNumbers.length);
+    const duplicateNumbers = [...new Set(sequenceNumbers.filter((number, index) =>
+      sequenceNumbers.indexOf(number) !== index,
+    ))];
+    expect(duplicateNumbers).toEqual(['075']);
+    expect(migrations.filter((fileName) => fileName.startsWith('075_')).sort()).toEqual([
+      '075_m3_conversation_lifecycle_redesign.sql',
+      '075_m6_place_lifecycle_notification.sql',
+    ]);
   });
 
   it('locks favourites to authenticated owners and returns only safe ride-card fields', async () => {

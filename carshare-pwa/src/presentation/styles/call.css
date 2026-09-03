@@ -53,6 +53,34 @@
   box-shadow: 0 0 0 10px rgba(22, 163, 74, 0.06);
 }
 
+.call-overlay-avatar-slot {
+  display: grid;
+  place-items: center;
+}
+
+.call-overlay-avatar-group {
+  grid-template-columns: repeat(2, 50px);
+  grid-template-rows: repeat(2, 50px);
+  gap: 0;
+  padding: 2px;
+}
+
+.call-overlay-avatar-group .call-overlay-avatar-slot {
+  margin: -4px;
+}
+
+.call-overlay-avatar-group .call-overlay-avatar-slot:nth-child(3) {
+  grid-column: 1 / -1;
+  margin-top: -18px;
+}
+
+.call-overlay-avatar-group .call-overlay-avatar {
+  width: 52px;
+  height: 52px;
+  border: 3px solid var(--surface, #fff);
+  font-size: 0.88rem;
+}
+
 .call-overlay-incoming .call-overlay-avatar-ring,
 .call-overlay-outgoing .call-overlay-avatar-ring {
   animation: call-ring-pulse 1.8s ease-in-out infinite;
@@ -76,7 +104,9 @@
 }
 
 .call-overlay-copy {
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
 }
 
 .call-overlay-eyebrow {
@@ -90,13 +120,17 @@
 }
 
 .call-overlay-copy h2 {
+  display: -webkit-box;
+  max-width: 100%;
   margin: 0;
   overflow: hidden;
   font-family: var(--font-display);
   font-size: 24px;
   font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .call-overlay-copy p {
@@ -105,6 +139,12 @@
   color: var(--muted);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
+}
+
+.call-overlay-copy .call-overlay-participant-status {
+  min-height: 0;
+  margin-top: 2px;
+  font-size: 12px;
 }
 
 .call-overlay-error {
@@ -239,17 +279,16 @@
   top: 16px;
   left: 16px;
   z-index: 2;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 13px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(4, 53, 29, 0.12);
+  border-radius: 50%;
+  color: var(--ink);
+  background: #f2f7f4;
   font: inherit;
   font-size: 12px;
   font-weight: 750;
@@ -258,7 +297,7 @@
 }
 
 .call-overlay-minimize:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #e1f6e8;
 }
 
 .call-mini-bar {
@@ -280,73 +319,6 @@
   box-shadow: 0 16px 44px rgba(5, 43, 26, 0.24);
   backdrop-filter: blur(16px);
   pointer-events: none;
-}
-
-.call-mini-browse {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 7px;
-  padding-top: 9px;
-  border-top: 1px solid rgba(4, 53, 29, 0.09);
-}
-
-.call-mini-browse button,
-.call-browse-actions button {
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(4, 53, 29, 0.12);
-  border-radius: 999px;
-  color: #14532d;
-  background: #f1faf4;
-  font: inherit;
-  font-size: 0.76rem;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.call-mini-browse button {
-  flex: 1;
-  padding: 0 10px;
-}
-
-.call-browse-actions {
-  width: 100%;
-  margin-top: 22px;
-  padding: 14px;
-  border: 1px solid rgba(4, 53, 29, 0.1);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.68);
-  text-align: left;
-}
-
-.call-browse-actions > span {
-  display: block;
-  margin-bottom: 9px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 750;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.call-browse-actions > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.call-browse-actions button {
-  width: 100%;
-  padding: 0 11px;
-}
-
-.call-mini-browse button:hover,
-.call-browse-actions button:hover {
-  border-color: rgba(20, 83, 45, 0.28);
-  background: #e1f6e8;
 }
 
 .call-mini-bar > * {
@@ -441,9 +413,7 @@
 }
 
 .call-mini-action:focus-visible,
-.call-overlay-minimize:focus-visible,
-.call-mini-browse button:focus-visible,
-.call-browse-actions button:focus-visible {
+.call-overlay-minimize:focus-visible {
   outline: 3px solid rgba(53, 194, 122, 0.42);
   outline-offset: 2px;
 }
@@ -481,11 +451,6 @@
   .call-mini-action {
     width: 38px;
     height: 38px;
-  }
-
-  .call-mini-browse button {
-    padding: 0 7px;
-    font-size: 0.7rem;
   }
 
   .call-overlay-backdrop {

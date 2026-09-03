@@ -60,6 +60,22 @@ function replaceConversationInFolders(folders, conversation) {
   ]));
 }
 
+function removeConversationFromSession(current, conversationId) {
+  const conversations = { ...current.conversations };
+  const messages = { ...current.messages };
+  delete conversations[conversationId];
+  delete messages[conversationId];
+  return {
+    ...current,
+    conversations,
+    messages,
+    folders: Object.fromEntries(Object.entries(current.folders).map(([folder, state]) => [
+      folder,
+      { ...state, items: state.items.filter((item) => item.id !== conversationId) },
+    ])),
+  };
+}
+
 export function MessagingSessionProvider({ children }) {
   const { user } = useAuth();
   const userId = user?.id || null;
@@ -159,12 +175,20 @@ export function MessagingSessionProvider({ children }) {
 
     const request = (async () => {
       try {
-        const [conversation, messages, calls] = await Promise.all([
-          MessagingService.getConversation(conversationId),
+        const conversation = await MessagingService.getConversation(conversationId);
+        if (!conversation) {
+          if (activeUserIdRef.current === userId) {
+            draftsRef.current.clearDraft(conversationId);
+            commitSession((current) => current.userId === userId
+              ? removeConversationFromSession(current, conversationId)
+              : current);
+          }
+          return null;
+        }
+        const [messages, calls] = await Promise.all([
           MessagingService.listMessages(conversationId),
           CallService.listConversationCalls(conversationId).catch(() => []),
         ]);
-        if (!conversation) throw new Error('This conversation is no longer available.');
         const timeline = [
           ...messages.map((message) => ({
             ...message,
@@ -295,6 +319,33 @@ export function MessagingSessionProvider({ children }) {
       unsubscribe();
     };
   }, [refreshConversation, refreshConversations, userId]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    const refreshLoadedFolders = () => {
+      const loadedFolders = ['active', 'archived']
+        .filter((item) => sessionRef.current.folders[item].loaded);
+      loadedFolders.forEach((item) => { void refreshConversations(item); });
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshLoadedFolders();
+    };
+    window.addEventListener('focus', refreshLoadedFolders);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    const expiries = Object.values(session.conversations)
+      .map((conversation) => conversation.effectiveExpiresAt)
+      .filter((value) => value && new Date(value).getTime() > Date.now())
+      .map((value) => new Date(value).getTime());
+    const timerId = expiries.length
+      ? window.setTimeout(refreshLoadedFolders, Math.min(...expiries) - Date.now() + 100)
+      : null;
+    return () => {
+      window.removeEventListener('focus', refreshLoadedFolders);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (timerId) window.clearTimeout(timerId);
+    };
+  }, [refreshConversations, session.conversations, userId]);
 
   const value = useMemo(() => ({
     folder: session.folder,

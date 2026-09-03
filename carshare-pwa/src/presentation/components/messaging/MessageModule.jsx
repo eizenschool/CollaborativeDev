@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
   isTerminalRideStatus,
   MessagingService,
 } from '../../../business-logic/MessagingService.js';
+import {
+  FRIENDSHIP_STATUS,
+  FriendshipService,
+} from '../../../business-logic/FriendshipService.js';
 import { useMessagingSession } from '../../../context/MessagingSessionContext.jsx';
-import { IconArchive, IconMessage, IconTrash } from '../icons.jsx';
+import { IconArchive, IconBell, IconMessage, IconTrash } from '../icons.jsx';
 import ConversationList from './ConversationList.jsx';
 import ChatWindow from './ChatWindow.jsx';
 import MessageHistory from './MessageHistory.jsx';
@@ -26,35 +30,52 @@ function EmptyChatSelection() {
     <div className="message-empty-selection">
       <div className="message-empty-selection-icon"><IconMessage size={34} /></div>
       <h2>Select a conversation</h2>
-      <p>Choose a private ride chat or accepted-trip group from the list.</p>
+      <p>Choose a friend chat, private ride chat or accepted-trip group from the list.</p>
     </div>
   );
 }
 
 function ManageConversationDialog({ conversation, currentUserId, pending, error, onClose, onConfirm, triggerRef }) {
   if (!conversation) return null;
-  const membership = conversation.members.find((member) => member.id === currentUserId);
+  const isFriend = conversation.scope === 'friend';
   const isTerminal = isTerminalRideStatus(conversation.rideStatus);
-  const canArchive = isTerminal && conversation.type === 'direct' && !conversation.isArchived;
-  const canLeave = isTerminal && conversation.type === 'group' && membership?.role === 'traveller';
-  let note = 'Conversation details remain available while this ride chat is active.';
-  if (conversation.isArchived) note = 'This private chat is archived and read-only. It cannot be unarchived and will expire with the trip retention period.';
-  else if (canArchive) note = `Archive this ${conversation.rideStatus.toLowerCase()} private chat? It will become read-only and remain searchable until expiry.`;
-  else if (canLeave) note = `Leave this ${conversation.rideStatus.toLowerCase()} group? You will immediately lose access and the remaining members will be notified.`;
-  else if (isTerminal && conversation.type === 'group') note = 'The Host cannot leave or archive a trip group.';
+  const canManage = isFriend || isTerminal;
+  const note = isFriend
+    ? 'Friend chats do not expire. You can archive, mute or delete your visible history at any time.'
+    : isTerminal
+      ? `Personal controls are available until this ${conversation.rideStatus.toLowerCase()} ride conversation expires.`
+    : 'Archive, delete, mute and unmute become available after the ride is completed, cancelled or expired.';
 
   return (
     <AdaptiveDialog
       open={Boolean(conversation)}
       onClose={() => { if (!pending) onClose(); }}
-      title="Conversation details"
+      title={conversation.type === 'group' ? 'Group members' : 'Conversation details'}
       description={conversation.title}
       triggerRef={triggerRef}
       footer={(
         <>
           <Button variant="secondary" disabled={pending} onClick={onClose}>Close</Button>
-          {canArchive && <Button loading={pending} loadingLabel="Archiving" onClick={() => onConfirm('archive')}><IconArchive size={16} aria-hidden="true" /> Archive conversation</Button>}
-          {canLeave && <Button variant="danger" loading={pending} loadingLabel="Leaving" onClick={() => onConfirm('leave')}><IconTrash size={16} aria-hidden="true" /> Leave group</Button>}
+          {canManage && (
+            <Button loading={pending} onClick={() => onConfirm(conversation.isArchived ? 'unarchive' : 'archive')}>
+              <IconArchive size={16} aria-hidden="true" /> {conversation.isArchived ? 'Unarchive' : 'Archive'}
+            </Button>
+          )}
+          {canManage && (
+            <Button variant="secondary" loading={pending} onClick={() => onConfirm(conversation.isMuted ? 'unmute' : 'mute')}>
+              <IconBell size={16} aria-hidden="true" /> {conversation.isMuted ? 'Unmute' : 'Mute'}
+            </Button>
+          )}
+          {canManage && (
+            <Button variant="danger" loading={pending} loadingLabel="Deleting" onClick={() => onConfirm('delete')}>
+              <IconTrash size={16} aria-hidden="true" /> Delete for me
+            </Button>
+          )}
+          {isFriend && conversation.friendshipStatus === FRIENDSHIP_STATUS.ACCEPTED && (
+            <Button variant="danger" loading={pending} onClick={() => onConfirm('remove-friend')}>
+              Remove friend
+            </Button>
+          )}
         </>
       )}
     >
@@ -81,17 +102,34 @@ export default function MessageModule() {
   const [manageConversation, setManageConversation] = useState(null);
   const [manageError, setManageError] = useState('');
   const [isManaging, setIsManaging] = useState(false);
+  const [incomingFriendCount, setIncomingFriendCount] = useState(0);
+  const [removeFriendTarget, setRemoveFriendTarget] = useState(null);
+  const [removeFriendError, setRemoveFriendError] = useState('');
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false);
   const manageReturnFocusRef = useRef(null);
+  const removeFriendReturnFocusRef = useRef(null);
   const isHistory = Boolean(conversationId && location.pathname.endsWith('/history'));
+
+  const refreshFriendCount = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const connections = await FriendshipService.listConnections();
+      setIncomingFriendCount(connections.filter((item) => item.status === FRIENDSHIP_STATUS.INCOMING_PENDING).length);
+    } catch {
+      // Friends can be deployed independently; ride messaging remains usable.
+      setIncomingFriendCount(0);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (isHistory) return;
     refreshConversations();
     if (!conversationId) return;
     refreshConversation(conversationId, { markRead: true }).then((conversation) => {
-      if (conversation?.isArchived && folder !== 'archived') setFolder('archived');
+      if (!conversation) navigate('/message', { replace: true });
+      else if (conversation.isArchived && folder !== 'archived') setFolder('archived');
     });
-  }, [conversationId, folder, isHistory, refreshConversation, refreshConversations, setFolder]);
+  }, [conversationId, folder, isHistory, navigate, refreshConversation, refreshConversations, setFolder]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(min-width: ${DESKTOP_BREAKPOINT + 1}px)`);
@@ -100,6 +138,20 @@ export default function MessageModule() {
     mediaQuery.addEventListener('change', update);
     return () => mediaQuery.removeEventListener('change', update);
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let timerId = null;
+    void refreshFriendCount();
+    const unsubscribe = FriendshipService.subscribe(() => {
+      window.clearTimeout(timerId);
+      timerId = window.setTimeout(() => { void refreshFriendCount(); }, 80);
+    });
+    return () => {
+      window.clearTimeout(timerId);
+      unsubscribe();
+    };
+  }, [refreshFriendCount, user?.id]);
 
   function selectConversation(id) {
     navigate(`/message/${id}`);
@@ -121,6 +173,13 @@ export default function MessageModule() {
   }
 
   async function confirmManage(action) {
+    if (action === 'remove-friend') {
+      removeFriendReturnFocusRef.current = manageReturnFocusRef.current;
+      setRemoveFriendError('');
+      setRemoveFriendTarget(manageConversation);
+      setManageConversation(null);
+      return;
+    }
     setManageError('');
     setIsManaging(true);
     try {
@@ -128,15 +187,18 @@ export default function MessageModule() {
         await MessagingService.archiveConversation(manageConversation.id);
         setFolder('archived');
         navigate(`/message/${manageConversation.id}`);
-        refreshConversation(manageConversation.id);
-        refreshConversations('active');
-        refreshConversations('archived');
-      } else {
-        await MessagingService.leaveGroup(manageConversation.id);
+      } else if (action === 'unarchive') {
+        await MessagingService.unarchiveConversation(manageConversation.id);
         setFolder('active');
+        navigate(`/message/${manageConversation.id}`);
+      } else if (action === 'delete') {
+        await MessagingService.deleteConversationForMe(manageConversation.id);
         navigate('/message');
-        refreshConversations('active');
+      } else if (action === 'mute' || action === 'unmute') {
+        await MessagingService.setConversationMuted(manageConversation.id, action === 'mute');
       }
+      await Promise.all([refreshConversations('active'), refreshConversations('archived')]);
+      if (action !== 'delete') await refreshConversation(manageConversation.id);
       setManageConversation(null);
     } catch (error) {
       setManageError(error.message || 'Unable to manage this conversation.');
@@ -155,6 +217,26 @@ export default function MessageModule() {
     );
   }
 
+  async function confirmRemoveFriend() {
+    if (!removeFriendTarget?.otherUserId) return;
+    setRemoveFriendError('');
+    setIsRemovingFriend(true);
+    try {
+      await FriendshipService.removeFriend(removeFriendTarget.otherUserId);
+      await Promise.all([
+        refreshFriendCount(),
+        refreshConversations('active'),
+        refreshConversations('archived'),
+      ]);
+      await refreshConversation(removeFriendTarget.id);
+      setRemoveFriendTarget(null);
+    } catch (error) {
+      setRemoveFriendError(error.message || 'Unable to remove this friend.');
+    } finally {
+      setIsRemovingFriend(false);
+    }
+  }
+
   const conversationList = (
     <ConversationList
       conversations={folderState.items}
@@ -168,6 +250,8 @@ export default function MessageModule() {
       error={folderState.error}
       onRetry={() => refreshConversations(folder)}
       onBrowseRides={() => navigate('/search')}
+      incomingFriendCount={incomingFriendCount}
+      onOpenFriends={() => navigate('/message/friends')}
     />
   );
 
@@ -202,6 +286,24 @@ export default function MessageModule() {
         onConfirm={confirmManage}
         triggerRef={manageReturnFocusRef}
       />
+      <AdaptiveDialog
+        open={Boolean(removeFriendTarget)}
+        onClose={() => { if (!isRemovingFriend) setRemoveFriendTarget(null); }}
+        title="Remove friend?"
+        description={removeFriendTarget ? `Your chat with ${removeFriendTarget.title} will remain in Messages as read-only.` : ''}
+        triggerRef={removeFriendReturnFocusRef}
+        footer={(
+          <>
+            <Button variant="secondary" disabled={isRemovingFriend} onClick={() => setRemoveFriendTarget(null)}>Keep friend</Button>
+            <Button variant="danger" loading={isRemovingFriend} loadingLabel="Removing" onClick={() => { void confirmRemoveFriend(); }}>
+              Remove friend
+            </Button>
+          </>
+        )}
+      >
+        <p>You will both lose messaging and calling access until a new friend request is accepted. Existing history is not deleted.</p>
+        {removeFriendError && <p className="message-composer-error" role="alert">{removeFriendError}</p>}
+      </AdaptiveDialog>
     </>
   );
 }

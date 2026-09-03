@@ -207,8 +207,11 @@ alternative.
   existing Message destination. Message notification records remain available
   to the shared Web Push pipeline so opted-in devices can alert while the page
   is closed.
-- A one-to-one voice call uses one global modal overlay for incoming/outgoing
-  ringing. Connecting, connected, and reconnecting phases add Minimize; the
+- Direct and group voice calls use one global modal overlay for incoming/outgoing
+  ringing. Starting a group call first opens a member picker and only selected
+  members ring; every invitee can answer or reject independently. The UI reports
+  joined, ringing, and declined counts. Connecting, connected, and reconnecting
+  phases expose one icon-only Minimize action; there is no separate browse menu. The
   minimized non-modal floating bar leaves navigation and page focus available
   and exposes participant, state/duration, mute, expand, and end. Blocked audio
   keeps an explicit recovery action. When the free relay allowance is
@@ -221,6 +224,12 @@ alternative.
   accessible label `Conversation details and management`; the same adaptive
   dialog is used on every viewport and remains viewable for active, terminal,
   and archived conversations.
+- Message keeps the seven primary destinations unchanged and adds Friends as a
+  local header entry. `/message/friends` reflows three request/friend sections
+  at phone, tablet, and desktop widths. Friend-chat rows carry a Friend marker;
+  removed friendships remain in the normal conversation list with
+  `Not friends · Read-only`, no composer/call action, and a profile link to add
+  the person again. Friend chats omit Ride summaries.
 - Notification and message Realtime inserts may use the account-local `Alert
   sounds` toggle. General events use one short Web Audio bell; incoming calls
   use a distinct repeating two-pulse ringtone. Do not promise a custom sound

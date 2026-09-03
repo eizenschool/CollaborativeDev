@@ -164,6 +164,7 @@ export default function ChatWindow({
   const {
     getConversation,
     getMessagesState,
+    refreshConversations,
     refreshConversation,
     getDraft,
     saveDraft,
@@ -183,6 +184,9 @@ export default function ChatWindow({
   const [isLocating, setIsLocating] = useState(false);
   const [isCaptureMenuOpen, setIsCaptureMenuOpen] = useState(false);
   const [isVideoCameraPickerOpen, setIsVideoCameraPickerOpen] = useState(false);
+  const [isCallPickerOpen, setIsCallPickerOpen] = useState(false);
+  const [selectedCallMemberIds, setSelectedCallMemberIds] = useState([]);
+  const [isCallStarting, setIsCallStarting] = useState(false);
   const [translationLanguage, setTranslationLanguage] = useState(() => storedTranslationLanguage(currentUser.id));
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
@@ -199,6 +203,7 @@ export default function ChatWindow({
   const videoCameraFirstActionRef = useRef(null);
   const deleteCancelRef = useRef(null);
   const deleteModalRef = useRef(null);
+  const callPickerRef = useRef(null);
 
   const changeTranslationLanguage = useCallback((language) => {
     setTranslationLanguage(language);
@@ -305,6 +310,8 @@ export default function ChatWindow({
     cancelVideoRecording();
     setIsCaptureMenuOpen(false);
     setIsVideoCameraPickerOpen(false);
+    setIsCallPickerOpen(false);
+    setSelectedCallMemberIds([]);
     clearDraft(conversationId);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (photoInputRef.current) photoInputRef.current.value = '';
@@ -371,6 +378,35 @@ export default function ChatWindow({
     deleteCancelRef.current?.focus();
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [deleteTarget, isPending]);
+
+  useEffect(() => {
+    if (!isCallPickerOpen) return undefined;
+    const dialog = callPickerRef.current;
+    const frame = window.requestAnimationFrame(() => dialog?.querySelector('input')?.focus());
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !isCallBusy) {
+        setIsCallPickerOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialog?.querySelectorAll('button:not(:disabled), input:not(:disabled)') || [])];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCallBusy, isCallPickerOpen]);
 
   useEffect(() => {
     if (!isCaptureMenuOpen) return undefined;
@@ -662,6 +698,9 @@ export default function ChatWindow({
         || isPhotoStarting || isPhotoCapturing || isVideoStarting || isVideoRecording || isVideoProcessing) return;
     setIsPending(true);
     setErrorMessage('');
+    const shouldRevealRideConversation = conversation.scope !== 'friend'
+      && conversation.type === 'direct'
+      && !conversation.hasMessages;
     try {
       if (editingMessage) {
         await MessagingService.editMessage({
@@ -685,6 +724,7 @@ export default function ChatWindow({
       }
       resetComposer();
       await refreshConversation(conversationId);
+      if (shouldRevealRideConversation) await refreshConversations('active');
     } catch (error) {
       setErrorMessage(`${error.message || 'Unable to save message.'} Your draft has been kept for Retry.`);
     } finally {
@@ -721,18 +761,42 @@ export default function ChatWindow({
   const hasNormalDraft = Boolean(text.trim() || mediaEntries.length || location);
   const hasDraft = Boolean(hasNormalDraft || voiceRecording);
   const isVoiceBusy = isVoiceStarting || isVoiceRecording || isVoiceProcessing;
-  const memberDescription = conversation.type === 'group' ? `${conversation.members.length} members` : 'Private ride chat';
+  const memberDescription = conversation.type === 'group'
+    ? `${conversation.members.length} members`
+    : conversation.scope === 'friend'
+      ? 'Friend chat'
+      : 'Private ride chat';
   const profileMember = conversation.type === 'direct'
     ? conversation.members.find((member) => member.id !== currentUser.id)
     : null;
+  const isGroupConversation = conversation.type === 'group';
+  const selectableCallMembers = isGroupConversation
+    ? conversation.members.filter((member) => (
+      member.id !== currentUser.id && member.accountActive !== false
+    ))
+    : [];
 
-  async function beginVoiceCall() {
+  async function beginVoiceCall(inviteeIds = null) {
     setErrorMessage('');
+    setIsCallStarting(true);
     try {
-      await startCall(conversation);
+      if (isGroupConversation && (!inviteeIds || inviteeIds.length === 0)) {
+        throw new Error('Select at least one member to call.');
+      }
+      setIsCallPickerOpen(false);
+      await startCall(conversation, inviteeIds);
+      await refreshConversations('active');
     } catch (error) {
       setErrorMessage(error.message || 'Unable to start a voice call.');
+    } finally {
+      setIsCallStarting(false);
     }
+  }
+
+  function toggleCallMember(memberId) {
+    setSelectedCallMemberIds((current) => current.includes(memberId)
+      ? current.filter((id) => id !== memberId)
+      : current.length < 7 ? [...current, memberId] : current);
   }
 
   return (
@@ -743,11 +807,30 @@ export default function ChatWindow({
           <Link className="message-chat-profile-link" to={`/users/${profileMember.id}`} aria-label={`View ${profileMember.fullName || conversation.title}'s profile`}>
             <ConversationAvatar conversation={conversation} currentUserId={currentUser.id} />
           </Link>
+        ) : isGroupConversation ? (
+          <button
+            type="button"
+            className="message-chat-group-trigger"
+            onClick={() => onManage(conversation)}
+            aria-label={`View members of ${conversation.title}`}
+          >
+            <ConversationAvatar conversation={conversation} currentUserId={currentUser.id} />
+          </button>
         ) : <ConversationAvatar conversation={conversation} currentUserId={currentUser.id} />}
         <div className="message-chat-header-content">
           <div className="message-chat-header-title-row">
-            <h2>{profileMember ? <Link className="message-chat-profile-name" to={`/users/${profileMember.id}`}>{conversation.title}</Link> : conversation.title}</h2>
+            <h2>
+              {profileMember ? (
+                <Link className="message-chat-profile-name" to={`/users/${profileMember.id}`}>{conversation.title}</Link>
+              ) : isGroupConversation ? (
+                <button type="button" className="message-chat-group-name" onClick={() => onManage(conversation)}>
+                  {conversation.title}
+                </button>
+              ) : conversation.title}
+            </h2>
             {conversation.type === 'group' && <span className="message-chat-header-badge">Group chat</span>}
+            {conversation.scope === 'friend' && <span className="message-chat-header-badge">Friend</span>}
+            {conversation.scope === 'friend' && conversation.isReadOnly && <span className="message-chat-header-badge message-chat-header-badge-read-only">Read-only</span>}
             {conversation.isArchived && <span className="message-chat-header-badge">Archived</span>}
           </div>
           <p className="message-chat-header-context">
@@ -756,14 +839,25 @@ export default function ChatWindow({
           </p>
         </div>
         <div className="message-chat-header-actions">
-          {conversation.type === 'direct' && (
+          {['direct', 'group'].includes(conversation.type) && (
             <button
               type="button"
               className="message-chat-header-button"
-              onClick={() => { void beginVoiceCall(); }}
-              disabled={conversation.isReadOnly || isCallBusy}
-              aria-label="Start voice call"
-              title={conversation.isReadOnly ? 'Archived conversations cannot start calls' : isCallBusy ? 'Another call is already active' : 'Start voice call'}
+              onClick={() => {
+                if (isGroupConversation) {
+                  setSelectedCallMemberIds([]);
+                  setIsCallPickerOpen(true);
+                } else {
+                  void beginVoiceCall();
+                }
+              }}
+              disabled={conversation.isReadOnly || isCallBusy || isCallStarting}
+              aria-label={conversation.type === 'group' ? 'Start group voice call' : 'Start voice call'}
+              title={conversation.isReadOnly
+                ? 'This conversation is read-only'
+                : isCallBusy
+                  ? 'Another call is already active'
+                  : conversation.type === 'group' ? 'Choose group members to call' : 'Start voice call'}
             >
               <IconPhone size={19} />
             </button>
@@ -800,7 +894,21 @@ export default function ChatWindow({
       </div>
 
       {conversation.isReadOnly ? (
-        <footer className="message-read-only-banner"><IconArchive size={17} /> Archived conversations are read-only until they expire.</footer>
+        <footer className="message-read-only-banner">
+          <IconArchive size={17} aria-hidden="true" />
+          {conversation.scope === 'friend' ? (
+            <span>
+              {conversation.friendshipStatus === 'accepted'
+                ? 'This member is currently unavailable, so messaging and calls are disabled.'
+                : 'Not friends · Read-only. Your existing history is still available.'}
+              {conversation.friendshipStatus !== 'accepted' && profileMember && (
+                <> <Link to={`/users/${profileMember.id}`}>Add friend again</Link></>
+              )}
+            </span>
+          ) : conversation.isFormerMember
+            ? 'You can only read messages sent before you left this group.'
+            : `This ${conversation.rideStatus?.toLowerCase() || 'ride'} group is read-only until it expires.`}
+        </footer>
       ) : (
         <footer className="message-composer">
           {editingMessage && (
@@ -1023,6 +1131,63 @@ export default function ChatWindow({
             <div className="message-options-actions">
               <button type="button" className="message-options-cancel" onClick={closeDeleteDialog} disabled={isPending}>Keep message</button>
               <button type="button" className="message-options-delete" onClick={confirmDelete} disabled={isPending}>{isPending ? 'Deleting…' : 'Delete message'}</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isCallPickerOpen && (
+        <div
+          className="message-options-backdrop"
+          role="presentation"
+          onMouseDown={() => !isCallBusy && setIsCallPickerOpen(false)}
+        >
+          <section
+            ref={callPickerRef}
+            className="message-options-modal message-call-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="group-call-picker-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className="message-options-handle" />
+            <div className="message-options-header">
+              <div>
+                <span id="group-call-picker-title">Choose people to call</span>
+                <p>Select up to 7 members. Only selected people will receive the call.</p>
+              </div>
+              <button type="button" onClick={() => setIsCallPickerOpen(false)} aria-label="Close member selection">
+                <IconX size={18} />
+              </button>
+            </div>
+            <div className="message-call-picker-list">
+              {selectableCallMembers.map((member) => {
+                const checked = selectedCallMemberIds.includes(member.id);
+                const disabled = !checked && selectedCallMemberIds.length >= 7;
+                return (
+                  <label key={member.id} className={`message-call-picker-member ${checked ? 'is-selected' : ''}`}>
+                    <MemberAvatar member={member} className="message-call-picker-avatar" />
+                    <span>{member.name}</span>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() => toggleCallMember(member.id)}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+            <div className="message-call-picker-footer">
+              <span>{selectedCallMemberIds.length} selected</span>
+              <button
+                type="button"
+                onClick={() => { void beginVoiceCall(selectedCallMemberIds); }}
+                disabled={selectedCallMemberIds.length === 0 || isCallBusy || isCallStarting}
+              >
+                <IconPhone size={18} />
+                {isCallStarting ? 'Starting…' : 'Call selected'}
+              </button>
             </div>
           </section>
         </div>

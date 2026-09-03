@@ -4,7 +4,12 @@ import { isSupabaseConfigured, supabase } from './supabaseClient.js';
 const CALL_SELECT = `
   *,
   caller:profiles!call_sessions_caller_id_fkey(id, full_name, profile_photo_url),
-  callee:profiles!call_sessions_callee_id_fkey(id, full_name, profile_photo_url)
+  callee:profiles!call_sessions_callee_id_fkey(id, full_name, profile_photo_url),
+  participants:call_participants(
+    call_id, user_id, role, status, device_id, invited_at,
+    answered_at, left_at, last_seen_at,
+    profile:profiles!call_participants_user_id_fkey(id, full_name, profile_photo_url)
+  )
 `;
 
 function requireSupabase() {
@@ -65,23 +70,29 @@ export const supabaseCallRepository = {
     const userId = await requireUserId();
     const earliest = new Date(Date.now() - 45_000).toISOString();
     const { data, error } = await client
-      .from('call_sessions')
-      .select(CALL_SELECT)
-      .eq('callee_id', userId)
+      .from('call_participants')
+      .select('call_id, invited_at')
+      .eq('user_id', userId)
+      .eq('role', 'invitee')
       .eq('status', 'ringing')
-      .gte('created_at', earliest)
-      .order('created_at', { ascending: false })
+      .gte('invited_at', earliest)
+      .order('invited_at', { ascending: false })
       .limit(1);
     if (error) throw normalizeError(error, 'Unable to check for incoming calls.');
-    return data?.[0] || null;
+    return data?.[0]?.call_id ? this.getCall(data[0].call_id) : null;
   },
 
-  async startCall(conversationId, callerDeviceId) {
+  async startCall(conversationId, callerDeviceId, inviteeIds = null) {
     const client = requireSupabase();
-    let { data, error } = await client.rpc('start_voice_call', {
+    const rpcName = Array.isArray(inviteeIds)
+      ? 'start_selective_voice_call'
+      : 'start_voice_call';
+    const params = {
       p_conversation_id: conversationId,
       p_caller_device_id: callerDeviceId,
-    });
+      ...(Array.isArray(inviteeIds) ? { p_invitee_ids: inviteeIds } : {}),
+    };
+    let { data, error } = await client.rpc(rpcName, params);
     if (error && isMissingCallPresenceRpc(error)) {
       ({ data, error } = await client.rpc('start_voice_call', {
         p_conversation_id: conversationId,
@@ -150,7 +161,12 @@ export const supabaseCallRepository = {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'call_sessions' },
-        listener,
+        (change) => listener({ ...change, table: 'call_sessions' }),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'call_participants' },
+        (change) => listener({ ...change, table: 'call_participants' }),
       )
       .subscribe((status, error) => onStatus?.(status, error));
     return () => { void client.removeChannel(channel); };

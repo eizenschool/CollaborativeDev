@@ -85,6 +85,57 @@ describe('legacy conversation compatibility', () => {
       tripRoute: 'KL Sentral to Penang',
     });
   });
+
+  it('maps accepted friend chats without ride lifecycle fields', () => {
+    const conversation = mapConversationRow(rawConversation({
+      scope: 'friend',
+      ride_id: null,
+      ride_status: null,
+      trip_route: null,
+      trip_departure_at: null,
+      expires_at: null,
+      friendship: { status: 'accepted' },
+      members: [
+        { user_id: userId, role: 'friend', profile: { full_name: 'Aina', status: 'active' } },
+        { user_id: otherId, role: 'friend', profile: { full_name: 'Ahmad', status: 'active' } },
+      ],
+    }), userId);
+
+    expect(conversation).toMatchObject({
+      scope: 'friend',
+      friendshipStatus: 'accepted',
+      otherUserId: otherId,
+      rideId: null,
+      rideStatus: null,
+      tripRoute: null,
+      expiresAt: null,
+      effectiveExpiresAt: null,
+      isReadOnly: false,
+    });
+  });
+
+  it('makes removed friendships and unavailable friend accounts read-only', () => {
+    const friendRow = {
+      scope: 'friend',
+      ride_id: null,
+      ride_status: null,
+      trip_route: null,
+      friendship: { status: 'removed' },
+      members: [
+        { user_id: userId, role: 'friend', profile: { full_name: 'Aina', status: 'active' } },
+        { user_id: otherId, role: 'friend', profile: { full_name: 'Ahmad', status: 'active' } },
+      ],
+    };
+    expect(mapConversationRow(rawConversation(friendRow), userId).isReadOnly).toBe(true);
+    expect(mapConversationRow(rawConversation({
+      ...friendRow,
+      friendship: { status: 'accepted' },
+      members: [
+        { user_id: userId, role: 'friend', profile: { full_name: 'Aina', status: 'active' } },
+        { user_id: otherId, role: 'friend', profile: { full_name: 'Ahmad', status: 'deactivated' } },
+      ],
+    }), userId)).toMatchObject({ isReadOnly: true, friendAccountsAvailable: false });
+  });
 });
 
 function rawConversation(overrides = {}) {
@@ -120,7 +171,7 @@ function rawMessage(overrides = {}) {
   };
 }
 
-function createRepository({ messages = [], failUploadName = null, failEdit = false } = {}) {
+function createRepository({ messages = [], conversations = [rawConversation()], failUploadName = null, failEdit = false } = {}) {
   let storedMessages = structuredClone(messages);
   const removedPaths = [];
   const uploads = [];
@@ -132,7 +183,7 @@ function createRepository({ messages = [], failUploadName = null, failEdit = fal
     getStoredMessages: () => structuredClone(storedMessages),
     getCurrentUserId: async () => userId,
     openRideDirectConversation: async () => conversationId,
-    listConversations: async () => [rawConversation()],
+    listConversations: async () => structuredClone(conversations),
     getConversation: async () => rawConversation(),
     listMessages: async () => structuredClone(storedMessages),
     getMessage: async (id) => structuredClone(storedMessages.find((message) => message.id === id) || null),
@@ -255,6 +306,80 @@ describe('composite message validation', () => {
 });
 
 describe('MessagingService repository orchestration', () => {
+  it('hides empty ride direct drafts while retaining chats with messages or calls', async () => {
+    const conversations = [
+      rawConversation({ id: '10000000-0000-4000-8000-000000000010' }),
+      rawConversation({ id: '10000000-0000-4000-8000-000000000011', type: 'group' }),
+      rawConversation({
+        id: '10000000-0000-4000-8000-000000000012',
+        scope: 'friend',
+        ride_id: null,
+        ride_status: null,
+        trip_route: null,
+        friendship: { status: 'accepted' },
+      }),
+      rawConversation({
+        id: '10000000-0000-4000-8000-000000000013',
+        last_message: rawMessage({ conversation_id: '10000000-0000-4000-8000-000000000013' }),
+      }),
+      rawConversation({
+        id: '10000000-0000-4000-8000-000000000014',
+        latest_call: {
+          id: '40000000-0000-4000-8000-000000000001',
+          conversation_id: '10000000-0000-4000-8000-000000000014',
+          caller_id: userId,
+          status: 'cancelled',
+          created_at: '2026-08-10T02:00:00Z',
+        },
+      }),
+    ];
+    const service = createMessagingService(createRepository({ conversations }));
+    const visible = await service.listConversations();
+
+    expect(visible).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: '10000000-0000-4000-8000-000000000011', type: 'group', hasMessages: false }),
+      expect.objectContaining({ id: '10000000-0000-4000-8000-000000000012', scope: 'friend', hasMessages: false }),
+      expect.objectContaining({ id: '10000000-0000-4000-8000-000000000013', type: 'direct', hasMessages: true }),
+      expect.objectContaining({
+        id: '10000000-0000-4000-8000-000000000014',
+        type: 'direct',
+        hasMessages: false,
+        hasCalls: true,
+        lastMessage: 'Cancelled call',
+      }),
+    ]));
+    expect(visible).toHaveLength(4);
+    expect(visible.map((conversation) => conversation.id)).not.toContain('10000000-0000-4000-8000-000000000010');
+  });
+
+  it('reveals a personally deleted conversation when a newer call is created', () => {
+    const conversation = mapConversationRow(rawConversation({
+      members: [
+        {
+          user_id: userId,
+          role: 'traveller',
+          deleted_before: '2026-08-10T01:00:00Z',
+          profile: { full_name: 'Aina' },
+        },
+        { user_id: otherId, role: 'host', profile: { full_name: 'Ahmad' } },
+      ],
+      latest_call: {
+        id: '40000000-0000-4000-8000-000000000002',
+        conversation_id: conversationId,
+        caller_id: otherId,
+        status: 'missed',
+        created_at: '2026-08-10T02:00:00Z',
+      },
+    }), userId);
+
+    expect(conversation).toMatchObject({
+      isHiddenByDelete: false,
+      hasActivity: true,
+      lastMessage: 'Missed call',
+      lastMessageAt: '2026-08-10T02:00:00Z',
+    });
+  });
+
   it('keeps archived conversations writable and maps personal deletion state', async () => {
     const archived = mapConversationRow(rawConversation({
       members: [
@@ -263,6 +388,34 @@ describe('MessagingService repository orchestration', () => {
       ],
     }), userId);
     expect(archived).toMatchObject({ isArchived: true, isReadOnly: false, isHiddenByDelete: false });
+  });
+
+  it('maps terminal mute state and retained former group access', () => {
+    const conversation = mapConversationRow(rawConversation({
+      type: 'group',
+      ride_status: 'Cancelled',
+      expires_at: '2026-08-17T02:00:00Z',
+      members: [
+        {
+          user_id: userId,
+          role: 'traveller',
+          left_at: '2026-08-10T02:00:00Z',
+          access_expires_at: '2026-08-17T02:00:00Z',
+          muted_at: '2026-08-10T03:00:00Z',
+          profile: { full_name: 'Aina' },
+        },
+        { user_id: otherId, role: 'host', profile: { full_name: 'Ahmad' } },
+      ],
+    }), userId);
+
+    expect(conversation).toMatchObject({
+      isMuted: true,
+      isFormerMember: true,
+      isReadOnly: true,
+      isTerminal: true,
+      effectiveExpiresAt: '2026-08-17T02:00:00.000Z',
+    });
+    expect(conversation.members.map((member) => member.id)).toEqual([otherId]);
   });
 
   it('validates supported translation languages and maps cached results', async () => {
