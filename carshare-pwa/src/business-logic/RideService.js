@@ -16,6 +16,13 @@ import {
 } from './GooglePlacesService.js';
 
 const JOURNEY_SCALES = ['Urban', 'Intercity'];
+export const CONFIRMED_ROUTE_RPC_TEXT_LIMIT = 120;
+
+export function confirmedRouteTextForRpc(value) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized ? normalized.slice(0, CONFIRMED_ROUTE_RPC_TEXT_LIMIT) : null;
+}
+
 const PUBLIC_RIDE_SELECT = `
   id, host_id, pickup, destination,
   departure_at, journey_scale,
@@ -398,8 +405,8 @@ export const RideService = {
         const { data, error } = await supabase.rpc(
           'search_public_rides_with_confirmed_locations',
           {
-            p_pickup: from || null,
-            p_destination: proximity ? null : (to || null),
+            p_pickup: confirmedRouteTextForRpc(from),
+            p_destination: proximity ? null : confirmedRouteTextForRpc(to),
             p_departure_start: range?.start || null,
             p_departure_end: range?.end || null,
             p_destination_place_id: proximity?.destinationPlaceId || null,
@@ -485,8 +492,14 @@ export const RideService = {
       ? 'search_public_multi_leg_journeys_with_confirmed_locations'
       : 'search_public_multi_leg_journeys';
     const { data, error } = await supabase.rpc(rpcName, {
-      p_pickup: criteria.pickup || null,
-      p_destination: criteria.destinationPlaceId ? null : (criteria.destination || null),
+      p_pickup: usesConfirmedLocations
+        ? confirmedRouteTextForRpc(criteria.pickup)
+        : (criteria.pickup || null),
+      p_destination: criteria.destinationPlaceId
+        ? null
+        : (usesConfirmedLocations
+            ? confirmedRouteTextForRpc(criteria.destination)
+            : (criteria.destination || null)),
       p_departure_start: range?.start || null,
       p_departure_end: range?.end || null,
       p_depart_after: criteria.departAfter || null,

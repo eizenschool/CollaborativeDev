@@ -36,10 +36,13 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   selected input IDs round-trip as `pickupPlaceId` and
   `destinationSearchPlaceId`; Module 6's existing `destinationPlaceId` remains
   a separate catalogue hint that alone enables the 5/10/25 km radius mode.
-  Configured Supabase environments require undeployed migration `079` to
-  compare those inputs privately against confirmed Ride endpoints. A Ride with
+  Deployed migration `079` compares those inputs privately against confirmed
+  Ride endpoints. A Ride with
   a different stored endpoint cannot match by text; only legacy rows with no
-  stored endpoint ID may use the confirmed display text as fallback.
+  stored endpoint ID may use the confirmed display text as fallback. Complete
+  Google labels remain visible and URL-persisted; only the RPC fallback prefix
+  is capped at the server's existing 120-character limit. Place IDs are not
+  truncated.
 - `/favourite` is authenticated and uses `FavouriteService`. The mock adapter
   persists per-user favourites. Migration `034` defines Supabase persistence,
   owner RLS, safe RPCs, and unavailable-ride cards. Its hardened private-helper

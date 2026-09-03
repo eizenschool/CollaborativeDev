@@ -545,7 +545,9 @@ is null may fall back to the confirmed Google display text, but a Ride with a
 different stored ID cannot. Public results never return Ride endpoint IDs,
 coordinates, instructions, waypoints, or route geometry. An environment that
 has not deployed `079` reports the dependency rather than silently reverting
-to loose text matching.
+to loose text matching. The client retains the complete Google label for display
+and URL state but caps only the RPC's legacy fallback prefix at 120 characters,
+matching the existing server guard while leaving Place IDs authoritative.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`079` are deployed; Module 6's `024` schema is deployed);
