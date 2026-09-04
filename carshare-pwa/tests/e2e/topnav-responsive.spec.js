@@ -11,11 +11,11 @@ test.beforeEach(async ({ page }) => {
 test('split-screen desktop keeps every navigation destination and account action visible', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 800 });
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?', exact: true })).toBeVisible();
 
   const navItems = page.locator('.topnav-links .topnav-item');
   await expect(navItems).toHaveCount(7);
-  for (const label of ['Home', 'Search', 'Ride', 'Trips', 'Message', 'Favourite', 'Profile']) {
+  for (const label of ['Explore', 'Search', 'Ride', 'Trips', 'Message', 'Favourite', 'Profile']) {
     await expect(page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name: label })).toBeVisible();
   }
   await expect(page.locator('.topnav-brand .brand-title')).toBeVisible();

@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 
 test('a passenger can cancel an active request from Ride Detail', async ({ page }) => {
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?', exact: true })).toBeVisible();
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     Object.assign(database.rides.r_1, {

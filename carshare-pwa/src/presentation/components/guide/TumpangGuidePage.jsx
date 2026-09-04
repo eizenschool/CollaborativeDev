@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
-import { getCurrentLocationPreview } from '../../../business-logic/GooglePlacesService.js';
+import { resolveCurrentLocation } from '../../../business-logic/GooglePlacesService.js';
 import { TumpangGuideService } from '../../../business-logic/guide/TumpangGuideService.js';
 import { GUIDE_ACTION, GUIDE_CORE_LANGUAGES, GUIDE_LANGUAGES, GUIDE_LIMITS, GUIDE_STORAGE } from '../../../business-logic/guide/constants.js';
 import {
-  getInitialGuideLanguage, guideCategoryLabel, guideCopy, guideFallbackReasonLabel, guideFeedbackReasons,
+  getInitialGuideLanguage, guideCategoryLabel, guideCopy,
   normalizeGuideLanguage, detectGuideLanguage
 } from '../../../business-logic/guide/GuideLanguage.js';
 import { normalizePlanState } from '../../../business-logic/guide/GuideIntentParser.js';
@@ -16,23 +16,17 @@ import { guideResponseContextText } from '../../../business-logic/guide/GuidePol
 import { localizeGuideResponse, localizedDifferentPlacesCommand } from '../../../business-logic/guide/GuideResponseLocalization.js';
 import { CATEGORY } from '../../../business-logic/discovery/constants.js';
 import AdaptiveDialog from '../ui/AdaptiveDialog.jsx';
-import { Button, IconButton } from '../ui/Button.jsx';
-import { IconArrowRight, IconCheck, IconClock, IconMapPin, IconMicrophone, IconRoute, IconSend, IconShield, IconStop } from '../icons.jsx';
-import ConfirmedLocationInput from '../maps/ConfirmedLocationInput.jsx';
+import { Button } from '../ui/Button.jsx';
+import { IconCheck, IconClock, IconRoute, IconShield } from '../icons.jsx';
 import GuideOnboarding from './GuideOnboarding.jsx';
-import GuideRecommendationCard from './GuideRecommendationCard.jsx';
-import GuidePlaceSpotlight from './GuidePlaceSpotlight.jsx';
 import PlacePoster from '../discover/PlacePoster.jsx';
 import { useGuideSpeechInput } from './useGuideSpeechInput.js';
+import GuideToolbar from './GuideToolbar.jsx';
+import GuideContextBar from './GuideContextBar.jsx';
+import GuideComposer, { GUIDE_SPEECH_LANGUAGE_OPTIONS } from './GuideComposer.jsx';
+import GuideTranscript from './GuideTranscript.jsx';
 
 const GUIDE_SPEECH_LANGUAGE_KEY = 'letstumpang_m6_guide_speech_language_v1';
-const GUIDE_SPEECH_LANGUAGE_OPTIONS = Object.freeze([
-  { value: 'auto', label: 'Auto' },
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '中文' },
-  { value: 'ms', label: 'Bahasa Melayu' },
-  { value: 'ta', label: 'தமிழ்' }
-]);
 const GUIDE_SPEECH_LANGUAGE_VALUES = new Set(GUIDE_SPEECH_LANGUAGE_OPTIONS.map((option) => option.value));
 
 function initialSpeechLanguage() {
@@ -105,53 +99,6 @@ function formatCopy(value, replacements, fallback) {
     : value(...Object.values(replacements));
   if (typeof value !== 'string') return fallback;
   return value.replace(/\{\{?(\w+)\}?\}/g, (_, key) => String(replacements[key] ?? ''));
-}
-
-function PlanSummary({ plan, copy, languagePack, onChange, onUseLocation, onSavePreferences, locationBusy, locationError, canSave }) {
-  const patch = (value) => onChange(normalizePlanState({ ...plan, ...value }));
-  const originLocation = plan.origin?.placeId
-    ? { placeId: plan.origin.placeId }
-    : Number.isFinite(plan.origin?.lat) && Number.isFinite(plan.origin?.lng)
-      ? { latitude: plan.origin.lat, longitude: plan.origin.lng }
-      : null;
-  const updateOrigin = (label, location) => patch({
-    origin: label ? {
-      label,
-      ...(location?.placeId ? { placeId: location.placeId } : {}),
-      ...(Number.isFinite(Number(location?.latitude)) ? { lat: Number(location.latitude) } : {}),
-      ...(Number.isFinite(Number(location?.longitude)) ? { lng: Number(location.longitude) } : {})
-    } : null
-  });
-  const toggleCategory = (category) => {
-    const selected = new Set(plan.preferredCategories);
-    if (selected.has(category)) selected.delete(category); else selected.add(category);
-    patch({ preferredCategories: [...selected] });
-  };
-  return (
-    <aside className="guide-plan" aria-labelledby="guide-plan-title">
-      <div className="guide-plan__heading"><div><p className="guide-eyebrow">{copy.livePlan}</p><h2 id="guide-plan-title">{copy.travelBrief}</h2></div><span className="guide-trip-badge" aria-hidden="true"><IconRoute size={22} /></span></div>
-      <ConfirmedLocationInput
-        id="guide-starting-point"
-        label={copy.startingPoint}
-        placeholder={copy.startingPointPlaceholder}
-        value={plan.origin?.label || ''}
-        location={originLocation}
-        onChange={updateOrigin}
-      />
-      <button className="guide-location-button" type="button" onClick={onUseLocation} disabled={locationBusy}><IconMapPin size={16} /> {locationBusy ? copy.locating : copy.useLocation}</button>
-      {locationError && <p className="guide-field-error" role="alert">{locationError}</p>}
-      <div className="guide-plan__row"><label>{copy.from}<input aria-label={copy.from} type="date" value={plan.startDate || ''} onChange={(event) => patch({ startDate: event.target.value, endDate: event.target.value })} /></label><label>{copy.until}<input aria-label={copy.until} type="date" min={plan.startDate || undefined} value={plan.endDate || ''} onChange={(event) => patch({ endDate: event.target.value })} /></label></div>
-      <label>{copy.people}<input aria-label={copy.people} type="number" min="1" max="20" inputMode="numeric" value={plan.partySize || ''} onChange={(event) => patch({ partySize: Number(event.target.value) || null })} /></label>
-      <fieldset><legend>{copy.categoryQuestion}</legend><div className="guide-category-chips">{Object.values(CATEGORY).map((category) => <button key={category} type="button" className={plan.preferredCategories.includes(category) ? 'active' : ''} aria-pressed={plan.preferredCategories.includes(category)} onClick={() => toggleCategory(category)}>{guideCategoryLabel(category, plan.language, languagePack)}</button>)}</div></fieldset>
-      <Button type="button" size="small" variant="secondary" onClick={onSavePreferences} disabled={!plan.preferredCategories.length}>{canSave ? copy.savePreferences : copy.signInSave}</Button>
-      <label className="guide-consent"><input type="checkbox" checked={plan.tripHistoryConsent} onChange={(event) => patch({ tripHistoryConsent: event.target.checked })} /><span><strong>{copy.historyConsent}</strong><small>{copy.historyNote}</small></span></label>
-    </aside>
-  );
-}
-
-function SourceBadge({ response, copy }) {
-  void response; void copy;
-  return null;
 }
 
 function placeInfoContent(info = {}) {
@@ -276,76 +223,6 @@ async function prepareLocalizedConversation({ messages, nextLanguage, pack, user
   });
 }
 
-// A quick reply is shown as "Name · State" so two same-named venues can be
-// told apart, but only the name is sent - the server matches a reply against
-// catalogue names, and the extra state token drags a token-overlap score
-// below the match threshold instead of helping it.
-function quickReplyText(label) {
-  const name = String(label || '').split('·')[0].trim();
-  return name || String(label || '').trim();
-}
-
-function AssistantBubble({ response, copy, language, languagePack, unlimitedTurns, actionStates, feedbackState, showQuickReplies, onQuickReply, onAction, onResponseAction, onFeedback, onRetry, onLoadMore, chatScrollRef }) {
-  const [negativeOpen, setNegativeOpen] = useState(false);
-  const navigate = useNavigate();
-  const isGuestQuotaReached = response.fallbackReason === 'guest_recommendation_limit' && !unlimitedTurns;
-  // A verified rules fallback is still a Guide response the user can judge.
-  // Excluding it made the feedback controls disappear exactly when the user
-  // most needed to report a timeout, rate limit or provider failure.
-  const canFeedback = ['clarify', 'recommend', 'help', 'action', 'place_info', 'travel_info'].includes(response.mode) && response.traceId !== 'welcome' && response.source !== 'unavailable';
-  const selectedFeedback = feedbackState?.sentiment || null;
-  return (
-    <article className={`guide-message guide-message--assistant guide-message--${response.mode}`}>
-      <div className="guide-avatar" aria-hidden="true"><IconRoute size={17} /></div>
-      <div className="guide-message__content">
-         {(!response.placeInfo || !response.placeInfo.place) && <p>{response.localizedMessage || response.assistantMessage || response.placeInfo?.summary}</p>}
-        {showQuickReplies && response.quickReplies?.length > 0 && (
-          // The server has been sending these options since the first
-          // clarify branch existed; nothing ever rendered them, so a
-          // question like "which place should I check the forecast for?"
-          // reached the traveller with its answers stripped out.
-          <div className="guide-quick-replies" role="group" aria-label={copy.quickRepliesLabel || 'Suggested replies'}>
-            {response.quickReplies.map((label) => (
-              <Button key={label} size="small" variant="secondary" onClick={() => onQuickReply(quickReplyText(label))}>{label}</Button>
-            ))}
-          </div>
-        )}
-        {response.mode === 'emergency' && <div className="guide-emergency-actions">{response.actions.map((action) => action.href?.startsWith('tel:') ? <a key={action.type} className="ui-button ui-button--danger ui-button--medium" href={action.href}>{action.label}</a> : <Link key={action.type} className="ui-button ui-button--secondary ui-button--medium" to={action.href}>{action.label}</Link>)}</div>}
-        {response.mode === 'catalogue_missing' && response.actions?.length > 0 && <div className="guide-emergency-actions">{response.actions.map((action) => <Button key={`${action.type}:${action.requestedName}`} size="small" variant="secondary" onClick={() => onResponseAction(action)}>{action.label}</Button>)}</div>}
-        {response.mode === 'action' && response.actions?.length > 0 && <div className="guide-emergency-actions">{response.actions.map((action) => <Button key={`${action.type}:${action.placeId || 'plan'}`} size="small" variant="primary" onClick={() => onResponseAction(action)}>{action.label}</Button>)}</div>}
-        {response.fallbackReason && !isGuestQuotaReached && <p className="guide-fallback-note"><IconShield size={14} /> {response.source === 'unavailable' ? copy.retryNotice : copy.rulesFallback} · {guideFallbackReasonLabel(response.fallbackReason, language, languagePack)}</p>}
-        {isGuestQuotaReached && (
-          <div className="guide-emergency-actions">
-            <Button
-              size="small" variant="primary"
-              onClick={() => navigate('/auth', { state: { from: '/assistant', reason: 'Sign in for unlimited Tumpang Guide recommendations.' } })}
-            >
-              {copy.signIn}
-            </Button>
-          </div>
-        )}
-        {response.retryable && <Button size="small" variant="secondary" onClick={() => onRetry(response)} disabled={response.retrying}>{response.retrying ? copy.thinking : copy.retryGemini}</Button>}
-         {response.placeInfo?.place && <GuidePlaceSpotlight placeInfo={response.placeInfo} planState={response.planState} copy={copy} language={language} languagePack={languagePack} chatScrollRef={chatScrollRef} />}
-        {response.externalPlaceInfo && <section className="guide-external-place" aria-label={response.externalPlaceInfo.officialName || copy.sourceLabel}>
-          <p>{response.externalPlaceInfo.summary}</p>
-          {response.externalPlaceInfo.highlights?.length > 0 && <ul>{response.externalPlaceInfo.highlights.map((item) => <li key={item}>{item}</li>)}</ul>}
-          <p><small>{response.externalPlaceInfo.catalogueStatus === 'external_not_actionable'
-            ? language === 'zh-CN' ? '此地点不在 Let\'s Tumpang 目录中，因此不能收藏、推荐或建立共乘操作。'
-              : language === 'ms' ? 'Tempat ini tiada dalam katalog Let\'s Tumpang, jadi tindakan simpan, cadangan dan tumpangan tidak tersedia.'
-                : language === 'ta' ? 'இந்த இடம் Let\'s Tumpang பட்டியலில் இல்லை; சேமிப்பு, பரிந்துரை மற்றும் பயணச் செயல்கள் கிடையாது.'
-                  : 'This place is not in the Let\'s Tumpang catalogue, so no save, recommendation or ride action is available.' : ''}</small></p>
-          {response.externalPlaceInfo.sources?.length > 0 && <details><summary>{copy.sourceLabel} ({response.externalPlaceInfo.sources.length})</summary><ol>{response.externalPlaceInfo.sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>)}</ol></details>}
-        </section>}
-        {response.recommendations?.length > 0 && <div className="guide-recommendations">{response.recommendations.map((recommendation) => <GuideRecommendationCard key={`${response.batchId || response.traceId}:${recommendation.placeId}`} recommendation={recommendation} featured={recommendation.role === 'best_match'} batchId={response.batchId} language={language} languagePack={languagePack} planState={response.planState} actionState={actionStates[`${recommendation.placeId}:${response.planState?.startDate || ''}`]} onAction={onAction} chatScrollRef={chatScrollRef} />)}</div>}
-        {response.mode === 'recommend' && response.recommendations?.length > 0 && response.recommendations.length < 3 && <button type="button" className="guide-text-action" onClick={onLoadMore}>{copy.showMore}</button>}
-         <div className="guide-message__meta">{!unlimitedTurns && response.mode !== 'emergency' && <span>{copy.remaining(response.remainingTurns)}</span>}
-           {canFeedback && <><button type="button" className={selectedFeedback === 'up' ? 'is-selected' : ''} onClick={() => onFeedback(response, selectedFeedback === 'up' ? 'clear' : 'up', 'helpful')}>{copy.helpful}</button><button type="button" className={selectedFeedback === 'down' ? 'is-selected' : ''} onClick={() => { if (selectedFeedback !== 'down') onFeedback(response, 'down', 'not_relevant'); setNegativeOpen((open) => !open); }}>{copy.notRelevant}</button>{negativeOpen && <select aria-label={copy.feedbackReason} value={selectedFeedback === 'down' ? (feedbackState.reason || 'not_relevant') : 'not_relevant'} onChange={(event) => { setNegativeOpen(false); onFeedback(response, 'down', event.target.value); }}><option value="">{copy.chooseFeedbackReason}</option>{guideFeedbackReasons(language, languagePack).map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select>}{selectedFeedback === 'down' && <button type="button" className="guide-feedback-clear" onClick={() => onFeedback(response, 'clear', 'not_relevant')}>×</button>}</>}
-        </div>
-      </div>
-    </article>
-  );
-}
-
 export default function TumpangGuidePage() {
   const { user } = useAuth();
   const location = useLocation();
@@ -367,7 +244,6 @@ export default function TumpangGuidePage() {
   const [actionStates, setActionStates] = useState({});
   const [feedbackStates, setFeedbackStates] = useState({});
   const [chatHydrationKey, setChatHydrationKey] = useState(null);
-  const [planOpen, setPlanOpen] = useState(true);
   const [speechLanguage, setSpeechLanguage] = useState(() => initialSpeechLanguage());
   const sessionRef = useRef(null);
   const chatScrollRef = useRef(null);
@@ -389,6 +265,12 @@ export default function TumpangGuidePage() {
   const interimTranscript = useCallback((text) => {
     voiceInterimRef.current = String(text || '').trim();
     setVoicePreview(voiceInterimRef.current);
+  }, []);
+  const handleDraftChange = useCallback((value) => {
+    voiceBaseDraftRef.current = value;
+    voiceInterimRef.current = '';
+    setVoicePreview('');
+    setDraft(value);
   }, []);
   const latestResponse = useMemo(() => [...messages].reverse().find((message) => message.response)?.response, [messages]);
   const hasConversation = useMemo(() => messages.some((message) => message.role === 'user'), [messages]);
@@ -745,7 +627,7 @@ export default function TumpangGuidePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, requestedSessionId, currentCopy.sessionDeletedElsewhere]);
 
-  const useCurrentLocation = async () => { setLocationBusy(true); setLocationError(''); try { const point = await getCurrentLocationPreview(); setPlanState((current) => normalizePlanState({ ...current, origin: { label: 'Current location', lat: point.latitude, lng: point.longitude } })); } catch { setLocationError(currentCopy.actionFailed); } finally { setLocationBusy(false); } };
+  const useCurrentLocation = async () => { setLocationBusy(true); setLocationError(''); try { const resolved = await resolveCurrentLocation(); setPlanState((current) => normalizePlanState({ ...current, origin: { label: resolved.label, placeId: resolved.location.placeId, lat: resolved.location.latitude, lng: resolved.location.longitude } })); } catch (error) { setLocationError(error?.message || currentCopy.actionFailed); } finally { setLocationBusy(false); } };
 
   const requestAction = (type, recommendation, cardPlan) => {
     if (!user) { navigate('/auth', { state: { from: '/assistant', reason: 'Sign in before saving a Tumpang Guide action.' } }); return; }
@@ -799,32 +681,61 @@ export default function TumpangGuidePage() {
     <main className="guide-page">
       <GuideOnboarding open={onboardingOpen} onClose={closeOnboarding} language={language} languagePack={languagePack} />
       {hasConversation && <h1 className="sr-only">Tumpang Guide</h1>}
-      {!hasConversation && <section className="guide-hero" aria-labelledby="guide-hero-title"><div className="guide-hero__copy"><p className="guide-eyebrow">TUMPANG GUIDE</p><h1 id="guide-hero-title">{currentCopy.heroTitle}</h1><p>{currentCopy.heroDescription}</p><div className="guide-hero__trust"><span><IconCheck size={14} /> {currentCopy.databaseOnly}</span><span><IconClock size={14} /> {currentCopy.timeoutFallback}</span><span><IconShield size={14} /> {currentCopy.privacy}</span></div></div><div className="guide-hero__media" aria-hidden="true"><PlacePoster seed="tumpang-guide-hero" category={CATEGORY.NATURE} /><span><IconRoute size={18} /><strong>{currentCopy.heroMediaTitle}</strong><small>{currentCopy.heroMediaDescription}</small></span></div></section>}
-      <div className={`guide-toolbar ${hasConversation ? 'is-active-chat' : ''}`}>
-        <div className="guide-toolbar__brand"><span className="guide-trip-badge"><IconRoute size={18} /></span><strong>Tumpang Guide</strong></div>
-        {languageBusy && <span className="guide-language-loading">{currentCopy.loadingLanguage}</span>}
-        {latestResponse && <SourceBadge response={latestResponse} copy={currentCopy} />}
-        <Button type="button" size="small" variant="secondary" onClick={() => setPlanOpen((value) => !value)} aria-expanded={planOpen}>{currentCopy.travelBrief}</Button>
-        <Button type="button" size="small" variant="secondary" onClick={startNewChat}>{currentCopy.newChat}</Button>
-        <Link to="/assistant/history">{currentCopy.pastPlans} <IconArrowRight size={14} /></Link>
-      </div>
-      <div className={`guide-layout ${planOpen ? '' : 'is-plan-closed'}`}>
-        {planOpen && <PlanSummary plan={planState} copy={currentCopy} languagePack={languagePack} onChange={setPlanState} onUseLocation={useCurrentLocation} onSavePreferences={requestPreferenceSave} locationBusy={locationBusy} locationError={locationError} canSave={Boolean(user)} />}
-        <section className="guide-chat" aria-label={`Tumpang Guide · ${currentCopy.smart}`}>
-          <div ref={chatScrollRef} className="guide-chat__messages" aria-live="polite">
-            {messages.map((message) => {
-              if (message.role === 'user') return <article key={message.id} className="guide-message guide-message--user"><p>{message.text}</p></article>;
-              const bubble = <AssistantBubble response={message.response} copy={currentCopy} language={language} languagePack={languagePack} unlimitedTurns={Boolean(user)} actionStates={actionStates} feedbackState={feedbackStates[message.response.traceId]} showQuickReplies={!busy && message.response.traceId === latestAssistantTrace} onQuickReply={(text) => send(text)} onAction={requestAction} onResponseAction={requestResponseAction} onFeedback={feedback} onRetry={retry} onLoadMore={loadMore} chatScrollRef={chatScrollRef} />;
-              const isOldRecommendation = message.response.recommendations?.length > 0 && message.response.traceId !== latestRecommendationTrace;
-              return <div key={message.id} className={`guide-batch ${message.response.recommendations?.length ? 'has-recommendations' : ''}`}>{isOldRecommendation ? <details><summary>{message.response.batchId ? `${currentCopy.batchLabel} · ${message.response.batchId.slice(-6)}` : currentCopy.smart}</summary>{bubble}</details> : bubble}</div>;
-            })}
-            {busy && <article className="guide-message guide-message--assistant"><div className="guide-avatar"><IconRoute size={17} /></div><div className="guide-message__content"><p className="guide-thinking"><span /> {currentCopy.thinking}</p></div></article>}
+      {!hasConversation && (
+        <section className="guide-hero" aria-labelledby="guide-hero-title">
+          <div className="guide-hero__copy">
+            <p className="guide-eyebrow">TUMPANG GUIDE</p>
+            <h1 id="guide-hero-title">{currentCopy.heroTitle}</h1>
+            <p>{currentCopy.heroDescription}</p>
+            <div className="guide-hero__trust">
+              <span><IconCheck size={14} /> {currentCopy.databaseOnly}</span>
+              <span><IconClock size={14} /> {currentCopy.timeoutFallback}</span>
+              <span><IconShield size={14} /> {currentCopy.privacy}</span>
+            </div>
           </div>
-          {notice && <p className="guide-notice" role="status">{notice}</p>}
-           <form className="guide-composer" onSubmit={(event) => { event.preventDefault(); send(); }}><div className="guide-composer__header"><label htmlFor="guide-message">{currentCopy.composerLabel}</label></div><div className="guide-composer__input-row"><textarea id="guide-message" rows="2" maxLength="1200" value={draft} onChange={(event) => { voiceBaseDraftRef.current = event.target.value; voiceInterimRef.current = ''; setVoicePreview(''); setDraft(event.target.value); }} placeholder="" /><label className="guide-voice-language"><span className="sr-only">{spokenLanguageLabel(speechLanguage)}</span><select aria-label={spokenLanguageLabel(speechLanguage)} title={spokenLanguageLabel(speechLanguage)} value={speechLanguage} onChange={changeSpeechLanguage} disabled={speech.listening || speech.processing}>{GUIDE_SPEECH_LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><IconButton label={speech.listening ? currentCopy.stopVoice : currentCopy.startVoice} onClick={speech.listening ? speech.stop : startSpeech} disabled={!speech.supported || speech.processing}>{speech.listening ? <IconStop size={19} /> : <IconMicrophone size={19} />}</IconButton><IconButton label={currentCopy.sendMessage} variant="primary" type="submit" disabled={busy || !draft.trim()}><IconSend size={19} /></IconButton></div>{voicePreview && <small className="guide-voice-preview" aria-live="polite">{voicePreview}</small>}<small>{currentCopy.voiceNote}</small>{speech.error && <p className="guide-field-error" role="alert">{speech.error}</p>}{speech.cloudFallbackAvailable && !speech.listening && <button type="button" className="guide-text-action" onClick={speech.startCloudFallback} disabled={speech.processing}>{speech.fallbackRequired ? (currentCopy.voiceUseCloudFallback || 'Use Groq cloud transcription') : (currentCopy.voiceTryCloudFallback || 'Not happy with this? Try cloud transcription instead')}</button>}</form>
+          <div className="guide-hero__media" aria-hidden="true">
+            <PlacePoster seed="tumpang-guide-hero" category={CATEGORY.NATURE} />
+            <span><IconRoute size={18} /><strong>{currentCopy.heroMediaTitle}</strong><small>{currentCopy.heroMediaDescription}</small></span>
+          </div>
         </section>
-      </div>
-      <AdaptiveDialog open={Boolean(pendingAction)} onClose={() => setPendingAction(null)} title={pendingAction?.type === GUIDE_ACTION.REGISTER_RIDE_ALERT || pendingAction?.type === 'cancel_ride_alert' ? currentCopy.rideAlert : pendingAction?.type === GUIDE_ACTION.SAVE_PREFERENCES ? currentCopy.savePreferences : pendingAction?.type === GUIDE_ACTION.REQUEST_CATALOGUE ? currentCopy.requestCatalogue : currentCopy.saveInterest} description={currentCopy.actionConfirm} footer={<><Button variant="secondary" onClick={() => setPendingAction(null)}>{currentCopy.cancel}</Button><Button onClick={confirmAction}>{currentCopy.confirm}</Button></>}><p>{pendingAction?.type === GUIDE_ACTION.REGISTER_RIDE_ALERT || pendingAction?.type === 'cancel_ride_alert' ? formatCopy(currentCopy.rideAlertConfirm, { name: pendingAction?.recommendation?.place?.name, date: pendingAction?.planState?.startDate }, '') : pendingAction?.type === GUIDE_ACTION.SAVE_PREFERENCES ? formatCopy(currentCopy.preferenceConfirm, { categories: (pendingAction?.planState?.preferredCategories || []).map((category) => guideCategoryLabel(category, language, languagePack)).join(', ') }, '') : pendingAction?.type === GUIDE_ACTION.REQUEST_CATALOGUE ? currentCopy.catalogueQueued : formatCopy(currentCopy.saveInterestConfirm, { name: pendingAction?.recommendation?.place?.name, date: pendingAction?.planState?.startDate }, '')}</p></AdaptiveDialog>
+      )}
+
+      <GuideToolbar hasConversation={hasConversation} languageBusy={languageBusy} copy={currentCopy} onNewChat={startNewChat} />
+
+      <section className="guide-chat" aria-label={`Tumpang Guide · ${currentCopy.smart}`}>
+        <GuideTranscript
+          messages={messages} copy={currentCopy} language={language} languagePack={languagePack}
+          unlimitedTurns={Boolean(user)} actionStates={actionStates} feedbackStates={feedbackStates}
+          busy={busy} latestAssistantTrace={latestAssistantTrace} latestRecommendationTrace={latestRecommendationTrace}
+          chatScrollRef={chatScrollRef}
+          onQuickReply={(text) => send(text)} onAction={requestAction} onResponseAction={requestResponseAction}
+          onFeedback={feedback} onRetry={retry} onLoadMore={loadMore}
+        />
+        {notice && <p className="guide-notice" role="status">{notice}</p>}
+
+        <div className="guide-dock">
+          <GuideContextBar
+            plan={planState} copy={currentCopy} language={language} languagePack={languagePack}
+            onChange={setPlanState} onUseLocation={useCurrentLocation} onSavePreferences={requestPreferenceSave}
+            locationBusy={locationBusy} locationError={locationError} canSave={Boolean(user)}
+          />
+          <GuideComposer
+            copy={currentCopy} draft={draft} onDraftChange={handleDraftChange} onSubmit={() => send()}
+            speechLanguage={speechLanguage} spokenLanguageLabel={spokenLanguageLabel} onChangeSpeechLanguage={changeSpeechLanguage}
+            speech={speech} onStartSpeech={startSpeech} busy={busy} voicePreview={voicePreview}
+          />
+        </div>
+      </section>
+
+      <AdaptiveDialog
+        open={Boolean(pendingAction)}
+        onClose={() => setPendingAction(null)}
+        title={pendingAction?.type === GUIDE_ACTION.REGISTER_RIDE_ALERT || pendingAction?.type === 'cancel_ride_alert' ? currentCopy.rideAlert : pendingAction?.type === GUIDE_ACTION.SAVE_PREFERENCES ? currentCopy.savePreferences : pendingAction?.type === GUIDE_ACTION.REQUEST_CATALOGUE ? currentCopy.requestCatalogue : currentCopy.saveInterest}
+        description={currentCopy.actionConfirm}
+        footer={<><Button variant="secondary" onClick={() => setPendingAction(null)}>{currentCopy.cancel}</Button><Button onClick={confirmAction}>{currentCopy.confirm}</Button></>}
+      >
+        <p>{pendingAction?.type === GUIDE_ACTION.REGISTER_RIDE_ALERT || pendingAction?.type === 'cancel_ride_alert' ? formatCopy(currentCopy.rideAlertConfirm, { name: pendingAction?.recommendation?.place?.name, date: pendingAction?.planState?.startDate }, '') : pendingAction?.type === GUIDE_ACTION.SAVE_PREFERENCES ? formatCopy(currentCopy.preferenceConfirm, { categories: (pendingAction?.planState?.preferredCategories || []).map((category) => guideCategoryLabel(category, language, languagePack)).join(', ') }, '') : pendingAction?.type === GUIDE_ACTION.REQUEST_CATALOGUE ? currentCopy.catalogueQueued : formatCopy(currentCopy.saveInterestConfirm, { name: pendingAction?.recommendation?.place?.name, date: pendingAction?.planState?.startDate }, '')}</p>
+      </AdaptiveDialog>
     </main>
   );
 }

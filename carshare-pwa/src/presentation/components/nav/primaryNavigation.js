@@ -1,8 +1,8 @@
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import {
   IconClock,
+  IconCompass,
   IconHeart,
-  IconHome,
   IconMessage,
   IconRoute,
   IconSearch,
@@ -10,7 +10,7 @@ import {
 } from '../icons.jsx';
 
 export const PRIMARY_NAV_ITEMS = Object.freeze([
-  Object.freeze({ to: '/home', label: 'Home', Icon: IconHome }),
+  Object.freeze({ to: '/home', label: 'Explore', Icon: IconCompass }),
   Object.freeze({ to: '/search', label: 'Search', Icon: IconSearch }),
   Object.freeze({ to: '/ride', label: 'Ride', Icon: IconRoute, requiresAuth: true }),
   Object.freeze({ to: '/trip', label: 'Trips', Icon: IconClock, requiresAuth: true }),

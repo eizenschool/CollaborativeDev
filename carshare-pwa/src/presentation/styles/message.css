@@ -2227,7 +2227,7 @@
 .message-read-only-banner { padding: 13px 16px max(13px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: #f9fafb; color: var(--muted); font-size: 11px; text-align: center; }
 
 .message-history-page { min-height: calc(100vh - 72px); background: var(--bg); }
-.message-history-header { position: sticky; top: 72px; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 14px max(18px, calc((100vw - 900px) / 2)); border-bottom: 1px solid var(--border); background: rgba(255,255,255,.97); }
+.message-history-header { position: sticky; top: var(--nav-offset); z-index: 10; display: flex; align-items: center; gap: 12px; padding: 14px max(18px, calc((100vw - 900px) / 2)); border-bottom: 1px solid var(--border); background: rgba(255,255,255,.97); }
 .message-history-header > button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #f3f4f6; cursor: pointer; }
 .message-history-header h1 { margin: 0; font-family: var(--font-display); font-size: 18px; }
 .message-history-header p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
@@ -4076,7 +4076,7 @@
   }
 
   .message-history-header {
-    top: 72px;
+    top: var(--nav-offset);
     min-height: 78px;
   }
 
@@ -4101,7 +4101,7 @@
   }
 
   .message-history-search {
-    top: 86px;
+    top: calc(var(--nav-offset) + 30px);
   }
 
   .message-history-body {

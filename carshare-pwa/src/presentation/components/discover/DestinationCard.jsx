@@ -39,7 +39,7 @@ export function freshnessLabel(updatedAt) {
   return `Updated ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(then)}`;
 }
 
-export default function DestinationCard({ candidate, onOpen }) {
+export default function DestinationCard({ candidate, onOpen, index }) {
   const place = candidate.place;
   const [photoShown, setPhotoShown] = useState(false);
   if (!place) return null;
@@ -59,6 +59,7 @@ export default function DestinationCard({ candidate, onOpen }) {
       type="button"
       className={'dsc-card' + (candidate.servedByRide ? '' : ' dsc-card-unserved')}
       onClick={() => onOpen(place.id)}
+      style={Number.isInteger(index) ? { '--motion-delay': `${Math.min(index, 5) * 40}ms` } : undefined}
     >
       <span className="dsc-card-media">
         <PlaceImage place={place} widthPx={PHOTO_WIDTH_CARD} onShownChange={setPhotoShown} />

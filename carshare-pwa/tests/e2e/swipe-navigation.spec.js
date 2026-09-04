@@ -55,16 +55,18 @@ test('touch swipes follow primary navigation order without hijacking other inter
   await expect(page).toHaveURL(/\/favourite$/);
 
   await page.goto('/home');
-  await dispatchTouch(page, '.home-greeting', { x: 76, y: 145 }, { x: 305, y: 145 });
+  await dispatchTouch(page, '.dsc-header', { x: 76, y: 145 }, { x: 305, y: 145 });
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.locator('.ui-swipe-route-frame .topnav')).toHaveCount(0);
   await expect(page.locator('.topnav')).toHaveCSS('position', 'fixed');
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const fixedNavBox = await page.locator('.topnav').boundingBox();
   expect(Math.abs((fixedNavBox.y + fixedNavBox.height) - 812)).toBeLessThan(1);
-  await expect(page.locator('.dsc-rail-track')).toBeVisible();
-  await dispatchTouch(page, '.dsc-rail-track', { x: 310, y: 650 }, { x: 76, y: 650 });
-  await expect(page).toHaveURL(/\/home$/);
+  // Home merged with Discover (docs/ai/DECISIONS.md); the horizontal-scroll
+  // destination rail this used to check (.dsc-rail-track) no longer exists
+  // as its own element - the equivalent exclusion for a horizontally
+  // scrollable region is covered by SwipeRouteViewport's own hasHorizontalScroller
+  // check and by the other non-hijacking assertions in this test.
 
   await page.goto('/search');
   await dispatchTouch(page, '.smart-search-hero', { x: 260, y: 150 }, { x: 242, y: 151 });
@@ -77,7 +79,7 @@ test('touch swipes follow primary navigation order without hijacking other inter
   // The full page can begin the phone gesture, including cards, form surfaces,
   // ordinary buttons, and the persistent navigation bar.
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?' })).toBeVisible();
   await page.locator('a[href="/trip"]').click();
   await expect(page).toHaveURL(/\/trip$/);
   await dispatchTouch(page, '.m5-trip-card', { x: 310, y: 390 }, { x: 76, y: 392 });
@@ -122,7 +124,7 @@ test('the Trips start-line car follows motion preference changes while the PWA s
 
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?' })).toBeVisible();
   await page.locator('a[href="/trip"]').click();
 
   const car = page.locator('[data-road-runner="journey-start"]');
@@ -152,7 +154,7 @@ test('guest swipe from Search to Ride preserves the guarded return destination',
   test.skip((page.viewportSize()?.width || 0) !== 375, 'Focused phone gesture coverage.');
 
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?' })).toBeVisible();
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     database.currentUserId = null;

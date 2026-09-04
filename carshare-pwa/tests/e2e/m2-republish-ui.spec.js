@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 
 test('Driver republishes an expired History ride into a separate editable Draft', async ({ page }) => {
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?' })).toBeVisible();
   await page.goto('/ride');
   await expect(page.getByRole('heading', { name: 'My rides' })).toBeVisible();
 
@@ -53,7 +53,7 @@ test('Driver republishes an expired History ride into a separate editable Draft'
 
 test('Completed History opens Ride Detail and reveals review only on request', async ({ page }) => {
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?' })).toBeVisible();
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     Object.assign(database.rides.r_5, {

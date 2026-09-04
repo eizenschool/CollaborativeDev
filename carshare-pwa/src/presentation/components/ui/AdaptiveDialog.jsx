@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { IconX } from '../icons.jsx';
 import { IconButton } from './Button.jsx';
 
@@ -98,7 +99,11 @@ export default function AdaptiveDialog({
 
   if (!rendered) return null;
 
-  return (
+  // Rendered via portal to document.body: this dialog is used from inside
+  // .guide-dock, which sets backdrop-filter - that creates a new containing
+  // block for descendant position:fixed elements, so an inline-rendered
+  // backdrop would be clipped to the dock instead of covering the viewport.
+  return createPortal(
     <div
       className="ui-dialog-backdrop"
       aria-hidden={closing || undefined}
@@ -135,6 +140,7 @@ export default function AdaptiveDialog({
         <div className="ui-dialog__body">{children}</div>
         {footer && <footer className="ui-dialog__footer">{footer}</footer>}
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }

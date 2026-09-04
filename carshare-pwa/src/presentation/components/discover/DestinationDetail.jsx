@@ -180,7 +180,7 @@ export default function DestinationDetail() {
       navigate(returnTo, { state: { guideRestoreScrollTop: Number(location.state?.guideRestoreScrollTop) || 0 } });
       return;
     }
-    navigate('/discover');
+    navigate('/home');
   };
 
   useEffect(() => {

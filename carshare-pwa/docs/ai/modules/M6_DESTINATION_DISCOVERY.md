@@ -102,7 +102,11 @@ Three behaviours follow from the weighting itself and need no separate rule:
 Do not change these constants casually.
 
 ## What Works Today
-`/discover` runs end to end two ways. With no Google key and no `.env.local`,
+`/home` runs end to end two ways (D032: this content moved from `/discover` to
+`/home`, and Home's former five action-card shortcuts were removed as
+duplicates of the shared navigation; `/discover` now redirects to `/home`,
+preserving its query string, and `/discover/:placeId` / `/discover/demand`
+are unchanged routes). With no Google key and no `.env.local`,
 it runs entirely offline on a 22-place fixture catalogue: recommendations, the
 two-section presentation, destination detail with reviews and the score
 breakdown, first-use preferences, interest recording, notification
@@ -167,10 +171,12 @@ Business logic: `src/business-logic/discovery/`
 - `PlaceDescription.js` — FR-6.8/6.9/6.10, the place described from phrases two or more of its own reviewers used independently
 - `geo.js`, `__tests__/`
 
-Presentation: `src/presentation/components/discover/` — hub, detail, card, rail,
-preference prompt, score breakdown, unmet demand view, `PlaceImage.jsx` (renders
-a live photo, falling back to `PlacePoster.jsx`'s FR-6.17 illustration tier when
-none is fetchable).
+Presentation: the hub content that used to be `discover/DiscoverHub.jsx` now
+lives in `src/presentation/components/HomeScreen.jsx` (D032); `discover/`
+keeps detail, card, preference prompt, score breakdown, unmet demand view, and
+`PlaceImage.jsx` (renders a live photo, falling back to `PlacePoster.jsx`'s
+FR-6.17 illustration tier when none is fetchable). `DiscoverRail.jsx` was
+removed - its home-screen strip is now the same content Home itself renders.
 
 Data: `src/data-access/discoveryStore.js` (fixture catalogue, own localStorage
 key; still the default) and `src/data-access/discoverySupabaseRepository.js`

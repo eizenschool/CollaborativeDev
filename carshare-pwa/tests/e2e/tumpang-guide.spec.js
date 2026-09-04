@@ -16,11 +16,23 @@ async function dismissOnboarding(page) {
   await page.getByRole('button', { name: 'Start planning' }).click();
 }
 
+// The former always-open "Your travel brief" sidebar is now a context bar
+// above the composer that opens the same fields in the shared AdaptiveDialog
+// (see GuideContextBar.jsx) - every field-fill now opens it first and closes
+// it with Escape before the composer becomes reachable again, since the
+// dialog is modal.
+async function openTravelBrief(page) {
+  await page.getByRole('button', { name: /Your travel brief/ }).click();
+  await expect(page.getByRole('dialog', { name: /Your travel brief/ })).toBeVisible();
+}
+
 async function requestRecommendations(page) {
+  await openTravelBrief(page);
   await page.getByLabel('Starting point').fill('Kuala Lumpur');
   await page.getByLabel('From').fill('2026-09-01');
   await page.getByLabel('People').fill('2');
   await page.getByRole('button', { name: 'Nature', exact: true }).click();
+  await page.keyboard.press('Escape');
   await page.getByLabel('Message Tumpang Guide').fill('Plan a nature day for us');
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.locator('.guide-rec-card').first()).toBeVisible();
@@ -31,7 +43,8 @@ test('Tumpang Guide produces local database-only choices and preserves Search an
   await dismissOnboarding(page);
   await expect(page.getByRole('heading', { name: 'Your local friend for the next good day out.' })).toBeVisible();
 
-  const planOverflow = await page.locator('.guide-plan').evaluate((plan) => {
+  await openTravelBrief(page);
+  const planOverflow = await page.locator('.guide-plan-fields').evaluate((plan) => {
     const card = plan.getBoundingClientRect();
     return [...plan.querySelectorAll('input, select, button, textarea')]
       .filter((control) => {
@@ -41,6 +54,7 @@ test('Tumpang Guide produces local database-only choices and preserves Search an
       .map((control) => control.getAttribute('aria-label') || control.tagName.toLowerCase());
   });
   expect(planOverflow).toEqual([]);
+  await page.keyboard.press('Escape');
 
   await requestRecommendations(page);
   await expect(page.getByText('Best match', { exact: true })).toBeVisible();

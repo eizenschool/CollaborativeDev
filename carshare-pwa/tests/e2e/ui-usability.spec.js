@@ -77,7 +77,7 @@ async function mockGooglePickupServices(page, { nearbyFails = false } = {}) {
 }
 
 test('public browsing preserves Discover to Search hand-off', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.getByRole('link', { name: 'Search' }).click();
   await expect(page.getByRole('heading', { name: 'Find the right ride' })).toBeVisible();
 
@@ -101,7 +101,7 @@ test('public browsing preserves Discover to Search hand-off', async ({ page }) =
 });
 
 test('authentication returns the member to the guarded destination', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     database.currentUserId = null;
@@ -121,7 +121,7 @@ test('authentication returns the member to the guarded destination', async ({ pa
 test('desktop Auth car stays on the journey route and keeps moving', async ({ page }) => {
   test.skip((page.viewportSize()?.width || 0) <= 880, 'The journey scene is intentionally hidden at compact widths.');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     database.currentUserId = null;
@@ -254,7 +254,7 @@ test('Create Ride skips Google for very inaccurate GPS and preserves manual reco
 });
 
 test('Ride cards use lazy destination photos while pickup photos stay on Published detail', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     const future = { date: '2026-09-15', time: '07:00', departureAt: '2026-09-14T23:00:00.000Z', status: 'Published', expiredAt: null };
@@ -320,7 +320,7 @@ test('Ride cards use lazy destination photos while pickup photos stay on Publish
 });
 
 test('Draft review aligns waypoint durations and keeps the pickup photo inside its summary', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     Object.assign(database.rides.r_5, {
@@ -381,7 +381,7 @@ test('Pickup photo recovers from camera denial with upload, preview, and remove'
       },
     });
   });
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     Object.assign(database.rides.r_5, {
@@ -413,7 +413,7 @@ test('Pickup photo recovers from camera denial with upload, preview, and remove'
 });
 
 test('Trip lifecycle timestamps reflow without overlapping their explanation', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     Object.assign(database.rides.r_6, {
@@ -448,7 +448,7 @@ test('Trip lifecycle timestamps reflow without overlapping their explanation', a
 });
 
 test('Ride waypoints keep long place details readable inside a deliberate card rail', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     database.rides.r_6.waypoints = [{
@@ -530,7 +530,7 @@ test('Discover reveals at most six cards per section before Show more', async ({
 });
 
 test('primary navigation is unobscured, keyboard focusable, and uses 44px targets', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await expectNoPageOverflow(page);
   const navTargets = page.locator('.topnav-links .topnav-item:visible');
   const count = await navTargets.count();
@@ -545,7 +545,7 @@ test('primary navigation is unobscured, keyboard focusable, and uses 44px target
 });
 
 test('Home does not fetch Ride, Trip, or Message route bundles', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.waitForLoadState('networkidle');
   const resourceNames = await page.evaluate(() => performance.getEntriesByType('resource').map((entry) => entry.name));
   expect(resourceNames.filter((name) => /MessageModule|RideHub|TripModule|tripStyles|\/ride-[^/]+\.css/.test(name))).toEqual([]);
@@ -568,7 +568,7 @@ test('mobile filters trap focus and return it to the trigger', async ({ page }) 
 });
 
 test('Ride workspace keeps long route names inside compact cards', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     Object.assign(database.rides.r_5, {
@@ -605,29 +605,42 @@ test('Ride workspace keeps long route names inside compact cards', async ({ page
 });
 
 test('shared motion uses staged feedback and honours reduced motion', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
-  const standardMotion = await page.evaluate(() => {
-    const route = document.querySelector('.ui-route-transition');
-    const cards = [...document.querySelectorAll('.home-action-card')];
-    return {
-      reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
-      routeName: getComputedStyle(route).animationName,
-      routeDuration: parseFloat(getComputedStyle(route).animationDuration),
-      cardName: getComputedStyle(cards[0]).animationName,
-      cardDelays: cards.map((card) => getComputedStyle(card).animationDelay),
-    };
-  });
+  await openPage(page, '/home', 'Where should you go?');
+  // Home merged with Discover (see docs/ai/DECISIONS.md); the staggered
+  // entrance that used to belong to the five now-removed home-action-card
+  // buttons moved to the destination cards that replaced them as the first
+  // screen's lead content (DestinationCard's `index` prop, dsc-card in
+  // discover.css).
+  const routeMotion = await page.locator('.ui-route-transition').evaluate((route) => ({
+    routeName: getComputedStyle(route).animationName,
+    routeDuration: parseFloat(getComputedStyle(route).animationDuration),
+  }));
+  // Scoped to one list: each section's card list restarts its own index at
+  // 0, so checking the whole page could land on two different sections'
+  // first cards and see 0s twice instead of a real stagger. Whichever
+  // section fixture data populates first is fine - the point under test is
+  // the stagger pattern, not a specific section's card count.
+  await expect(page.locator('.dsc-list-skeleton')).toHaveCount(0);
+  const cardMotion = await page.locator('.dsc-list:not(.dsc-list-skeleton)').first().locator('.dsc-card').evaluateAll((cards) => ({
+    cardName: cards.length ? getComputedStyle(cards[0]).animationName : null,
+    cardDelays: cards.slice(0, 3).map((card) => getComputedStyle(card).animationDelay),
+  }));
+  const standardMotion = {
+    reduced: await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches),
+    ...routeMotion,
+    ...cardMotion,
+  };
   expect(standardMotion).toEqual({
     reduced: false,
     routeName: 'ui-route-enter',
     routeDuration: 0.28,
     cardName: 'ui-item-enter',
-    cardDelays: ['0s', '0.04s', '0.08s', '0.12s', '0.16s'],
+    cardDelays: ['0s', '0.04s', '0.08s'],
   });
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?', exact: true })).toBeVisible();
   const reducedDuration = await page.locator('.ui-route-transition').evaluate((route) => (
     parseFloat(getComputedStyle(route).animationDuration)
   ));
@@ -636,7 +649,7 @@ test('shared motion uses staged feedback and honours reduced motion', async ({ p
 
 test('layout reflows for zoom, reduced motion, long names, and offline recovery', async ({ page, context }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
 
   const viewport = page.viewportSize();
@@ -688,6 +701,9 @@ test('critical pages have no WCAG A or AA axe violations', async ({ page }) => {
 });
 
 test('Home visual baseline is stable', async ({ page }) => {
-  await openPage(page, '/home', 'Hi, Jamie');
+  await openPage(page, '/home', 'Where should you go?');
+  // The heading renders immediately; wait for the loading skeleton to clear
+  // so the baseline captures real content rather than a frozen shimmer frame.
+  await expect(page.locator('.dsc-list-skeleton')).toHaveCount(0);
   await expect(page).toHaveScreenshot('home.png', { fullPage: true });
 });

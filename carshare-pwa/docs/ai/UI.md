@@ -34,9 +34,14 @@ Shared implementation locations:
 - `src/presentation/styles/theme.css` - global tokens, app shell, navigation,
   and shared presentation primitives.
 - `src/presentation/components/ui/` - shared `Button`, `IconButton`, page,
-  card, field, status, async-state, adaptive-dialog, route-loading, and route
-  error/focus primitives. These components are presentation-only and never
-  read Supabase or business data directly.
+  card, field, status, async-state, adaptive-dialog, route-loading, route
+  error/focus, `Skeleton`, and `Chip` primitives. These components are
+  presentation-only and never read Supabase or business data directly.
+  `Skeleton` and `Chip` consolidate patterns that had drifted into per-module
+  copies (message.css's skeleton shimmer; ride.css's `.chip-select` and
+  discover.css's `.dsc-filter`) - reach for these before adding a new one.
+  Trip's `.m5-chip` is intentionally not yet migrated; out of scope for the
+  change that introduced the shared primitive.
 - `src/presentation/components/nav/TopNav.jsx` - the shared responsive
   navigation component.
 - `src/presentation/components/notifications/NotificationCenter.jsx` - shared
@@ -169,6 +174,24 @@ after every ride, and reaching it only through Profile made Module 5 read as a
 sub-feature of Module 1. It sits beside Ride because one arranges rides and the
 other records them. On a 375px phone seven items leave 50px each, above the
 42px minimum in `theme.css`, so no navigation styling changed.
+
+The first destination's route (`/home`), position, and swipe-order role are
+unchanged. Its label and icon changed from "Home" to "Explore" (compass icon)
+because `/home` itself changed: it now renders the full destination-discovery
+content that used to live at `/discover` (Module 6), not a landing page of
+navigation shortcuts - see `docs/ai/DECISIONS.md`. `/discover` still exists as
+a redirect to `/home` (preserving its query string) so existing links and
+notifications keep working; only `/discover/:placeId` and `/discover/demand`
+remain their own routes.
+
+Every sticky element positioned under the shared nav (module sub-headers,
+sidebars, toolbars) should read its offset from the `--nav-offset` custom
+property in `theme.css` (`72px` on desktop, redefined to `56px` inside the
+`max-width: 700px` block to match the mobile app bar) rather than a literal
+pixel value. Before this token existed, seven-plus module rules each hardcoded
+their own guess at the nav height, which drifted out of sync at the phone
+breakpoint where the nav moves to the bottom of the screen - the direct cause
+of reported UI overlap.
 
 Use `TopNav.jsx`; do not implement a separate navigation bar inside a module.
 The current route determines the active state.
