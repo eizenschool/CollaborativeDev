@@ -539,18 +539,18 @@ input references as `pickupPlaceId` and `destinationSearchPlaceId`;
 `destinationPlaceId` remains the separate Module 6 catalogue hint and is the
 only input that enables the existing 5/10/25 km recommendation radius.
 
-Migration `079` privately compares passenger-supplied IDs with confirmed Ride
+Migration `082` privately compares passenger-supplied IDs with confirmed Ride
 endpoint IDs for direct and multi-leg matching. A legacy Ride whose endpoint ID
 is null may fall back to the confirmed Google display text, but a Ride with a
 different stored ID cannot. Public results never return Ride endpoint IDs,
 coordinates, instructions, waypoints, or route geometry. An environment that
-has not deployed `079` reports the dependency rather than silently reverting
+has not deployed `082` reports the dependency rather than silently reverting
 to loose text matching. The client retains the complete Google label for display
 and URL state but caps only the RPC's legacy fallback prefix at 120 characters,
 matching the existing server guard while leaving Place IDs authoritative.
 
 ## Open Decisions
-- database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`079` are deployed; Module 6's `024` schema is deployed);
+- database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;

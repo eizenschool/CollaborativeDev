@@ -97,7 +97,7 @@ describe('Module 4 SQL contract', () => {
 
   it('matches confirmed Search locations privately without returning Ride endpoint IDs', async () => {
     const sql = await import('node:fs/promises').then(({ readFile }) => readFile(
-      new URL('../../../database/sql/079_m4_confirmed_location_search.sql', import.meta.url),
+      new URL('../../../database/sql/082_m4_confirmed_location_search.sql', import.meta.url),
       'utf8'
     ));
     const directColumns = sql.match(/returns table\s*\(([\s\S]*?)\)\s*language/i)?.[1] || '';

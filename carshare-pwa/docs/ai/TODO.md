@@ -76,7 +76,7 @@ easier to change now than after you have built against it.
 - [x] Deploy `068_m4_multi_leg_journey_search.sql`; Search falls back only after
   direct results are exhausted and returns public-safe two-leg itineraries over
   confirmed endpoints and approved catalogue transfer points.
-- [x] Deploy `079_m4_confirmed_location_search.sql`; both direct and multi-leg
+- [x] Deploy `082_m4_confirmed_location_search.sql`; both direct and multi-leg
   RPCs execute under `anon`, migration history is recorded, and the
   post-deployment advisors report no new Module 4 security finding.
 - [ ] Complete the seeded live matrix for exact Pickup/Destination search,

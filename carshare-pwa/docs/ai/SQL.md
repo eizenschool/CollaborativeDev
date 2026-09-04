@@ -14,10 +14,10 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 search/favourites and favourite availability alerts
 Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m4, 068_m4,
-  069_project, 070_project, 072_m1, 073_m1, 074_m1, and 079_m4 as tracked Supabase
+  069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-081
+Repository SQL history: 001-082
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -57,8 +57,8 @@ rejects that column-restricted `update` grant for the
 confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
-is authored locally, not yet deployed, and grants that. `079_m4` is deployed;
-the next unused repository sequence is `080`.)
+is authored locally, not yet deployed, and grants that. `082_m4` is deployed;
+the next unused repository sequence is `083`.)
 ```
 
 The repository has one documented historical numbering collision at `075`
@@ -276,7 +276,7 @@ slots `065`/`066` to `067`/`068` after deployment because newer Development
 work had already claimed `065_m3` and `066_m2`. This repository-only rename
 does not require either deployed migration to be executed again.
 
-`079_m4_confirmed_location_search.sql` was deployed on 2026-09-03 as
+`082_m4_confirmed_location_search.sql` was deployed on 2026-09-03 as
 `m4_confirmed_location_search`. It adds narrow anonymous/authenticated invoker
 RPCs for direct and two-leg searches
 whose entered Pickup/Destination came from Google Places autocomplete. Private
@@ -588,7 +588,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `040_m4_favourites_advisor_followup.sql` - deployed 2026-08-27; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
 - `067_m4_favourite_unavailable_notifications.sql` - deployed 2026-08-27; shared in-app/Web Push producer for deduplicated unavailable-favourite transitions and safe similar-search links.
 - `068_m4_multi_leg_journey_search.sql` - deployed 2026-08-27; public-safe two-leg fallback over confirmed endpoints, approved catalogue transfers, stored schedules, and existing Module 4 filters.
-- `079_m4_confirmed_location_search.sql` - deployed 2026-09-03 as `m4_confirmed_location_search`; anonymously smoke-tested private exact/legacy-null endpoint matching behind safe public direct and multi-leg invoker RPCs, plus Published endpoint indexes.
+- `082_m4_confirmed_location_search.sql` - deployed 2026-09-03 as `m4_confirmed_location_search`; anonymously smoke-tested private exact/legacy-null endpoint matching behind safe public direct and multi-leg invoker RPCs, plus Published endpoint indexes.
 - `041_m6_ride_available_notification.sql` - deployed and live-verified 2026-08-24; FR-6.33/UC6.12 `public.rides` trigger dispatching through `private.create_user_notification(...)` to matching `ride_notify_registration` rows, plus a daily Cron job expiring past-date active registrations.
 - `042_m6_scheduled_ingestion.sql` - deployed and live-verified 2026-08-24; weekly pg_cron + pg_net sweep calling `m6-ingest` with `maxDetails: 0`. Its FR-6.3/6.4/6.5 auto-decay counterpart in the Edge Function was found unsafe and removed the same day - see this file's `042_m6` entry above.
 - `043_m3_add_voice_calls.sql` - applied outside tracked migration history on 2026-08-24; one-to-one call-session rows, locked participant RPCs, busy-call serialization, Realtime publication, and caller/callee-only private Broadcast signalling policies. WebRTC audio remains peer-to-peer.
