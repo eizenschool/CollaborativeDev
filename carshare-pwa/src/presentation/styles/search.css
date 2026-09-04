@@ -114,6 +114,161 @@
   font: 500 14px var(--font);
 }
 
+.search-location-field .confirmed-location-field,
+.search-location-field .route-field {
+  min-width: 0;
+}
+
+.search-location-field .route-field > label {
+  display: block;
+  margin-bottom: 6px;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.search-location-field .input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--teal);
+}
+
+.search-location-field.destination .input-wrap {
+  color: var(--danger);
+}
+
+.search-location-field .prefix-icon {
+  position: absolute;
+  z-index: 1;
+  left: 13px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.search-location-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 42px 0 38px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  outline: 0;
+  color: var(--ink);
+  background: #fafcfb;
+  font: 500 14px var(--font);
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.search-location-field input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, .1);
+}
+
+.search-location-field input[aria-invalid="true"]:not(:focus) {
+  border-color: #f3b7b7;
+}
+
+.search-location-field .location-confirmed-icon {
+  position: absolute;
+  z-index: 2;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--teal-dark);
+  background: var(--teal-tint);
+  pointer-events: none;
+}
+
+.search-location-field .location-field-message {
+  margin: 5px 2px 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.search-location-field .location-field-message.error {
+  color: var(--danger);
+}
+
+.search-location-field .location-suggestions-panel {
+  position: absolute;
+  z-index: 45;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 14px 35px rgba(17, 24, 39, .16);
+}
+
+.search-location-field .location-suggestions-heading {
+  margin: 0;
+  padding: 9px 12px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.search-location-field .location-suggestions-panel ul {
+  max-height: 252px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+}
+
+.search-location-field .location-suggestions-panel li {
+  min-height: 46px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 10px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.search-location-field .location-suggestions-panel li svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--teal);
+}
+
+.search-location-field .location-suggestions-panel li:hover,
+.search-location-field .location-suggestions-panel li.active {
+  background: var(--teal-tint);
+}
+
+.search-location-field .google-attribution {
+  min-height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 7px 12px;
+  border-top: 1px solid #edf3ef;
+}
+
+.search-location-field .google-attribution img {
+  display: block;
+  width: 120px;
+  max-width: 100%;
+  height: auto;
+}
+
 .smart-search-submit,
 .search-apply-desktop,
 .search-apply-button {

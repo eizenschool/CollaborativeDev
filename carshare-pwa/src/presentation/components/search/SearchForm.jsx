@@ -1,10 +1,6 @@
-import {
-  IconCalendar,
-  IconClock,
-  IconMapPin,
-  IconSearch
-} from '../icons.jsx';
+import { IconCalendar, IconClock, IconSearch } from '../icons.jsx';
 import { applyManualDestinationText } from '../../../business-logic/SmartSearchService.js';
+import ConfirmedLocationInput from '../maps/ConfirmedLocationInput.jsx';
 
 export default function SearchForm({ criteria, onChange, onSubmit, loading }) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
@@ -12,33 +8,38 @@ export default function SearchForm({ criteria, onChange, onSubmit, loading }) {
 
   return (
     <form className="smart-search-form" onSubmit={onSubmit} aria-label="Search available rides">
-      <label className="smart-field smart-field-route" htmlFor="smart-search-pickup">
-        <span>Pickup</span>
-        <span className="smart-input-wrap">
-          <IconMapPin size={16} aria-hidden="true" />
-          <input
-            id="smart-search-pickup"
-            autoComplete="street-address"
-            value={criteria.pickup}
-            onChange={(event) => patch({ pickup: event.target.value })}
-            placeholder="e.g. KL Sentral"
-          />
-        </span>
-      </label>
+      <div className="smart-field smart-field-route search-location-field">
+        <ConfirmedLocationInput
+          id="smart-search-pickup"
+          label="Pickup"
+          placeholder="Search a place in Malaysia"
+          value={criteria.pickup}
+          location={criteria.pickupPlaceId ? { source: 'place', placeId: criteria.pickupPlaceId } : null}
+          searchOnFocusOnly
+          onChange={(pickup, location) => patch({
+            pickup,
+            pickupPlaceId: location?.placeId || ''
+          })}
+        />
+      </div>
 
-      <label className="smart-field smart-field-route" htmlFor="smart-search-destination">
-        <span>Destination</span>
-        <span className="smart-input-wrap destination">
-          <IconMapPin size={16} aria-hidden="true" />
-          <input
-            id="smart-search-destination"
-            autoComplete="street-address"
-            value={criteria.destination}
-            onChange={(event) => onChange(applyManualDestinationText(criteria, event.target.value))}
-            placeholder="e.g. Georgetown"
-          />
-        </span>
-      </label>
+      <div className="smart-field smart-field-route search-location-field destination">
+        <ConfirmedLocationInput
+          id="smart-search-destination"
+          label="Destination"
+          placeholder="Search a place in Malaysia"
+          value={criteria.destination}
+          location={criteria.destinationSearchPlaceId
+            ? { source: 'place', placeId: criteria.destinationSearchPlaceId }
+            : (criteria.destinationPlaceId ? { source: 'place', placeId: criteria.destinationPlaceId } : null)}
+          searchOnFocusOnly
+          onChange={(destination, location) => onChange(applyManualDestinationText(
+            criteria,
+            destination,
+            location?.placeId || ''
+          ))}
+        />
+      </div>
 
       <label className="smart-field" htmlFor="smart-search-date">
         <span>Travel date</span>

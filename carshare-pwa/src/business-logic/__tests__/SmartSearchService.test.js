@@ -46,12 +46,14 @@ describe('Module 4 smart search contracts', () => {
 
   it('normalizes criteria and preserves each repeated restriction tag in URLs', () => {
     const normalized = normalizeSmartSearchCriteria({
-      pickup: ' KL Sentral ', minSeats: '2', tags: ['No smoking', 'No smoking', 'Pet-friendly']
+      pickup: ' KL Sentral ', pickupPlaceId: ' google-kl-sentral ',
+      minSeats: '2', tags: ['No smoking', 'No smoking', 'Pet-friendly']
     });
     const params = smartSearchCriteriaToParams(normalized);
     const restored = smartSearchCriteriaFromParams(params);
 
     expect(restored.pickup).toBe('KL Sentral');
+    expect(restored.pickupPlaceId).toBe('google-kl-sentral');
     expect(restored.minSeats).toBe(2);
     expect(restored.tags).toEqual(['No smoking', 'Pet-friendly']);
     expect(params.getAll('tag')).toEqual(['No smoking', 'Pet-friendly']);
@@ -103,13 +105,17 @@ describe('Module 4 smart search contracts', () => {
       tags: ['No smoking']
     });
     expect(applyManualDestinationText(selected, 'Melaka')).toMatchObject({
-      pickup: 'KL Sentral', destination: 'Melaka', destinationPlaceId: '', proximityKm: 0,
+      pickup: 'KL Sentral', destination: 'Melaka', destinationSearchPlaceId: '', destinationPlaceId: '', proximityKm: 0,
       tags: ['No smoking']
+    });
+    expect(applyManualDestinationText(selected, 'Melaka Sentral', 'google-melaka-sentral')).toMatchObject({
+      destination: 'Melaka Sentral', destinationSearchPlaceId: 'google-melaka-sentral',
+      destinationPlaceId: '', proximityKm: 0
     });
     expect(expandProximityCriteria(selected).proximityKm).toBe(10);
     expect(expandProximityCriteria({ ...selected, proximityKm: 10 }).proximityKm).toBe(25);
     expect(expandProximityCriteria({ ...selected, proximityKm: 25 })).toMatchObject({
-      destination: 'Jonker Street', destinationPlaceId: '', proximityKm: 0
+      destination: 'Jonker Street', destinationSearchPlaceId: 'fixture_jonker', destinationPlaceId: '', proximityKm: 0
     });
   });
 
@@ -124,6 +130,20 @@ describe('Module 4 smart search contracts', () => {
     expect(() => validateSmartSearchCriteria({ date: '2026-08-12' }, { now })).toThrow('past');
     expect(() => validateSmartSearchCriteria({ date: '2026-08-13', departAfter: '25:00' }, { now })).toThrow('departure time');
     expect(validateSmartSearchCriteria({ date: '2026-08-14', departAfter: '07:30' }, { now }).departAfter).toBe('07:30');
+  });
+
+  it('requires a Google suggestion for each non-empty ordinary route field', () => {
+    expect(() => validateSmartSearchCriteria({ pickup: 'KL Sentral' }))
+      .toThrow('Choose a pickup');
+    expect(() => validateSmartSearchCriteria({ destination: 'Ipoh' }))
+      .toThrow('Choose a destination');
+    expect(validateSmartSearchCriteria({
+      pickup: 'KL Sentral', pickupPlaceId: 'google-kl',
+      destination: 'Ipoh', destinationSearchPlaceId: 'google-ipoh'
+    })).toMatchObject({ pickupPlaceId: 'google-kl', destinationSearchPlaceId: 'google-ipoh' });
+    expect(validateSmartSearchCriteria({
+      destination: 'Jonker Street', destinationPlaceId: 'fixture_jonker', proximityKm: 10
+    }).destinationPlaceId).toBe('fixture_jonker');
   });
 
   it('applies current-data filters with AND semantics for restriction tags', () => {
@@ -187,6 +207,7 @@ describe('Module 4 smart search contracts', () => {
 
     const result = await SmartSearchService.search({
       pickup: 'KL',
+      pickupPlaceId: 'google-kl',
       destination: 'Jonker Street',
       destinationPlaceId: 'fixture_jonker',
       proximityKm: 5,
@@ -199,6 +220,7 @@ describe('Module 4 smart search contracts', () => {
       to: '',
       date: '',
       proximity: { destinationPlaceId: 'fixture_jonker', radiusKm: 5 },
+      confirmedLocations: { pickupPlaceId: 'google-kl', destinationPlaceId: '' },
       compatibility: null
     });
     expect(result).toHaveLength(1);
@@ -219,6 +241,7 @@ describe('Module 4 smart search contracts', () => {
       to: '',
       date: '',
       proximity: null,
+      confirmedLocations: null,
       compatibility: { vehicleType: 'suv', language: 'english' }
     });
   });
@@ -237,6 +260,35 @@ describe('Module 4 smart search contracts', () => {
       ride({ id: 'middle', time: '10:00', departureAt: '2026-08-20T02:00:00.000Z' })
     ], { departAfter: '09:00' });
     expect(result.map((item) => item.id)).toEqual(['middle', 'late']);
+  });
+
+  it('matches confirmed mock endpoints exactly and uses text only for legacy rides without IDs', async () => {
+    RideService.searchRides.mockResolvedValue([
+      ride({
+        id: 'exact', pickup: 'KL Sentral', destination: 'Ipoh Station',
+        pickupLocation: { placeId: 'google-kl' }, destinationLocation: { placeId: 'google-ipoh' }
+      }),
+      ride({
+        id: 'different-id', pickup: 'KL Sentral', destination: 'Ipoh Station',
+        pickupLocation: { placeId: 'google-other-kl' }, destinationLocation: { placeId: 'google-ipoh' }
+      }),
+      ride({
+        id: 'legacy', pickup: 'KL Sentral entrance', destination: 'Ipoh Station',
+        pickupLocation: null, destinationLocation: null
+      })
+    ]);
+
+    const result = await SmartSearchService.search({
+      pickup: 'KL Sentral', pickupPlaceId: 'google-kl',
+      destination: 'Ipoh Station', destinationSearchPlaceId: 'google-ipoh'
+    });
+
+    expect(result.map((item) => item.id)).toEqual(['exact', 'legacy']);
+    expect(RideService.searchRides).toHaveBeenCalledWith(expect.objectContaining({
+      confirmedLocations: { pickupPlaceId: 'google-kl', destinationPlaceId: 'google-ipoh' }
+    }));
+    expect(result[0]).not.toHaveProperty('pickupLocation');
+    expect(result[0]).not.toHaveProperty('destinationLocation');
   });
 
   it('sorts by the shared Composite Host Impact formula with departure as tie-breaker', () => {
@@ -261,6 +313,7 @@ describe('Module 4 smart search contracts', () => {
   it('returns a two-leg fallback only when no suitable direct ride remains', async () => {
     const first = ride({
       id: 'leg-one',
+      pickupLocation: { placeId: 'google-kl' },
       destination: 'George Town Heritage Core',
       destinationLocation: { placeId: 'fixture_georgetown' },
       departureAt: '2026-09-10T00:00:00.000Z',
@@ -272,7 +325,7 @@ describe('Module 4 smart search contracts', () => {
       pickup: 'George Town Heritage Core',
       pickupLocation: { placeId: 'fixture_georgetown' },
       destination: 'Ipoh Station',
-      destinationLocation: { placeId: 'fixture_chain_a' },
+      destinationLocation: { placeId: 'google-ipoh' },
       departureAt: '2026-09-10T02:30:00.000Z',
       date: '2026-09-10', time: '10:30', journeyScale: 'Urban',
       estimatedArrivalAt: '2026-09-10T04:00:00.000Z'
@@ -280,7 +333,8 @@ describe('Module 4 smart search contracts', () => {
     RideService.searchRides.mockResolvedValueOnce([]).mockResolvedValueOnce([first, second]);
 
     const result = await SmartSearchService.search({
-      pickup: 'KL', destination: 'Ipoh', date: '2026-09-10',
+      pickup: 'KL', pickupPlaceId: 'google-kl',
+      destination: 'Ipoh', destinationSearchPlaceId: 'google-ipoh', date: '2026-09-10',
       minSeats: 2, tags: ['No smoking']
     });
 

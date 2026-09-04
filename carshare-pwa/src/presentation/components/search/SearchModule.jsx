@@ -202,6 +202,7 @@ export default function SearchModule() {
     setCriteria((current) => normalizeSmartSearchCriteria({
       ...current,
       destination: place.name,
+      destinationSearchPlaceId: '',
       destinationPlaceId: place.sourcePlaceId,
       proximityKm: 10
     }));
@@ -212,6 +213,7 @@ export default function SearchModule() {
   function clearRecommendedDestination() {
     setCriteria((current) => normalizeSmartSearchCriteria({
       ...current,
+      destinationSearchPlaceId: current.destinationPlaceId,
       destinationPlaceId: '',
       proximityKm: 0
     }));
@@ -232,7 +234,9 @@ export default function SearchModule() {
   function clearFilters() {
     setCriteria((current) => normalizeSmartSearchCriteria({
       pickup: current.pickup,
+      pickupPlaceId: current.pickupPlaceId,
       destination: current.destination,
+      destinationSearchPlaceId: current.destinationSearchPlaceId,
       destinationPlaceId: current.destinationPlaceId,
       proximityKm: current.proximityKm,
       date: current.date,
@@ -305,7 +309,11 @@ export default function SearchModule() {
     appliedCriteria.destinationPlaceId && {
       key: 'destination-radius',
       label: `Within ${appliedCriteria.proximityKm} km of ${appliedCriteria.destination}`,
-      remove: () => removeAppliedFilter({ destinationPlaceId: '', proximityKm: 0 })
+      remove: () => removeAppliedFilter({
+        destinationSearchPlaceId: appliedCriteria.destinationPlaceId,
+        destinationPlaceId: '',
+        proximityKm: 0
+      })
     },
     appliedCriteria.journeyScale && {
       key: 'journey-scale',
@@ -366,7 +374,7 @@ export default function SearchModule() {
           </button>
           {criteria.destinationPlaceId && (
             <button type="button" className="search-destination-clear" onClick={clearRecommendedDestination}>
-              Use text only
+              Match exact place
             </button>
           )}
         </div>
@@ -413,7 +421,7 @@ export default function SearchModule() {
               <div className="search-empty-actions">
                 {appliedCriteria.destinationPlaceId && (
                   <button type="button" onClick={applyProximityAlternative}>
-                    {appliedCriteria.proximityKm < 25 ? 'Expand the radius' : 'Search destination text only'}
+                    {appliedCriteria.proximityKm < 25 ? 'Expand the radius' : 'Match the exact destination'}
                   </button>
                 )}
                 <button type="button" className="secondary" onClick={() => { setCriteria(normalizeSmartSearchCriteria()); setSearchParams(new URLSearchParams()); }}>Start over</button>

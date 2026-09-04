@@ -16,6 +16,13 @@ import {
 } from './GooglePlacesService.js';
 
 const JOURNEY_SCALES = ['Urban', 'Intercity'];
+export const CONFIRMED_ROUTE_RPC_TEXT_LIMIT = 120;
+
+export function confirmedRouteTextForRpc(value) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized ? normalized.slice(0, CONFIRMED_ROUTE_RPC_TEXT_LIMIT) : null;
+}
+
 const PUBLIC_RIDE_SELECT = `
   id, host_id, pickup, destination,
   departure_at, journey_scale,
@@ -391,9 +398,34 @@ export const RideService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
   journeyScales: JOURNEY_SCALES,
 
-  async searchRides({ from, to, date, proximity = null, compatibility = null } = {}) {
+  async searchRides({ from, to, date, proximity = null, confirmedLocations = null, compatibility = null } = {}) {
     if (isSupabaseConfigured) {
       const range = date ? klDayRange(date) : null;
+      if (confirmedLocations) {
+        const { data, error } = await supabase.rpc(
+          'search_public_rides_with_confirmed_locations',
+          {
+            p_pickup: confirmedRouteTextForRpc(from),
+            p_destination: proximity ? null : confirmedRouteTextForRpc(to),
+            p_departure_start: range?.start || null,
+            p_departure_end: range?.end || null,
+            p_destination_place_id: proximity?.destinationPlaceId || null,
+            p_radius_km: proximity?.radiusKm || null,
+            p_vehicle_type: compatibility?.vehicleType || null,
+            p_language: compatibility?.language || null,
+            p_pickup_place_id: confirmedLocations.pickupPlaceId || null,
+            p_destination_search_place_id: confirmedLocations.destinationPlaceId || null
+          }
+        );
+        if (error) {
+          const detail = `${error.code || ''} ${error.message || ''} ${error.details || ''}`;
+          if (error.code === 'PGRST202' || /search_public_rides_with_confirmed_locations/i.test(detail)) {
+            throw new Error('Confirmed location search is not available in this environment yet.');
+          }
+          throw rpcError(error);
+        }
+        return attachDestinationPhotoPlaceIds((data || []).map(mapProximityRideRow));
+      }
       const { data: compatibleData, error: compatibilityError } = await supabase.rpc(
         'search_public_rides_with_compatibility',
         {
@@ -445,15 +477,29 @@ export const RideService = {
       if (error) throw rpcError(error);
       return attachDestinationPhotoPlaceIds(data.map(mapRideRow));
     }
-    return attachDestinationPhotoPlaceIds(await mockDb.listRides({ from, to, date }));
+    return attachDestinationPhotoPlaceIds(await mockDb.listRides({
+      from: confirmedLocations?.pickupPlaceId ? '' : from,
+      to: confirmedLocations?.destinationPlaceId ? '' : to,
+      date
+    }));
   },
 
   async searchMultiLegRides(criteria = {}) {
     if (!isSupabaseConfigured) return [];
     const range = criteria.date ? klDayRange(criteria.date) : null;
-    const { data, error } = await supabase.rpc('search_public_multi_leg_journeys', {
-      p_pickup: criteria.pickup || null,
-      p_destination: criteria.destinationPlaceId ? null : (criteria.destination || null),
+    const usesConfirmedLocations = Boolean(criteria.pickupPlaceId || criteria.destinationSearchPlaceId);
+    const rpcName = usesConfirmedLocations
+      ? 'search_public_multi_leg_journeys_with_confirmed_locations'
+      : 'search_public_multi_leg_journeys';
+    const { data, error } = await supabase.rpc(rpcName, {
+      p_pickup: usesConfirmedLocations
+        ? confirmedRouteTextForRpc(criteria.pickup)
+        : (criteria.pickup || null),
+      p_destination: criteria.destinationPlaceId
+        ? null
+        : (usesConfirmedLocations
+            ? confirmedRouteTextForRpc(criteria.destination)
+            : (criteria.destination || null)),
       p_departure_start: range?.start || null,
       p_departure_end: range?.end || null,
       p_depart_after: criteria.departAfter || null,
@@ -465,7 +511,11 @@ export const RideService = {
       p_contribution: criteria.contribution || null,
       p_min_rating: criteria.minRating || null,
       p_vehicle_type: criteria.vehicleType || null,
-      p_language: criteria.language || null
+      p_language: criteria.language || null,
+      ...(usesConfirmedLocations ? {
+        p_pickup_place_id: criteria.pickupPlaceId || null,
+        p_destination_search_place_id: criteria.destinationSearchPlaceId || null
+      } : {})
     });
     if (error) {
       const detail = `${error.code || ''} ${error.message || ''} ${error.details || ''}`;

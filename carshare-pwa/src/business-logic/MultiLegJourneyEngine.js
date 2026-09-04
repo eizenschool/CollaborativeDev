@@ -95,7 +95,10 @@ export function findMultiLegJourneys({
 
   for (const first of candidates) {
     const firstParts = departureParts(first.departureAt)
-    if (!lower(first.pickup).includes(pickup)) continue
+    const firstPickupId = confirmedPlaceId(first, 'pickup')
+    if (criteria.pickupPlaceId) {
+      if (firstPickupId ? firstPickupId !== criteria.pickupPlaceId : !lower(first.pickup).includes(pickup)) continue
+    } else if (!lower(first.pickup).includes(pickup)) continue
     if (criteria.date && firstParts.date !== criteria.date) continue
     if (criteria.departAfter && firstParts.time < criteria.departAfter) continue
 
@@ -111,6 +114,10 @@ export function findMultiLegJourneys({
       const proximityDistanceKm = destinationDistances.get(destinationId)
       if (criteria.destinationPlaceId) {
         if (!Number.isFinite(Number(proximityDistanceKm))) continue
+      } else if (criteria.destinationSearchPlaceId) {
+        if (destinationId
+          ? destinationId !== criteria.destinationSearchPlaceId
+          : !lower(second.destination).includes(destination)) continue
       } else if (destination && !lower(second.destination).includes(destination)) {
         continue
       }
