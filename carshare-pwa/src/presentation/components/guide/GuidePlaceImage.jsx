@@ -21,27 +21,21 @@ export default function GuidePlaceImage({
   useEffect(() => { onShownChange?.(shown); }, [shown, onShownChange]);
 
   if (!shown) {
+    if (revealable && candidateUrl && !mediaEnabled && showPhotoLabel) {
+      return (
+        <button
+          type="button"
+          className="guide-place-image-button"
+          aria-label={`${showPhotoLabel}: ${place?.name || ''}`}
+          onClick={(event) => { event.stopPropagation(); setRevealed(true); }}
+        >
+          <PlacePoster seed={place?.id} category={place?.category} variant={variant} />
+          <span className="dsc-reveal guide-reveal">{showPhotoLabel}</span>
+        </button>
+      );
+    }
     return (
-      <>
-        <PlacePoster seed={place?.id} category={place?.category} variant={variant} />
-        {revealable && candidateUrl && !mediaEnabled && showPhotoLabel && (
-          <span
-            role="button"
-            tabIndex={0}
-            className="dsc-reveal guide-reveal"
-            aria-label={`${showPhotoLabel}: ${place?.name || ''}`}
-            onClick={(event) => { event.stopPropagation(); setRevealed(true); }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') return;
-              event.preventDefault();
-              event.stopPropagation();
-              setRevealed(true);
-            }}
-          >
-            {showPhotoLabel}
-          </span>
-        )}
-      </>
+      <PlacePoster seed={place?.id} category={place?.category} variant={variant} />
     );
   }
 

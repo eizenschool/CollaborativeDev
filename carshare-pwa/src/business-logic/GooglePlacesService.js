@@ -1,7 +1,8 @@
 // ===== BUSINESS LOGIC LAYER (GooglePlacesService) =====
 // Cost-controlled browser boundary for confirmed Google place predictions and
 // one-shot current-location reverse geocoding. This service never creates a
-// Dynamic Maps instance and never calls Place Details or Routes.
+// Dynamic Maps instance or calls Routes. It fetches only the minimal Place
+// Details fields needed to attach coordinates to a selected autocomplete row.
 
 const GOOGLE_MAPS_SCRIPT_ID = 'lets-tumpang-google-maps-script';
 const GOOGLE_MAPS_SCRIPT_URL = 'https://maps.googleapis.com/maps/api/js';
@@ -24,6 +25,10 @@ export const NEARBY_PICKUP_TYPES = Object.freeze([
 const MAP_DIAGNOSTIC_TEXT_LIMIT = 160;
 
 let googleMapsPromise = null;
+// Autocomplete predictions are intentionally kept outside the returned rows.
+// The prediction object is not serialisable UI state and Place Details should
+// only be requested after the user selects a row, not on every keystroke.
+const locationPredictionCache = new Map();
 
 export class LocationServiceError extends Error {
   constructor(code, message) {
@@ -182,19 +187,67 @@ export async function searchLocations(input, { maps, navigatorObject = globalThi
     const mapsApi = await resolveMaps(maps);
     const { AutocompleteSuggestion } = await mapsApi.importLibrary('places');
     const { suggestions = [] } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(buildAutocompleteRequest(query, { origin }));
-    return suggestions
+    const candidates = suggestions
       .map(({ placePrediction }) => {
         const distanceMeters = Number(placePrediction?.distanceMeters);
-        return {
+        const candidate = {
           placeId: placePrediction?.placeId?.trim() || '',
           label: placePrediction?.text?.toString().trim() || '',
           ...(Number.isFinite(distanceMeters) ? { distanceMeters } : {})
         };
+        if (candidate.placeId && candidate.label && placePrediction) {
+          locationPredictionCache.set(candidate.placeId, placePrediction);
+        }
+        return candidate;
       })
       .filter((suggestion) => suggestion.placeId && suggestion.label)
       .slice(0, 5);
+    // Keep the cache bounded because this module can live for the whole PWA
+    // session. Prediction data is only used to resolve a selected row.
+    while (locationPredictionCache.size > 100) {
+      const oldest = locationPredictionCache.keys().next().value;
+      if (!oldest) break;
+      locationPredictionCache.delete(oldest);
+    }
+    return candidates;
   } catch (error) {
     throw serviceError(error, 'Location suggestions are unavailable. Please try again later.');
+  }
+}
+
+export async function resolveLocationSuggestion(suggestion) {
+  const candidate = {
+    placeId: String(suggestion?.placeId || '').trim(),
+    label: String(suggestion?.label || '').trim(),
+    ...(Number.isFinite(Number(suggestion?.distanceMeters))
+      ? { distanceMeters: Number(suggestion.distanceMeters) } : {}),
+    ...(Number.isFinite(Number(suggestion?.latitude))
+      ? { latitude: Number(suggestion.latitude) } : {}),
+    ...(Number.isFinite(Number(suggestion?.longitude))
+      ? { longitude: Number(suggestion.longitude) } : {}),
+    ...(suggestion?.formattedAddress ? { formattedAddress: String(suggestion.formattedAddress).trim() } : {})
+  };
+  if (!candidate.placeId || (Number.isFinite(candidate.latitude) && Number.isFinite(candidate.longitude))) {
+    return candidate;
+  }
+
+  const prediction = locationPredictionCache.get(candidate.placeId);
+  if (typeof prediction?.toPlace !== 'function') return candidate;
+  try {
+    const place = prediction.toPlace();
+    if (typeof place?.fetchFields !== 'function') return candidate;
+    await place.fetchFields({ fields: ['location', 'formattedAddress'] });
+    const latitude = placeCoordinate(place.location, 'lat');
+    const longitude = placeCoordinate(place.location, 'lng');
+    return {
+      ...candidate,
+      ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
+      ...(place.formattedAddress ? { formattedAddress: String(place.formattedAddress).trim() } : {})
+    };
+  } catch {
+    // A confirmed Place ID is still useful when the optional coordinate fetch
+    // is unavailable. The server can apply its normal state-level safeguards.
+    return candidate;
   }
 }
 
@@ -349,6 +402,7 @@ export const GooglePlacesService = {
   backend: 'google-places',
   isConfigured: Boolean(configuredApiKey),
   searchLocations,
+  resolveLocationSuggestion,
   buildAutocompleteRequest,
   createMapDiagnostic,
   loadGoogleMapsLibraries,

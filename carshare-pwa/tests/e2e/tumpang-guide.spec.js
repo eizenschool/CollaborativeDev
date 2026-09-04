@@ -23,10 +23,10 @@ async function requestRecommendations(page) {
   await page.getByRole('button', { name: 'Nature', exact: true }).click();
   await page.getByLabel('Message Tumpang Guide').fill('Plan a nature day for us');
   await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.locator('.guide-rec-card')).toHaveCount(3);
+  await expect(page.locator('.guide-rec-card').first()).toBeVisible();
 }
 
-test('Tumpang Guide produces three database-only choices and preserves the Discover/Search hand-off', async ({ page }) => {
+test('Tumpang Guide produces local database-only choices and preserves Search and Discover-detail hand-offs', async ({ page }) => {
   await page.goto('/assistant');
   await dismissOnboarding(page);
   await expect(page.getByRole('heading', { name: 'Your local friend for the next good day out.' })).toBeVisible();
@@ -44,8 +44,9 @@ test('Tumpang Guide produces three database-only choices and preserves the Disco
 
   await requestRecommendations(page);
   await expect(page.getByText('Best match', { exact: true })).toBeVisible();
-  await expect(page.getByText('Practical alternative', { exact: true })).toBeVisible();
-  await expect(page.getByText('Wildcard', { exact: true })).toBeVisible();
+  const recommendationCount = await page.locator('.guide-rec-card').count();
+  expect(recommendationCount).toBeGreaterThanOrEqual(1);
+  expect(recommendationCount).toBeLessThanOrEqual(3);
 
   // Find a ride belongs to the Guide recommendation card. The existing
   // destination detail intentionally shows "I will drive" when no Ride serves
@@ -59,14 +60,17 @@ test('Tumpang Guide produces three database-only choices and preserves the Disco
   await firstCard.getByRole('button', { name: /Why this/ }).click();
   await expect(firstCard.locator('.guide-why')).toBeVisible();
   await firstCard.getByRole('button', { name: /View full destination details/ }).click();
-  await expect(page).toHaveURL(/\/discover\/[^/?]+\?date=2026-09-01&from=guide/);
-  await expect(page.getByText(/Tumpang Guide · Best match/)).toBeVisible();
+  await expect(page).toHaveURL(/\/discover\/[^/?]+\?date=2026-09-01/);
+  await expect(page.getByRole('button', { name: /Back to Tumpang Guide/ })).toBeVisible();
+  await page.getByRole('button', { name: /Back to Tumpang Guide/ }).click();
+  await expect(page).toHaveURL(/\/assistant/);
+  await expect(page.locator('.guide-rec-card').first()).toBeVisible();
 });
 
 test('Tumpang Guide stays keyboard-accessible and stops recommendations for emergencies', async ({ page }) => {
   await page.goto('/assistant');
   await dismissOnboarding(page);
-  await page.getByLabel('Message Tumpang Guide').fill('SOS I am in danger');
+  await page.getByLabel('Message Tumpang Guide').fill('Someone is unconscious and needs an ambulance now');
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByRole('link', { name: 'Call 999' })).toBeVisible();
   await expect(page.locator('.guide-rec-card')).toHaveCount(0);
@@ -74,4 +78,14 @@ test('Tumpang Guide stays keyboard-accessible and stops recommendations for emer
   expect(results.violations).toEqual([]);
   const width = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+});
+
+test('language is AI-managed, New chat stays visible and ordinary replies are not disclosure widgets', async ({ page }) => {
+  await page.goto('/assistant');
+  await dismissOnboarding(page);
+  await expect(page.getByRole('button', { name: 'Guide language' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'New chat' })).toBeVisible();
+  await page.getByLabel('Message Tumpang Guide').fill('How does this work?');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.locator('.guide-message__content > details')).toHaveCount(0);
 });

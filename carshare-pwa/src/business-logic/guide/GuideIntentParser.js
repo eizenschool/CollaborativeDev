@@ -80,9 +80,11 @@ export function normalizePlanState(value = {}) {
   const range = startDate ? dateRangeDays(startDate, requestedEnd) : [];
   const partySize = Number(value.partySize);
   const preferredCategories = [...new Set((value.preferredCategories || []).filter((item) => Object.values(CATEGORY).includes(item)))];
+  const originPlaceId = String(value.origin?.placeId || '').trim();
   return {
     origin: value.origin?.label ? {
       label: String(value.origin.label).slice(0, 80),
+      ...(originPlaceId ? { placeId: originPlaceId.slice(0, 180) } : {}),
       lat: Number.isFinite(value.origin.lat) ? value.origin.lat : undefined,
       lng: Number.isFinite(value.origin.lng) ? value.origin.lng : undefined
     } : null,
@@ -96,8 +98,9 @@ export function normalizePlanState(value = {}) {
     children: Boolean(value.children),
     tripHistoryConsent: Boolean(value.tripHistoryConsent),
     language: normalizeGuideLanguage(value.language),
-    recommendationMode: ['default', 'different', 'quieter'].includes(value.recommendationMode)
-      ? value.recommendationMode : 'default'
+    recommendationMode: ['default', 'different', 'quieter', 'expanded'].includes(value.recommendationMode)
+      ? value.recommendationMode : 'default',
+    searchRadiusKm: [80, 160, 320].includes(Number(value.searchRadiusKm)) ? Number(value.searchRadiusKm) : 80
   };
 }
 
@@ -178,9 +181,7 @@ export function mergeGuideIntent(planState, text, { today = localIso(new Date())
 
 export function mostImportantMissingField(planState) {
   const plan = normalizePlanState(planState);
-  if (!plan.startDate) return 'date';
   if (!plan.origin) return 'origin';
-  if (!plan.partySize) return 'party';
   if (!plan.preferredCategories.length) return 'preference';
   return null;
 }
@@ -189,6 +190,9 @@ export function sanitizedPlanSummary(planState) {
   const plan = normalizePlanState(planState);
   return {
     ...plan,
-    origin: plan.origin ? { label: plan.origin.label } : null
+    origin: plan.origin ? {
+      label: plan.origin.label,
+      ...(plan.origin.placeId ? { placeId: plan.origin.placeId } : {})
+    } : null
   };
 }

@@ -4,18 +4,10 @@
 // ordering, batch IDs and plan facts remain untouched.
 import { GUIDE_MODE } from './constants.js';
 import { guideCopy, normalizeGuideLanguage } from './GuideLanguage.js';
-
-const CORE_REPLIES = Object.freeze({
-  en: Object.freeze({ clarify: ['A nature day tomorrow', 'Food this weekend', 'How does this work?'], recommend: ['Make it more practical', 'Recommend other places', 'Change the date'] }),
-  'zh-CN': Object.freeze({ clarify: ['明天的自然日', '这个周末吃美食', '这个助手怎么用？'], recommend: ['更实用一点', '推荐其他地点', '更改日期'] }),
-  ms: Object.freeze({ clarify: ['Hari alam esok', 'Makanan hujung minggu ini', 'Bagaimana ini berfungsi?'], recommend: ['Jadikan lebih praktikal', 'Cadangkan tempat lain', 'Tukar tarikh'] }),
-  ta: Object.freeze({ clarify: ['நாளை இயற்கை நாள்', 'இந்த வார இறுதி உணவு', 'இது எப்படி செயல்படும்?'], recommend: ['இன்னும் நடைமுறையான இடம்', 'வேறு இடங்களைப் பரிந்துரைக்கவும்', 'தேதியை மாற்றவும்'] })
-});
+import { greetingAt } from './GuideGreetings.js';
 
 function missingField(plan = {}) {
-  if (!plan.startDate) return 'date';
   if (!plan.origin?.label) return 'origin';
-  if (!plan.partySize) return 'party';
   if (!plan.preferredCategories?.length) return 'preference';
   return null;
 }
@@ -28,22 +20,23 @@ function clarifyMessage(copy, plan) {
         : field === 'preference' ? copy.askPreference : copy.recommend;
 }
 
-function coreReplies(mode, language, response) {
-  const replies = CORE_REPLIES[language];
-  if (!replies) {
-    const copy = response.languagePack?.copy || response.languagePack || null;
-    const dynamic = mode === GUIDE_MODE.CLARIFY || mode === GUIDE_MODE.HELP
-      ? [copy?.quickNature, copy?.quickFood, copy?.quickHelp]
-      : mode === GUIDE_MODE.RECOMMEND || mode === GUIDE_MODE.FALLBACK
-        ? [copy?.quickPractical, copy?.quickDifferent, copy?.quickDate]
-        : [];
-    return dynamic.length && dynamic.every((reply) => typeof reply === 'string' && reply.trim())
-      ? dynamic : response.quickReplies || [];
-  }
-  if (mode === GUIDE_MODE.CLARIFY) return replies.clarify;
-  if (mode === GUIDE_MODE.RECOMMEND || mode === GUIDE_MODE.FALLBACK) return replies.recommend;
-  return response.quickReplies || [];
-}
+// What the Guide actually said, in whatever language it said it.
+//
+// This module runs over RESTORED history (TumpangGuidePage's
+// localizeStoredMessages), never over the live turn - so replacing a stored
+// message with canned copy here does not "translate" a conversation, it
+// rewrites what the assistant is recorded as having said. Production caught
+// exactly that: reopening a saved chat turned "你想查到哪个地点的车程？"
+// into "What matters most: food, heritage, nature, or an event?" - a
+// question that was never asked - because that message was source:"rules"
+// (real deterministic server copy, not AI) and the old not-AI branch always
+// rebuilt clarify text from the canned template. Precedence is therefore: a
+// real translation OF THIS MESSAGE, else this message verbatim, else - only
+// for a response carrying no text at all - the canned line.
+const storedMessageText = (response) => response.localizedMessage || response.assistantMessage || '';
+
+const cachedTranslationFor = (response, language) => response.localizedMessages?.[language]
+  || response.localizedMessages?.[normalizeGuideLanguage(language)];
 
 function localizeActions(actions, copy) {
   const labels = {
@@ -72,25 +65,50 @@ export function localizeGuideResponse(response, language, languagePack = null) {
   const originalLanguage = response.originalLanguage || response.language || language;
   const localized = {
     ...response,
-    language,
+    // `language` belongs to the answer itself. The page's selected interface
+    // language is passed separately and must not rewrite a mixed-language
+    // conversation or its Travel Brief.
+    language: response.language || originalLanguage,
     originalLanguage,
-    planState: response.planState ? { ...response.planState, language } : response.planState,
-    quickReplies: coreReplies(response.mode, language, { ...response, languagePack }),
+    planState: response.planState,
+    // v3 keeps the conversation free-form. Only explicit, real app actions
+    // belong below a response; localization must not recreate canned prompts.
+    quickReplies: [],
     actions: localizeActions(response.actions, copy),
     localizedMessage: response.localizedMessage
   };
 
-  if (response.traceId === 'welcome') localized.localizedMessage = copy.welcome;
-  else if (response.mode === GUIDE_MODE.CLARIFY) localized.localizedMessage = clarifyMessage(copy, response.planState);
-  if (response.mode === GUIDE_MODE.RECOMMEND) {
-    const translated = response.localizedMessages?.[language]
-      || response.localizedMessages?.[normalizeGuideLanguage(language)];
-    localized.localizedMessage = response.source === 'gemini'
-      ? translated || (normalizeGuideLanguage(originalLanguage) === normalizeGuideLanguage(language)
-        ? response.assistantMessage : copy.recommend)
-      : copy.recommend;
+  // The welcome message is one of several rotating greetings (GuideGreetings.js),
+  // not the single fixed copy.welcome string - a UI-language switch must
+  // re-translate the *same* greeting slot the user was shown, not silently
+  // re-roll into a different one or fall back to the old static line. Older
+  // cached snapshots predating rotation have no greetingIndex, so they fall
+  // back to copy.welcome exactly as before.
+  if (response.traceId === 'welcome') {
+    localized.localizedMessage = Number.isInteger(response.greetingIndex)
+      ? greetingAt(language, response.greetingIndex)
+      : copy.welcome;
   }
-  if (response.mode === GUIDE_MODE.FALLBACK) localized.localizedMessage = response.recommendations?.length ? copy.offline : copy.noCandidates;
+  else if (response.mode === GUIDE_MODE.CLARIFY) {
+    localized.localizedMessage = cachedTranslationFor(response, language)
+      || storedMessageText(response) || clarifyMessage(copy, response.planState);
+  }
+  if (response.mode === GUIDE_MODE.RECOMMEND) {
+    localized.localizedMessage = cachedTranslationFor(response, language)
+      || storedMessageText(response) || copy.recommend;
+  }
+  if (response.mode === GUIDE_MODE.TRAVEL_INFO) {
+    // travel_info had no branch at all, which is the only reason the weather
+    // answers survived the restore bug intact. Give it the same precedence as
+    // every other mode so a language switch can still pick up a real
+    // translation, without ever inventing replacement text.
+    localized.localizedMessage = cachedTranslationFor(response, language) || storedMessageText(response);
+  }
+  if (response.mode === GUIDE_MODE.FALLBACK) {
+    localized.localizedMessage = response.source === 'unavailable'
+      ? copy.retryNotice
+      : response.recommendations?.length ? copy.offline : copy.noCandidates;
+  }
   if (response.mode === GUIDE_MODE.EMERGENCY) localized.localizedMessage = copy.emergency;
   if (response.mode === GUIDE_MODE.HELP) {
     const cachedTranslation = response.localizedMessages?.[language]
@@ -98,6 +116,27 @@ export function localizeGuideResponse(response, language, languagePack = null) {
     localized.localizedMessage = cachedTranslation
       || (normalizeGuideLanguage(originalLanguage) === normalizeGuideLanguage(language)
         ? response.assistantMessage : response.assistantMessage || copy.helpMissing);
+  }
+  if (response.mode === GUIDE_MODE.SMALL_TALK) {
+    const cachedTranslation = response.localizedMessages?.[language]
+      || response.localizedMessages?.[normalizeGuideLanguage(language)];
+    localized.localizedMessage = cachedTranslation
+      || (normalizeGuideLanguage(originalLanguage) === normalizeGuideLanguage(language)
+        ? response.assistantMessage : response.localizedMessage || response.assistantMessage);
+  }
+  if (response.mode === GUIDE_MODE.ACTION) {
+    const cachedTranslation = response.localizedMessages?.[language]
+      || response.localizedMessages?.[normalizeGuideLanguage(language)];
+    localized.localizedMessage = cachedTranslation
+      || (normalizeGuideLanguage(originalLanguage) === normalizeGuideLanguage(language)
+        ? response.assistantMessage : response.localizedMessage || response.assistantMessage);
+  }
+  if (response.mode === GUIDE_MODE.PLACE_INFO) {
+    const cachedTranslation = response.localizedMessages?.[language]
+      || response.localizedMessages?.[normalizeGuideLanguage(language)];
+    localized.localizedMessage = cachedTranslation
+      || (normalizeGuideLanguage(originalLanguage) === normalizeGuideLanguage(language)
+        ? response.assistantMessage : response.localizedMessage || response.assistantMessage);
   }
   if (response.mode === GUIDE_MODE.CATALOGUE_MISSING) {
     const requestedName = response.actions?.find((action) => action?.type === 'request_catalogue')?.requestedName;

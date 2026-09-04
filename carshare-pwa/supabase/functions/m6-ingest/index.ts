@@ -608,6 +608,14 @@ async function runIngestion(request: Request) {
     primaryType: string;
     category: string;
   }> = [];
+  // A region's circle is trusted to sit inside Malaysia, but a 50km radius
+  // from a border state's hub does not always stay there: Labuan's circle
+  // reaches into Brunei, Perlis's reaches into Thailand. processCatalogueRequests
+  // already guards its own single-place lookups with isMalaysiaAddress; the
+  // sweep enrichment loop below fetches the same addressComponents field but
+  // never checked it, so a border region silently upserted places from
+  // another country into the Malaysian catalogue.
+  const outOfCountry: Array<{ placeId: string; name: string }> = [];
   let enriched = 0;
   let refreshed = 0;
   // The `maxDetails` budget counts requests made, not rows written. A place
@@ -632,9 +640,13 @@ async function runIngestion(request: Request) {
     try {
       const detail = await details(placeId, googleKey);
       detailsSpent += 1;
+      const name = detail.displayName?.text?.trim() || placeId;
+      if (!isMalaysiaAddress(detail.addressComponents)) {
+        outOfCountry.push({ placeId, name });
+        continue;
+      }
       const types = detail.types?.length ? detail.types : item.nearby.types || [];
       const primaryType = detail.primaryType || "";
-      const name = detail.displayName?.text?.trim() || placeId;
       const resolved = resolveCategory(
         classifyPlace(types, primaryType),
         alreadyKnown?.category,
@@ -736,6 +748,7 @@ async function runIngestion(request: Request) {
     detailsSpent,
     skipped,
     retained,
+    outOfCountry,
     absent,
     demoted,
     retired,

@@ -10,7 +10,7 @@ import { Button } from '../ui/Button.jsx';
 import { IconArrowRight, IconCar, IconMapPin } from '../icons.jsx';
 import GuidePlaceImage from './GuidePlaceImage.jsx';
 
-export default function GuideRecommendationCard({ recommendation, batchId = null, language, languagePack, planState, actionState, onAction }) {
+export default function GuideRecommendationCard({ recommendation, featured = false, batchId = null, language, languagePack, planState, actionState, onAction, chatScrollRef }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [photoShown, setPhotoShown] = useState(false);
@@ -21,6 +21,10 @@ export default function GuideRecommendationCard({ recommendation, batchId = null
   });
   const copy = guideCopy(language, languagePack);
   const reasons = recommendation.verifiedReasonCodes.map((code) => guideReasonText(code, place, planState, language, languagePack)).filter(Boolean);
+  const lead = String(recommendation.personalizedReason || reasons[0] || '').trim();
+  const personalizedWhy = String(recommendation.personalizedWhy || '').trim();
+  const tradeoff = String(recommendation.personalizedTradeoff
+    || guideTradeoffLabel(recommendation.tradeoffCode, language, languagePack)).trim();
   const interestActive = Boolean(actionState?.interest);
   const alertActive = Boolean(actionState?.alert);
   const findRide = () => navigate(DestinationDiscoveryService.buildPrefillUrl('search', place, {
@@ -28,8 +32,9 @@ export default function GuideRecommendationCard({ recommendation, batchId = null
   }));
   const openDetails = () => {
     const returnTo = `${location.pathname}${location.search}`;
+    const guideRestoreScrollTop = Number(chatScrollRef?.current?.scrollTop) || 0;
     TumpangGuideService.saveDetailReason({ ...recommendation, batchId: batchId || recommendation.batchId }, planState, returnTo, languagePack);
-    navigate(`/assistant/place/${place.id}?date=${planState.startDate || ''}`, { state: { returnTo } });
+    navigate(`/discover/${place.id}?date=${planState.startDate || ''}`, { state: { returnTo, guideRestoreScrollTop, fromGuide: true } });
   };
   const toggleWhy = () => setWhyOpen((open) => {
     const next = !open;
@@ -38,7 +43,7 @@ export default function GuideRecommendationCard({ recommendation, batchId = null
   });
 
   return (
-    <article className="guide-rec-card">
+    <article className={`guide-rec-card ${featured ? 'is-featured' : 'is-alternative'}`}>
       <div className="guide-rec-card__media">
         <GuidePlaceImage place={place} revealable copy={copy} onShownChange={setPhotoShown} />
         <span className="guide-rec-card__role">{guideRoleLabel(recommendation.role, language, languagePack)}</span>
@@ -47,17 +52,21 @@ export default function GuideRecommendationCard({ recommendation, batchId = null
       </div>
       <div className="guide-rec-card__body">
         <div><h3>{place.name}</h3><p className="guide-rec-card__location"><IconMapPin size={14} /> {place.state} · {guideCategoryLabel(place.category, language, languagePack)}</p></div>
-        <ul>{reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}</ul>
+        {lead && <p className="guide-rec-card__lead">{lead}</p>}
         {whyOpen && <section className="guide-why" aria-label={`${copy.whyThis}: ${place.name}`}>
           <strong>{copy.whyThis}</strong>
-          <p>{reasons.join(' ') || copy.verifiedRules}</p>
+          {personalizedWhy
+            ? <p>{personalizedWhy}</p>
+            : <ul>{reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
           <small>{copy.verifiedRules}</small>
         </section>}
-        <p className="guide-rec-card__tradeoff"><strong>{copy.tradeoff}:</strong> {guideTradeoffLabel(recommendation.tradeoffCode, language, languagePack)}</p>
+        <p className="guide-rec-card__tradeoff"><strong>{copy.tradeoff}:</strong> {tradeoff}</p>
         <div className="guide-rec-card__actions">
           <Button size="small" variant={whyOpen ? 'secondary' : undefined} onClick={toggleWhy}>{copy.whyThis} {whyOpen ? '↑' : <IconArrowRight size={15} />}</Button>
-          <Button size="small" variant="secondary" onClick={findRide}><IconCar size={15} /> {copy.findRide}</Button>
           <Button size="small" variant="secondary" onClick={openDetails}>{copy.details}</Button>
+        </div>
+        <div className="guide-rec-card__secondary-actions">
+          <button type="button" className="guide-text-action" onClick={findRide}><IconCar size={14} /> {copy.findRide}</button>
           <button type="button" className="guide-text-action" aria-pressed={interestActive} onClick={() => onAction(interestActive ? 'cancel_interest' : GUIDE_ACTION.RECORD_INTEREST, recommendation, planState)}>
             {interestActive ? `✓ ${copy.interestSaved} · ${copy.cancel}` : copy.saveInterest}
           </button>

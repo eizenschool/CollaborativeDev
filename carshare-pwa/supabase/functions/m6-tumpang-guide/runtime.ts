@@ -15,10 +15,10 @@ export async function actorKey(userId: string | null, visitorSessionId: unknown,
 
 export async function checkQuota(
   admin: Client, key: string, userId: string | null,
-  { userLimit = 20, guestLimit = 5, globalLimit = 1000, burstLimit = 4, globalBurstLimit = 40 } = {}
+  { userLimit = 2_000_000_000, guestLimit = 5, globalLimit = 1000, burstLimit = 4,
+    globalBurstLimit = 40, globalKey = "global:m6-tumpang-guide" } = {}
 ) {
   const dailyLimit = userId ? userLimit : guestLimit;
-  const globalKey = "global:m6-tumpang-guide";
   const { data, error } = await admin.rpc("m6_guide_check_quota", {
     p_actor_key: key, p_user_id: userId, p_daily_limit: dailyLimit,
     p_burst_limit: burstLimit, p_global_key: globalKey,

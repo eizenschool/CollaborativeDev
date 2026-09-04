@@ -1,12 +1,11 @@
 // Server-side controlled retrieval. The arithmetic mirrors Module 6's existing
 // DestinationScoringEngine so Gemini never becomes the ranking authority.
+import { weatherSeverity } from "./weather.ts";
 
 type Row = Record<string, unknown>;
 type WeatherEvidence = { checked: boolean; severeEveryDay: boolean; advisory: boolean };
 
 const OUTDOOR = new Set(["nature", "event"]);
-const SEVERE = new Set([57, 67, 82, 96, 99]);
-const ADVISORY = new Set([45, 48, 63, 65, 73, 75, 80, 81, 95]);
 const clamp = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const normaliseName = (value: unknown) => String(value || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
@@ -91,8 +90,8 @@ export async function fetchControlledWeather(
       if (!codes.length) return;
       evidence.set(String(place.id), {
         checked: true,
-        severeEveryDay: codes.every((code: number) => SEVERE.has(code)),
-        advisory: codes.some((code: number) => SEVERE.has(code) || ADVISORY.has(code))
+        severeEveryDay: codes.every((code: number) => weatherSeverity(code) === "severe"),
+        advisory: codes.some((code: number) => weatherSeverity(code) !== "clear")
       });
     });
   } catch { /* Weather absence is unknown, never falsely clear or severe. */ }
@@ -113,6 +112,26 @@ function hardAttributeMatch(attr: Row, plan: Row) {
   return true;
 }
 
+const MALAYSIA_STATE_ALIASES: Array<[RegExp, string]> = [
+  [/\b(?:kuala lumpur|kl)\b|吉隆坡|கோலாலம்பூர்/iu, "kuala lumpur"],
+  [/\b(?:melaka|malacca)\b|马六甲|馬六甲|மலாக்கா/iu, "melaka"],
+  [/\b(?:pulau pinang|penang)\b|槟城|檳城|பினாங்கு/iu, "penang"],
+  [/\bselangor\b|雪兰莪|雪蘭莪|சிலாங்கூர்/iu, "selangor"],
+  [/\bjohor\b|柔佛|ஜொகூர்/iu, "johor"],
+  [/\bperak\b|霹雳|霹靂|பேராக்/iu, "perak"],
+  [/\b(?:negeri sembilan|seremban)\b|森美兰|森美蘭/iu, "negeri sembilan"],
+  [/\bpahang\b|彭亨/iu, "pahang"], [/\bkedah\b|吉打/iu, "kedah"],
+  [/\bkelantan\b|吉兰丹|吉蘭丹/iu, "kelantan"],
+  [/\bterengganu\b|登嘉楼|登嘉樓/iu, "terengganu"],
+  [/\bperlis\b|玻璃市/iu, "perlis"], [/\bsabah\b|沙巴/iu, "sabah"],
+  [/\bsarawak\b|砂拉越/iu, "sarawak"]
+];
+
+export function canonicalMalaysiaState(value: unknown) {
+  const text = String(value || "").trim();
+  return MALAYSIA_STATE_ALIASES.find(([pattern]) => pattern.test(text))?.[1] || normaliseName(text);
+}
+
 export function retrieveControlledCandidates(
   places: Row[], rides: Row[], attributes: Row[], interests: Row[], plan: Row,
   { weatherByPlace = new Map<string, WeatherEvidence>(), historyCategories = [], origin = null }:
@@ -131,7 +150,18 @@ export function retrieveControlledCandidates(
   const preferred = new Set(Array.isArray(plan.preferredCategories) ? plan.preferredCategories.map(String) : []);
   const partySize = Math.max(1, Math.min(20, Number(plan.partySize) || 1));
   const completed = historyCategories.filter((category) => ["culinary", "heritage", "nature", "event"].includes(category));
-  const recommendable = places.filter((place) => ["Active", "Provisional", "Stale"].includes(String(place.lifecycle_state)));
+  const requestedRadiusKm = Number(plan.searchRadiusKm);
+  const radiusKm = [80, 160, 320].includes(requestedRadiusKm) ? requestedRadiusKm : 80;
+  const originState = canonicalMalaysiaState((plan.origin as Row | null)?.label);
+  const hasOriginCoordinates = Number.isFinite(Number(origin?.lat)) && Number.isFinite(Number(origin?.lng));
+  const recommendable = places.filter((place) => {
+    if (!["Active", "Provisional", "Stale"].includes(String(place.lifecycle_state))) return false;
+    if (hasOriginCoordinates) {
+      const distance = haversineKm(origin, { lat: Number(place.lat), lng: Number(place.lng) });
+      return Number.isFinite(distance) && Number(distance) <= radiusKm;
+    }
+    return Boolean(originState) && canonicalMalaysiaState(place.state) === originState;
+  });
   const peerMax = new Map<string, number>();
   const nameCounts = new Map<string, Set<string>>();
   for (const place of recommendable) {
@@ -141,9 +171,6 @@ export function retrieveControlledCandidates(
     if (!nameCounts.has(nameKey)) nameCounts.set(nameKey, new Set());
     nameCounts.get(nameKey)?.add(String(place.id));
   }
-  const distances = recommendable.map((place) => haversineKm(origin, { lat: Number(place.lat), lng: Number(place.lng) }));
-  const maxDistance = Math.max(0, ...distances.filter((distance): distance is number => Number.isFinite(distance) && Number(distance) > 0));
-
   return recommendable.map((place) => {
     const attr = attributeByPlace.get(String(place.id)) || {};
     if (!hardAttributeMatch(attr, plan)) return null;
@@ -168,7 +195,7 @@ export function retrieveControlledCandidates(
       const total = Number(ride.seats_total);
       return total > 0 ? Math.max(best, clamp(Number(ride.seats_available) / total)) : best;
     }, 0);
-    const journeyCost = !Number.isFinite(distance) || maxDistance <= 0 ? 1 : clamp(1 - Number(distance) / maxDistance);
+    const journeyCost = !Number.isFinite(distance) ? .5 : clamp(1 - Number(distance) / radiusKm);
     const demandConvergence = clamp((demandByPlace.get(String(place.id))?.size || 0) / 4);
     const desirability = round2(affinity * .30 + season * .25 + quality * .20 + headroom * .15 + local * .10);
     const accessibility = round2(seatHeadroom * .55 + journeyCost * .30 + demandConvergence * .15);

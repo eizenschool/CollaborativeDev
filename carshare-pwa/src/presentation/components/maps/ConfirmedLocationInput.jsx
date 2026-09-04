@@ -32,6 +32,7 @@ export default function ConfirmedLocationInput({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [currentCandidate, setCurrentCandidate] = useState(null);
   const [currentLocationSession, setCurrentLocationSession] = useState(null);
+  const [selectionPending, setSelectionPending] = useState(false);
 
   const confirmed = GooglePlacesService.isConfirmedLocation(location);
 
@@ -50,6 +51,7 @@ export default function ConfirmedLocationInput({
       setCurrentLocationSession(null);
       return undefined;
     }
+    if (selectionPending) return undefined;
     if (currentLocationSession) return undefined;
     if (confirmed && trimmed === selectedLabel) {
       requestSequence.current += 1;
@@ -89,10 +91,11 @@ export default function ConfirmedLocationInput({
     }, LOCATION_SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [confirmed, currentCandidate, currentLocationPreview, currentLocationSession, disabled, query, value]);
+  }, [confirmed, currentCandidate, currentLocationPreview, currentLocationSession, disabled, query, selectionPending, value]);
 
   function changeText(nextValue) {
     requestSequence.current += 1;
+    setSelectionPending(false);
     setQuery(nextValue);
     setCurrentCandidate(null);
     setCurrentLocationSession(null);
@@ -100,16 +103,35 @@ export default function ConfirmedLocationInput({
     onChange(nextValue, null);
   }
 
-  function selectSuggestion(suggestion) {
+  async function selectSuggestion(suggestion) {
     requestSequence.current += 1;
+    const sequence = requestSequence.current;
     setQuery(suggestion.label);
     setSuggestions([]);
-    setStatus('idle');
-    setMessage('');
+    setSelectionPending(true);
+    setStatus('resolving');
+    setMessage('Confirming this location…');
     setActiveIndex(-1);
     setCurrentCandidate(null);
     setCurrentLocationSession(null);
-    onChange(suggestion.label, { source: 'place', placeId: suggestion.placeId });
+    try {
+      const resolved = await GooglePlacesService.resolveLocationSuggestion(suggestion);
+      if (sequence !== requestSequence.current) return;
+      setSelectionPending(false);
+      setStatus('idle');
+      setMessage('');
+      onChange(resolved.label, {
+        source: 'place',
+        placeId: resolved.placeId,
+        ...(Number.isFinite(Number(resolved.latitude)) ? { latitude: Number(resolved.latitude) } : {}),
+        ...(Number.isFinite(Number(resolved.longitude)) ? { longitude: Number(resolved.longitude) } : {})
+      });
+    } catch (error) {
+      if (sequence !== requestSequence.current) return;
+      setSelectionPending(false);
+      setStatus('error');
+      setMessage(error?.message || 'This location could not be confirmed. Choose another suggestion.');
+    }
   }
 
   function handleKeyDown(event) {
@@ -134,6 +156,7 @@ export default function ConfirmedLocationInput({
 
   async function useCurrentLocation() {
     const sequence = ++requestSequence.current;
+    setSelectionPending(false);
     setSuggestions([]);
     setStatus('locating');
     setMessage(loadNearbySuggestions
@@ -238,7 +261,7 @@ export default function ConfirmedLocationInput({
             aria-controls={listId}
             aria-activedescendant={expanded && activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}
             aria-describedby={!currentCandidate && !expanded && (message || (!confirmed && query.trim())) ? messageId : undefined}
-            aria-invalid={status === 'error' || Boolean(!confirmed && query.trim() && !currentCandidate)}
+            aria-invalid={status === 'error' || Boolean(!selectionPending && !confirmed && query.trim() && !currentCandidate)}
             autoComplete="off"
             placeholder={placeholder}
             value={query}

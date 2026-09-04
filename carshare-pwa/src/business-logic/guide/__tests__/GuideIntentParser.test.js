@@ -36,4 +36,14 @@ describe('Tumpang Guide intent parser', () => {
     expect(plan.startDate).toMatch(/^20\d{2}-\d{2}-\d{2}$/);
     expect(sanitizedPlanSummary(plan).origin).toEqual({ label: 'Current location' });
   });
+
+  it('keeps a confirmed map Place ID without exposing exact coordinates', () => {
+    const plan = normalizePlanState({ origin: {
+      label: 'Melaka, Malaysia', placeId: 'ChIJ-confirmed-melaka', lat: 2.1896, lng: 102.2501
+    } });
+    expect(plan.origin).toMatchObject({ label: 'Melaka, Malaysia', placeId: 'ChIJ-confirmed-melaka' });
+    expect(sanitizedPlanSummary(plan).origin).toEqual({
+      label: 'Melaka, Malaysia', placeId: 'ChIJ-confirmed-melaka'
+    });
+  });
 });

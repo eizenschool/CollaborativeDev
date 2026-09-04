@@ -5,6 +5,8 @@ import { resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '../../..');
 const sql = readFileSync(resolve(root, 'database/sql/079_m6_tumpang_guide.sql'), 'utf8');
 const stabilitySql = readFileSync(resolve(root, 'database/sql/080_m6_tumpang_guide_stability.sql'), 'utf8');
+const reliabilitySql = readFileSync(resolve(root, 'database/sql/081_m6_guide_agent_reliability.sql'), 'utf8');
+const routeBudgetSql = readFileSync(resolve(root, 'database/sql/082_m6_guide_route_budget.sql'), 'utf8');
 
 describe('Tumpang Guide SQL security contract', () => {
   it('creates the private Guide domain and 768-dimensional Help embeddings', () => {
@@ -52,5 +54,40 @@ describe('Tumpang Guide SQL security contract', () => {
     expect(stabilitySql).toMatch(/revoke all on function public\.m6_guide_upgrade_batch[\s\S]*from public, anon, authenticated/);
     expect(stabilitySql).toMatch(/grant execute on function public\.m6_guide_upgrade_batch[\s\S]*to service_role/);
     expect(stabilitySql).toContain("p_language !~ '^[a-z]{2,3}(-[A-Za-z]{2,8})?$'");
+  });
+
+  it('keeps v3 turn idempotency, provider health and live facts private', () => {
+    for (const table of ['ai_guide_turn_requests', 'ai_guide_provider_attempts', 'ai_guide_provider_health', 'ai_guide_live_fact_cache']) {
+      expect(reliabilitySql).toContain(`create table if not exists private.${table}`);
+      expect(reliabilitySql).toContain(`alter table private.${table} enable row level security`);
+      expect(reliabilitySql).toContain(`alter table private.${table} force row level security`);
+    }
+    expect(reliabilitySql).toContain('primary key (actor_key, client_turn_id)');
+    expect(reliabilitySql).toContain('create or replace function public.m6_claim_ai_guide_turn');
+    expect(reliabilitySql).toContain('create or replace function public.m6_complete_ai_guide_turn');
+    expect(reliabilitySql).toContain('create or replace function public.m6_fail_ai_guide_turn');
+    expect(reliabilitySql).toMatch(/security definer[\s\S]*set search_path = ''/i);
+    expect(reliabilitySql).toMatch(/revoke execute on function public\.m6_claim_ai_guide_turn[\s\S]*from public, anon, authenticated/i);
+    expect(reliabilitySql).toMatch(/grant execute on function public\.m6_claim_ai_guide_turn[\s\S]*to service_role/i);
+    expect(reliabilitySql).not.toMatch(/\b(?:raw_message|raw_prompt|audio_data)\s+(?:text|bytea|jsonb)\b/i);
+  });
+
+  it('gives the Guide its own smaller, idempotent daily route budget that still spends the shared M2 quota', () => {
+    for (const table of ['m6_guide_route_daily_usage', 'm6_guide_route_usage_requests']) {
+      expect(routeBudgetSql).toContain(`create table if not exists private.${table}`);
+      expect(routeBudgetSql).toContain(`revoke all on table private.${table} from public, anon, authenticated`);
+    }
+    expect(routeBudgetSql).toContain('request_count between 0 and 40');
+    expect(routeBudgetSql).toMatch(/create or replace function public\.consume_m6_guide_route_quota\(p_request_id uuid\)[\s\S]*security definer/i);
+    expect(routeBudgetSql).toContain("set search_path = ''");
+    expect(routeBudgetSql).toContain("(now() at time zone 'Asia/Kuala_Lumpur')::date");
+    // The Guide's own cap must be checked - and therefore fail - before the
+    // shared M2 quota is ever touched, so a Guide-exhausted day never spends
+    // a slot from the pool Module 2's paid flow depends on.
+    expect(routeBudgetSql.indexOf('M6_GUIDE_ROUTE_BUDGET'))
+      .toBeLessThan(routeBudgetSql.indexOf('perform public.consume_m2_route_quota'));
+    expect(routeBudgetSql).toContain('perform public.consume_m2_route_quota(p_request_id)');
+    expect(routeBudgetSql).toMatch(/revoke all on function public\.consume_m6_guide_route_quota\(uuid\)[\s\S]*from public, anon, authenticated/i);
+    expect(routeBudgetSql).toMatch(/grant execute on function public\.consume_m6_guide_route_quota\(uuid\)[\s\S]*to service_role/i);
   });
 });

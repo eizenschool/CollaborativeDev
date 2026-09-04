@@ -10,10 +10,10 @@ const TRADEOFFS = new Set(Object.values(GUIDE_TRADEOFF));
 const ACTIONS = new Set(Object.values(GUIDE_ACTION));
 
 const EMERGENCY_TERMS = [
-  /\b(?:emergency|danger|unsafe|attack|accident|help me|call police|ambulance|sos)\b/i,
-  /紧急|危險|危险|求救|救命|报警|報警|救护车|救護車/u,
-  /\b(?:kecemasan|bahaya|kemalangan|tolong saya|polis|ambulans)\b/i,
-  /அவசரம்|ஆபத்து|விபத்து|உதவி|காவல்|ஆம்புலன்ஸ்/u
+  /\b(?:call\s+999|medical emergency|immediate danger|being attacked|car (?:crash|accident)|someone (?:is )?(?:unconscious|bleeding|dying)|need (?:the )?(?:police|ambulance) now)\b/i,
+  /拨打\s*999|立即危险|有人(?:昏迷|流血|快死)|正在被攻击|严重车祸/u,
+  /\b(?:hubungi\s*999|bahaya segera|sedang diserang|kemalangan serius)\b/i,
+  /999\s*ஐ?\s*அழை|உடனடி ஆபத்து|தாக்கப்படுகிறேன்/u
 ];
 
 const HELP_TERMS = [
@@ -31,11 +31,30 @@ export function isGuideHelpIntent(text) {
   return HELP_TERMS.some((pattern) => pattern.test(String(text || '')));
 }
 
+export function shouldUseLocalGuideRules({ online = true, fixtureMode = false, qaMode = false, forceFallback = '' } = {}) {
+  return Boolean(fixtureMode || !online || (qaMode && forceFallback === 'offline'));
+}
+
 export function safeRecentMessages(messages = []) {
   return messages
     .filter((message) => message && ['user', 'assistant'].includes(message.role))
     .slice(-GUIDE_LIMITS.CONTEXT_TURNS * 2)
     .map((message) => ({ role: message.role, text: String(message.text || '').slice(0, GUIDE_LIMITS.MAX_MESSAGE_CHARS) }));
+}
+
+export function guideResponseContextText(response = {}) {
+  if (response?.placeInfo) {
+    const info = response.placeInfo;
+    const highlights = Array.isArray(info.highlights) ? info.highlights.filter(Boolean).join('; ') : '';
+    const practical = Array.isArray(info.practicalNotes) ? info.practicalNotes.filter(Boolean).join('; ') : '';
+    return [
+      `Previous public venue facts for ${info.officialName || info.place?.name || 'the selected place'}.`,
+      highlights ? `Already covered activities: ${highlights}` : '',
+      practical ? `Already covered practical information: ${practical}` : ''
+    ].filter(Boolean).join(' ').slice(0, GUIDE_LIMITS.MAX_MESSAGE_CHARS);
+  }
+  return String(response?.localizedMessage || response?.assistantMessage || '')
+    .slice(0, GUIDE_LIMITS.MAX_MESSAGE_CHARS);
 }
 
 export function validateGuideResponse(raw, allowedPlaceIds = [], { expectedRecommendations = null } = {}) {
@@ -45,6 +64,9 @@ export function validateGuideResponse(raw, allowedPlaceIds = [], { expectedRecom
   if (typeof raw.assistantMessage !== 'string' || !raw.assistantMessage.trim()) return { valid: false, reason: 'missing_message' };
   if (!Array.isArray(raw.quickReplies) || !Array.isArray(raw.recommendations) || !Array.isArray(raw.actions)) {
     return { valid: false, reason: 'invalid_collections' };
+  }
+  if (raw.mode === GUIDE_MODE.SMALL_TALK && (raw.recommendations.length || raw.actions.length)) {
+    return { valid: false, reason: 'small_talk_has_actions' };
   }
   if (raw.recommendations.length > GUIDE_LIMITS.MAX_RECOMMENDATIONS) return { valid: false, reason: 'too_many_recommendations' };
 
@@ -77,7 +99,19 @@ export function validateGuideResponse(raw, allowedPlaceIds = [], { expectedRecom
   }
   if (expected && (raw.recommendations.length !== expected.size
     || [...expected.keys()].some((id) => !seen.has(id)))) return { valid: false, reason: 'provider_changed_rule_batch' };
-  if (raw.actions.some((action) => !action || !ACTIONS.has(action.type))) return { valid: false, reason: 'unknown_action' };
+  const mutatingActions = new Set([
+    GUIDE_ACTION.RECORD_INTEREST, GUIDE_ACTION.REGISTER_RIDE_ALERT,
+    GUIDE_ACTION.SAVE_PREFERENCES, GUIDE_ACTION.REQUEST_CATALOGUE
+  ]);
+  for (const action of raw.actions) {
+    if (!action || !ACTIONS.has(action.type)) return { valid: false, reason: 'unknown_action' };
+    if (action.placeId && !allow.has(action.placeId)) {
+      return { valid: false, reason: 'action_place_not_allowlisted', rejectedPlaceId: action.placeId };
+    }
+    if (mutatingActions.has(action.type) && action.requiresConfirmation !== true) {
+      return { valid: false, reason: 'action_confirmation_required' };
+    }
+  }
   if (!Number.isInteger(raw.remainingTurns) || raw.remainingTurns < 0) return { valid: false, reason: 'invalid_remaining_turns' };
   if (typeof raw.traceId !== 'string' || !raw.traceId) return { valid: false, reason: 'missing_trace' };
   return { valid: true, response: raw };

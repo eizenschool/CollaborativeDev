@@ -8,7 +8,7 @@
 // independently mention (PlaceDescription.js); the individual reviews follow
 // below, attributed, as reviews.
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
@@ -166,12 +166,22 @@ export default function DestinationDetail() {
   const { placeId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const travelDate = searchParams.get('date') || today();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
+  const returnToGuide = () => {
+    const returnTo = typeof location.state?.returnTo === 'string' && location.state.returnTo.startsWith('/assistant')
+      ? location.state.returnTo : null;
+    if (returnTo) {
+      navigate(returnTo, { state: { guideRestoreScrollTop: Number(location.state?.guideRestoreScrollTop) || 0 } });
+      return;
+    }
+    navigate('/discover');
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -193,8 +203,8 @@ export default function DestinationDetail() {
     return (
       <div className="dsc-page">
         <p className="dsc-empty">That destination is no longer available.</p>
-        <button className="dsc-btn" onClick={() => navigate('/discover')} type="button">
-          Back to destinations
+        <button className="dsc-btn" onClick={returnToGuide} type="button">
+          {location.state?.fromGuide ? 'Back to Tumpang Guide' : 'Back to destinations'}
         </button>
       </div>
     );
@@ -232,8 +242,8 @@ export default function DestinationDetail() {
 
   return (
     <div className="dsc-page dsc-detail">
-      <button className="dsc-back" onClick={() => navigate('/discover')} type="button">
-        <IconArrowLeft size={16} /> Back to destinations
+      <button className="dsc-back" onClick={returnToGuide} type="button">
+        <IconArrowLeft size={16} /> {location.state?.fromGuide ? 'Back to Tumpang Guide' : 'Back to destinations'}
       </button>
 
       {guideContext && (

@@ -3,7 +3,7 @@ import { DestinationDiscoveryService } from '../discovery/DestinationDiscoverySe
 import { tumpangGuideStore } from '../../data-access/tumpangGuideStore.js';
 import { tumpangGuideSupabaseRepository } from '../../data-access/tumpangGuideSupabaseRepository.js';
 import {
-  requestGuideFeedback, requestGuideLanguagePack, requestGuideTranslations, requestGuideTurn
+  requestGuideFeedback, requestGuideLanguagePack, requestGuideTranscription, requestGuideTranslations, requestGuideTurn
 } from '../../data-access/tumpangGuideEdgeRepository.js';
 import {
   GUIDE_ACTION, GUIDE_FIXTURE_MODE, GUIDE_LANGUAGES, GUIDE_LIMITS, GUIDE_LIVE_CATALOGUE_MODE, GUIDE_LIVE_MODE, GUIDE_MODE, GUIDE_QA_MODE,
@@ -11,10 +11,10 @@ import {
   GUIDE_MODEL
 } from './constants.js';
 import {
-  guideCopy, isCompleteGuideLanguagePack, normalizeGuideLanguage, GUIDE_PACK_VERSION
+  detectGuideLanguage, guideCopy, isCompleteGuideLanguagePack, normalizeGuideLanguage, GUIDE_PACK_VERSION
 } from './GuideLanguage.js';
 import { mergeGuideIntent, mostImportantMissingField, normalizePlanState, sanitizedPlanSummary } from './GuideIntentParser.js';
-import { createTraceId, isEmergencyIntent, isGuideHelpIntent, safeRecentMessages, validateGuideResponse } from './GuidePolicy.js';
+import { createTraceId, isEmergencyIntent, isGuideHelpIntent, safeRecentMessages, shouldUseLocalGuideRules, validateGuideResponse } from './GuidePolicy.js';
 import { runFixtureGuideTurn } from './GuideFixtureEngine.js';
 import { afterSuccessfulGuideTurn, guideQuotaState } from './GuideQuota.js';
 
@@ -42,12 +42,12 @@ function recordGuestSuccess(visitorSessionId) {
 
 function fixtureQuota(user, visitorSessionId) {
   if (!user?.id) return guestQuota(visitorSessionId);
-  return guideQuotaState(tumpangGuideStore.dailyUsage(`user:${user.id}`), GUIDE_LIMITS.AUTHENTICATED_DAILY_TURNS);
+  return { allowed: true, remaining: GUIDE_LIMITS.AUTHENTICATED_DAILY_TURNS };
 }
 
 function recordFixtureSuccess(user, visitorSessionId) {
   return user?.id
-    ? tumpangGuideStore.recordSuccessfulTurn(`user:${user.id}`, GUIDE_LIMITS.AUTHENTICATED_DAILY_TURNS)
+    ? { allowed: true, remaining: GUIDE_LIMITS.AUTHENTICATED_DAILY_TURNS }
     : recordGuestSuccess(visitorSessionId);
 }
 
@@ -154,11 +154,52 @@ async function safeRulesTurn(args) {
   }
 }
 
+async function safeHydratePlace(placeId, existingPlace = null) {
+  if (existingPlace) return { place: existingPlace, failed: false };
+  if (!placeId) return { place: null, failed: false };
+  try {
+    const place = await DestinationDiscoveryService.getPlace(placeId);
+    return { place: place || null, failed: !place };
+  } catch {
+    return { place: null, failed: true };
+  }
+}
+
 async function hydrate(response) {
-  const hydrated = await Promise.all((response.recommendations || []).map(async (recommendation) => ({
-    ...recommendation, place: await DestinationDiscoveryService.getPlace(recommendation.placeId)
-  })));
-  return { ...response, recommendations: hydrated.filter((recommendation) => recommendation.place) };
+  try {
+  const recommendationResults = await Promise.all((response.recommendations || []).map(async (recommendation) => {
+    const result = await safeHydratePlace(recommendation.placeId, recommendation.place);
+    return { recommendation: { ...recommendation, place: result.place }, failed: result.failed };
+  }));
+  const hydrated = recommendationResults.map((result) => result.recommendation)
+    .filter((recommendation) => recommendation.place);
+  const spotlightPlaceId = response.placeInfo?.placeId;
+  const spotlightResult = await safeHydratePlace(spotlightPlaceId, response.placeInfo?.place);
+  const actionResults = await Promise.all((response.actions || []).map(async (action) => {
+    const result = await safeHydratePlace(action.placeId, action.place);
+    return { action: { ...action, place: result.place }, failed: result.failed };
+  }));
+  const hydratedActions = actionResults.map((result) => result.action);
+  const hydrationFailed = recommendationResults.some((result) => result.failed)
+    || actionResults.some((result) => result.failed) || spotlightResult.failed;
+  return {
+    ...response,
+    recommendations: hydrated.filter((recommendation) => recommendation.place),
+    placeInfo: response.placeInfo ? { ...response.placeInfo, place: spotlightResult.place } : null,
+    actions: hydratedActions,
+    ...(hydrationFailed ? { catalogueHydrationWarning: true } : {})
+  };
+  } catch {
+    // Hydration enriches an already catalogue-validated Edge response. It is
+    // never allowed to turn that successful response into an AI outage.
+    return {
+      ...response,
+      recommendations: (response.recommendations || []).filter((item) => item.place),
+      placeInfo: response.placeInfo ? { ...response.placeInfo, place: response.placeInfo.place || null } : null,
+      actions: (response.actions || []).map((action) => ({ ...action, place: action.place || null })),
+      catalogueHydrationWarning: true
+    };
+  }
 }
 
 function packStorageKey(language) { return `m6-guide-pack:${normalizeGuideLanguage(language)}:${GUIDE_PACK_VERSION}`; }
@@ -201,6 +242,13 @@ function repeatedShownPlace(response, shownPlaceIds, recommendationMode) {
 }
 
 export const TumpangGuideService = {
+  transcribeAudio(audio, { visitorSessionId, languageHint = 'auto' } = {}) {
+    return requestGuideTranscription(audio, {
+      visitorSessionId,
+      languageHint
+    });
+  },
+
   createSession(user, language = 'en', planState = {}) {
     if (!user?.id) return null;
     return GUIDE_FIXTURE_MODE
@@ -211,23 +259,36 @@ export const TumpangGuideService = {
         language, planState: normalizePlanState(planState) };
   },
 
-  async sendTurn({ user, sessionId, visitorSessionId, text, planState, messages, shownPlaceIds = [], language = null, languageLocked = false, qa = {}, online = true, retryBatchId = null, retryPlaceIds = [], retryRecommendations = [] }) {
+  async sendTurn({ user, sessionId, visitorSessionId, clientTurnId = null, text, planState, messages, placeContext = [], conversationFocus = 'none', pendingClarification = null, shownPlaceIds = [], language = null, uiLanguage = null, responseLanguage = null, languageLocked = false, qa = {}, online = true, retryBatchId = null, retryPlaceIds = [], retryRecommendations = [] }) {
+    // Keep one id for the whole browser request, including a locally-created
+    // outage response. If the Edge call timed out after it reached Supabase,
+    // Retry must reclaim/replay the same reliability lease instead of starting
+    // a second provider turn with a new id.
+    const stableClientTurnId = clientTurnId || globalThis.crypto?.randomUUID?.() || createBatchId();
     const limit = GUIDE_FIXTURE_MODE
       ? fixtureQuota(user, visitorSessionId)
       : { allowed: true, remaining: user?.id ? GUIDE_LIMITS.AUTHENTICATED_DAILY_TURNS : GUIDE_LIMITS.GUEST_SESSION_TURNS };
     if (!limit.allowed) {
       const language = normalizePlanState(planState).language;
-      return { mode: GUIDE_MODE.FALLBACK, assistantMessage: user?.id
-        ? 'You have used today’s 20 smart turns. Your saved plans remain available.'
-        : 'This guest session has used its 5 smart turns. Sign in for saved plans and a larger daily allowance.',
+      return { mode: GUIDE_MODE.FALLBACK, assistantMessage: guideCopy(language).guestQuota,
       language, planState: normalizePlanState(planState), quickReplies: [], recommendations: [], actions: [],
-      remainingTurns: 0, fallbackReason: 'rate_limit', source: 'rules', batchId: null, traceId: createTraceId('limit') };
+      remainingTurns: 0, fallbackReason: 'guest_recommendation_limit', source: 'quota', retryable: false,
+      batchId: null, traceId: createTraceId('limit') };
     }
 
-    const requestPlan = mergeGuideIntent(planState, text, {
-      today: qa.today, manualLanguage: languageLocked ? (language || planState?.language) : null
+    const localRules = shouldUseLocalGuideRules({
+      online, fixtureMode: GUIDE_FIXTURE_MODE, qaMode: GUIDE_QA_MODE, forceFallback: qa.forceFallback
     });
-    const localRules = GUIDE_FIXTURE_MODE || !GUIDE_LIVE_CATALOGUE_MODE || !online || (GUIDE_QA_MODE && qa.forceFallback === 'offline');
+    const basePlan = normalizePlanState({
+      ...planState,
+      language: languageLocked ? (language || planState?.language) : planState?.language
+    });
+    // In a live online conversation the raw message must reach the AI intent
+    // layer unchanged. The deterministic parser is reserved for fixture and
+    // genuinely offline operation only.
+    const requestPlan = localRules ? mergeGuideIntent(basePlan, text, {
+      today: qa.today, manualLanguage: languageLocked ? (language || planState?.language) : null
+    }) : basePlan;
     let raw;
     let allowedCandidates = [];
     if (localRules) {
@@ -258,27 +319,66 @@ export const TumpangGuideService = {
     } else {
       try {
         raw = await requestGuideTurn({
+          clientTurnId: stableClientTurnId,
           sessionId, visitorSessionId, message: String(text || '').slice(0, GUIDE_LIMITS.MAX_MESSAGE_CHARS),
+          uiLanguage: uiLanguage || language || requestPlan.language,
+          responseLanguage: responseLanguage || detectGuideLanguage(String(text || ''), language || requestPlan.language),
           planState: sanitizedPlanSummary(requestPlan), recentMessages: safeRecentMessages(messages),
+          placeContext: (placeContext || []).slice(0, 4).map((item) => ({
+            placeId: String(item?.placeId || ''), name: String(item?.name || '').slice(0, 120),
+            role: String(item?.role || '')
+          })),
+          conversationFocus: ['place', 'recommendation_batch', 'capabilities', 'action', 'emergency', 'none'].includes(conversationFocus)
+            ? conversationFocus : 'none',
+          // Narrow client-side echo of a shape the server itself validates
+          // independently (safePendingClarification in index.ts) - this is
+          // just defense in depth against a malformed local object, never
+          // the trust boundary.
+          pendingClarification: pendingClarification
+            && ['get_weather_forecast', 'get_route_estimate'].includes(pendingClarification.tool)
+            && typeof pendingClarification.field === 'string'
+            ? {
+              tool: pendingClarification.tool, field: pendingClarification.field,
+              ...(pendingClarification.destinationName ? { destinationName: String(pendingClarification.destinationName).slice(0, 160) } : {})
+            } : null,
           shownPlaceIds, languageLocked, tripHistoryConsent: Boolean(requestPlan.tripHistoryConsent),
           originCoordinates: Number.isFinite(requestPlan.origin?.lat) && Number.isFinite(requestPlan.origin?.lng)
             ? { lat: requestPlan.origin.lat, lng: requestPlan.origin.lng } : null,
           qa: GUIDE_QA_MODE ? qa : {}, retryBatchId, retryPlaceIds, retryRecommendations
         });
-        for (const recommendation of raw?.recommendations || []) {
-          const place = await DestinationDiscoveryService.getPlace(recommendation.placeId);
-          if (place) allowedCandidates.push({ placeId: place.id, place });
-        }
+        const responsePlaceIds = [...new Set([
+          ...(raw?.recommendations || []).map((item) => item.placeId),
+          ...(raw?.actions || []).map((item) => item.placeId).filter(Boolean),
+          ...(raw?.placeInfo?.placeId ? [raw.placeInfo.placeId] : [])
+        ])];
+        const placeResults = await Promise.allSettled(responsePlaceIds.map(async (placeId) => ({
+          placeId, place: await DestinationDiscoveryService.getPlace(placeId)
+        })));
+        placeResults.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value.place) {
+            allowedCandidates.push({ placeId: result.value.place.id, place: result.value.place });
+          } else {
+            // The Edge response is already catalogue-validated. A secondary
+            // browser hydration outage must not relabel that AI turn as a
+            // provider failure or reject its verified Place ID.
+            const unresolvedPlaceId = result.status === 'fulfilled' ? result.value.placeId : responsePlaceIds[index];
+            allowedCandidates.push({ placeId: unresolvedPlaceId, place: null, hydrationPending: true });
+            raw = { ...raw, catalogueHydrationWarning: true };
+          }
+        });
       } catch (error) {
-        const rules = await safeRulesTurn({ text, planState: requestPlan, userId: user?.id,
-          remainingTurns: limit.remaining, qa: { ...qa, forceFallback: '' }, shownPlaceIds, languageLocked,
-          fixedRecommendations: retryRecommendations });
-        raw = fallbackFromVerified(rules.response, rules.response.language,
-          error?.name === 'AbortError' ? 'timeout' : (error?.status === 429 ? 'provider_429' : 'provider_unavailable'));
-        if (retryBatchId && retryRecommendations.length && raw.recommendations?.length === retryRecommendations.length) {
-          raw = { ...raw, batchId: retryBatchId, mode: GUIDE_MODE.FALLBACK };
-        }
-        allowedCandidates = rules.allowedCandidates;
+        const responseLanguage = detectGuideLanguage(String(text || ''), requestPlan.language);
+        raw = {
+          mode: GUIDE_MODE.FALLBACK,
+          assistantMessage: guideCopy(responseLanguage).retryNotice,
+          language: responseLanguage, responseLanguage, planState: requestPlan, quickReplies: [], recommendations: [], actions: [],
+          remainingTurns: limit.remaining,
+          fallbackReason: error?.name === 'AbortError' ? 'timeout'
+            : (error?.fallbackReason || (error?.status === 401 ? 'auth_session_invalid'
+              : error?.status === 429 ? 'rate_limit' : 'provider_unavailable')),
+          source: 'unavailable', retryable: true, clientTurnId: stableClientTurnId,
+          batchId: retryBatchId || null, traceId: createTraceId('provider')
+        };
       }
     }
 
@@ -294,7 +394,18 @@ export const TumpangGuideService = {
     const validation = repeatedPlaceId
       ? { valid: false, reason: 'duplicate_shown_place', rejectedPlaceId: repeatedPlaceId }
       : validateGuideResponse(raw, allowedIds);
-    if (!validation.valid) {
+    if (!validation.valid && !localRules) {
+      const responseLanguage = detectGuideLanguage(String(text || ''), requestPlan.language);
+      raw = {
+        mode: GUIDE_MODE.FALLBACK,
+        assistantMessage: guideCopy(responseLanguage).retryNotice,
+        language: responseLanguage, responseLanguage, planState: requestPlan, quickReplies: [], recommendations: [], actions: [],
+        remainingTurns: limit.remaining, fallbackReason: validation.reason,
+        source: 'unavailable', retryable: true, clientTurnId: stableClientTurnId,
+        batchId: raw.batchId || null, traceId: raw.traceId || createTraceId('validation'),
+        validation: { reason: validation.reason, rejectedPlaceId: validation.rejectedPlaceId || null }
+      };
+    } else if (!validation.valid) {
       const rules = await safeRulesTurn({ text, planState: requestPlan, userId: user?.id,
         remainingTurns: limit.remaining, qa: { ...qa, rejectUnknownPlace: false, forceFallback: '' }, shownPlaceIds, languageLocked,
         fixedRecommendations: retryRecommendations });
@@ -309,6 +420,20 @@ export const TumpangGuideService = {
       const recorded = recordFixtureSuccess(user, visitorSessionId);
       raw = { ...raw, remainingTurns: recorded.remaining };
     }
+    const knownPlaces = new Map(allowedCandidates.filter((candidate) => candidate.place)
+      .map((candidate) => [String(candidate.placeId), candidate.place]));
+    raw = {
+      ...raw,
+      recommendations: (raw.recommendations || []).map((item) => ({
+        ...item, place: item.place || knownPlaces.get(String(item.placeId)) || null
+      })),
+      placeInfo: raw.placeInfo ? {
+        ...raw.placeInfo, place: raw.placeInfo.place || knownPlaces.get(String(raw.placeInfo.placeId)) || null
+      } : null,
+      actions: (raw.actions || []).map((action) => ({
+        ...action, place: action.place || knownPlaces.get(String(action.placeId)) || null
+      }))
+    };
     const finalResponse = await hydrate(raw);
     if (user?.id && sessionId && GUIDE_FIXTURE_MODE) tumpangGuideStore.appendTurn(user.id, sessionId, text, finalResponse);
     return finalResponse;
@@ -376,10 +501,17 @@ export const TumpangGuideService = {
     writePack(normalized, pack);
     return pack;
   },
-  async translateMessages({ user, sessionId, visitorSessionId, language, messages }) {
+  async translateMessages({ user, sessionId, visitorSessionId, language, messages, cacheTranslations = true }) {
     if (!messages?.length || !GUIDE_LIVE_MODE || (user?.id && !sessionId) || (!user?.id && !visitorSessionId)) return {};
-    const result = await requestGuideTranslations({ sessionId, visitorSessionId, language, messages });
-    return Object.fromEntries((result.translations || []).map((item) => [item.id, item.text]));
+    const translated = {};
+    for (let index = 0; index < messages.length; index += 12) {
+      const result = await requestGuideTranslations({
+        sessionId, visitorSessionId, language, cacheTranslations,
+        messages: messages.slice(index, index + 12)
+      });
+      for (const item of result.translations || []) translated[item.id] = item.text;
+    }
+    return translated;
   },
   async getActionState(userId, placeId, travelDate) {
     if (!userId || !placeId || !travelDate || !DestinationDiscoveryService.getActionState) return { interest: null, alert: null };
@@ -439,6 +571,9 @@ export const TumpangGuideService = {
   saveDetailReason(recommendation, planState, returnTo = '/assistant', languagePack = null) {
     try { sessionStorage.setItem(`m6-guide-reason:${recommendation.placeId}`, JSON.stringify({
       role: recommendation.role, reasonCodes: recommendation.verifiedReasonCodes, tradeoffCode: recommendation.tradeoffCode,
+      personalizedReason: String(recommendation.personalizedReason || '').slice(0, 360),
+      personalizedWhy: String(recommendation.personalizedWhy || '').slice(0, 900),
+      personalizedTradeoff: String(recommendation.personalizedTradeoff || '').slice(0, 280),
       batchId: recommendation.batchId || null, planState: sanitizedPlanSummary(planState), languagePack: languagePack || null,
       returnTo: typeof returnTo === 'string' && returnTo.startsWith('/assistant') ? returnTo : '/assistant',
       savedAt: Date.now()

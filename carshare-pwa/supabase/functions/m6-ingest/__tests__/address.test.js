@@ -44,6 +44,13 @@ describe('stateFromAddress', () => {
       .toBe('Selangor');
   });
 
+  it('normalises "Labuan Federal Territory" the same as the other Labuan spellings (regression: this exact word order was missing, so the real Labuan sweep split into two state groups - "Labuan" and "Labuan Federal Territory" - for the same eight places)', () => {
+    expect(stateFromAddress([component('Labuan Federal Territory', ['administrative_area_level_1'])]))
+      .toBe('Labuan');
+    expect(stateFromAddress([component('Federal Territory of Labuan', ['administrative_area_level_1'])]))
+      .toBe('Labuan');
+  });
+
   it('is case-insensitive about the alias, but not about the result', () => {
     expect(stateFromAddress([component('PULAU PINANG', ['administrative_area_level_1'])]))
       .toBe('Penang');

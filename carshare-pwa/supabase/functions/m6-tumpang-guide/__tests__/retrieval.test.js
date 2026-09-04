@@ -48,5 +48,22 @@ describe('Tumpang Guide controlled retrieval', () => {
     expect(result[0]).toMatchObject({ hasRide: true, availableSeats: 2 });
     expect(result[0].reasonCodes).toContain('seat_headroom');
   });
+
+  it('hard-limits coordinate searches to 80km and never fills the batch with a remote place', () => {
+    const local = place(1, { state: 'Selangor', lat: 3.15, lng: 101.7 });
+    const remote = place(2, { state: 'Penang', lat: 5.4141, lng: 100.3288, rating: 5, review_count: 5000 });
+    const result = retrieveControlledCandidates([local, remote], [], [], [],
+      { ...plan, origin: { label: 'Kuala Lumpur' }, searchRadiusKm: 80 },
+      { origin: { lat: 3.139, lng: 101.6869 } });
+    expect(result.map((item) => item.id)).toEqual([local.id]);
+  });
+
+  it('uses same-state filtering when only an origin label is available', () => {
+    const melaka = place(1, { state: 'Melaka' });
+    const penang = place(2, { state: 'Penang' });
+    const result = retrieveControlledCandidates([melaka, penang], [], [], [],
+      { ...plan, origin: { label: '馬六甲' } });
+    expect(result.map((item) => item.id)).toEqual([melaka.id]);
+  });
 });
 

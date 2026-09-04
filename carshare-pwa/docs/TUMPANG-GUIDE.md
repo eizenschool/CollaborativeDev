@@ -1,126 +1,160 @@
-# Tumpang Guide — Module 6 controlled RAG
+# Tumpang Guide — canonical product and architecture specification
 
-## Status
+Updated: 2026-09-02
 
-Implementation is present on `Module6_Trust_And_Safety` and is deliberately
-rollout-gated. Migrations `079_m6_tumpang_guide.sql` and
-`080_m6_tumpang_guide_stability.sql`, plus the Edge Function, must be reviewed
-and deployed by the team before the live provider flag is enabled. Automated
-tests and production/PWA builds are run at the second model-switch checkpoint
-before integration.
+For takeover status, failure history and exact test/deployment caveats, start
+with `docs/TUMPANG-GUIDE-CLAUDE-HANDOFF.md`. This file defines the intended
+system. It does not claim that the current implementation fully satisfies it.
 
-The feature is public at `/assistant`; guests get an in-memory conversation and
-five successful Gemini turns per browser session. Signed-in users get twenty
-successful Gemini turns per Malaysia calendar day, private Past plans, deletion,
-feedback and automatic 90-day expiry.
+## Product boundary
 
-## Reused project capabilities
+Tumpang Guide is a conversational layer over the existing Let’s Tumpang
+catalogue, Discover detail pages, interests, Ride search/alerts and travel
+preferences. It may chat, explain and teach, but recommendation cards and
+actions are constrained by trusted application data.
 
-Tumpang Guide does not maintain a second destination or Ride system.
+- Recommendations come only from recommendable Supabase catalogue rows.
+- Non-catalogue places receive a fixed localized refusal. They are not searched,
+  cached, carded, saved or used for Ride actions.
+- Signed-in users are not subject to a Guide-turn allowance.
+- Account writes require confirmation.
+- Immediate emergencies use a fixed server response after AI understanding.
 
-- Retrieval and fixture fallback call the existing
-  `DestinationDiscoveryService`, weather gate, seasonal calendar, two-axis score,
-  latent demand, preference and completed-trip adapters.
-- Recommendation cards reuse `PlaceImage`, so live Places Photos and the local
-  deterministic poster fallback behave exactly like Discover.
-- `Why this` expands verified reasons inside the same card first. Its separate
-  details action opens the existing `/discover/:placeId` carousel, reviews,
-  description, Street View and Ride actions with a small session-scoped reason
-  banner.
-- `Find a ride` uses the accepted FR-6.35 Search prefill contract.
-- Location is the existing one-shot browser geolocation preview. Coordinates are
-  used only by server retrieval and are removed before Gemini receives the plan.
-- Interest, Ride alerts, travel preferences and notification results use the
-  existing Module 6 services and shared notification centre.
-- Shared Button, IconButton, AdaptiveDialog, PageShell and AsyncState primitives
-  are reused. No shared theme or navigation component was changed.
+## Provider-owned turn
 
-## Controlled RAG flow
+Gemini is the primary owner of a complete turn. It receives the original
+message, recent context, Travel Brief and conversation focus; it may answer
+directly or call up to two read-only tools. Tool results return to the same
+Gemini attempt for the final response.
 
-1. The four-language parser merges date, starting point, party size, category and
-   constraints into a maximum seven-day plan.
-2. The Edge Function validates an optional user JWT and server-side quota.
-3. Postgres supplies only recommendable `places`, current Published/Matched Ride
-   seats, latent interest and `place_travel_attributes`.
-4. Weather is fetched once in a batched Open-Meteo request; severe weather is a
-   gate, not a Gemini judgement. Season, affinity, quality, visitation headroom,
-   local-economy, seat headroom, distance and demand reuse the established Module
-   6 scoring semantics.
-5. Gemini receives the de-identified plan, at most six dialogue rounds, category
-   counts from consented Trip History, and a candidate allowlist. It has no
-   Google Search or Maps grounding tool.
-6. The server rejects unknown Place IDs, duplicate roles, unverified reason
-   codes, unknown actions and invalid JSON. Rejection, timeout, provider 429,
-   disabled Gemini or offline state uses deterministic catalogue rules.
-7. A signed-in turn is atomically stored with the shown Place IDs, evidence,
-   model/prompt version and private trace. Guest message text is never stored.
-8. Every recommendation response has an immutable `batchId`. Gemini retries,
-   language changes, Why this expansion and detail-page return reuse that batch;
-   they do not silently re-rank or consume another recommendation turn.
+If any Gemini stage times out, is rate-limited, has an auth/model/contract error,
+uses invalid tool arguments or fails semantic output validation, discard the
+entire attempt. Groq then repeats the complete turn from the pre-turn state and
+original message. A response must never contain Gemini intent combined with
+Groq rendering, translation or grounded search.
 
-Fixed response fields:
+If both providers fail, preserve the plan and conversation and show a transparent
+retry state. Deterministic recommendation content is allowed only in explicit
+offline/fixture mode.
 
-```text
-mode, assistantMessage, language, planState, quickReplies,
-recommendations[{ placeId, role, verifiedReasonCodes, tradeoffCode }],
-actions, remainingTurns, fallbackReason, traceId
-```
+Provider and model identity remain in private audit only. Public responses expose
+`clientTurnId`, `traceId`, `edgeVersion`, safe tool-result summaries and fallback
+state, but no provider ownership metadata.
 
-The browser performs an additional Place ID/action/schema check before rendering.
+## State model
 
-## Safety and action boundary
+- `travelBrief`: origin, optional coordinates, dates, party, categories, budget
+  and refinement preferences. It persists across topics.
+- `conversationFocus`: `place`, `recommendation_batch`, `capabilities`, `action`,
+  `emergency` or `none`.
+- `uiLanguage`: changed only through the selector or explicit request.
+- `responseLanguage`: inferred from the current message without translating
+  the whole UI or prior history.
 
-- Emergency intent bypasses Gemini and stops recommendation. The response only
-  exposes Call 999 and the existing Trusted Family/Profile route.
-- Save interest, register Ride alert, save travel preferences and request a
-  catalogue review always open Confirm/Cancel first.
-- Publish, Request Seat, Cancel Ride, Profile mutation and real-person messaging
-  never execute inside Guide; only their formal pages may perform them.
-- An individual Ride Favourite is not offered until Search has selected a real
-  Ride, so Guide hands off instead of guessing a Ride ID.
+The explicit current question outranks stale Travel Brief fields. SOS is a
+single-turn interruption rather than a permanent focus.
 
-## Database migration
+## Tools
 
-`database/sql/079_m6_tumpang_guide.sql` adds only Module 6 data:
+Every tool has a dedicated schema.
 
-- `ai_guide_sessions`, `ai_guide_messages`, `ai_guide_recommendations`,
-  `ai_guide_feedback`
-- `ai_help_sections` with `extensions.vector(768)`
-- `place_travel_attributes`
-- `place_catalogue_requests`
-- private usage and trace tables
+- `search_catalogue`: recommendation and refinement only. The backend applies
+  catalogue, distance and ranking rules and returns selected Place IDs.
+- `get_place_information`: resolves a named/contextual catalogue place and
+  returns structured public facts, uncertainty, checked time and sources.
+- `get_guide_capabilities`: supplies the Guide’s actual supported features.
+- `prepare_guide_action`: prepares a supported write for user confirmation.
+- `trigger_emergency`: selects the server-owned emergency response/actions.
+- `change_interface_language`: explicit interface-language change only.
 
-Every public table has RLS. Browser writes to AI sessions/messages,
-recommendations, feedback, embeddings, usage and traces are revoked. The Edge
-Function owns atomic writes. Owners may read/delete only their history. Account
-deletion cascades through owner-linked rows. Cron removes expired conversations
-and old private guest traces.
+Ordinary chat calls no travel tool. A named catalogue place cannot become a
+recommendation or missing-field clarification. A non-catalogue name is rejected
+before provider/web search and does not consume a smart turn.
 
-The same migration schedules at most five aggregated catalogue names each week.
-`m6-ingest` reuses its Text Search and bounded Details enrichment, verifies a
-Malaysia result and supported category, then accepts or rejects with a fixed
-reason. Existing notification triggers inform each requester.
+## Recommendation rules
 
-## External request inventory
+- Coordinates present: default candidate radius is 80 km.
+- State label only: remain in the same state.
+- Never add distant results to reach three cards.
+- Offer a real Expand range action when local supply is insufficient; expand only
+  after confirmation.
+- Date and party are optional unless a requested activity, weather, Ride seats or
+  group size makes them material.
+- “Too far”, “another place” and “quieter” update the retrieval constraints and
+  re-run catalogue search.
+- Ranking and role assignment are backend-owned. AI explains selected results but
+  cannot change order, IDs, evidence or actions.
 
-No external call is made by automated tests.
+## Place information and Help
 
-| Caller | Endpoint | Purpose | Credential |
-|---|---|---|---|
-| Browser | `/functions/v1/m6-tumpang-guide` | Guide turn/feedback | publishable key + optional user JWT |
-| Guide Edge | Gemini `models/{model}:generateContent` | friendly comparison over allowlisted candidates | `GEMINI_API_KEY` Edge secret |
-| Guide Edge | Gemini `models/gemini-embedding-2:embedContent` | 768-dimensional Help query/document vectors | `GEMINI_API_KEY` Edge secret |
-| Guide Edge | `api.open-meteo.com/v1/forecast` | batched weather gate | no credential |
-| `m6-ingest` | Google Places `places:searchText` | weekly top-five catalogue request validation | existing `GOOGLE_PLACES_SERVER_KEY` |
-| `m6-ingest` | Google Places `/places/{id}` | same-call catalogue and travel-attribute enrichment | existing server key |
+A catalogue place question such as `What is fun at KL Bird Park?` goes directly
+to place information even when Travel Brief is empty. It never asks for origin,
+date or group size. Contextual follow-ups resolve against the current verified
+focus. Long structured content appears in the card; chat contains a short lead-in.
 
-The Details field mask now includes price level, opening hours, children/groups,
-restroom, parking, wheelchair entrance and outdoor seating in the same bounded
-enrichment response. Recommendation requests never call Places Details.
+Help uses a server-owned capability contract so common questions receive a
+natural and accurate answer even without a matching Help row. It must not fall
+back to refusal-style “no verified Help section” text.
 
-## Environment and secrets
+Provider Markdown/HTML is parsed into validated fields and never rendered raw.
 
-Browser build flags:
+## Emergency and actions
+
+The AI distinguishes urgent physical danger from ordinary discomfort and app
+requests. Clear unconsciousness, severe bleeding or immediate danger produces
+the server’s fixed 999 and Trusted Family response. “Help me save this” and
+similar action language is not an emergency. SOS shows no turn counter.
+
+Save interest, travel preferences and Ride alerts are prepared first and written
+only after explicit confirmation. Publishing, seat requests, cancellations and
+profile edits remain on their established application pages.
+
+## UI and navigation
+
+- Empty composer with no example placeholder or prefilled prompts.
+- Language selector beside the microphone.
+- Starting point uses map-like autocomplete with a responsive, non-overlapping
+  result list.
+- Recommendation cards open the existing `/discover/:placeId` route and pass a
+  Guide return path, dates and scroll state.
+- Returning restores the conversation and scroll position.
+- Past Plans deletion immediately clears any active restored copy.
+
+## Voice
+
+Browser `SpeechRecognition`/`webkitSpeechRecognition` is primary. Supported
+choices are English `en-MY`, 中文 `zh-CN`, Bahasa Melayu `ms-MY` and Tamil
+`ta-MY`; there is no Auto mode. Interim text is preview-only. Deduplicated final
+text fills the editable draft once and never auto-sends.
+
+A logical recording session may restart the physical browser recognizer after a
+normal pause until the user presses Stop. Permission, network, microphone and
+unsupported-language errors stop cleanly.
+
+Groq transcription is a user-selected fallback after browser failure. It records
+again, never silently uploads prior audio and never stores audio in Supabase.
+Catalogue names are not injected as speech bias.
+
+## Reliability and data
+
+Migrations 079/080 provide Guide data and stability contracts. Migration 081
+adds request idempotency/lease, private provider attempts, shared provider
+health/cooldown and short live-fact caching. The user reports 081 applied, but
+remote state must be verified before relying on it.
+
+The same actor and `clientTurnId` must execute at most one provider turn. A
+completed request replays its cached response; an active lease returns processing;
+an expired lease may be safely claimed. Provider 429/auth/model failures trigger
+the appropriate shared cooldown and whole-turn fallback. Raw prompts, messages
+and audio are not stored in reliability tables.
+
+The browser deadline is 110 seconds. Each provider receives a bounded whole-turn
+budget while leaving time for database completion inside Supabase hosted limits.
+Timeout extension is not a substitute for correct failover or quota handling.
+
+## Configuration
+
+Browser:
 
 ```text
 VITE_TUMPANG_GUIDE_ENABLED=true
@@ -128,54 +162,26 @@ VITE_TUMPANG_GUIDE_MODE=gemini
 VITE_DISCOVERY_DATA_SOURCE=supabase
 ```
 
-When browser Supabase values are present, the Guide now selects the live
-`m6-tumpang-guide` Edge Function automatically. Set
-`VITE_TUMPANG_GUIDE_MODE=fixture` only for deliberate offline/demo use; the
-fixture build and automated tests remain isolated from live services.
-
-For a production build, `VITE_TUMPANG_GUIDE_ENABLED=true` is accepted only
-when the browser Supabase URL and publishable key are also present. If the live
-configuration is missing, `/assistant` stays disabled instead of exposing the
-fixture catalogue to production users.
-
-Edge secrets/settings:
+Server-only examples:
 
 ```text
 GEMINI_API_KEY=<server only>
-M6_TUMPANG_GUIDE_GEMINI_ENABLED=true
-M6_GUIDE_GEMINI_MODEL=gemini-3.5-flash-lite
-M6_GUIDE_EMBEDDING_MODEL=gemini-embedding-2
-M6_GUIDE_ALLOWED_ORIGINS=https://<app-host>
+GROQ_API_KEY=<server only>
+M6_TUMPANG_GUIDE_AI_ENABLED=true
+M6_GUIDE_PRIMARY_PROVIDER=gemini
+M6_GUIDE_SECONDARY_PROVIDER=groq
+M6_GUIDE_GEMINI_MODEL=<supported configurable Flash model>
+M6_GUIDE_GROQ_MODEL=openai/gpt-oss-20b
+M6_GUIDE_ALLOWED_ORIGINS=http://localhost:5173,https://letstumpang.netlify.app
 M6_GUIDE_VISITOR_PEPPER=<random server value>
-M6_GUIDE_GLOBAL_DAILY_CAP=1000
-M6_GUIDE_ACTOR_BURST_CAP=4
-M6_GUIDE_GLOBAL_BURST_CAP=40
-M6_GUIDE_QA_USER_IDS=<comma-separated approved production QA user IDs>
 ```
 
-`GEMINI_API_KEY` must never use a `VITE_` prefix. The project URL, publishable
-key and user JWT are the only browser-side Supabase values.
+Provider keys must never use a `VITE_` prefix or enter browser bundles.
 
-After migration deployment, call the service-key-only operation
-`refresh_help_embeddings` once to populate currently null Help vectors. Until
-then the same verified Help rows use deterministic keyword fallback.
+## Verification rule
 
-## Rollout order
-
-1. Review and apply `079_m6_tumpang_guide.sql`, then `080_m6_tumpang_guide_stability.sql`, after confirming the shared
-   migration ledger. Do not rename the existing Module 3 `075` file from this
-   module branch.
-2. Redeploy `m6-ingest`, then deploy `m6-tumpang-guide` with the server flag off.
-3. Populate Help vectors and verify RLS with two accounts.
-4. Run the written Vitest, SQL-contract, Edge-pure, Playwright, production and
-   PWA build checks without live API traffic.
-5. Enable the browser and server flags in QA, then test accounts, signed-in users
-   and finally guests.
-
-## Files and ownership
-
-The implementation lives under Module 6-owned `guide/`, `discover/`,
-`m6-tumpang-guide`, `m6-ingest`, this document and migrations `079`/`080`. The only
-shared integration edits are the lazy `/assistant/*` route and its Edge Function
-config entry. Home, Search, Module 2/3/4/5 business logic, shared navigation,
-shared CSS tokens and the former `/safety` prototype are unchanged.
+Automated tests must remain isolated from live providers. After unit, Edge,
+Playwright, axe, production and PWA checks, verify the deployed version separately
+with real Gemini, forced Gemini-to-Groq fallback, catalogue search, browser voice
+on hardware and Supabase persistence. Always correlate `traceId`, Edge version,
+frontend build and migration state.

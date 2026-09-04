@@ -7,6 +7,10 @@ export const GUIDE_MODE = Object.freeze({
   CLARIFY: 'clarify',
   RECOMMEND: 'recommend',
   HELP: 'help',
+  SMALL_TALK: 'small_talk',
+  ACTION: 'action',
+  PLACE_INFO: 'place_info',
+  TRAVEL_INFO: 'travel_info',
   CATALOGUE_MISSING: 'catalogue_missing',
   EMERGENCY: 'emergency',
   FALLBACK: 'fallback'
@@ -69,22 +73,31 @@ export const GUIDE_TRADEOFF = Object.freeze({
 });
 
 export const GUIDE_LIMITS = Object.freeze({
-  AUTHENTICATED_DAILY_TURNS: 20,
-  GUEST_SESSION_TURNS: 5,
+  AUTHENTICATED_DAILY_TURNS: Number.MAX_SAFE_INTEGER,
+  // Spent only by a turn that actually produces a recommendation batch —
+  // chatting, place-info answers and search-augmented follow-ups are free
+  // even for guests (see supabase/functions/m6-tumpang-guide/index.ts's
+  // finalize()).
+  GUEST_SESSION_TURNS: 3,
   CONTEXT_TURNS: 6,
   MAX_DATE_RANGE_DAYS: 7,
-  REQUEST_TIMEOUT_MS: 10_000,
+  // The Edge Function may need an intent pass, catalogue retrieval, and (for
+  // place_info) Gemini Search followed by Groq browser search. The old 35s
+  // client deadline could abort a healthy fallback while the Edge Function
+  // was still working. 110s remains below Supabase's 150s hosted request
+  // ceiling and leaves time for a real Gemini -> Groq fallback.
+  REQUEST_TIMEOUT_MS: 110_000,
   SESSION_RETENTION_DAYS: 90,
   MAX_MESSAGE_CHARS: 1_200,
   MAX_RECOMMENDATIONS: 3
 });
 
 export const GUIDE_MODEL = Object.freeze({
-  GENERATION: 'gemini-3.5-flash-lite',
-  EMBEDDING: 'gemini-embedding-2',
+  GENERATION: 'gemini-3.7-flash',
+  EMBEDDING: 'gemini-embedding-2-preview',
   EMBEDDING_DIMENSIONS: 768,
-  PROMPT_VERSION: 'm6-guide-v2',
-  THINKING_LEVEL: 'minimal'
+  PROMPT_VERSION: 'm6-guide-agent-v3',
+  THINKING_LEVEL: 'low'
 });
 
 export const GUIDE_STORAGE = Object.freeze({
