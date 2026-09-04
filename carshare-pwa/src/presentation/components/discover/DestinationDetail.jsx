@@ -8,7 +8,7 @@
 // independently mention (PlaceDescription.js); the individual reviews follow
 // below, attributed, as reviews.
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { getAuthNavigation } from '../../../business-logic/authAccess.js';
 import { DestinationDiscoveryService } from '../../../business-logic/discovery/DestinationDiscoveryService.js';
@@ -25,6 +25,8 @@ import { PHOTO_WIDTH_LARGE } from '../../../business-logic/discovery/placePhotos
 import { hasStreetViewEmbedKey } from '../../../business-logic/discovery/StreetView.js';
 import { buildPlaceDescription } from '../../../business-logic/discovery/PlaceDescription.js';
 import ScoreBreakdown from './ScoreBreakdown.jsx';
+import { TumpangGuideService } from '../../../business-logic/guide/TumpangGuideService.js';
+import { guideReasonText, guideRoleLabel, guideTradeoffLabel } from '../../../business-logic/guide/GuideLanguage.js';
 
 // A sentinel, not a photoReferences record - Carousel below tells it apart
 // from a real frame by identity, not by shape.
@@ -164,12 +166,22 @@ export default function DestinationDetail() {
   const { placeId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const travelDate = searchParams.get('date') || today();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
+  const returnToGuide = () => {
+    const returnTo = typeof location.state?.returnTo === 'string' && location.state.returnTo.startsWith('/assistant')
+      ? location.state.returnTo : null;
+    if (returnTo) {
+      navigate(returnTo, { state: { guideRestoreScrollTop: Number(location.state?.guideRestoreScrollTop) || 0 } });
+      return;
+    }
+    navigate('/home');
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -191,8 +203,8 @@ export default function DestinationDetail() {
     return (
       <div className="dsc-page">
         <p className="dsc-empty">That destination is no longer available.</p>
-        <button className="dsc-btn" onClick={() => navigate('/discover')} type="button">
-          Back to destinations
+        <button className="dsc-btn" onClick={returnToGuide} type="button">
+          {location.state?.fromGuide ? 'Back to Tumpang Guide' : 'Back to destinations'}
         </button>
       </div>
     );
@@ -203,6 +215,11 @@ export default function DestinationDetail() {
   const showRating = place.rating && place.reviewCount >= REVIEW_CONFIDENCE_SATURATION;
   const described = buildPlaceDescription(place, { distanceKm });
   const freshness = freshnessLabel(place.updatedAt);
+  const guideContext = TumpangGuideService.getDetailReason(place.id);
+  const guideLanguage = guideContext?.planState?.language || 'en';
+  const guideReasons = (guideContext?.reasonCodes || [])
+    .map((code) => guideReasonText(code, place, guideContext.planState, guideLanguage))
+    .filter(Boolean);
 
   const notifyMe = async () => {
     if (!user) {
@@ -225,9 +242,20 @@ export default function DestinationDetail() {
 
   return (
     <div className="dsc-page dsc-detail">
-      <button className="dsc-back" onClick={() => navigate('/discover')} type="button">
-        <IconArrowLeft size={16} /> Back to destinations
+      <button className="dsc-back" onClick={returnToGuide} type="button">
+        <IconArrowLeft size={16} /> {location.state?.fromGuide ? 'Back to Tumpang Guide' : 'Back to destinations'}
       </button>
+
+      {guideContext && (
+        <section className="dsc-guide-context" aria-labelledby="dsc-guide-context-title">
+          <strong id="dsc-guide-context-title">Tumpang Guide · {guideRoleLabel(guideContext.role, guideLanguage)}</strong>
+          <p>
+            Recommended for {guideContext.planState?.startDate || 'your selected date'} from {guideContext.planState?.origin?.label || 'your starting point'}.
+            {' '}Trade-off: {guideTradeoffLabel(guideContext.tradeoffCode, guideLanguage)}.
+          </p>
+          {guideReasons.length > 0 && <p>{guideReasons.slice(0, 2).join(' · ')}</p>}
+        </section>
+      )}
 
       <div className="dsc-detail-layout">
         <div className="dsc-detail-main">

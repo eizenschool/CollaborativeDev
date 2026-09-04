@@ -247,6 +247,16 @@ export const DestinationDiscoveryService = {
     return discoveryDb.recordInterest(userId, placeId, travelDate);
   },
 
+  async getInterest(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return null;
+    return discoveryDb.getInterest?.(userId, placeId, travelDate) || null;
+  },
+
+  async removeInterest(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return { removed: false };
+    return discoveryDb.removeInterest?.(userId, placeId, travelDate) || { removed: false };
+  },
+
   /** FR-6.33 - intent, the strong signal. */
   async registerForNotification(userId, placeId, travelDate) {
     if (!userId || !placeId || !travelDate) return { registration: null, alreadyExisted: false };
@@ -259,6 +269,18 @@ export const DestinationDiscoveryService = {
 
   async cancelRegistration(userId, registrationId) {
     return discoveryDb.cancelRegistration(userId, registrationId);
+  },
+
+  async getActionState(userId, placeId, travelDate) {
+    const [interest, registrations] = await Promise.all([
+      this.getInterest(userId, placeId, travelDate),
+      this.listRegistrations(userId)
+    ]);
+    return {
+      interest,
+      alert: registrations.find((registration) => registration.placeId === placeId
+        && registration.travelDate === travelDate && registration.status === 'active') || null
+    };
   },
 
   async getPlace(placeId) {

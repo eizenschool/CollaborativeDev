@@ -113,6 +113,25 @@ export const liveDiscoveryDb = {
     return { recorded: Boolean(data) };
   },
 
+  async getInterest(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return null;
+    const client = requireClient();
+    const { data, error } = await client.from('place_interest')
+      .select('id,user_id,place_id,travel_date,created_at')
+      .eq('user_id', userId).eq('place_id', placeId).eq('travel_date', travelDate).maybeSingle();
+    if (error) throw error;
+    return data ? { id: data.id, userId: data.user_id, placeId: data.place_id, travelDate: data.travel_date, createdAt: data.created_at } : null;
+  },
+
+  async removeInterest(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return { removed: false };
+    const client = requireClient();
+    const { data, error } = await client.from('place_interest').delete()
+      .eq('user_id', userId).eq('place_id', placeId).eq('travel_date', travelDate).select('id');
+    if (error) throw error;
+    return { removed: Boolean(data?.length) };
+  },
+
   async latentDemand(travelDate) {
     if (!travelDate) return new Map();
     const client = requireClient();
@@ -161,8 +180,8 @@ export const liveDiscoveryDb = {
     const { data, error } = await client
       .from('ride_notify_registration')
       .upsert(
-        { user_id: userId, place_id: placeId, travel_date: travelDate, status: 'active' },
-        { onConflict: 'user_id,place_id,travel_date', ignoreDuplicates: true }
+        { user_id: userId, place_id: placeId, travel_date: travelDate, status: 'active', closed_at: null },
+        { onConflict: 'user_id,place_id,travel_date' }
       )
       .select('*')
       .maybeSingle();

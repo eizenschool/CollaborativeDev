@@ -27,7 +27,7 @@ export default function AudienceSwitch({ active, travelDate, demo }) {
         role="tab"
         aria-selected={active === 'explore'}
         className={'dsc-audience-tab' + (active === 'explore' ? ' active' : '')}
-        onClick={() => go('/discover')}
+        onClick={() => go('/home')}
       >
         <IconSearch size={16} /> Where should I go?
       </button>

@@ -3,6 +3,7 @@ import { withSupabase } from "npm:@supabase/server";
 import { classifyPlace, resolveCategory } from "./classification.ts";
 import { stateFromAddress } from "./address.ts";
 import { SWEEP_REGIONS, type Region } from "./regions.ts";
+import { travelAttributesFor } from "./travelAttributes.ts";
 
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1";
 const GOOGLE_FIELD_MASK = "places.id,places.types,places.location,places.photos";
@@ -17,7 +18,8 @@ const GOOGLE_FIELD_MASK = "places.id,places.types,places.location,places.photos"
 // outside its own state; see address.ts.
 const DETAILS_FIELD_MASK =
   "displayName,rating,userRatingCount,reviews,photos,types,primaryType,location," +
-  "addressComponents";
+  "addressComponents,priceLevel,regularOpeningHours,goodForChildren,goodForGroups," +
+  "restroom,parkingOptions,accessibilityOptions,outdoorSeating";
 const DEFAULT_INCLUDED_TYPES = ["restaurant", "tourist_attraction", "museum", "park"];
 
 type NearbyPlace = {
@@ -48,9 +50,18 @@ type PlaceDetails = {
     shortText?: string;
     types?: string[];
   }>;
+  priceLevel?: string;
+  regularOpeningHours?: Record<string, unknown>;
+  goodForChildren?: boolean;
+  goodForGroups?: boolean;
+  restroom?: boolean;
+  parkingOptions?: Record<string, boolean>;
+  accessibilityOptions?: Record<string, boolean>;
+  outdoorSeating?: boolean;
 };
 
 type ExistingPlace = {
+  id: string;
   source_place_id: string;
   lifecycle_state: string;
   state_before_demotion: string | null;
@@ -271,9 +282,208 @@ function inFilter(values: string[]): string {
 
 async function knownPlaces(baseUrl: string, key: string, sourceIds: string[]) {
   if (!sourceIds.length) return new Map<string, ExistingPlace>();
-  const query = `places?select=source_place_id,lifecycle_state,state_before_demotion,category&source_place_id=${encodeURIComponent(inFilter(sourceIds))}`;
+  const query = `places?select=id,source_place_id,lifecycle_state,state_before_demotion,category&source_place_id=${encodeURIComponent(inFilter(sourceIds))}`;
   const rows = await supabaseRequest<ExistingPlace[]>(baseUrl, key, query);
   return new Map((rows || []).map((row) => [row.source_place_id, row]));
+}
+
+async function upsertTravelAttributes(
+  baseUrl: string,
+  key: string,
+  rows: Array<{ sourcePlaceId: string; attributes: Record<string, unknown> }>,
+) {
+  if (!rows.length) return 0;
+  const places = await knownPlaces(baseUrl, key, rows.map((row) => row.sourcePlaceId));
+  const payload = rows.flatMap((row) => {
+    const placeId = places.get(row.sourcePlaceId)?.id;
+    return placeId ? [{ place_id: placeId, ...row.attributes }] : [];
+  });
+  if (!payload.length) return 0;
+  await supabaseRequest<unknown>(
+    baseUrl,
+    key,
+    "place_travel_attributes?on_conflict=place_id",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return payload.length;
+}
+
+type CatalogueRequest = {
+  id: string;
+  normalized_name: string;
+  requested_name: string;
+  support_count: number;
+};
+
+async function textSearch(requestedName: string, googleKey: string) {
+  const result = await googleRequest<{ places?: NearbyPlace[] }>(
+    requestUrl("/places:searchText"),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-FieldMask": GOOGLE_FIELD_MASK,
+      },
+      body: JSON.stringify({
+        textQuery: requestedName,
+        regionCode: "MY",
+        languageCode: "en",
+        maxResultCount: 1,
+        locationRestriction: {
+          rectangle: {
+            low: { latitude: 0.8, longitude: 99.6 },
+            high: { latitude: 7.5, longitude: 119.4 },
+          },
+        },
+      }),
+    },
+    googleKey,
+  );
+  return result.places?.[0] || null;
+}
+
+function isMalaysiaAddress(components: PlaceDetails["addressComponents"]) {
+  return Boolean(components?.some((component) =>
+    component.types?.includes("country")
+      && (component.shortText?.toUpperCase() === "MY" || component.longText?.toLowerCase() === "malaysia")
+  ));
+}
+
+async function updateCatalogueRequests(
+  baseUrl: string,
+  key: string,
+  normalizedName: string,
+  values: Record<string, unknown>,
+) {
+  await supabaseRequest<unknown>(
+    baseUrl,
+    key,
+    `place_catalogue_requests?normalized_name=eq.${encodeURIComponent(normalizedName)}&status=in.(pending,processing)`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ ...values, updated_at: new Date().toISOString() }),
+    },
+  );
+}
+
+async function processCatalogueRequests(
+  baseUrl: string,
+  databaseKey: string,
+  googleKey: string,
+  maximum: number,
+  dryRun: boolean,
+) {
+  const pending = await supabaseRequest<CatalogueRequest[]>(
+    baseUrl,
+    databaseKey,
+    "place_catalogue_requests?select=id,normalized_name,requested_name,support_count&status=eq.pending&order=support_count.desc,created_at.asc&limit=100",
+  );
+  const unique = [...new Map((pending || []).map((row) => [row.normalized_name, row])).values()]
+    .sort((a, b) => b.support_count - a.support_count)
+    .slice(0, maximum);
+  if (dryRun) return { dryRun: true, selected: unique, processed: [] };
+
+  const processed: Array<Record<string, unknown>> = [];
+  for (const request of unique) {
+    await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, { status: "processing" });
+    try {
+      const match = await textSearch(request.requested_name, googleKey);
+      if (!match?.id) {
+        await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, {
+          status: "rejected", rejection_reason: "not_found", resolved_at: new Date().toISOString(),
+        });
+        processed.push({ name: request.requested_name, status: "rejected", reason: "not_found" });
+        continue;
+      }
+
+      const detail = await details(match.id, googleKey);
+      if (!isMalaysiaAddress(detail.addressComponents)) {
+        await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, {
+          status: "rejected", rejection_reason: "not_in_malaysia", resolved_at: new Date().toISOString(),
+        });
+        processed.push({ name: request.requested_name, status: "rejected", reason: "not_in_malaysia" });
+        continue;
+      }
+      const types = detail.types?.length ? detail.types : match.types || [];
+      const primaryType = detail.primaryType || "";
+      const category = classifyPlace(types, primaryType);
+      if (!category) {
+        await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, {
+          status: "rejected", rejection_reason: "unsupported_category", resolved_at: new Date().toISOString(),
+        });
+        processed.push({ name: request.requested_name, status: "rejected", reason: "unsupported_category" });
+        continue;
+      }
+      const location = detail.location || match.location || {};
+      if (!validCoordinate(location.latitude, -90, 90) || !validCoordinate(location.longitude, -180, 180)) {
+        await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, {
+          status: "rejected", rejection_reason: "insufficient_source_data", resolved_at: new Date().toISOString(),
+        });
+        processed.push({ name: request.requested_name, status: "rejected", reason: "insufficient_source_data" });
+        continue;
+      }
+
+      const known = await knownPlaces(baseUrl, databaseKey, [match.id]);
+      const existingCataloguePlaceId = known.get(match.id)?.id || null;
+      if (existingCataloguePlaceId) {
+        await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, {
+          status: "rejected", rejection_reason: "duplicate_place",
+          resolved_place_id: existingCataloguePlaceId, resolved_at: new Date().toISOString(),
+        });
+        processed.push({
+          name: request.requested_name, status: "rejected",
+          reason: "duplicate_place", placeId: existingCataloguePlaceId,
+        });
+        continue;
+      }
+
+      const observedAt = new Date().toISOString();
+      const name = detail.displayName?.text?.trim() || request.requested_name;
+      const state = stateFromAddress(detail.addressComponents, "Malaysia");
+      const reviewCount = Number.isFinite(detail.userRatingCount) ? Number(detail.userRatingCount) : 0;
+      const photos = photoReferences(detail);
+      await upsertPlaces(baseUrl, databaseKey, [{
+        source_place_id: match.id, name, category, types, primary_type: primaryType || null,
+        ...descriptionFor(name, category, state),
+        rating: typeof detail.rating === "number" ? detail.rating : null,
+        review_count: reviewCount, reviews: reviewsFor(detail),
+        lat: location.latitude, lng: location.longitude, state,
+        photo_references: photos,
+        lifecycle_state: reviewCount >= 3 && photos.length ? "Active" : "Provisional",
+        state_before_demotion: null, absence_counter: 0,
+        last_seen_at: observedAt, updated_at: observedAt,
+      }]);
+      const created = await knownPlaces(baseUrl, databaseKey, [match.id]);
+      const cataloguePlaceId = created.get(match.id)?.id || null;
+      await upsertTravelAttributes(baseUrl, databaseKey, [{
+        sourcePlaceId: match.id,
+        attributes: travelAttributesFor(detail, observedAt),
+      }]);
+      if (!cataloguePlaceId) throw new Error("Accepted place was not returned after enrichment.");
+
+      await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, {
+        status: "accepted", rejection_reason: null,
+        resolved_place_id: cataloguePlaceId, resolved_at: new Date().toISOString(),
+      });
+      processed.push({ name: request.requested_name, status: "accepted", placeId: cataloguePlaceId });
+    } catch (error) {
+      // Provider or database outages are retryable. They do not become a false
+      // product rejection and therefore do not notify the requester.
+      await updateCatalogueRequests(baseUrl, databaseKey, request.normalized_name, {
+        status: "pending", rejection_reason: null,
+      });
+      processed.push({
+        name: request.requested_name, status: "retry",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return { dryRun: false, selected: unique.length, processed };
 }
 
 async function upsertPlaces(baseUrl: string, key: string, rows: Record<string, unknown>[]) {
@@ -326,6 +536,15 @@ async function runIngestion(request: Request) {
     return json({ error: "Request body must be valid JSON" }, 400);
   }
 
+  if (input.catalogueRequests === true) {
+    const maximum = typeof input.maxCatalogueRequests === "number"
+      ? Math.max(1, Math.min(5, Math.floor(input.maxCatalogueRequests)))
+      : 5;
+    return json(await processCatalogueRequests(
+      baseUrl, databaseKey, googleKey, maximum, input.dryRun === true,
+    ));
+  }
+
   // A manual call that omits `regions` used to sweep only Kuala Lumpur; it now
   // sweeps every region the catalogue actually holds. See regions.ts for why
   // these coordinates are each state's hub rather than a reconstruction of
@@ -361,6 +580,7 @@ async function runIngestion(request: Request) {
   const sourceIds = [...discovered.keys()];
   const existing = dryRun ? new Map<string, ExistingPlace>() : await knownPlaces(baseUrl, databaseKey, sourceIds);
   const upserts: Record<string, unknown>[] = [];
+  const travelAttributeRows: Array<{ sourcePlaceId: string; attributes: Record<string, unknown> }> = [];
   const failures: Array<{ placeId: string; error: string }> = [];
   // Places the sweep found and enrichment paid for, but which classification
   // rejected as not being destinations - hotels and shopping malls, mostly. The
@@ -388,6 +608,14 @@ async function runIngestion(request: Request) {
     primaryType: string;
     category: string;
   }> = [];
+  // A region's circle is trusted to sit inside Malaysia, but a 50km radius
+  // from a border state's hub does not always stay there: Labuan's circle
+  // reaches into Brunei, Perlis's reaches into Thailand. processCatalogueRequests
+  // already guards its own single-place lookups with isMalaysiaAddress; the
+  // sweep enrichment loop below fetches the same addressComponents field but
+  // never checked it, so a border region silently upserted places from
+  // another country into the Malaysian catalogue.
+  const outOfCountry: Array<{ placeId: string; name: string }> = [];
   let enriched = 0;
   let refreshed = 0;
   // The `maxDetails` budget counts requests made, not rows written. A place
@@ -412,9 +640,13 @@ async function runIngestion(request: Request) {
     try {
       const detail = await details(placeId, googleKey);
       detailsSpent += 1;
+      const name = detail.displayName?.text?.trim() || placeId;
+      if (!isMalaysiaAddress(detail.addressComponents)) {
+        outOfCountry.push({ placeId, name });
+        continue;
+      }
       const types = detail.types?.length ? detail.types : item.nearby.types || [];
       const primaryType = detail.primaryType || "";
-      const name = detail.displayName?.text?.trim() || placeId;
       const resolved = resolveCategory(
         classifyPlace(types, primaryType),
         alreadyKnown?.category,
@@ -445,6 +677,7 @@ async function runIngestion(request: Request) {
       const description = descriptionFor(name, category, state);
       const reviewCount = Number.isFinite(detail.userRatingCount) ? Number(detail.userRatingCount) : 0;
       const photos = photoReferences(detail);
+      const enrichedAt = new Date().toISOString();
       upserts.push({
         source_place_id: placeId,
         name,
@@ -465,8 +698,12 @@ async function runIngestion(request: Request) {
         lifecycle_state: lifecycle || (reviewCount >= 3 && photos.length ? "Active" : "Provisional"),
         state_before_demotion: null,
         absence_counter: 0,
-        last_seen_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        last_seen_at: enrichedAt,
+        updated_at: enrichedAt,
+      });
+      travelAttributeRows.push({
+        sourcePlaceId: placeId,
+        attributes: travelAttributesFor(detail, enrichedAt),
       });
       enriched += 1;
     } catch (error) {
@@ -475,6 +712,9 @@ async function runIngestion(request: Request) {
   }
 
   if (!dryRun) await upsertPlaces(baseUrl, databaseKey, upserts);
+  const travelAttributesUpserted = dryRun
+    ? 0
+    : await upsertTravelAttributes(baseUrl, databaseKey, travelAttributeRows);
 
   // FR-6.3/6.4/6.5 automatic decay is disabled for now, not merely unused -
   // do not re-enable this without fixing the reason it was turned off.
@@ -508,10 +748,12 @@ async function runIngestion(request: Request) {
     detailsSpent,
     skipped,
     retained,
+    outOfCountry,
     absent,
     demoted,
     retired,
     upserted: dryRun ? 0 : upserts.length,
+    travelAttributesUpserted,
     failures,
   });
 }

@@ -63,10 +63,10 @@
    contain block-level children. Spans are inline by default, so every one of
    these containers has to declare its own display or the height simply does not
    apply and the SVG expands to its own aspect ratio instead. */
-.dsc-hero-media { display: block; position: relative; height: 200px; }
+.dsc-hero-media { display: block; position: relative; height: 240px; }
 
-@media (min-width: 701px) { .dsc-hero-media { height: 260px; } }
-@media (min-width: 1101px) { .dsc-hero-media { height: 320px; } }
+@media (min-width: 701px) { .dsc-hero-media { height: 340px; } }
+@media (min-width: 1101px) { .dsc-hero-media { height: 440px; } }
 
 .dsc-hero-scrim {
   display: block;
@@ -102,13 +102,13 @@
 .dsc-hero-title {
   display: block;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
   margin: 0 0 4px;
   line-height: 1.2;
 }
 
-@media (min-width: 701px) { .dsc-hero-title { font-size: 24px; } }
+@media (min-width: 701px) { .dsc-hero-title { font-size: 32px; } }
 
 .dsc-hero-sub { display: block; font-size: 14px; margin: 0; opacity: 0.92; }
 
@@ -128,6 +128,132 @@
   font-size: 14px;
 }
 
+/* The AI entry point. Home's primary action for a visitor who cannot yet
+   name a destination - direction A (spacious editorial): an inviting,
+   full-width block the reader reads as a headline offer, not a flat search
+   bar - matching the "one primary action" language of the accepted mockup,
+   rather than the dense-utility bar this had drifted into. */
+.dsc-header .dsc-eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dsc-header .dsc-lede { margin: 0 0 24px; color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 56ch; }
+
+.dsc-ask {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 20px 20px 20px 24px;
+  margin-top: 4px;
+  background: linear-gradient(135deg, var(--teal-tint) 0%, #fff 62%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl, var(--radius-card));
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard);
+}
+.dsc-ask:hover { border-color: var(--teal); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.dsc-ask:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.dsc-ask-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--teal-dark);
+}
+.dsc-ask-ph {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+}
+.dsc-ask-go {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  background: var(--teal);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+.dsc-ask:hover .dsc-ask-go { background: var(--teal-dark); }
+
+@media (max-width: 700px) {
+  .dsc-ask { flex-wrap: wrap; padding: 18px; }
+  .dsc-ask-ph { font-size: 16px; }
+  .dsc-ask-go { width: 100%; justify-content: center; }
+}
+
+/* The account-status strip: only rendered when there is genuinely something
+   pending, so it never occupies space for a visitor with nothing going on. */
+.dsc-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  margin: 16px 0 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  color: var(--ink);
+}
+.dsc-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  flex: none;
+  box-shadow: 0 0 0 3px var(--teal-tint);
+}
+.dsc-status button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Loading skeleton: replaces the plain "Finding destinations…" text so the
+   page does not visibly jump in height once results arrive. */
+.dsc-list-skeleton { pointer-events: none; }
+.dsc-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+}
+.dsc-card-skeleton .dsc-card-media { aspect-ratio: 16 / 10; border-radius: var(--radius-lg); }
+
 /* Phone-first: a column stacks the date field, the filter chips and the
    media toggle onto their own rows instead of the two-column squeeze that
    used to result from flex-wrap alone (the chips wrapped into a cramped
@@ -141,7 +267,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 24px;
+  margin: 32px 0 40px;
 }
 
 @media (min-width: 701px) {
@@ -221,52 +347,34 @@
   .dsc-filters { flex-wrap: wrap; overflow-x: visible; align-self: auto; padding-bottom: 0; }
 }
 
-.dsc-filter {
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--muted);
-  border-radius: 999px;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-family: inherit;
-  text-transform: capitalize;
-  flex: 0 0 auto;
-  cursor: pointer;
-  min-height: 44px;
-}
-
-.dsc-filter:hover { border-color: var(--teal); color: var(--teal-dark); }
-
-.dsc-filter.active {
-  background: var(--teal);
-  border-color: var(--teal);
-  color: #fff;
-  font-weight: 600;
-}
+/* Category filter buttons use the shared ui/Primitives Chip (.ui-chip). The
+   category value itself is lowercase (business-logic/discovery/constants.js);
+   capitalising is this row's presentation choice, not a global Chip rule. */
+.dsc-filters .ui-chip { text-transform: capitalize; }
 
 /* --- sections ----------------------------------------------------------- */
 
-.dsc-section { margin-bottom: 32px; }
+.dsc-section { margin-bottom: 56px; }
 
 .dsc-section-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .dsc-section h2 {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--ink);
   margin: 0;
 }
 
 .dsc-section-note {
-  margin: 0 0 16px;
-  font-size: 13px;
+  margin: 0 0 24px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -278,15 +386,16 @@
 
 .dsc-list {
   display: grid;
-  gap: 16px;
+  gap: 28px;
   /* minmax(0, 1fr), not bare 1fr: cards contain white-space: nowrap
      descendants (.dsc-chip, .dsc-count), and an unbroken chip can otherwise
-     push a bare 1fr track wider than its even share of the grid. */
+     push a bare 1fr track wider than its even share of the grid. Two columns
+     at most, not three - direction A shows fewer, larger destinations per
+     screen rather than maximising how many fit. */
   grid-template-columns: minmax(0, 1fr);
 }
 
 @media (min-width: 701px) { .dsc-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1101px) { .dsc-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 .dsc-empty,
 .dsc-notice,
@@ -432,9 +541,9 @@
 .dsc-reveal:hover { background: rgba(17, 24, 39, 0.85); }
 .dsc-reveal:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
-/* The always-visible global toggle in .dsc-controls. Built on .dsc-filter's
-   chip so it reads as part of the same control row rather than a separate
-   settings widget. */
+/* The always-visible global toggle in .dsc-controls. Built on the shared
+   Chip primitive so it reads as part of the same control row rather than a
+   separate settings widget. */
 /* align-self: stretch, matching .dsc-filters above - on the phone column
    layout this gives the toggle its own full-width row instead of the
    orphaned content-width pill it used to be left as beside a wrapped chip
@@ -454,11 +563,18 @@
 /* --- card --------------------------------------------------------------- */
 
 .dsc-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  /* Weaker card boundary than the dense-utility direction used - whitespace
+     and imagery do the separating, the border is a hairline, not a frame. */
+  border: 1px solid var(--border-subtle, #eef1f0);
+  border-radius: var(--radius-lg, var(--radius-card));
   overflow: hidden;
   background: #fff;
   display: flex;
+  /* Staggered entrance: same ui-item-enter + --motion-delay pattern the
+     former home-action-card used, reused here since it is now these cards
+     that lead the first screen a visitor sees. */
+  animation: ui-item-enter var(--motion-slow) var(--ease-enter) both;
+  animation-delay: var(--motion-delay, 0ms);
   flex-direction: column;
   text-align: left;
   padding: 0;
@@ -480,13 +596,13 @@
    140px let the image ratio drift from 2.45:1 to 2.9:1 across breakpoints,
    the one image slot in this file that never adapted. display: block is
    still required for the same <button>-interior reason as .dsc-hero-media. */
-.dsc-card-media { display: block; position: relative; aspect-ratio: 16 / 10; }
+.dsc-card-media { display: block; position: relative; aspect-ratio: 4 / 3; }
 
 .dsc-card-body {
-  padding: 16px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
 }
 
@@ -499,7 +615,7 @@
 
 .dsc-card-title {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 600;
   color: var(--ink);
   margin: 0;
@@ -727,7 +843,7 @@
 
 @media (min-width: 1101px) {
   .dsc-detail-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
-  .dsc-detail-aside { position: sticky; top: 88px; order: 0; }
+  .dsc-detail-aside { position: sticky; top: calc(var(--nav-offset) + 16px); order: 0; }
 }
 
 .dsc-carousel { position: relative; border-radius: var(--radius-card); overflow: hidden; }

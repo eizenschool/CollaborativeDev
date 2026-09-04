@@ -549,6 +549,59 @@ to loose text matching. The client retains the complete Google label for display
 and URL state but caps only the RPC's legacy fallback prefix at 120 characters,
 matching the existing server guard while leaving Place IDs authoritative.
 
+## D032 — Home merges with Destination Discovery; "Home" nav slot renamed Explore
+**Status:** Accepted; implemented
+
+The former '/home' landing page held five action-card shortcuts that all
+duplicated an existing navigation destination (Publish a ride -> Ride, Find a
+ride -> Search, My requests -> Ride, My impact -> Trips, My profile ->
+Profile) plus a short destination rail with its own "See all" link into
+Module 6's '/discover' hub. The two screens answered overlapping questions
+("what can I do here" vs "where should I go") with duplicated content and an
+extra click between them.
+
+'/home' now renders Module 6's destination-discovery content directly (the
+former DiscoverHub.jsx, moved into HomeScreen.jsx); the five action cards are
+removed. '/discover' redirects to '/home' preserving its query string, so
+existing bookmarks, shared links, and notification actions still resolve.
+'/discover/:placeId' and '/discover/demand' are unchanged, standalone
+routes. The shared navigation's first slot keeps its route, position, and
+swipe-order role; only its label and icon changed (Home -> Explore, compass
+icon) to match what it now opens directly. Trip and ride-request status for a
+signed-in member (previously two of the five removed cards) is preserved as a
+short, conditional status strip at the top of '/home' - populated from the
+existing RideRequestService/RideService, rendered only when there is
+something pending, so it never occupies space for a visitor with nothing
+going on.
+
+## D033 — Tumpang Guide: "Your travel brief" sidebar becomes a context bar
+**Status:** Accepted; implemented
+
+The Guide's trip-planning fields (starting point, dates, party size, category
+preferences, trip-history consent) lived in a sidebar ('PlanSummary') open by
+default beside the chat on every viewport. Below the shared 900px breakpoint
+it stacked above the conversation instead of beside it, so a phone visitor
+opening Tumpang Guide saw a full form before any chat - the reported "the
+sidebar toggle only collapses itself" confusion traced to this: the toggle
+button and the sidebar's own heading used the identical copy string
+('Your travel brief'), so the button was named after what it hid rather than
+what pressing it would do.
+
+The sidebar is removed. The same fields now live behind a single summary row
+('GuideContextBar.jsx') docked above the composer, built from the plan's
+current values (e.g. "Kuala Lumpur · Sat 6 Sep · 2 people · Nature"); tapping
+it opens the identical fields in the shared 'AdaptiveDialog' (a bottom sheet
+on phone, a centred dialog on wider layouts) rather than a permanent column.
+No plan-editing capability was removed - PlanSummary's state, handlers, and
+normalizePlanState contract are unchanged; only where the fields render
+moved. TumpangGuidePage.jsx (previously ~830 lines with the toolbar,
+sidebar, transcript, and composer all inline) was split into
+GuideToolbar.jsx, GuideContextBar.jsx, GuideComposer.jsx, and
+GuideTranscript.jsx; the composer's speech-recognition language selector
+gained a visible "Voice input" caption, since it was previously
+indistinguishable from a reply-language control despite governing only
+transcription.
+
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;

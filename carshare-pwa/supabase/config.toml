@@ -19,3 +19,8 @@ verify_jwt = false
 
 [functions.m6-ingest]
 verify_jwt = false
+
+[functions.m6-tumpang-guide]
+# Public guests are allowed. The function validates an optional user JWT in its
+# own code and never trusts a browser-supplied user identifier.
+verify_jwt = false

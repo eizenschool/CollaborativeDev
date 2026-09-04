@@ -580,6 +580,19 @@ const fixtureDiscoveryDb = {
     return { recorded: !exists };
   },
 
+  async getInterest(userId, placeId, travelDate) {
+    await delay();
+    return state.interest.find((item) => item.userId === userId && item.placeId === placeId && item.travelDate === travelDate) || null;
+  },
+
+  async removeInterest(userId, placeId, travelDate) {
+    await delay();
+    const before = state.interest.length;
+    state.interest = state.interest.filter((item) => !(item.userId === userId && item.placeId === placeId && item.travelDate === travelDate));
+    if (state.interest.length !== before) save(state);
+    return { removed: state.interest.length !== before };
+  },
+
   /**
    * FR-6.31. Returns counts only, never who - the same privacy boundary the
    * `place_latent_demand()` security definer function enforces in Postgres.

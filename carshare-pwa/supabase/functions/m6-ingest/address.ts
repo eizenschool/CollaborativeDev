@@ -37,6 +37,7 @@ const STATE_ALIASES: Record<string, string> = {
   "kuala lumpur federal territory": "Kuala Lumpur",
   "federal territory of labuan": "Labuan",
   "wilayah persekutuan labuan": "Labuan",
+  "labuan federal territory": "Labuan",
   "federal territory of putrajaya": "Putrajaya",
   "wilayah persekutuan putrajaya": "Putrajaya",
   "pulau pinang": "Penang",

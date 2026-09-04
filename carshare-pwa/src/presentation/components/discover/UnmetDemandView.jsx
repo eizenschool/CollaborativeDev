@@ -56,7 +56,7 @@ export default function UnmetDemandView() {
 
   return (
     <div className="dsc-page">
-      <button className="dsc-back" onClick={() => navigate('/discover')} type="button">
+      <button className="dsc-back" onClick={() => navigate('/home')} type="button">
         <IconArrowLeft size={16} /> Back to destinations
       </button>
 

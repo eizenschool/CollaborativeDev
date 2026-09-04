@@ -67,7 +67,7 @@ test('Trip Mode presents a responsive control overview and compact safety suppor
   test.skip(process.env.VITE_M2_LIVE_TRACKING_ENABLED !== 'true', 'The combined safety hub needs both release flags enabled.');
 
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?', exact: true })).toBeVisible();
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     const departure = new Date(Date.now() + (30 * 60 * 1000));
@@ -138,7 +138,7 @@ test('Trip Mode presents a responsive control overview and compact safety suppor
 
 test('eligible rides expose a global confirmed SOS launcher outside Trip Mode', async ({ page }) => {
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?', exact: true })).toBeVisible();
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     const departure = new Date(Date.now() + (30 * 60 * 1000));
@@ -220,7 +220,7 @@ test('accepted Passenger keeps the Family Link creation action in Trip Mode', as
   test.skip(process.env.VITE_M2_LIVE_TRACKING_ENABLED !== 'true', 'Family Link is release-gated with live tracking.');
 
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should you go?', exact: true })).toBeVisible();
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     const departure = new Date(Date.now() + (30 * 60 * 1000));

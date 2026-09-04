@@ -7,7 +7,7 @@
 // is the part worth pinning. Same reasoning as PlacePoster.test.js.
 
 import { describe, expect, it } from 'vitest';
-import { selectWithheldForCategory } from '../../../presentation/components/discover/DiscoverHub.jsx';
+import { selectWithheldForCategory } from '../../../presentation/components/HomeScreen.jsx';
 import { CATEGORY } from '../constants.js';
 
 const candidate = (placeId, category) => ({ placeId, place: { id: placeId, category } });

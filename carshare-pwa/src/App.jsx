@@ -9,6 +9,7 @@ import {
 import { useAuth } from './context/AuthContext.jsx';
 import { resolveAuthReturnPath } from './business-logic/authAccess.js';
 import { legacyRideSearchUrlFromParams } from './business-logic/SmartSearchService.js';
+import { GUIDE_FEATURE_ENABLED } from './business-logic/guide/constants.js';
 import TopNav from './presentation/components/nav/TopNav.jsx';
 import { Button } from './presentation/components/ui/Button.jsx';
 import {
@@ -26,6 +27,7 @@ const RideHub = lazy(() => import('./presentation/components/ride/RideHub.jsx'))
 const PublishRide = lazy(() => import('./presentation/components/ride/PublishRide.jsx'));
 const SafetyRoutes = lazy(() => import('./presentation/components/safety/SafetyRoutes.jsx'));
 const DiscoverRoutes = lazy(() => import('./presentation/components/discover/DiscoverRoutes.jsx'));
+const GuideRoutes = lazy(() => import('./presentation/components/guide/GuideRoutes.jsx'));
 const RideDetail = lazy(() => import('./presentation/components/ride/RideDetail.jsx'));
 const ManageRequests = lazy(() => import('./presentation/components/ride/ManageRequests.jsx'));
 const MyRequests = lazy(() => import('./presentation/components/ride/MyRequests.jsx'));
@@ -148,6 +150,9 @@ function AppShell({ routeLocation }) {
             exists for, and the service already scores an anonymous request with a
             neutral affinity rather than requiring an account. */}
         <Route path="/discover/*" element={<DiscoverRoutes />} />
+        {/* Module 6 controlled-RAG assistant. Public and route-lazy; it is not a
+            new persistent navigation destination and remains rollout-gated. */}
+        {GUIDE_FEATURE_ENABLED && <Route path="/assistant/*" element={<GuideRoutes />} />}
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>

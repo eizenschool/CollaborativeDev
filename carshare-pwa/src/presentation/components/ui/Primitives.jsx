@@ -109,3 +109,32 @@ export function AsyncState({
     </div>
   );
 }
+
+export function Skeleton({ as: Component = 'span', className = '', height, radius, width, ...props }) {
+  const style = { ...(props.style || {}) };
+  if (width !== undefined) style.width = width;
+  if (height !== undefined) style.height = height;
+  if (radius !== undefined) style.borderRadius = radius;
+  return (
+    <Component
+      {...props}
+      style={style}
+      className={['ui-skeleton', className].filter(Boolean).join(' ')}
+      aria-hidden="true"
+    />
+  );
+}
+
+export function Chip({ children, className = '', pressed, selected = false, ...props }) {
+  const isToggle = pressed !== undefined;
+  return (
+    <button
+      type="button"
+      {...props}
+      aria-pressed={isToggle ? pressed : undefined}
+      className={['ui-chip', (isToggle ? pressed : selected) && 'ui-chip--selected', className].filter(Boolean).join(' ')}
+    >
+      {children}
+    </button>
+  );
+}

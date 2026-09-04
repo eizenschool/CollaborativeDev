@@ -345,7 +345,7 @@
 
 .search-desktop-filters {
   position: sticky;
-  top: 92px;
+  top: calc(var(--nav-offset) + 20px);
   display: grid;
   gap: 10px;
 }
