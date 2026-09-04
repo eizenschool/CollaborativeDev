@@ -118,7 +118,7 @@ export const GUIDE_AGENT_TOOLS = [
   { name: "get_guide_capabilities", description: "Explain the Guide's real capabilities and how to use its existing app actions. Do not ask for travel-planning fields.", parameters: CAPABILITIES_PARAMETERS },
   { name: "prepare_guide_action", description: "Prepare a supported save-interest, ride-alert or save-preferences action. The server will require confirmation before writing.", parameters: ACTION_PARAMETERS },
   { name: "trigger_emergency", description: "Use only for an immediate physical emergency such as unconsciousness, severe bleeding or immediate danger. The server supplies the fixed SOS message.", parameters: EMERGENCY_PARAMETERS },
-  { name: "respond_conversationally", description: "Reply naturally to greetings, affection, jokes, feelings or casual conversation that does not request a travel tool. Do not recommend places.", parameters: CONVERSATIONAL_PARAMETERS },
+  { name: "respond_conversationally", description: "Reply naturally to greetings, affection, jokes, feelings or casual conversation that does not request a travel tool. Never name, count, describe or imply any place, popular spot or suggestion in assistantMessage here - no verified catalogue lookup happens in this tool, so any such claim would be invented. A traveller expressing even a vague wish to go somewhere or eat something (\"I want to eat\", \"saya nak makan\", \"想出去走走\") is a travel-tool request, not casual conversation - route that to search_catalogue instead, never to this tool.", parameters: CONVERSATIONAL_PARAMETERS },
   { name: "change_interface_language", description: "Use only when the user explicitly asks to change the Guide interface language; ordinary English, Chinese, Malay or Tamil messages do not change the interface.", parameters: CHANGE_LANGUAGE_PARAMETERS }
 ];
 
@@ -135,7 +135,7 @@ function statusError(provider: ProviderName, response: Response) {
 export function decisionPrompt(input: Row) {
   return JSON.stringify({
     instruction: "You own this entire Tumpang Guide turn: understanding, tool selection and the final answer. No other code will override your choice of tool or the mode it produces - select carefully, exactly once. Understand mixed languages and follow-up context naturally. Speak with a warm, lively tone and the occasional light touch of humor - except during trigger_emergency or a serious safety topic, where the reply must stay calm, direct and free of jokes.",
-    routingExamples: "Compare these closely, since the wording is often similar: 'food in KL' or 'suggest something to eat in Penang' -> search_catalogue (a destination request naming an area, not one specific venue). 'What's good to eat at KL Bird Park?' or 'Tell me about Tokyo Disneyland' -> get_place_information (a question about one already-identified venue, even though it also mentions food/activities). 'I love KL' or 'KL is amazing' -> respond_conversationally (affection/opinion about a place, not a request for options or facts). 'Tell me more about that' or 'why the first one' with a focused venue in verifiedPlaceContext -> get_place_information, resolving 'that'/'the first one'/'it' to the matching entry and copying its exact official name into requestedPlaceName. 'Another place' or 'somewhere quieter' -> search_catalogue with recommendationMode different/quieter. 'Will it rain this weekend?' / '这个周末会下雨吗？' / 'Hujan tak hujung minggu ni?' / 'இந்த வாரயிறுதியில் மழை பெய்யுமா?' -> get_weather_forecast, locationName empty if no place was named (the server will ask), startDate/endDate resolved from today. 'How hot will it be at Batu Caves on Saturday?' / '星期六黑风洞会很热吗？' -> get_weather_forecast with locationName exactly 'Batu Caves'. 'How long does it take to get to Melaka?' / '去马六甲要多久？' / 'Berapa lama nak sampai Melaka?' / 'மலாக்கா செல்ல எவ்வளவு நேரம் ஆகும்?' -> get_route_estimate with destinationName 'Melaka'. 'How far is it from here?' with one venue focused in verifiedPlaceContext -> get_route_estimate with destinationName copied exactly from that entry. 'How do I get around KL without a car?' / 'Macam mana nak gerak tanpa kereta?' -> get_travel_info; this asks which transport modes exist, not how long one specific drive takes - that distinction is the whole difference between get_travel_info and get_route_estimate. 'Somewhere with good weather this weekend' / '这周末找个天气好的地方' -> search_catalogue, NOT get_weather_forecast; weather here is a constraint on which places to suggest, the traveller is asking for place options, not for the forecast itself. 'What time does the night market close?' -> get_travel_info (a factual lookup neither the forecast nor the route tool can answer).",
+    routingExamples: "Compare these closely, since the wording is often similar: 'food in KL' or 'suggest something to eat in Penang' -> search_catalogue (a destination request naming an area, not one specific venue). 'I want to eat' / 'saya nak makan' / 'nak pergi jalan-jalan' / 'kamu suggest je lah, i takde idea' (a bare wish to eat, go out or be suggested something, with no venue named) -> search_catalogue, never respond_conversationally - infer preferredCategories from the wish where clear (eating implies culinary), leave originLabel as whatever the Travel Brief already has, and let the server ask for anything still missing rather than writing a reply that only sounds like it found places. 'What's good to eat at KL Bird Park?' or 'Tell me about Tokyo Disneyland' -> get_place_information (a question about one already-identified venue, even though it also mentions food/activities). 'I love KL' or 'KL is amazing' -> respond_conversationally (affection/opinion about a place, not a request for options or facts). 'Tell me more about that' or 'why the first one' with a focused venue in verifiedPlaceContext -> get_place_information, resolving 'that'/'the first one'/'it' to the matching entry and copying its exact official name into requestedPlaceName. 'Another place' or 'somewhere quieter' -> search_catalogue with recommendationMode different/quieter. 'Will it rain this weekend?' / '这个周末会下雨吗？' / 'Hujan tak hujung minggu ni?' / 'இந்த வாரயிறுதியில் மழை பெய்யுமா?' -> get_weather_forecast, locationName empty if no place was named (the server will ask), startDate/endDate resolved from today. 'How hot will it be at Batu Caves on Saturday?' / '星期六黑风洞会很热吗？' -> get_weather_forecast with locationName exactly 'Batu Caves'. 'How long does it take to get to Melaka?' / '去马六甲要多久？' / 'Berapa lama nak sampai Melaka?' / 'மலாக்கா செல்ல எவ்வளவு நேரம் ஆகும்?' -> get_route_estimate with destinationName 'Melaka'. 'How far is it from here?' with one venue focused in verifiedPlaceContext -> get_route_estimate with destinationName copied exactly from that entry. 'How do I get around KL without a car?' / 'Macam mana nak gerak tanpa kereta?' -> get_travel_info; this asks which transport modes exist, not how long one specific drive takes - that distinction is the whole difference between get_travel_info and get_route_estimate. 'Somewhere with good weather this weekend' / '这周末找个天气好的地方' -> search_catalogue, NOT get_weather_forecast; weather here is a constraint on which places to suggest, the traveller is asking for place options, not for the forecast itself. 'What time does the night market close?' -> get_travel_info (a factual lookup neither the forecast nor the route tool can answer).",
     placeInformationRule: "Use get_place_information - never search_catalogue - for any named-place question, including a bare venue name, a question about one specific already-identified venue, or a follow-up referring back to a place from verifiedPlaceContext. Never ask for origin, date or party size for get_place_information. A named place that is not in the verified catalogue must be treated as catalogue_missing; do not use web search, recommendations or app actions for it.",
     weatherRule: "get_weather_forecast is the only way to answer a weather question - rain, sun, heat, humidity, haze, storms, whether the forecast suits a plan. Never state or guess a forecast in assistantMessage yourself; the server supplies the real numbers and will rewrite your draft. If the traveller named a specific venue and it is focused in verifiedPlaceContext, copy its exact name into locationName. If they named a smaller landmark, mall, street or neighbourhood that is not itself a catalogue venue but you recognise as being within a well-known Malaysian city or state capital (e.g. KLCC, Bukit Bintang or Petaling Street are all in Kuala Lumpur; George Town is in Penang; Batu Ferringhi is in Penang) - normalise locationName down to that city so the server can still check the right area's forecast, instead of leaving an obscure sub-area name that will not match anything. If the traveller named no place at all, leave locationName empty - the server has a sensible default and will say so.",
     routeRule: "get_route_estimate answers one specific point-to-point journey - how far or how long to ONE named destination. Never state a distance or duration yourself; the server computes the real number. A destination may be a catalogue attraction OR a town, city or state capital - 'how long does it take to get to Melaka' is an ordinary question that needs no specific venue, so never turn a city destination into a demand for something more specific. As with weather, if the traveller named a smaller landmark, mall or neighbourhood that you recognise as sitting inside a well-known Malaysian city, normalise destinationName down to that city instead of leaving an obscure sub-area name that will match nothing. If no destination is identifiable at all, leave destinationName empty and the server will ask. Do not use this for 'what transport options exist' - that is get_travel_info.",
@@ -150,47 +150,81 @@ export function decisionPrompt(input: Row) {
   });
 }
 
+// A one-off timeout or 5xx from the routing call is often a single bad
+// network hop, not real exhaustion - one quick retry recovers the turn
+// without ever needing the secondary provider, which is exactly the call
+// this file's other provider (Groq's tighter free-tier quota) least wants
+// to absorb. A 429 is different: the rate-limit window has not passed in
+// the ~300ms before a retry, so retrying it immediately only spends a
+// second call for the same rejection - never retried here.
+function isTransientToolChoiceError(error: unknown) {
+  const status = Number((error as Error & { status?: number })?.status || 0);
+  return (error instanceof Error && error.name === "AbortError") || status === 408 || (status >= 500 && status < 600);
+}
+
 async function geminiToolChoice(apiKey: string, model: string, input: Row, timeoutMs: number, fetchImpl: typeof fetch) {
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+  const attempt = async (budgetMs: number) => {
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), budgetMs);
+    try {
+      const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST", signal: controller.signal,
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: decisionPrompt(input) }] }],
+          tools: [{ functionDeclarations: GUIDE_AGENT_TOOLS.map((tool) => ({ ...tool, parameters: normalizeGeminiSchema(tool.parameters) })) }],
+          toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: GUIDE_AGENT_TOOLS.map((tool) => tool.name) } },
+          // Gemini 3.7 supports low/medium/high only. "minimal" is rejected
+          // by the API as an invalid request, which used to make every primary
+          // agent decision fail before Groq could be considered.
+          generationConfig: { maxOutputTokens: 900, thinkingConfig: { thinkingLevel: "low" } }
+        })
+      });
+      if (!response.ok) throw statusError("gemini", response);
+      const body = await response.json();
+      const call = body?.candidates?.[0]?.content?.parts?.find((part: Row) => part.functionCall)?.functionCall;
+      if (!call?.name || !call?.args) throw new Error("Gemini returned no valid Guide tool call.");
+      return { toolName: String(call.name), args: call.args as Row };
+    } finally { clearTimeout(timer); }
+  };
   try {
-    const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST", signal: controller.signal,
-      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: decisionPrompt(input) }] }],
-        tools: [{ functionDeclarations: GUIDE_AGENT_TOOLS.map((tool) => ({ ...tool, parameters: normalizeGeminiSchema(tool.parameters) })) }],
-        toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: GUIDE_AGENT_TOOLS.map((tool) => tool.name) } },
-        // Gemini 3.7 supports low/medium/high only. "minimal" is rejected
-        // by the API as an invalid request, which used to make every primary
-        // agent decision fail before Groq could be considered.
-        generationConfig: { maxOutputTokens: 900, thinkingConfig: { thinkingLevel: "low" } }
-      })
-    });
-    if (!response.ok) throw statusError("gemini", response);
-    const body = await response.json();
-    const call = body?.candidates?.[0]?.content?.parts?.find((part: Row) => part.functionCall)?.functionCall;
-    if (!call?.name || !call?.args) throw new Error("Gemini returned no valid Guide tool call.");
-    return { toolName: String(call.name), args: call.args as Row };
-  } finally { clearTimeout(timer); }
+    return await attempt(timeoutMs);
+  } catch (error) {
+    const remaining = timeoutMs - (Date.now() - started);
+    if (!isTransientToolChoiceError(error) || remaining < 1_500) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 250 + Math.floor(Math.random() * 150)));
+    return await attempt(timeoutMs - (Date.now() - started));
+  }
 }
 
 async function groqToolChoice(apiKey: string, model: string, input: Row, timeoutMs: number, fetchImpl: typeof fetch) {
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+  const attempt = async (budgetMs: number) => {
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), budgetMs);
+    try {
+      const response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST", signal: controller.signal,
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          model, messages: [{ role: "user", content: decisionPrompt(input) }],
+          tools: GUIDE_AGENT_TOOLS.map((tool) => ({ type: "function", function: { ...tool, parameters: normalizeStrictJsonSchema(tool.parameters) } })),
+          tool_choice: "required", parallel_tool_calls: false, reasoning_effort: "low", max_completion_tokens: 900
+        })
+      });
+      if (!response.ok) throw statusError("groq", response);
+      const body = await response.json(); const call = body?.choices?.[0]?.message?.tool_calls?.[0]?.function;
+      if (!call?.name || typeof call.arguments !== "string") throw new Error("Groq returned no valid Guide tool call.");
+      return { toolName: String(call.name), args: JSON.parse(call.arguments) as Row };
+    } finally { clearTimeout(timer); }
+  };
   try {
-    const response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST", signal: controller.signal,
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        model, messages: [{ role: "user", content: decisionPrompt(input) }],
-        tools: GUIDE_AGENT_TOOLS.map((tool) => ({ type: "function", function: { ...tool, parameters: normalizeStrictJsonSchema(tool.parameters) } })),
-        tool_choice: "required", parallel_tool_calls: false, reasoning_effort: "low", max_completion_tokens: 900
-      })
-    });
-    if (!response.ok) throw statusError("groq", response);
-    const body = await response.json(); const call = body?.choices?.[0]?.message?.tool_calls?.[0]?.function;
-    if (!call?.name || typeof call.arguments !== "string") throw new Error("Groq returned no valid Guide tool call.");
-    return { toolName: String(call.name), args: JSON.parse(call.arguments) as Row };
-  } finally { clearTimeout(timer); }
+    return await attempt(timeoutMs);
+  } catch (error) {
+    const remaining = timeoutMs - (Date.now() - started);
+    if (!isTransientToolChoiceError(error) || remaining < 1_500) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 250 + Math.floor(Math.random() * 150)));
+    return await attempt(timeoutMs - (Date.now() - started));
+  }
 }
 
 export async function chooseGuideTool(provider: ProviderName, input: Row, { timeoutMs = 45_000, fetchImpl = fetch } = {}) {

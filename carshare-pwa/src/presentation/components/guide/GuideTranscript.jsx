@@ -10,6 +10,7 @@ import { Button } from '../ui/Button.jsx';
 import { IconRoute, IconShield } from '../icons.jsx';
 import GuideRecommendationCard from './GuideRecommendationCard.jsx';
 import GuidePlaceSpotlight from './GuidePlaceSpotlight.jsx';
+import GuidePlaceFollowUp from './GuidePlaceFollowUp.jsx';
 
 // A quick reply is shown as "Name · State" so two same-named venues can be
 // told apart, but only the name is sent - the server matches a reply against
@@ -60,7 +61,9 @@ function AssistantBubble({ response, copy, language, languagePack, unlimitedTurn
           </div>
         )}
         {response.retryable && <Button size="small" variant="secondary" onClick={() => onRetry(response)} disabled={response.retrying}>{response.retrying ? copy.thinking : copy.retryGemini}</Button>}
-         {response.placeInfo?.place && <GuidePlaceSpotlight placeInfo={response.placeInfo} planState={response.planState} copy={copy} language={language} languagePack={languagePack} chatScrollRef={chatScrollRef} />}
+         {response.placeInfo?.place && (response.placeInfo.followUp
+           ? <GuidePlaceFollowUp placeInfo={response.placeInfo} copy={copy} />
+           : <GuidePlaceSpotlight placeInfo={response.placeInfo} planState={response.planState} copy={copy} language={language} languagePack={languagePack} chatScrollRef={chatScrollRef} />)}
         {response.externalPlaceInfo && <section className="guide-external-place" aria-label={response.externalPlaceInfo.officialName || copy.sourceLabel}>
           <p>{response.externalPlaceInfo.summary}</p>
           {response.externalPlaceInfo.highlights?.length > 0 && <ul>{response.externalPlaceInfo.highlights.map((item) => <li key={item}>{item}</li>)}</ul>}

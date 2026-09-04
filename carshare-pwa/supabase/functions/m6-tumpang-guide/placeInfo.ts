@@ -7,7 +7,7 @@ type AdminClient = Parameters<typeof providerInCooldown>[0];
 const ACTIVE_STATES = new Set(["Active", "Provisional", "Stale"]);
 const OFFICIAL_HINTS = ["gov.my", "tourism.gov.my", "malaysia.travel"];
 const PRACTICAL_LEAD_PATTERN = /\b(?:opening|hours?|admission|fees?|price|tickets?|accessib|parking|transport|getting there|practical|facilit|weather|dress code)\b/iu;
-const LIVE_CACHE_TTL_MS = 5 * 60_000;
+const LIVE_CACHE_TTL_MS = 15 * 60_000;
 const livePlaceInfoCache = new Map<string, { expiresAt: number; value: Row }>();
 
 export function resetPlaceInfoReliabilityStateForTests() {

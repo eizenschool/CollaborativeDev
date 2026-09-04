@@ -101,7 +101,13 @@ export const RECOMMENDATION_COPY_SCHEMA = {
   type: "object", additionalProperties: false,
   required: ["assistantMessage", "language", "recommendationCopy", "quickReplies"],
   properties: {
-    assistantMessage: { type: "string", maxLength: 1200 },
+    // One short intro sentence for the batch, not a per-place description -
+    // that belongs in recommendationCopy below. 1200 was generous enough to
+    // let the model write a full paragraph describing every place a second
+    // time, duplicating what the cards already show; 260 leaves room for a
+    // single sentence across every supported language without permitting a
+    // list.
+    assistantMessage: { type: "string", maxLength: 260 },
     language: { type: "string", maxLength: 24 },
     recommendationCopy: {
       type: "array", minItems: 1, maxItems: 3,

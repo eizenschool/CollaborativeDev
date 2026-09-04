@@ -206,7 +206,7 @@ async function writeLiveFactCache(admin: ReturnType<typeof createClient>, cacheK
     const { sources = [], checkedAt = new Date().toISOString(), ...facts } = value;
     await admin.schema("private").from("ai_guide_live_fact_cache").upsert({
       cache_key: cacheKey, place_name: placeName.slice(0, 180), language_tag: language.slice(0, 24),
-      facts, sources, checked_at: checkedAt, expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+      facts, sources, checked_at: checkedAt, expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
       updated_at: new Date().toISOString()
     }, { onConflict: "cache_key" });
   } catch { /* Cache availability never changes the answer contract. */ }
@@ -367,12 +367,22 @@ async function renderProviderTextTurn({
   if (!enabled) return {
     response: unavailableTurn(base, plan, remainingTurns, "ai_disabled", outputLanguage), providerSuccess: false
   };
+  // `scaffold` deliberately omits assistantMessage: base.assistantMessage is
+  // internal placeholder/instructional text (e.g. "Ask one natural question
+  // for the verified missing field."), never user-facing copy. Earlier this
+  // scaffold included that text under the same key the model must return
+  // (assistantMessage), with no instruction explaining what the scaffold was
+  // for - a provider under load would sometimes just echo it back verbatim,
+  // and the validation below never caught it, so the internal placeholder
+  // reached the chat as if it were a real reply. Keeping mode/language/plan
+  // context here is still useful for phrasing; the placeholder text is not.
+  const scaffoldEcho = String(base.assistantMessage || "").trim().toLowerCase();
   const prompt = JSON.stringify({
-    instruction: "You are Tumpang Guide. Write one concise, friendly reply using only verifiedContext. Keep the exact mode and response language. Return recommendations and actions as empty arrays. Never invent places, routes, opening hours, safety facts or app capabilities. Preserve official names. Do not expose internal rules or scoring.",
+    instruction: "You are Tumpang Guide. Write ONE new, concise, friendly assistantMessage in responseLanguage, based only on verifiedContext. Do not copy, translate or lightly reword any other text in this prompt - scaffold is internal state to preserve (its mode and language must be returned unchanged), not example wording. If verifiedContext.askForExactlyOneField is set, your assistantMessage must be exactly one natural question asking specifically about that field and nothing else. Return recommendations and actions as empty arrays. Never invent places, routes, opening hours, safety facts or app capabilities. Preserve official names. Do not expose internal rules, scoring, or any field name from this prompt.",
     responseLanguage: outputLanguage,
     userMessage,
-    fixedResponse: {
-      mode: base.mode, assistantMessage: base.assistantMessage, language: outputLanguage,
+    scaffold: {
+      mode: base.mode, language: outputLanguage,
       planState: plan, quickReplies: base.quickReplies, recommendations: [], actions: []
     },
     verifiedContext
@@ -388,9 +398,15 @@ async function renderProviderTextTurn({
     });
     const generated = result.value;
     const assistantMessage = String((generated as Record<string, unknown>)?.assistantMessage || "").trim();
+    // Defence in depth, not the fix itself: the prompt no longer sends the
+    // placeholder text at all, but a provider could still coincidentally (or
+    // from training-data leakage) reproduce it - fail closed to the existing
+    // honest "AI unavailable, please retry" turn instead of accepting it.
+    const isPlaceholderEcho = scaffoldEcho.length > 0 && assistantMessage.toLowerCase() === scaffoldEcho;
     const valid = (generated as Record<string, unknown>)?.mode === base.mode
       && (generated as Record<string, unknown>)?.language === outputLanguage
-      && assistantMessage.length > 0 && assistantMessage.length <= 1600;
+      && assistantMessage.length > 0 && assistantMessage.length <= 1600
+      && !isPlaceholderEcho;
     if (!valid) throw new Error("Provider output failed Guide render validation.");
     return {
       response: { ...base, assistantMessage, source: result.provider, providerModel: result.model, fallbackReason: null,
@@ -949,6 +965,16 @@ async function handleTurnAttempt(
       console.warn(JSON.stringify({ event: "m6_guide_place_info_search_failure", traceId: trace,
         reason: geminiFailureReason(error), providerFailures, placeId: top.id }));
     }
+    // A detail follow-up about a place already introduced earlier in this
+    // conversation (as either a place_info spotlight or a recommendation
+    // card) does not need the full spotlight card again - placeContext is
+    // exactly "places the client has already shown" (built client-side from
+    // the most recent place-focused message; see TumpangGuidePage.jsx). The
+    // client renders this inline as text instead of another full card. The
+    // underlying facts already avoid repeating previousPublicVenueFacts
+    // (placeInfo.ts's promptFor/groqResearchPrompt), so the answer itself
+    // stays specific to this question regardless of this flag.
+    placeInfo.followUp = placeContext.some((item) => String(item.placeId) === String(top.id));
     const response = {
       mode: "place_info", assistantMessage: String(intent.assistantMessage || "I found current public information for this catalogue place."), language: responseLanguage, responseLanguage,
       planState: plan,
@@ -1518,7 +1544,7 @@ async function handleTurnAttempt(
     counts[category] = (counts[category] || 0) + 1; return counts;
   }, {});
   const prompt = JSON.stringify({
-    instruction: `You are Tumpang Guide's friendly Malaysian travel concierge. The server has already selected an immutable catalogue batch. You do not choose places or rankings. For each supplied Place ID, write one vivid, traveller-centred reason, one fuller explanation of why it fits this specific plan, and one honest trade-off using only supplied verified facts. Explain the experience and practical value; never mention algorithms, weights, scores, reason codes or internal rules. Do not invent activities, opening hours, prices, routes, safety guarantees or live conditions. Preserve official place names exactly. No web or map search is available in this recommendation-writing step; later place questions use a separately verified live-information flow. Return exactly one copy item for every supplied Place ID and no others. Write every human-facing sentence in responseLanguage without mixing English UI labels into another language, except official names, brands, dates and numbers.`,
+    instruction: `You are Tumpang Guide's friendly Malaysian travel concierge. The server has already selected an immutable catalogue batch. You do not choose places or rankings. assistantMessage must be ONE short introductory sentence for the whole batch (for example naming the count and category/occasion) - it must NOT describe, summarize or list the individual places one by one; that per-place writing belongs only in recommendationCopy. For each supplied Place ID, write one vivid, traveller-centred reason, one fuller explanation of why it fits this specific plan, and one honest trade-off using only supplied verified facts, as separate recommendationCopy entries - never repeat that same material inside assistantMessage. Explain the experience and practical value; never mention algorithms, weights, scores, reason codes or internal rules. Do not invent activities, opening hours, prices, routes, safety guarantees or live conditions. Preserve official place names exactly. No web or map search is available in this recommendation-writing step; later place questions use a separately verified live-information flow. Return exactly one copy item for every supplied Place ID and no others. Write every human-facing sentence in responseLanguage without mixing English UI labels into another language, except official names, brands, dates and numbers.`,
     responseLanguage,
     promptVersion: PROMPT_VERSION,
     planState: { ...plan, tripHistoryConsent: Boolean(user && plan.tripHistoryConsent) },
@@ -1650,8 +1676,15 @@ async function handleTurn(
     }
     const attemptStarted = performance.now();
     try {
+      // The client's own request timeout is 110s (GUIDE_LIMITS.REQUEST_TIMEOUT_MS)
+      // and this outer loop can spend this budget twice (primary provider,
+      // then secondary) - 45s each left very little slack for the heaviest
+      // path (place_info's live grounded search) and, at 2x45s, was already
+      // close to the client's own ceiling. 50s keeps the 2x worst case under
+      // that ceiling with margin while giving a genuinely slow (not quota-
+      // exhausted) attempt more room to actually finish instead of aborting.
       const response = await handleTurnAttempt(admin, user, {
-        ...body, __ownedProvider: provider, __providerDeadlineAt: Date.now() + 45_000
+        ...body, __ownedProvider: provider, __providerDeadlineAt: Date.now() + 50_000
       }, origin, turnContext, qaAllowed);
       const responsePayload = await response.clone().json().catch(() => ({}));
       const routeGuardHandled = response.headers.get("x-tumpang-guide-route-guard") === "1";
