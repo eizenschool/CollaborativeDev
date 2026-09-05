@@ -38,6 +38,10 @@ authored undeployed migration `065` adds the authoritative database triggers,
 65 Driver minimum, 50 Traveller minimum, three-Ride provisional access, and
 safety-hold override. Driver and requester identity rows link to the safe
 `/users/:userId` public profile. Module 2's contribution remains non-monetary.
+`RideRequestService.submitRequest` also requires a submitted MyKad, the same
+`IdentityVerificationService.requireVerifiedIdentity` check `PublishRide.jsx`
+already gates on - client-side only, alongside the reputation check above, not
+an authoritative database trigger.
 
 The Ride UI now foregrounds the existing `rideJourneyState` next action with
 role, timing, and responsible party. Publish keeps its five-step unlock,

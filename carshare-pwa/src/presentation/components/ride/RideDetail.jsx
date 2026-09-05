@@ -10,6 +10,7 @@ import { RideLiveTrackingService, isPointStale, isPointUnavailable } from '../..
 import { isAtLeastHoursAway, isBeforeRideExpiry, REQUEST_CUTOFF_HOURS } from '../../../business-logic/rideDateTime.js';
 import { GoogleMapsEmbedService } from '../../../business-logic/GoogleMapsEmbedService.js';
 import { MessagingService } from '../../../business-logic/MessagingService.js';
+import { IdentityVerificationService } from '../../../business-logic/IdentityVerificationService.js';
 import { formatJourneyCountdown, getRideJourneyState, isTripModeEligible, RIDE_ACTION } from '../../../business-logic/rideJourneyState.js';
 import GoogleRouteMap from '../maps/GoogleRouteMap.jsx';
 import LiveRideMap from '../maps/LiveRideMap.jsx';
@@ -592,6 +593,7 @@ export default function RideDetail() {
     setError('');
     setIsOpeningChat(true);
     try {
+      await IdentityVerificationService.requireVerifiedIdentity(user.id);
       const conversationId = await MessagingService.openRideDirectConversation(ride.id);
       navigate(`/message/${conversationId}`);
     } catch (err) {

@@ -4,6 +4,7 @@ import {
   FriendshipService,
   groupFriendConnections,
 } from '../../../business-logic/FriendshipService.js';
+import { IdentityVerificationService } from '../../../business-logic/IdentityVerificationService.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
   IconArrowLeft,
@@ -146,6 +147,7 @@ export default function FriendCenter() {
       if (action === 'decline') await FriendshipService.respondToRequest(otherUserId, false);
       if (action === 'cancel') await FriendshipService.cancelRequest(otherUserId);
       if (action === 'message') {
+        await IdentityVerificationService.requireVerifiedIdentity(user.id);
         const conversationId = await FriendshipService.openConversation(otherUserId);
         navigate(`/message/${conversationId}`);
         return;

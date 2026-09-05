@@ -16,6 +16,7 @@ globalThis.localStorage = {
 };
 
 const {
+  canInteractWithIdentity,
   canPublishWithIdentity,
   describeIdentityStatus,
   identityLicenseHasLapsed,
@@ -78,6 +79,38 @@ describe('one MyKad, one account', () => {
     const submission = { file: photo(), icNumber: '880505-08-1234', licenseExpiry: '2099-12-31' };
     await IdentityVerificationService.submit('user-c', submission);
     await expect(IdentityVerificationService.submit('user-c', submission)).resolves.toMatchObject({
+      status: IDENTITY_STATUS.PENDING
+    });
+  });
+});
+
+describe('interaction gate (requesting to join a ride, messaging another member)', () => {
+  it('blocks a member who has not submitted a document', () => {
+    expect(canInteractWithIdentity(null)).toBe(false);
+    expect(canInteractWithIdentity({ status: IDENTITY_STATUS.NONE })).toBe(false);
+    expect(canInteractWithIdentity({ status: IDENTITY_STATUS.REJECTED })).toBe(false);
+  });
+
+  it('unlocks on submission, before review completes, and needs no driver licence', () => {
+    expect(canInteractWithIdentity({ status: IDENTITY_STATUS.PENDING })).toBe(true);
+    expect(canInteractWithIdentity({ status: IDENTITY_STATUS.APPROVED, licenseExpiry: '2020-01-01' })).toBe(true);
+  });
+
+  it('stays open when migration 093 is not deployed', () => {
+    expect(canInteractWithIdentity({ status: IDENTITY_STATUS.NONE, deploymentPending: true })).toBe(true);
+  });
+
+  it('requireVerifiedIdentity resolves silently once submitted, and throws a matchable error otherwise', async () => {
+    await expect(IdentityVerificationService.requireVerifiedIdentity('user-unverified')).rejects.toMatchObject({
+      code: 'IDENTITY_NOT_VERIFIED'
+    });
+
+    await IdentityVerificationService.submit('user-verified', {
+      file: photo(),
+      icNumber: '770815-10-2468',
+      licenseExpiry: '2099-12-31'
+    });
+    await expect(IdentityVerificationService.requireVerifiedIdentity('user-verified')).resolves.toMatchObject({
       status: IDENTITY_STATUS.PENDING
     });
   });

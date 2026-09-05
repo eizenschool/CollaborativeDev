@@ -14,7 +14,7 @@ Supabase-backed Ride and friend communication for UC3.4, UC3.7, and UC3.8.
   every viewport. The shared adaptive dialog is a scrollable bottom sheet on
   phone and a centred dialog on larger screens, showing live route, lifecycle,
   schedule, roles, and members. The desktop trip-details sidebar is not rendered.
-- A signed-in non-Host can create or reuse one direct chat for a Published ride from Ride Detail; acceptance is not required.
+- A signed-in non-Host can create or reuse one direct chat for a Published ride from Ride Detail; acceptance is not required. Opening it, and opening or messaging a friend from `PublicProfile.jsx`/`FriendCenter.jsx`, first requires a submitted MyKad - `IdentityVerificationService.requireVerifiedIdentity` runs in the presentation layer before the `MessagingService`/`FriendshipService` call, since neither service itself takes the caller's id (Module 1, client-side only).
 - Accepting the first ride request creates the ride's one group chat in the same transaction and adds the Host plus accepted account holder. Later accepted account holders join that group. Companion names never become members.
 - Friendships require a request and explicit acceptance. Each canonical account
   pair owns at most one permanent `friend`-scoped direct conversation, created

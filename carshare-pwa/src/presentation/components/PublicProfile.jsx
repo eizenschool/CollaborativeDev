@@ -7,6 +7,7 @@ import {
   FRIENDSHIP_STATUS,
   FriendshipService,
 } from '../../business-logic/FriendshipService.js';
+import { IdentityVerificationService } from '../../business-logic/IdentityVerificationService.js';
 import { sharePublicProfile } from '../../business-logic/ProfileShareService.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { IconArrowLeft, IconCar, IconLeaf, IconMedal, IconMessage, IconShield, IconStar, IconUser, IconUsers } from './icons.jsx';
@@ -82,6 +83,7 @@ export default function PublicProfile() {
       if (action === 'accept') next = await FriendshipService.respondToRequest(userId, true);
       if (action === 'decline') next = await FriendshipService.respondToRequest(userId, false);
       if (action === 'message') {
+        await IdentityVerificationService.requireVerifiedIdentity(user.id);
         const conversationId = await FriendshipService.openConversation(userId);
         navigate(`/message/${conversationId}`);
         return;

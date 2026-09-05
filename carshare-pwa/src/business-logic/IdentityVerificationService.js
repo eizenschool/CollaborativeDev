@@ -58,14 +58,24 @@ export function describeIdentityStatus(status) {
   }
 }
 
-// Submitting unlocks publishing; approval is what earns the verified label.
-// Holding publishing until a human approves would dead-end every Host, because
-// the reviewer surface is still an open Trust & Safety decision.
-export function canPublishWithIdentity(state) {
+// Submitting unlocks every gate below; approval is what earns the verified
+// label. Holding any of them until a human approves would dead-end every
+// member, because the reviewer surface is still an open Trust & Safety
+// decision.
+//
+// This is the shared standard: identity has been submitted and not rejected.
+// Requesting to join a ride and contacting another member need nothing more -
+// neither puts the member behind the wheel. Publishing layers a
+// licence-currency check on top of it, below.
+export function canInteractWithIdentity(state) {
   if (!state) return false;
   if (state.deploymentPending) return true;
-  const submitted = state.status === IDENTITY_STATUS.PENDING || state.status === IDENTITY_STATUS.APPROVED;
-  if (!submitted) return false;
+  return state.status === IDENTITY_STATUS.PENDING || state.status === IDENTITY_STATUS.APPROVED;
+}
+
+export function canPublishWithIdentity(state) {
+  if (!canInteractWithIdentity(state)) return false;
+  if (state.deploymentPending) return true;
   // A submission made before the licence moved onto this record has no expiry
   // stored. Unknown is treated as valid, not lapsed, so nobody who already
   // verified is locked out by a field that did not exist at the time.
@@ -152,6 +162,21 @@ export const IdentityVerificationService = {
       throw error;
     }
     return mapRow(data);
+  },
+
+  // Mirrors ReputationService.requireEligibility: fetches the caller's own
+  // status fresh and throws with a matchable code, rather than every call
+  // site re-fetching getStatus and re-running canInteractWithIdentity itself.
+  // There is no admin surface to approve submissions, so this only ever
+  // demands submission, never approval - approval is still just the label.
+  async requireVerifiedIdentity(userId) {
+    const state = await this.getStatus(userId);
+    if (!canInteractWithIdentity(state)) {
+      const error = new Error('Verify your identity in Profile > Info & Security before using this feature.');
+      error.code = 'IDENTITY_NOT_VERIFIED';
+      throw error;
+    }
+    return state;
   },
 
   async submit(userId, submission) {
