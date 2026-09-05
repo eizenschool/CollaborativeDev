@@ -5,11 +5,22 @@ vi.mock('../../data-access/supabaseClient.js', () => ({
   supabase: null
 }));
 
+// The mock backend persists through localStorage, which the node test
+// environment does not provide - same shim FavouriteService.test.js uses.
+const memory = new Map();
+globalThis.localStorage = {
+  getItem: (key) => memory.get(key) ?? null,
+  setItem: (key, value) => memory.set(key, value),
+  removeItem: (key) => memory.delete(key),
+  clear: () => memory.clear()
+};
+
 const {
   canPublishWithIdentity,
   describeIdentityStatus,
   identityLicenseHasLapsed,
   IDENTITY_STATUS,
+  IdentityVerificationService,
   validateIdentityDocument,
   validateIdentitySubmission
 } = await import('../IdentityVerificationService.js');
@@ -51,6 +62,24 @@ describe('one-time MyKad capture', () => {
   it('rejects a missing or lapsed licence expiry', () => {
     expect(() => validateIdentitySubmission({ ...submission, licenseExpiry: '' })).toThrow(/expiry date/i);
     expect(() => validateIdentitySubmission({ ...submission, licenseExpiry: '2020-01-01' })).toThrow(/already expired/i);
+  });
+});
+
+describe('one MyKad, one account', () => {
+  it('refuses a MyKad number already registered to another account', async () => {
+    const submission = { file: photo(), icNumber: '990101-14-5678', licenseExpiry: '2099-12-31' };
+    await IdentityVerificationService.submit('user-a', submission);
+    await expect(IdentityVerificationService.submit('user-b', submission)).rejects.toThrow(
+      /already registered to another account/i
+    );
+  });
+
+  it('still lets a member resubmit under their own account', async () => {
+    const submission = { file: photo(), icNumber: '880505-08-1234', licenseExpiry: '2099-12-31' };
+    await IdentityVerificationService.submit('user-c', submission);
+    await expect(IdentityVerificationService.submit('user-c', submission)).resolves.toMatchObject({
+      status: IDENTITY_STATUS.PENDING
+    });
   });
 });
 
@@ -141,5 +170,18 @@ describe('Module 1 identity verification SQL contract', () => {
   it('grants a table-level update so .upsert() no longer hits 42501', async () => {
     const sql = await read('../../../database/sql/095_m1_grant_table_level_identity_verifications_update.sql');
     expect(sql).toContain('grant update on table public.identity_verifications to authenticated;');
+  });
+
+  // A second account reusing an already-registered MyKad number is a fraud
+  // vector 093_m1/094_m1 left open; 096_m1 closes it.
+  it('refuses a second account reusing an already-registered MyKad number', async () => {
+    const sql = await read('../../../database/sql/096_m1_unique_ic_number.sql');
+    expect(sql).toContain(
+      'create unique index if not exists identity_verifications_ic_number_key'
+    );
+    expect(sql).toContain('on public.identity_verifications (ic_number)');
+    // Partial, not a bare unique constraint: a null ic_number (rows from
+    // before 094_m1) must never collide with another null.
+    expect(sql).toContain('where ic_number is not null');
   });
 });

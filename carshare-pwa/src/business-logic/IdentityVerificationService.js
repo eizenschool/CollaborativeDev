@@ -41,6 +41,14 @@ function isUndeployedIdentityContract(error) {
     && /does not exist|schema cache|not found|Bucket not found/i.test(detail);
 }
 
+// 096_m1's unique index only rejects a *second account* reusing a number
+// already on record - a member's own resubmission keeps their existing row
+// (see submit()) and never hits this.
+function isDuplicateIcNumber(error) {
+  if (error?.code !== '23505') return false;
+  return /identity_verifications_ic_number_key|ic_number/i.test(`${error?.message || ''} ${error?.details || ''}`);
+}
+
 export function describeIdentityStatus(status) {
   switch (status) {
     case IDENTITY_STATUS.APPROVED: return 'Identity verified';
@@ -180,7 +188,12 @@ export const IdentityVerificationService = {
       )
       .select('status, document_path, submitted_at, reviewed_at, review_note, ic_number, license_expiry')
       .single();
-    if (error) throw error;
+    if (error) {
+      if (isDuplicateIcNumber(error)) {
+        throw new Error('That MyKad number is already registered to another account.');
+      }
+      throw error;
+    }
     return mapRow(data);
   },
 

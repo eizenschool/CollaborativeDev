@@ -81,6 +81,12 @@ UPDATE, which Postgres refuses for that statement shape with a
 `profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
 needs; RLS still does the real gatekeeping underneath it.
 
+`096_m1` adds a partial unique index on `ic_number` so the same MyKad cannot
+back two accounts - a rejected or reputation-damaged member could otherwise
+sign up again under a new email and resubmit the same number. A member's own
+resubmission is unaffected: it lands on their existing row through the
+`onConflict: 'user_id'` upsert.
+
 `/home` is now the public website entry rather than a post-login-only route.
 Guests can browse Home, Search, Ride listings, and Published Ride Detail; the
 shared auth gate is applied only when they enter account-specific services.

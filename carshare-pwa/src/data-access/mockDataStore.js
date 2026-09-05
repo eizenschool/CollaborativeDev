@@ -681,11 +681,21 @@ export const mockDb = {
     await delay();
     const db = load();
     db.identityVerifications ||= {};
+    const icNumber = (submission?.icNumber || '').replace(/-/g, '');
+    // Mirrors 096_m1's unique index: the same MyKad on a different account is
+    // refused, but a member resubmitting under their own row is not - that is
+    // just this same assignment overwriting it below.
+    const heldByAnotherAccount = Object.entries(db.identityVerifications).some(
+      ([otherUserId, record]) => otherUserId !== userId && record.ic_number === icNumber
+    );
+    if (heldByAnotherAccount) {
+      throw new Error('That MyKad number is already registered to another account.');
+    }
     db.identityVerifications[userId] = {
       status: 'pending',
       document_path: `${userId}/mykad-${Date.now()}.mock`,
       document_name: submission?.file?.name || 'mykad.jpg',
-      ic_number: (submission?.icNumber || '').replace(/-/g, ''),
+      ic_number: icNumber,
       license_expiry: submission?.licenseExpiry || null,
       submitted_at: new Date().toISOString(),
       reviewed_at: null,

@@ -727,6 +727,15 @@ UPDATE, so Postgres refused that statement shape with a
 `profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
 needs; RLS still does the real gatekeeping underneath it.
 
+Nothing stopped the same MyKad number appearing on two accounts either: a
+member whose reputation dropped, or whose document was rejected, could sign up
+again under a fresh email and resubmit the same number to start clean.
+`096_m1` closes that with a partial unique index on `ic_number` (`where
+ic_number is not null`, so legacy rows captured before `094_m1` never collide
+on a shared null). A member's own resubmission still lands on their existing
+row through `093_m1`'s `onConflict: 'user_id'` upsert, so only a *second
+account* reusing the number is ever refused.
+
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
