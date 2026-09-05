@@ -666,6 +666,66 @@ no badge, no public signal and no reputation. Document photos, and the
 reviewer surface they would require, remain out of scope and depend on the open
 Trust & Safety console decision.
 
+## D035 - Identity is verified where it is used, not at sign-up
+**Status:** Accepted in application; migrations 093_m1 and 094_m1 authored and not deployed
+
+Sign-up no longer asks for a MyKad number. That gate (D034, `088_m1`) only
+covered email sign-up: `signInWithGoogle()` created a full account without it,
+so the check was skippable by choosing the easier button. It also asked every
+member for an identity number when only a Host needs one.
+
+A Host now uploads a photo of their MyKad before publishing a Ride. Submitting
+unlocks publishing; approval is what earns the verified label. Holding
+publishing until a human approves would dead-end every Host, because the shared
+Trust & Safety reviewer surface is still an open decision - so review runs
+through a service-role-only `private.review_identity_verification`, following
+`078_m1`, and no client role can approve any submission including its own.
+
+These images are sensitive personal data under the PDPA. `093_m1` puts them in
+a PRIVATE `identity-documents` bucket under owner-scoped Storage policies with
+no anon policy, so the only way to view one is a short-lived signed URL created
+by the owner or the service role. They never appear on a public profile, a Ride
+card, or in the public profile projection. Retention and deletion are not yet
+specified and remain open.
+
+`093_m1` also retires `profile_private.ic_checked_at`: it restores
+`handle_new_user()` to a body that does not write it before dropping the
+column, so account creation cannot break. Until the migration is deployed the
+client reports the dependency and the publish gate stays open, matching how
+Module 1 and Module 4 already treat undeployed columns.
+
+The MyKad is entered once. `019_m1`/`088_m1` put the driver's licence number
+and expiry on `vehicles`, so a Host retyped the same MyKad number for every car
+they registered; a licence belongs to a person, not to a vehicle. `094_m1`
+moves both onto `identity_verifications`, captured in the same step as the
+photo, and retires the per-vehicle licence trigger - leaving the old columns in
+place, unused, because other modules may still read them. The vehicle form no
+longer asks for a licence at all. The number is held beside a photo that
+already shows it, under the same owner-only RLS, and never enters the public
+profile projection or a Ride card.
+
+Publishing therefore now depends on: a non-rejected identity submission, a
+licence that has not lapsed, a registered vehicle, and the D034 reputation
+gate. A submission made before `094_m1` has no expiry stored; that unknown is
+treated as valid rather than lapsed, so nobody who already verified is locked
+out by a column that did not exist when they submitted. `malaysianIdentity.js`
+holds the one MyKad validator and the licence-currency rule so the fields
+cannot drift apart.
+
+Status in Profile > Info & Security and the blocking gate in front of Publish
+render from one component, so the two can never describe the same state
+differently.
+
+Review itself is still manual: a reviewer runs
+`private.review_identity_verification` from the Supabase SQL Editor, following
+the `078_m1` service-role pattern, because a client-facing reviewer surface
+depends on the open Trust & Safety console decision. Submitting still writes
+through a direct `.upsert()`; the client's write grant on this table needs to
+be table-level rather than column-restricted or Postgres refuses the
+`INSERT ... ON CONFLICT DO UPDATE` that `.upsert()` emits with a
+`42501 permission denied` error - the same trap `071_project` already hit on
+`profile_visibility`. Fixing that grant is a follow-up.
+
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;

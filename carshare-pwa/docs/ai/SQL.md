@@ -17,7 +17,7 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-092 (`087_m1` and `088_m1` are authored and not deployed)
+Repository SQL history: 001-094 (`087_m1`, `088_m1`, `093_m1` and `094_m1` are authored and not deployed)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -675,6 +675,25 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
   `reputation_hold` reachable for the first time since `072_m1` defined them,
   without a client-facing admin surface.
+- `094_m1_identity_holds_the_licence.sql` - authored, not deployed; adds
+  `ic_number` and `license_expiry` to `identity_verifications` so the MyKad is
+  entered once instead of on every vehicle, drops the `088_m1`
+  `enforce_ride_driver_license_before_publish` trigger, and folds the expiry
+  check into `private.enforce_ride_identity_verification`. A submission with no
+  expiry recorded is treated as valid, not lapsed.
+  `vehicles.driver_license_number`/`driver_license_expiry` are deliberately
+  left in place and unused.
+- `093_m1_identity_document_verification.sql` - authored, not deployed;
+  moves identity verification from sign-up to the point of use (D035). Adds the
+  PRIVATE `identity-documents` bucket with owner-folder Storage policies and no
+  anon policy, `public.identity_verifications` (owner may only ever insert or
+  return its own row to `pending`), the
+  `enforce_ride_identity_before_publish` trigger requiring a non-rejected
+  submission before a Ride reaches `Published`, and service-role-only
+  `private.review_identity_verification`. It also restores
+  `handle_new_user()` to a body that does not write `ic_checked_at` and then
+  drops that column, retiring the `088_m1` sign-up flag - the restore must stay
+  ahead of the drop or account creation breaks.
 - `087_m1_reputation_starts_at_ceiling.sql` - authored, not deployed;
   moves the reputation origin from 70 to 100, rebases live scores by +30
   clamped at 100 (guarded by the current column default, so re-running is a

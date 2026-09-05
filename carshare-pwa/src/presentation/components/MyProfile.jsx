@@ -11,6 +11,8 @@ import { ProfileService } from '../../business-logic/ProfileService.js';
 import { VehicleService } from '../../business-logic/VehicleService.js';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
 import { ReputationService } from '../../business-logic/ReputationService.js';
+import { IdentityVerificationService } from '../../business-logic/IdentityVerificationService.js';
+import IdentityVerificationCard from './profile/IdentityVerificationCard.jsx';
 import { describeReputationEvent, REPUTATION_POLICY } from '../../business-logic/ReputationPolicy.js';
 import { sharePublicProfile } from '../../business-logic/ProfileShareService.js';
 import TrustedFamilyCard from './profile/TrustedFamilyCard.jsx';
@@ -230,12 +232,33 @@ function OverviewPanel({ user, summary, reputation, vehicles, activeVehicleCount
 // ---------- INFO & SECURITY (merges Profile Info + Profile Picture + Emergency Contact) ----------
 
 function InfoSecurityPanel({ user, onSaved }) {
+  const [identityState, setIdentityState] = useState(null);
+  const [identityError, setIdentityError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    IdentityVerificationService.getStatus(user.id)
+      .then((state) => active && setIdentityState(state))
+      .catch((err) => active && setIdentityError(err.message || 'Your identity status could not be read.'));
+    return () => { active = false; };
+  }, [user.id]);
+
   return (
     <>
       <div className="panel-head"><h2>Info &amp; Security</h2><p>Your identity, photo, and emergency contact — saved together</p></div>
       <div className="grid-2">
         <div>
           <BasicInfoCard user={user} onSaved={onSaved} />
+          {identityError
+            ? <div className="card"><p className="card-title">Identity verification</p><div className="alert alert-error">{identityError}</div></div>
+            : identityState && (
+              <IdentityVerificationCard
+                compact
+                userId={user.id}
+                state={identityState}
+                onSubmitted={setIdentityState}
+              />
+            )}
           <LanguagePreferencesCard user={user} onSaved={onSaved} />
           <ChangePasswordCard userId={user.id} />
         </div>
@@ -542,7 +565,7 @@ function EmergencyContactCard({ user, onSaved }) {
 
 // ---------- MY VEHICLES ----------
 
-const emptyVehicleForm = { id: null, make: '', model: '', vehicleType: '', plate: '', driverLicenseNumber: '', driverLicenseExpiry: '', colour: '', seats: 4, year: new Date().getFullYear() };
+const emptyVehicleForm = { id: null, make: '', model: '', vehicleType: '', plate: '', colour: '', seats: 4, year: new Date().getFullYear() };
 
 function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount }) {
   const [form, setForm] = useState(null);
@@ -619,29 +642,6 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
             <div className="field"><label>Model</label><div className="input-wrap"><input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} required /></div></div>
             <div className="field"><label>Vehicle category</label><div className="input-wrap"><select value={form.vehicleType || ''} onChange={(e) => setForm({ ...form, vehicleType: e.target.value })} required><option value="">Choose a category</option>{VEHICLE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></div>
             <div className="field"><label>Plate Number</label><div className="input-wrap"><input value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} required /></div></div>
-            <div className="field">
-              <label>Driver's License Number <span className="hint">confirms you're licensed to drive this vehicle</span></label>
-              <div className="input-wrap">
-                <input
-                  value={form.driverLicenseNumber}
-                  onChange={(e) => setForm({ ...form, driverLicenseNumber: e.target.value })}
-                  placeholder="e.g. D1234567"
-                  required
-                />
-              </div>
-            </div>
-            <div className="field">
-              <label>Driver's License Expiry <span className="hint">a lapsed licence cannot publish rides</span></label>
-              <div className="input-wrap">
-                <input
-                  type="date"
-                  value={form.driverLicenseExpiry || ''}
-                  onChange={(e) => setForm({ ...form, driverLicenseExpiry: e.target.value })}
-                  min={new Date().toISOString().slice(0, 10)}
-                  required
-                />
-              </div>
-            </div>
             <div className="field"><label>Colour</label><div className="input-wrap"><input value={form.colour} onChange={(e) => setForm({ ...form, colour: e.target.value })} /></div></div>
             <div className="field"><label>Seats available</label><div className="input-wrap"><input type="number" min="1" max="8" value={form.seats} onChange={(e) => setForm({ ...form, seats: e.target.value })} required /></div></div>
             <div className="field"><label>Year</label><div className="input-wrap"><input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} required /></div></div>

@@ -2,6 +2,11 @@
 import { supabase, isSupabaseConfigured } from '../data-access/supabaseClient.js';
 import { mockDb } from '../data-access/mockDataStore.js';
 import { ProfileService } from './ProfileService.js';
+// Re-exported so existing importers (and tests) keep one entry point, while
+// VehicleService can share the same validator without importing this service.
+import { validateMalaysianIC } from './malaysianIdentity.js';
+
+export { validateMalaysianIC };
 
 function validateEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
@@ -9,43 +14,6 @@ function validateEmail(email) {
 
 function validatePassword(password) {
   return typeof password === 'string' && password.length >= 8;
-}
-
-// Birthplace codes that JPN has never assigned. Everything else in 01-99 is a
-// state, a federal territory, a foreign country of birth, or a documented
-// "unknown" marker, so only this set can be rejected without turning away real
-// MyKad holders.
-const UNASSIGNED_BIRTHPLACE_CODES = new Set([
-  '00', '17', '18', '19', '20', '69', '70', '73', '80', '81', '94', '95', '96', '97'
-]);
-
-// MyKad carries no check digit, so structural validity is the most an offline
-// gate can prove: the YYMMDD segment must be a real calendar date and the
-// birthplace code must be one JPN actually issues. The last four digits are a
-// registration serial with no public rule, so they stay unchecked.
-function isRealBirthDate(yymmdd) {
-  const year = Number(yymmdd.slice(0, 2));
-  const month = Number(yymmdd.slice(2, 4));
-  const day = Number(yymmdd.slice(4, 6));
-  if (month < 1 || month > 12 || day < 1) return false;
-  // The century is not encoded, so the date is real when either reading is -
-  // this only changes the answer for 29 February.
-  return [1900 + year, 2000 + year].some(
-    (fullYear) => day <= new Date(Date.UTC(fullYear, month, 0)).getUTCDate()
-  );
-}
-
-// Malaysian MyKad format: 6-digit birthdate (YYMMDD) + 2-digit birthplace/state
-// code + 4-digit serial, with or without the conventional dashes. This is a
-// structural sign-up gate, not identity verification: nothing here proves the
-// number belongs to the person entering it, so it must never grant a verified
-// badge or reputation. The value itself is never persisted or sent to Supabase.
-export function validateMalaysianIC(ic) {
-  const trimmed = (ic || '').trim();
-  if (!/^\d{6}-?\d{2}-?\d{4}$/.test(trimmed)) return false;
-  const digits = trimmed.replace(/-/g, '');
-  if (!isRealBirthDate(digits.slice(0, 6))) return false;
-  return !UNASSIGNED_BIRTHPLACE_CODES.has(digits.slice(6, 8));
 }
 
 export function buildSignUpResult({ authUser, session, appUser }) {
@@ -87,20 +55,18 @@ export function buildSessionUser(authUser) {
 export const AuthService = {
   backend: isSupabaseConfigured ? 'supabase' : 'mock',
 
-  async signUp({ fullName, email, password, icNumber }) {
+  // Sign-up deliberately collects no identity document. Identity is checked
+  // where it matters instead - a Host uploads their MyKad before publishing a
+  // Ride (IdentityVerificationService) - so the check cannot be skipped by
+  // choosing Google sign-in, and an account that only browses or rides along
+  // is never asked for one.
+  async signUp({ fullName, email, password }) {
     if (!fullName?.trim()) throw new Error('Full name is required.');
     if (!validateEmail(email)) throw new Error('Enter a valid email address.');
     if (!validatePassword(password)) throw new Error('Password must be at least 8 characters.');
-    if (!validateMalaysianIC(icNumber)) {
-      throw new Error('Enter a valid Malaysian IC number, e.g. 990101-14-5678.');
-    }
 
     if (isSupabaseConfigured) {
-      // Migration 088 has handle_new_user() stamp profile_private.ic_checked_at
-      // from this flag at account creation - the only point both the confirmed
-      // and pending-confirmation sign-up paths pass through. The IC number
-      // itself is still never sent.
-      const options = { data: { full_name: fullName.trim(), ic_format_checked: true } };
+      const options = { data: { full_name: fullName.trim() } };
       if (typeof window !== 'undefined') options.emailRedirectTo = window.location.origin;
 
       const { data, error } = await supabase.auth.signUp({ email, password, options });

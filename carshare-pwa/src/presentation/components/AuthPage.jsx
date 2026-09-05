@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { resolveAuthReturnPath } from '../../business-logic/authAccess.js';
-import { IconCar, IconMail, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar, IconGoogle, IconShield } from './icons.jsx';
+import { IconCar, IconMail, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar, IconGoogle } from './icons.jsx';
 import '../styles/auth.css';
 
 export default function AuthPage() {
@@ -16,7 +16,6 @@ export default function AuthPage() {
 
   const [mode, setMode] = useState('login'); // 'signup' | 'login'
   const [fullName, setFullName] = useState('');
-  const [icNumber, setIcNumber] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -79,7 +78,7 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (mode === 'signup') {
-        const result = await signUp({ fullName, email, password, icNumber });
+        const result = await signUp({ fullName, email, password });
         if (result.requiresEmailConfirmation) {
           setVerificationMessage(`We sent a confirmation link to ${result.email}. Confirm it before signing in.`);
           return;
@@ -208,24 +207,6 @@ export default function AuthPage() {
                 <div className="auth-input-wrap">
                   <span className="prefix"><IconUser size={16} /></span>
                   <input id="auth-full-name" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Jamie Delacroix" required />
-                </div>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div className="auth-field">
-                <label htmlFor="auth-ic-number">IC Number (MyKad) <span className="hint">used to verify your identity, never stored</span></label>
-                <div className="auth-input-wrap">
-                  <span className="prefix"><IconShield size={16} /></span>
-                  <input
-                    id="auth-ic-number"
-                    value={icNumber}
-                    onChange={(e) => setIcNumber(e.target.value)}
-                    placeholder="990101-14-5678"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    required
-                  />
                 </div>
               </div>
             )}
