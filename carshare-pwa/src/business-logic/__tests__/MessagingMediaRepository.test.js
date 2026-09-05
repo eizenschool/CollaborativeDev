@@ -4,6 +4,7 @@ import {
   attachSignedUrls,
   isMissingConversationLifecycleSchema,
   isMissingFriendshipConversationSchema,
+  isMissingRideInvitationSchema,
 } from '../../data-access/supabaseMessagingRepository.js';
 
 function callActivityClient({ data = [], error = null } = {}) {
@@ -42,6 +43,39 @@ function storageClient({ batchData, singleResults = {} }) {
 }
 
 describe('message media signed URLs', () => {
+  it('keeps photo URLs stable across refreshes and renews them before expiry', async () => {
+    const path = 'user/conversation/message/version/photo.png';
+    const { client, bucket } = storageClient({ batchData: [{ path, signedUrl: 'https://storage.test/first' }] });
+    vi.useFakeTimers();
+    try {
+      const rows = messageWithAttachments([path]);
+      const first = await attachSignedUrls(rows, client);
+      const second = await attachSignedUrls(rows, client);
+      expect(second).toEqual(first);
+      expect(bucket.createSignedUrls).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(60 * 60 * 1000);
+      bucket.createSignedUrls.mockResolvedValue({ data: [{ path, signedUrl: 'https://storage.test/renewed' }], error: null });
+      const renewed = await attachSignedUrls(rows, client);
+      expect(renewed[0].attachments[0].signed_url).toBe('https://storage.test/renewed');
+      expect(bucket.createSignedUrls).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('signs only new versioned paths and never returns a removed attachment', async () => {
+    const oldPath = 'user/conversation/message/v1/photo.png';
+    const newPath = 'user/conversation/message/v2/photo.png';
+    const { client, bucket } = storageClient({ batchData: [{ path: oldPath, signedUrl: 'https://storage.test/old' }] });
+    await attachSignedUrls(messageWithAttachments([oldPath]), client);
+    bucket.createSignedUrls.mockResolvedValue({ data: [{ path: newPath, signedUrl: 'https://storage.test/new' }], error: null });
+    const rows = await attachSignedUrls(messageWithAttachments([newPath]), client);
+    expect(bucket.createSignedUrls.mock.calls[1][0]).toEqual([newPath]);
+    expect(rows[0].attachments).toHaveLength(1);
+    expect(rows[0].attachments[0].signed_url).toBe('https://storage.test/new');
+    expect(await attachSignedUrls([{ id: 'deleted', attachments: [] }], client)).toEqual([{ id: 'deleted', attachments: [] }]);
+  });
+
   it('maps batch results by returned path instead of response order', async () => {
     const firstPath = 'user/conversation/message/version/first.png';
     const secondPath = 'user/conversation/message/version/second.png';
@@ -96,6 +130,17 @@ describe('message media signed URLs', () => {
 });
 
 describe('conversation lifecycle schema compatibility', () => {
+  it('recognizes an undeployed Ride invitation table or RPC', () => {
+    expect(isMissingRideInvitationSchema({
+      code: '42P01',
+      message: 'relation message_ride_invitations does not exist',
+    })).toBe(true);
+    expect(isMissingRideInvitationSchema({
+      code: 'PGRST202',
+      message: 'Could not find the function public.list_friend_ride_invite_options',
+    })).toBe(true);
+  });
+
   it('recognizes a missing friendship relation without disabling ride messages', () => {
     expect(isMissingFriendshipConversationSchema({
       code: 'PGRST200',

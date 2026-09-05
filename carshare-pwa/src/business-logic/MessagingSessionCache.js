@@ -10,6 +10,7 @@ function normalizeDraft(draft = {}) {
     mediaEntries: Array.isArray(draft.mediaEntries) ? draft.mediaEntries : [],
     location: draft.location || null,
     voiceRecording: draft.voiceRecording || null,
+    rideInvitation: draft.rideInvitation || null,
     editingMessage: draft.editingMessage || null,
   };
 }
@@ -20,6 +21,7 @@ export function hasMessageDraftContent(draft) {
     || draft?.mediaEntries?.length
     || draft?.location
     || draft?.voiceRecording
+    || draft?.rideInvitation
     || draft?.editingMessage,
   );
 }

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { IconPhone } from '../icons.jsx';
+import { memo, useState } from 'react';
+import { IconMoreVertical, IconPhone, IconTrash } from '../icons.jsx';
 
 function getInitials(name = 'Member') {
   return name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
@@ -56,7 +56,7 @@ function callResult(status) {
   }[status] || 'Call';
 }
 
-export default function CallEventBubble({ call }) {
+export default memo(function CallEventBubble({ call, onDelete }) {
   const duration = formatDuration(call.durationSeconds);
   const failed = ['missed', 'failed', 'declined'].includes(call.status);
   const isOutgoing = call.direction === 'outgoing';
@@ -86,8 +86,12 @@ export default function CallEventBubble({ call }) {
         </article>
         <div className={`message-bubble-meta ${isOutgoing ? 'message-bubble-meta-current-user' : ''}`}>
           <span>{formatTime(call.createdAt)}</span>
+          {onDelete && <details className="message-bubble-actions">
+            <summary aria-label="Call record actions" title="Call record actions"><IconMoreVertical size={18} /></summary>
+            <div><button type="button" className="danger" onClick={() => onDelete(call)}><IconTrash size={14} /> Delete for me</button></div>
+          </details>}
         </div>
       </div>
     </div>
   );
-}
+});

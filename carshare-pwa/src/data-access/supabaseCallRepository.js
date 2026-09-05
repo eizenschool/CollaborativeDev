@@ -56,7 +56,7 @@ export const supabaseCallRepository = {
   async listCalls(conversationId) {
     const client = requireSupabase();
     const { data, error } = await client
-      .from('call_sessions')
+      .from('chat_call_history')
       .select(CALL_SELECT)
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })

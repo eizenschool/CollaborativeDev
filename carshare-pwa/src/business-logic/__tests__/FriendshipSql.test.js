@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 async function migration() {
   const { readFile } = await import('node:fs/promises');
-  return readFile(new URL('../../../database/sql/079_m3_friendships_and_persistent_chat.sql', import.meta.url), 'utf8');
+  const sql = await readFile(new URL('../../../database/sql/079_m3_friendships_and_persistent_chat.sql', import.meta.url), 'utf8');
+  return sql.replace(/\r\n/g, '\n');
 }
 
 describe('friendship and persistent-chat migration', () => {

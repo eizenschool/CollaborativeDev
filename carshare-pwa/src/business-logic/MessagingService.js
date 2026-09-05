@@ -8,6 +8,7 @@ export const MESSAGE_TYPE = {
   VIDEO: 'video',
   AUDIO: 'audio',
   LOCATION: 'location',
+  RIDE_INVITATION: 'ride_invitation',
   SYSTEM: 'system',
 };
 
@@ -222,12 +223,29 @@ function messagePreview(message) {
   if (!message) return 'No messages yet';
   if (message.deleted_at) return 'message deleted';
   if (message.text_content) return message.text_content;
+  if (message.ride_invitation) return 'Ride invitation';
   const kinds = (message.attachments || []).map((item) => item.kind);
   if (kinds.includes(MESSAGE_TYPE.IMAGE)) return 'Photo';
   if (kinds.includes(MESSAGE_TYPE.VIDEO)) return 'Video';
   if (kinds.includes(MESSAGE_TYPE.AUDIO)) return 'Voice message';
   if (kinds.includes(MESSAGE_TYPE.LOCATION)) return 'Location';
   return message.kind === 'system' ? 'Group update' : 'Message';
+}
+
+function mapRideInvitation(row) {
+  if (!row) return null;
+  return {
+    rideId: row.ride_id,
+    pickup: row.pickup || '',
+    destination: row.destination || '',
+    departureAt: row.departure_at || null,
+    seatsAvailable: Number(row.seats_available ?? 0),
+    contribution: row.contribution || '',
+    rideStatus: row.ride_status || 'Unavailable',
+    requestStatus: row.request_status || null,
+    canRequest: row.can_request === undefined ? Boolean(row.source_role) : Boolean(row.can_request),
+    sourceRole: row.source_role || null,
+  };
 }
 
 export function mapConversationRow(row, currentUserId) {
@@ -351,6 +369,7 @@ export function mapMessageRow(row, conversation, currentUserId) {
   const messageTypes = [];
   if (row.kind === 'system') messageTypes.push(MESSAGE_TYPE.SYSTEM);
   if (row.text_content) messageTypes.push(MESSAGE_TYPE.TEXT);
+  if (row.ride_invitation) messageTypes.push(MESSAGE_TYPE.RIDE_INVITATION);
   attachments.forEach((attachment) => {
     if (!messageTypes.includes(attachment.kind)) messageTypes.push(attachment.kind);
   });
@@ -372,6 +391,7 @@ export function mapMessageRow(row, conversation, currentUserId) {
     senderName: sender?.full_name || (row.kind === 'system' ? 'System' : 'Member'),
     senderAvatar: sender?.profile_photo_url || null,
     attachments,
+    rideInvitation: mapRideInvitation(row.ride_invitation),
     messageTypes,
     createdAt: row.created_at,
     editedAt: row.edited_at,
@@ -379,14 +399,20 @@ export function mapMessageRow(row, conversation, currentUserId) {
     timestamp: formatMessageTime(row.created_at),
     isRead,
     canEdit: row.sender_id === currentUserId
+      && row.kind === 'user'
       && !row.deleted_at
       && !isRead
+      && !row.ride_invitation
       && !attachments.some((attachment) => attachment.kind === MESSAGE_TYPE.AUDIO)
       && !conversation?.isReadOnly
       && !conversation?.interactionBlocked,
-    canDelete: row.sender_id === currentUserId
+    canDelete: true,
+    canDeleteForEveryone: row.sender_id === currentUserId
+      && row.kind === 'user'
       && !row.deleted_at
-      && !conversation?.isReadOnly,
+      && !isRead
+      && !conversation?.isReadOnly
+      && !conversation?.interactionBlocked,
   };
 }
 
@@ -444,6 +470,8 @@ function containsKeyword(message, keyword) {
   const normalized = keyword.toLocaleLowerCase();
   return message.text.toLocaleLowerCase().includes(normalized)
     || message.senderName.toLocaleLowerCase().includes(normalized)
+    || message.rideInvitation?.pickup.toLocaleLowerCase().includes(normalized)
+    || message.rideInvitation?.destination.toLocaleLowerCase().includes(normalized)
     || message.attachments.some((attachment) =>
       attachment.fileName?.toLocaleLowerCase().includes(normalized),
     );
@@ -455,7 +483,7 @@ export function getMessagingChangeConversationId(change) {
     : change?.old;
   if (!row) return null;
   if (change.table === 'conversations') return row.id || null;
-  if (['conversation_members', 'messages'].includes(change.table)) {
+  if (['conversation_members', 'messages', 'chat_item_deletions'].includes(change.table)) {
     return row.conversation_id || null;
   }
   if (change.table === 'call_sessions') return row.conversation_id || null;
@@ -501,9 +529,11 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       return mapConversationRow(row, currentUserId);
     },
 
-    async listMessages(conversationId) {
-      const currentUserId = await repository.getCurrentUserId();
-      const conversation = await this.getConversation(conversationId);
+    async listMessages(conversationId, { conversation: loadedConversation, currentUserId: loadedUserId } = {}) {
+      const currentUserId = loadedUserId || await repository.getCurrentUserId();
+      const conversation = loadedConversation?.id === conversationId
+        ? loadedConversation
+        : await this.getConversation(conversationId);
       if (!conversation) throw new Error('Unable to load messages.');
       const rows = await repository.listMessages(conversationId);
       return rows
@@ -519,6 +549,32 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       const messages = await this.listMessages(conversationId);
       if (!query) return messages;
       return messages.filter((message) => containsKeyword(message, query));
+    },
+
+    async listRideInviteOptions(conversationId) {
+      const rows = await repository.listRideInviteOptions(conversationId);
+      return rows.map((row) => mapRideInvitation(row));
+    },
+
+    async sendRideInvitation({ conversationId, rideId, text = '' }) {
+      const messageText = cleanText(text);
+      if (!conversationId || !rideId) throw new Error('Choose a Ride to invite your friend.');
+      if (messageText.length > MAX_MESSAGE_LENGTH) {
+        throw new Error(`Message must not exceed ${MAX_MESSAGE_LENGTH} characters.`);
+      }
+      const messageId = createUuid();
+      const savedMessageId = await repository.sendRideInvitation({
+        conversationId,
+        messageId,
+        rideId,
+        text: messageText,
+      });
+      const [currentUserId, conversation, row] = await Promise.all([
+        repository.getCurrentUserId(),
+        this.getConversation(conversationId),
+        repository.getMessage(savedMessageId),
+      ]);
+      return mapMessageRow(row, conversation, currentUserId);
     },
 
     async sendMessage({
@@ -668,7 +724,17 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       return mapMessageRow(row, conversation, currentUserId);
     },
 
+    async deleteForMe(itemId, itemType = 'message') {
+      if (!itemId || !['message', 'call'].includes(itemType)) {
+        throw new Error('Choose a message or call record to delete.');
+      }
+      await repository.deleteForMe(itemId, itemType);
+      return true;
+    },
+
     async deleteMessage(messageId) {
+      // The RPC atomically checks ownership, chat access and the read cursor.
+      // Re-fetching content/media here adds latency without preventing a read race.
       const paths = await repository.deleteMessage(messageId);
       await repository.removeMedia(paths).catch(() => {});
       return true;

@@ -7,6 +7,7 @@ function draft(overrides = {}) {
     mediaEntries: [{ token: 'new:photo-1', source: 'new', previewUrl: 'blob:photo-1', file: { name: 'photo.jpg' } }],
     location: { latitude: 3.139, longitude: 101.6869 },
     voiceRecording: null,
+    rideInvitation: null,
     editingMessage: null,
     ...overrides,
   };
@@ -74,5 +75,27 @@ describe('MessagingSessionCache', () => {
     }));
     expect(releasePreviewUrl).toHaveBeenCalledWith('blob:voice-1');
     expect(cache.getDraft('conversation-1')).toBeNull();
+  });
+
+  it('keeps an unsent Ride invitation card as conversation draft content', () => {
+    const cache = createMessagingSessionCache();
+    cache.setActiveUser('user-1');
+    const rideInvitation = {
+      rideId: 'ride-1',
+      pickup: 'KL Sentral',
+      destination: 'Penang',
+    };
+
+    cache.saveDraft('conversation-1', draft({
+      text: 'Join this Ride?',
+      mediaEntries: [],
+      location: null,
+      rideInvitation,
+    }));
+
+    expect(cache.getDraft('conversation-1')).toMatchObject({
+      text: 'Join this Ride?',
+      rideInvitation,
+    });
   });
 });

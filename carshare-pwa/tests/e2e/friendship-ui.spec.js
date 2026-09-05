@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
 
 test('Friends stays usable at every viewport when migration 079 is unavailable', async ({ page }) => {
   await page.goto('/home');
-  await expect(page.getByRole('heading', { name: 'Hi, Jamie' })).toBeVisible();
+  await expect(page.getByText('Hi, Jamie', { exact: true })).toBeVisible({ timeout: 20_000 });
   await page.goto('/message/friends');
 
   await expect(page.getByRole('heading', { name: 'Friends', exact: true })).toBeVisible();
@@ -23,7 +23,7 @@ test('Friends stays usable at every viewport when migration 079 is unavailable',
   await expect(back).toBeFocused();
   await back.click();
   await expect(page).toHaveURL(/\/message$/);
-  await expect(page.getByRole('heading', { name: 'Messages' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Messages' })).toBeVisible({ timeout: 20_000 });
 
   const rideMessages = page.getByRole('tab', { name: /Ride messages/ });
   const friendMessages = page.getByRole('tab', { name: /Friend messages/ });

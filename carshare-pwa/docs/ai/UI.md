@@ -253,6 +253,10 @@ alternative.
   removed friendships remain in the normal conversation list with
   `Not friends · Read-only`, no composer/call action, and a profile link to add
   the person again. Friend chats omit Ride summaries.
+- Accepted Friend chats expose a Ride picker in the composer. It lists current
+  eligible Rides the sender Hosts or has Pending/Accepted participation in,
+  supports an optional text note, and renders a live-state card linking to Ride
+  Detail. The recipient still uses the existing `Request to join` action.
 - Notification and message Realtime inserts may use the account-local `Alert
   sounds` toggle. General events use one short Web Audio bell; incoming calls
   use a distinct repeating two-pulse ringtone. Do not promise a custom sound

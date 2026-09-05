@@ -17,7 +17,7 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-088 (`087_m1` and `088_m1` are authored and not deployed)
+Repository SQL history: 001-090 (`087_m1` and `088_m1` are authored and not deployed)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -58,7 +58,7 @@ confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that. `082_m4` is deployed;
-the next unused repository sequence is `089`.)
+the next unused repository sequence is `091`.)
 ```
 
 The repository has one documented historical numbering collision at `075`
@@ -477,6 +477,10 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
   archive/delete/mute state, access expiry, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
+- `message_ride_invitations` (deployed `20260905093400`): one `ride_id`
+  reference per Friend-chat message. Visible members have SELECT only; current
+  Ride fields and recipient request eligibility come from an authenticated RPC
+  instead of being copied into message history.
 - `message_translations` (in deployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
 - `call_sessions` (in live `043`, extended by deployed `080`): direct/group call lifecycle rows; participants receive SELECT only and mutate through authenticated RPCs. Deployed `065_m3` requires current conversation visibility, the live `077` schema adds device-bound heartbeats and orphan recovery, and deployed `080` adds independent per-member state.
 - `call_participants` (in deployed `080`): one caller/invitee row per call member with ringing, accepted, declined, missed, left, or failed state; browser roles receive RLS-filtered SELECT only.
@@ -689,13 +693,17 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `Published`. A vehicle registered before this file has a null expiry, which
   is treated as unknown rather than expired so no existing Host is locked out.
   Deliberately no document photos, no Storage bucket, and no verified badge.
-- `079_m3_friendships_and_persistent_chat.sql` - authored, not deployed;
+- `079_m3_friendships_and_persistent_chat.sql` - deployed;
   adds mutually confirmed account-pair friendships, authenticated RPC-only
   transitions, one separate permanent direct conversation per friendship,
   friend-member profile relevance, accepted/active-account message and call
   gates, read-only retained history after removal, Realtime publication, and
   deduplicated request/acceptance notifications. It depends on authored `075`
   and `077` and does not alter existing Ride chat identities or seven-day rules.
+- `20260905093400_m3_friend_ride_invitations` - deployed 2026-09-05;
+  adds Friend-chat Ride cards, Host or Pending/Accepted passenger sharing,
+  recipient eligibility rechecks, live Ride-state reads, deletion cleanup, and
+  deduplicated invitation notifications without changing seat/request state.
 - `080_m3_group_voice_calls.sql` - deployed 2026-09-03 as tracked migration
   `m3_group_voice_calls`; adds direct/group
   call types, per-member invitations and lifecycle state, independent
@@ -779,3 +787,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 5. Update this file after confirmed database changes.
 6. Run security and performance advisors after DDL changes.
 7. Never expose service-role/server secrets in frontend code or commit local environment files.
+
+## Individual chat deletion (2026-09-05)
+
+- Deployed `089_m3_personal_message_deletion.sql` (`m3_personal_message_deletion`): owner-readable, RPC-written `chat_item_deletions`, account-local message visibility, Realtime refreshes, and the security-invoker `chat_call_history` view. Call signalling continues to read `call_sessions`.
+- Deployed `090_m3_delete_all_message_types.sql` (`m3_delete_all_message_types`): shared deletion accepts text, media, location, voice and Ride invitations; requires the sender, writable/visible conversation, and no other member read cursor at or beyond the message. Member locks serialize the read check. Shared media/invitation payloads are removed atomically; messages retain tombstones.
+- `database/tests/m3_personal_deletion.sql` verifies real authenticated-role isolation and deletion gates inside a fully rolled-back transaction on a seeded database.

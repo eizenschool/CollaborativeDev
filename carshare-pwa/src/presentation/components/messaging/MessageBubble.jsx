@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { IconCheck, IconEdit, IconMoreVertical, IconTrash } from '../icons.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
 import MessageTranslation from './MessageTranslation.jsx';
+import RideInvitationCard from './RideInvitationCard.jsx';
 
 function getInitials(name = 'Member') {
   return name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
@@ -140,7 +141,7 @@ function MessageActions({ message, onEdit, onDelete }) {
   );
 }
 
-export default function MessageBubble({
+export default memo(function MessageBubble({
   message,
   currentUserId,
   onEdit = () => {},
@@ -154,6 +155,7 @@ export default function MessageBubble({
     return (
       <div id={`message-${message.id}`} className={`message-system-row ${highlighted ? 'message-highlighted' : ''}`} role="status">
         <span className="message-system-text">{message.text}</span>
+        <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} />
       </div>
     );
   }
@@ -163,6 +165,7 @@ export default function MessageBubble({
     return (
       <div id={`message-${message.id}`} className={`message-deleted-row ${isCurrentUser ? 'message-deleted-row-current-user' : ''} ${highlighted ? 'message-highlighted' : ''}`}>
         <span className="message-deleted-text">Message deleted</span>
+        <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} />
       </div>
     );
   }
@@ -192,6 +195,7 @@ export default function MessageBubble({
           )}
           {audio && <MediaAttachment attachment={audio} />}
           {location && <GoogleLocationMap latitude={location.latitude} longitude={location.longitude} compact />}
+          {message.rideInvitation && <RideInvitationCard invitation={message.rideInvitation} />}
         </div>
         {(audio || message.text) && (
           <MessageTranslation
@@ -216,4 +220,4 @@ export default function MessageBubble({
       </div>
     </div>
   );
-}
+});

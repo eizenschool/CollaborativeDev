@@ -4,6 +4,7 @@ import {
   IconArrowLeft,
   IconArchive,
   IconCamera,
+  IconCar,
   IconClock,
   IconMapPin,
   IconMessage,
@@ -25,6 +26,7 @@ import { useMessagingSession } from '../../../context/MessagingSessionContext.js
 import { useCallSession } from '../../../context/CallSessionContext.jsx';
 import MessageBubble from './MessageBubble.jsx';
 import CallEventBubble from './CallEventBubble.jsx';
+import RideInvitationCard from './RideInvitationCard.jsx';
 import GoogleLocationMap from '../maps/GoogleLocationMap.jsx';
 import usePhotoCapture from '../../hooks/usePhotoCapture.js';
 import useVideoRecorder from './useVideoRecorder.js';
@@ -176,6 +178,7 @@ export default function ChatWindow({
   const [mediaEntries, setMediaEntries] = useState(() => initialDraft?.mediaEntries || []);
   const [location, setLocation] = useState(() => initialDraft?.location || null);
   const [voiceRecording, setVoiceRecording] = useState(() => initialDraft?.voiceRecording || null);
+  const [rideInvitation, setRideInvitation] = useState(() => initialDraft?.rideInvitation || null);
   const [editingMessage, setEditingMessage] = useState(() => initialDraft?.editingMessage || null);
   const [composerConversationId, setComposerConversationId] = useState(conversationId);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -187,6 +190,9 @@ export default function ChatWindow({
   const [isCallPickerOpen, setIsCallPickerOpen] = useState(false);
   const [selectedCallMemberIds, setSelectedCallMemberIds] = useState([]);
   const [isCallStarting, setIsCallStarting] = useState(false);
+  const [isRidePickerOpen, setIsRidePickerOpen] = useState(false);
+  const [rideOptions, setRideOptions] = useState([]);
+  const [rideOptionsLoading, setRideOptionsLoading] = useState(false);
   const [translationLanguage, setTranslationLanguage] = useState(() => storedTranslationLanguage(currentUser.id));
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
@@ -204,6 +210,7 @@ export default function ChatWindow({
   const deleteCancelRef = useRef(null);
   const deleteModalRef = useRef(null);
   const callPickerRef = useRef(null);
+  const ridePickerRef = useRef(null);
 
   const changeTranslationLanguage = useCallback((language) => {
     setTranslationLanguage(language);
@@ -243,6 +250,7 @@ export default function ChatWindow({
         previewUrl: URL.createObjectURL(file),
       };
     });
+    setRideInvitation(null);
     setErrorMessage('');
   }, [releaseVoiceRecording]);
 
@@ -303,6 +311,7 @@ export default function ChatWindow({
       releaseVoiceRecording(current);
       return null;
     });
+    setRideInvitation(null);
     setEditingMessage(null);
     setErrorMessage('');
     cancelVoiceRecording();
@@ -311,6 +320,7 @@ export default function ChatWindow({
     setIsCaptureMenuOpen(false);
     setIsVideoCameraPickerOpen(false);
     setIsCallPickerOpen(false);
+    setIsRidePickerOpen(false);
     setSelectedCallMemberIds([]);
     clearDraft(conversationId);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -325,6 +335,7 @@ export default function ChatWindow({
     setMediaEntries(draft?.mediaEntries || []);
     setLocation(draft?.location || null);
     setVoiceRecording(draft?.voiceRecording || null);
+    setRideInvitation(draft?.rideInvitation || null);
     setEditingMessage(draft?.editingMessage || null);
     setComposerConversationId(conversationId);
     setErrorMessage('');
@@ -353,9 +364,18 @@ export default function ChatWindow({
       mediaEntries,
       location,
       voiceRecording,
+      rideInvitation,
       editingMessage,
     });
-  }, [composerConversationId, conversationId, editingMessage, location, mediaEntries, saveDraft, text, voiceRecording]);
+  }, [composerConversationId, conversationId, editingMessage, location, mediaEntries, rideInvitation, saveDraft, text, voiceRecording]);
+
+  useEffect(() => {
+    if (!messageList.some((message) => message.rideInvitation)) return undefined;
+    const timerId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshConversation(conversationId);
+    }, 15000);
+    return () => window.clearInterval(timerId);
+  }, [conversationId, messageList, refreshConversation]);
 
   useEffect(() => {
     if (!deleteTarget) return undefined;
@@ -407,6 +427,36 @@ export default function ChatWindow({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isCallBusy, isCallPickerOpen]);
+
+  useEffect(() => {
+    if (!isRidePickerOpen) return undefined;
+    const dialog = ridePickerRef.current;
+    const frame = window.requestAnimationFrame(() => dialog?.querySelector('button:not(:disabled)')?.focus());
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setIsRidePickerOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialog?.querySelectorAll('button:not(:disabled), a[href]') || [])];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isRidePickerOpen]);
 
   useEffect(() => {
     if (!isCaptureMenuOpen) return undefined;
@@ -577,7 +627,7 @@ export default function ChatWindow({
     );
   }
 
-  function beginEdit(message) {
+  const beginEdit = useCallback((message) => {
     resetComposer();
     setEditingMessage(message);
     setText(message.text);
@@ -585,7 +635,7 @@ export default function ChatWindow({
     const sharedLocation = message.attachments.find((item) => item.kind === MESSAGE_TYPE.LOCATION);
     setLocation(sharedLocation ? { latitude: sharedLocation.latitude, longitude: sharedLocation.longitude } : null);
     window.setTimeout(() => messageInputRef.current?.focus(), 0);
-  }
+  }, [resetComposer]);
 
   function openCaptureMenu() {
     setIsCaptureMenuOpen(true);
@@ -671,10 +721,10 @@ export default function ChatWindow({
     setErrorMessage('');
   }
 
-  function openDeleteDialog(message) {
+  const openDeleteDialog = useCallback((message) => {
     deleteReturnFocusRef.current = document.activeElement;
     setDeleteTarget(message);
-  }
+  }, []);
 
   function closeDeleteDialog() {
     setDeleteTarget(null);
@@ -684,7 +734,7 @@ export default function ChatWindow({
   function handleComposerKeyDown(event) {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (text.trim() || mediaEntries.length || location) submitMessage();
+    if (text.trim() || mediaEntries.length || location || rideInvitation) submitMessage();
   }
 
   function resizeComposer(event) {
@@ -711,6 +761,12 @@ export default function ChatWindow({
           mediaOrder: mediaEntries.map((item) => item.token),
           location,
         });
+      } else if (rideInvitation) {
+        await MessagingService.sendRideInvitation({
+          conversationId,
+          rideId: rideInvitation.rideId,
+          text,
+        });
       } else {
         await MessagingService.sendMessage({
           conversationId,
@@ -723,8 +779,8 @@ export default function ChatWindow({
         });
       }
       resetComposer();
-      await refreshConversation(conversationId);
-      if (shouldRevealRideConversation) await refreshConversations('active');
+      void refreshConversation(conversationId);
+      if (shouldRevealRideConversation) void refreshConversations('active');
     } catch (error) {
       setErrorMessage(`${error.message || 'Unable to save message.'} Your draft has been kept for Retry.`);
     } finally {
@@ -732,14 +788,18 @@ export default function ChatWindow({
     }
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(scope) {
     if (!deleteTarget || isPending) return;
     setIsPending(true);
     setErrorMessage('');
     try {
-      await MessagingService.deleteMessage(deleteTarget.id);
+      if (scope === 'everyone') {
+        await MessagingService.deleteMessage(deleteTarget.id);
+      } else {
+        await MessagingService.deleteForMe(deleteTarget.id, deleteTarget.itemType === 'call' ? 'call' : 'message');
+      }
       setDeleteTarget(null);
-      await refreshConversation(conversationId);
+      void refreshConversation(conversationId);
     } catch (error) {
       setErrorMessage(error.message || 'Unable to delete message.');
     } finally {
@@ -759,7 +819,7 @@ export default function ChatWindow({
   }
 
   const hasNormalDraft = Boolean(text.trim() || mediaEntries.length || location);
-  const hasDraft = Boolean(hasNormalDraft || voiceRecording);
+  const hasDraft = Boolean(hasNormalDraft || voiceRecording || rideInvitation);
   const isVoiceBusy = isVoiceStarting || isVoiceRecording || isVoiceProcessing;
   const memberDescription = conversation.type === 'group'
     ? `${conversation.members.length} members`
@@ -791,6 +851,27 @@ export default function ChatWindow({
     } finally {
       setIsCallStarting(false);
     }
+  }
+
+  async function openRidePicker() {
+    setIsRidePickerOpen(true);
+    setRideOptionsLoading(true);
+    setErrorMessage('');
+    try {
+      setRideOptions(await MessagingService.listRideInviteOptions(conversation.id));
+    } catch (error) {
+      setRideOptions([]);
+      setErrorMessage(error.message || 'Unable to load Rides for this friend.');
+    } finally {
+      setRideOptionsLoading(false);
+    }
+  }
+
+  function chooseRideInvitation(invitation) {
+    setRideInvitation(invitation);
+    setIsRidePickerOpen(false);
+    setErrorMessage('');
+    window.setTimeout(() => messageInputRef.current?.focus(), 0);
   }
 
   function toggleCallMember(memberId) {
@@ -876,7 +957,7 @@ export default function ChatWindow({
 
       <div className="message-chat-scroll" aria-live="polite">
         {messageList.length ? messageList.map((item) => item.itemType === 'call' ? (
-          <CallEventBubble key={`call-${item.id}`} call={item} />
+          <CallEventBubble key={`call-${item.id}`} call={item} onDelete={openDeleteDialog} />
         ) : (
           <MessageBubble
             key={`message-${item.id}`}
@@ -915,6 +996,12 @@ export default function ChatWindow({
             <div className="message-editing-banner">
               <span>Editing message — changes apply to the whole text/media/location bundle.</span>
               <button type="button" onClick={resetComposer}>Cancel</button>
+            </div>
+          )}
+          {rideInvitation && (
+            <div className="message-ride-invitation-draft-wrap">
+              <RideInvitationCard invitation={rideInvitation} draft />
+              <button type="button" onClick={() => setRideInvitation(null)} aria-label="Remove Ride invitation"><IconX size={15} /></button>
             </div>
           )}
           <ComposerMedia entries={mediaEntries} onMove={moveMedia} onRemove={removeMedia} />
@@ -977,9 +1064,12 @@ export default function ChatWindow({
                 </div>
               ) : (
                 <>
-                  <button type="button" className="message-composer-icon-button" onClick={() => fileInputRef.current?.click()} disabled={isPending} aria-label="Add photos or videos" title="Add photos or videos"><IconPaperclip size={20} /></button>
-                  <button ref={captureButtonRef} type="button" className="message-composer-icon-button" onClick={openCaptureMenu} disabled={isPending} aria-label="Open camera options" title="Take photo or record video"><IconCamera size={20} /></button>
-                  <button type="button" className={`message-composer-icon-button ${location ? 'message-composer-icon-button-active' : ''}`} onClick={shareCurrentLocation} disabled={isPending || isLocating} aria-label={isLocating ? 'Getting current location' : 'Share current location'} title="Share current location"><IconMapPin size={20} /></button>
+                  <button type="button" className="message-composer-icon-button" onClick={() => fileInputRef.current?.click()} disabled={isPending || Boolean(rideInvitation)} aria-label="Add photos or videos" title="Add photos or videos"><IconPaperclip size={20} /></button>
+                  <button ref={captureButtonRef} type="button" className="message-composer-icon-button" onClick={openCaptureMenu} disabled={isPending || Boolean(rideInvitation)} aria-label="Open camera options" title="Take photo or record video"><IconCamera size={20} /></button>
+                  <button type="button" className={`message-composer-icon-button ${location ? 'message-composer-icon-button-active' : ''}`} onClick={shareCurrentLocation} disabled={isPending || isLocating || Boolean(rideInvitation)} aria-label={isLocating ? 'Getting current location' : 'Share current location'} title="Share current location"><IconMapPin size={20} /></button>
+                  {conversation.scope === 'friend' && (
+                    <button type="button" className={`message-composer-icon-button ${rideInvitation ? 'message-composer-icon-button-active' : ''}`} onClick={() => { void openRidePicker(); }} disabled={isPending || Boolean(mediaEntries.length || location || voiceRecording || editingMessage)} aria-label="Invite friend to a Ride" title="Invite friend to a Ride"><IconCar size={20} /></button>
+                  )}
                   <div className="message-composer-input-wrap">
                     <textarea
                       ref={messageInputRef}
@@ -988,7 +1078,7 @@ export default function ChatWindow({
                       onKeyDown={handleComposerKeyDown}
                       rows="1"
                       maxLength="1000"
-                      placeholder="Write a message"
+                      placeholder={rideInvitation ? 'Add a message (optional)' : 'Write a message'}
                       aria-label="Message text"
                       aria-describedby={`message-composer-help-${conversation.id}`}
                       disabled={isPending}
@@ -1127,10 +1217,11 @@ export default function ChatWindow({
         <div className="message-options-backdrop" role="presentation" onMouseDown={() => !isPending && closeDeleteDialog()}>
           <section ref={deleteModalRef} className="message-options-modal" role="dialog" aria-modal="true" aria-labelledby="delete-message-title" onMouseDown={(event) => event.stopPropagation()}>
             <span className="message-options-handle" />
-            <div className="message-options-header"><div><span id="delete-message-title">Delete this message?</span><p>The complete text, media, location or voice message will be deleted permanently.</p></div><button ref={deleteCancelRef} type="button" onClick={closeDeleteDialog} aria-label="Close delete confirmation"><IconX size={18} /></button></div>
-            <div className="message-options-actions">
-              <button type="button" className="message-options-cancel" onClick={closeDeleteDialog} disabled={isPending}>Keep message</button>
-              <button type="button" className="message-options-delete" onClick={confirmDelete} disabled={isPending}>{isPending ? 'Deleting…' : 'Delete message'}</button>
+            <div className="message-options-header"><div><span id="delete-message-title">{deleteTarget.itemType === 'call' ? 'Delete this call record?' : 'Delete this message?'}</span><p>Delete for me hides this item only from your account. Other members keep their copy.{deleteTarget.canDeleteForEveryone ? ' Delete for everyone removes the message for all members.' : ''}</p></div><button ref={deleteCancelRef} type="button" onClick={closeDeleteDialog} disabled={isPending} aria-label="Close delete confirmation"><IconX size={18} /></button></div>
+            <div className="message-options-actions message-delete-options">
+              <button type="button" className="message-options-cancel" onClick={closeDeleteDialog} disabled={isPending}>Cancel</button>
+              <button type="button" className="message-options-delete" onClick={() => confirmDelete('me')} disabled={isPending}>Delete for me</button>
+              {deleteTarget.canDeleteForEveryone && <button type="button" className="message-options-delete" onClick={() => confirmDelete('everyone')} disabled={isPending}>Delete for everyone</button>}
             </div>
           </section>
         </div>
@@ -1188,6 +1279,34 @@ export default function ChatWindow({
                 <IconPhone size={18} />
                 {isCallStarting ? 'Starting…' : 'Call selected'}
               </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isRidePickerOpen && (
+        <div className="message-options-backdrop" role="presentation" onMouseDown={() => setIsRidePickerOpen(false)}>
+           <section ref={ridePickerRef} className="message-options-modal message-ride-picker" role="dialog" aria-modal="true" aria-labelledby="ride-invitation-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+            <span className="message-options-handle" />
+            <div className="message-options-header">
+              <div><span id="ride-invitation-picker-title">Invite to a Ride</span><p>Choose a Ride you host, requested, or already joined.</p></div>
+              <button type="button" onClick={() => setIsRidePickerOpen(false)} aria-label="Close Ride selection"><IconX size={18} /></button>
+            </div>
+            <div className="message-ride-picker-list">
+              {rideOptionsLoading ? <p className="message-ride-picker-empty">Loading available Rides…</p> : rideOptions.length ? rideOptions.map((option) => (
+                <button type="button" key={option.rideId} onClick={() => chooseRideInvitation(option)}>
+                  <RideInvitationCard invitation={option} draft />
+                  <span>{option.sourceRole === 'host' ? 'Your hosted Ride' : 'Your requested or joined Ride'}</span>
+                </button>
+              )) : (
+                <div className="message-ride-picker-empty">
+                  <p>No Rides are currently available for this friend.</p>
+                  <div className="message-ride-picker-empty-actions">
+                    <Link to="/search">Search Rides</Link>
+                    <Link to="/ride/publish">Publish a Ride</Link>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         </div>

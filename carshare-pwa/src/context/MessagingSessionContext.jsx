@@ -186,7 +186,7 @@ export function MessagingSessionProvider({ children }) {
           return null;
         }
         const [messages, calls] = await Promise.all([
-          MessagingService.listMessages(conversationId),
+          MessagingService.listMessages(conversationId, { conversation, currentUserId: userId }),
           CallService.listConversationCalls(conversationId).catch(() => []),
         ]);
         const timeline = [

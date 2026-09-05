@@ -504,7 +504,7 @@ switches, exposes the filtered RPC, and narrows raw cross-profile visibility;
 until deployed, the app uses non-persistent defaults and labels that state.
 
 ## D031 — Confirmed Friendships and Separate Permanent Direct Chats
-**Status:** Accepted in application; migration 079 authored and not deployed
+**Status:** Accepted and deployed
 
 A friendship is one normalized account pair and requires explicit acceptance.
 It is not inferred from a Ride, request, message, contact list, or profile view.
@@ -527,11 +527,12 @@ shared notification centre, not the Message unread count. `079_m3` implements
 the pair locks, RLS, RPCs, Realtime publication, safe profile relevance, and
 friend-chat write gate while preserving all Ride-chat IDs and lifecycle rules.
 
-A future co-ride invitation may be a structured friend-chat message storing
-only `ride_id` and resolving live Ride state when displayed. It will open the
-existing Ride Detail and `Request to join` flow; it must not auto-request,
-reserve a seat, or bypass Driver approval. That card is explicitly outside the
-current release.
+A co-ride invitation is implemented as a structured friend-chat message storing
+only `ride_id` and resolving live Ride state when displayed. It opens the
+existing Ride Detail and `Request to join` flow; it does not auto-request,
+reserve a seat, or bypass Driver approval. A sender may share a Ride they Host
+or one on which their own request is Pending or Accepted, while the recipient
+must still be currently eligible to request it.
 
 ## D032 — Module 4 Search Requires Confirmed Google Suggestions
 **Status:** Accepted and deployed 2026-09-03

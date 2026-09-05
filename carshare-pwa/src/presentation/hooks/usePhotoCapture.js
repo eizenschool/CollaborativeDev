@@ -94,11 +94,14 @@ export default function usePhotoCapture({ onPhotoReady, onError }) {
     }
   }, [isCapturing, previewStream, stopCapture]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    generationRef.current += 1;
-    streamRef.current?.getTracks?.().forEach((track) => track.stop());
-    streamRef.current = null;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      generationRef.current += 1;
+      streamRef.current?.getTracks?.().forEach((track) => track.stop());
+      streamRef.current = null;
+    };
   }, []);
 
   return { isStarting, isCapturing, previewStream, startCapture, capturePhoto, cancelCapture: stopCapture };

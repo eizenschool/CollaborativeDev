@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
 const MEDIA_BUCKET = 'message-media';
 const SIGNED_URL_SECONDS = 60 * 60;
+const signedMediaCaches = new WeakMap();
 // Attachment mutations are committed with a messages or conversations change,
 // so subscribing to them separately only produces duplicate refreshes.
 const CORE_REALTIME_TABLES = [
@@ -10,6 +11,7 @@ const CORE_REALTIME_TABLES = [
   'conversation_members',
   'messages',
   'call_sessions',
+  'chat_item_deletions',
 ];
 const LIFECYCLE_REALTIME_TABLES = ['friendships'];
 
@@ -67,6 +69,8 @@ const MESSAGE_SELECT = `
   attachments:message_attachments(*)
 `;
 
+let rideInvitationSchemaAvailable = null;
+
 function requireSupabase() {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Messaging requires a configured Supabase connection.');
@@ -93,6 +97,75 @@ export function isMissingFriendshipConversationSchema(error) {
     .join(' ');
   return ['PGRST200', 'PGRST204', 'PGRST205', '42703', '42P01'].includes(error?.code)
     && /friendships|friendship_id|scope|conversations_friendship_id_fkey/i.test(details);
+}
+
+export function isMissingRideInvitationSchema(error) {
+  const details = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
+  return ['PGRST200', 'PGRST202', 'PGRST204', 'PGRST205', '42703', '42P01'].includes(error?.code)
+    && /message_ride_invitations|friend_ride_invitation|ride_invite_options/i.test(details);
+}
+
+async function attachRideInvitationRows(rows, client = requireSupabase()) {
+  if (!rows.length || rideInvitationSchemaAvailable === false) return rows;
+  const { data: invitations, error } = await client
+    .from('message_ride_invitations')
+    .select('message_id, ride_id')
+    .in('message_id', rows.map((row) => row.id));
+  if (error) {
+    if (isMissingRideInvitationSchema(error)) {
+      rideInvitationSchemaAvailable = false;
+      return rows;
+    }
+    throw normalizeError(error, 'Unable to load Ride invitations.');
+  }
+  rideInvitationSchemaAvailable = true;
+  const conversationIds = [...new Set(rows.map((row) => row.conversation_id).filter(Boolean))];
+  const snapshotResults = await Promise.all(conversationIds.map(async (conversationId) => {
+    const { data, error: snapshotError } = await client.rpc(
+      'get_friend_ride_invitation_cards',
+      { p_conversation_id: conversationId },
+    );
+    if (snapshotError) {
+      if (isMissingRideInvitationSchema(snapshotError)) return [];
+      throw normalizeError(snapshotError, 'Unable to refresh Ride invitations.');
+    }
+    return data || [];
+  }));
+  const snapshotByMessage = new Map(snapshotResults.flat().map((item) => [item.message_id, item]));
+  const invitationByMessage = new Map((invitations || []).map((item) => [item.message_id, item]));
+  return rows.map((row) => {
+    const invitation = invitationByMessage.get(row.id);
+    return invitation ? {
+      ...row,
+      ride_invitation: { ...invitation, ...(snapshotByMessage.get(row.id) || {}) },
+    } : row;
+  });
+}
+
+async function attachConversationRideInvitationPreviews(rows, client = requireSupabase()) {
+  const conversations = Array.isArray(rows) ? rows : rows ? [rows] : [];
+  if (!conversations.length || rideInvitationSchemaAvailable === false) return rows;
+  const messageIds = conversations.map((row) => row.last_message_id).filter(Boolean);
+  if (!messageIds.length) return rows;
+  const { data, error } = await client.from('message_ride_invitations')
+    .select('message_id, ride_id').in('message_id', messageIds);
+  if (error) {
+    if (isMissingRideInvitationSchema(error)) {
+      rideInvitationSchemaAvailable = false;
+      return rows;
+    }
+    throw normalizeError(error, 'Unable to load conversation previews.');
+  }
+  rideInvitationSchemaAvailable = true;
+  const byMessage = new Map((data || []).map((item) => [item.message_id, item]));
+  const enriched = conversations.map((row) => {
+    const lastMessage = Array.isArray(row.last_message) ? row.last_message[0] : row.last_message;
+    const invitation = byMessage.get(row.last_message_id);
+    if (!lastMessage || !invitation) return row;
+    const enrichedMessage = { ...lastMessage, ride_invitation: invitation };
+    return { ...row, last_message: Array.isArray(row.last_message) ? [enrichedMessage] : enrichedMessage };
+  });
+  return Array.isArray(rows) ? enriched : enriched[0];
 }
 
 async function loadConversationRows(client, conversationId = null) {
@@ -180,15 +253,29 @@ export async function attachSignedUrls(rows, client = requireSupabase()) {
 
   if (!paths.length) return rows;
 
-  const bucket = client.storage.from(MEDIA_BUCKET);
-  const { data, error } = await bucket.createSignedUrls(paths, SIGNED_URL_SECONDS);
-
-  if (error) throw normalizeError(error, 'Unable to load message media.');
+  // Rows have already passed message RLS. Reuse valid URLs for their immutable
+  // versioned paths so Realtime refreshes do not reload every photo/video.
+  let cache = signedMediaCaches.get(client);
+  if (!cache) {
+    cache = new Map();
+    signedMediaCaches.set(client, cache);
+  }
+  const now = Date.now();
   const urlsByPath = new Map();
   const errorsByPath = new Map();
+  for (const [path, entry] of cache) {
+    if (entry.expiresAt <= now) cache.delete(path);
+    else if (paths.includes(path)) urlsByPath.set(path, entry.url);
+  }
+  const missingPaths = paths.filter((path) => !urlsByPath.has(path));
+  const bucket = client.storage.from(MEDIA_BUCKET);
+  const { data, error } = missingPaths.length
+    ? await bucket.createSignedUrls(missingPaths, SIGNED_URL_SECONDS)
+    : { data: [], error: null };
+  if (error) throw normalizeError(error, 'Unable to load message media.');
 
   (data || []).forEach((item, index) => {
-    const path = paths.includes(item?.path) ? item.path : paths[index];
+    const path = missingPaths.includes(item?.path) ? item.path : missingPaths[index];
     if (!path) return;
     const signedUrl = getSignedUrl(item);
     if (signedUrl) {
@@ -221,6 +308,12 @@ export async function attachSignedUrls(rows, client = requireSupabase()) {
     );
   }));
 
+  missingPaths.forEach((path) => {
+    const url = urlsByPath.get(path);
+    if (url) cache.set(path, { url, expiresAt: now + (SIGNED_URL_SECONDS - 60) * 1000 });
+  });
+  while (cache.size > 500) cache.delete(cache.keys().next().value);
+
   return rows.map((row) => ({
     ...row,
     attachments: (row.attachments || []).map((attachment) => ({
@@ -240,7 +333,7 @@ export async function attachLatestCallActivity(rows, client = requireSupabase())
   if (!conversations.length) return rows;
 
   const { data, error } = await client
-    .from('call_sessions')
+    .from('chat_call_history')
     .select('id, conversation_id, caller_id, callee_id, call_type, status, created_at')
     .in('conversation_id', conversations.map((conversation) => conversation.id))
     .order('created_at', { ascending: false });
@@ -283,7 +376,7 @@ export const supabaseMessagingRepository = {
     const userId = await requireUserId();
     const { data, error } = await loadConversationRows(client);
     if (error) throw normalizeError(error, 'Unable to load conversations.');
-    const conversations = data || [];
+    const conversations = await attachConversationRideInvitationPreviews(data || [], client);
     if (!conversations.length) return conversations;
 
     const [messageResult, conversationsWithCalls] = await Promise.all([
@@ -318,7 +411,7 @@ export const supabaseMessagingRepository = {
     const client = requireSupabase();
     const { data, error } = await loadConversationRows(client, conversationId);
     if (error) throw normalizeError(error, 'Unable to load this conversation.');
-    return attachLatestCallActivity(data, client);
+    return attachLatestCallActivity(await attachConversationRideInvitationPreviews(data, client), client);
   },
 
   async listMessages(conversationId) {
@@ -330,7 +423,7 @@ export const supabaseMessagingRepository = {
       .order('created_at', { ascending: true })
       .order('id', { ascending: true });
     if (error) throw normalizeError(error, 'Unable to load messages.');
-    return attachSignedUrls(data || []);
+    return attachSignedUrls(await attachRideInvitationRows(data || [], client));
   },
 
   async getMessage(messageId) {
@@ -342,8 +435,36 @@ export const supabaseMessagingRepository = {
       .maybeSingle();
     if (error) throw normalizeError(error, 'Unable to load this message.');
     if (!data) return null;
-    const [message] = await attachSignedUrls([data]);
+    const [message] = await attachSignedUrls(await attachRideInvitationRows([data], client));
     return message;
+  },
+
+  async listRideInviteOptions(conversationId) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('list_friend_ride_invite_options', {
+      p_conversation_id: conversationId,
+    });
+    if (error) {
+      if (isMissingRideInvitationSchema(error)) {
+        throw Object.assign(new Error('Ride invitations are not available in this environment yet.'), {
+          code: 'RIDE_INVITATIONS_UNAVAILABLE',
+        });
+      }
+      throw normalizeError(error, 'Unable to load Rides for this friend.');
+    }
+    return data || [];
+  },
+
+  async sendRideInvitation({ conversationId, messageId, rideId, text }) {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('send_friend_ride_invitation', {
+      p_conversation_id: conversationId,
+      p_message_id: messageId,
+      p_ride_id: rideId,
+      p_text: text || null,
+    });
+    if (error) throw normalizeError(error, 'Unable to send this Ride invitation.');
+    return data;
   },
 
   async uploadMedia({ conversationId, messageId, versionId, file }) {
@@ -398,6 +519,14 @@ export const supabaseMessagingRepository = {
     });
     if (error) throw normalizeError(error, 'Unable to edit message.');
     return data;
+  },
+
+  async deleteForMe(itemId, itemType) {
+    const { error } = await requireSupabase().rpc('delete_chat_item_for_me', {
+      p_item_id: itemId,
+      p_item_type: itemType,
+    });
+    if (error) throw normalizeError(error, 'Unable to delete this item for you.');
   },
 
   async deleteMessage(messageId) {
