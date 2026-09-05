@@ -26,6 +26,33 @@ describe('validateMalaysianIC', () => {
     expect(validateMalaysianIC('')).toBe(false);
     expect(validateMalaysianIC(undefined)).toBe(false);
   });
+
+  it('rejects a birth date that never existed', () => {
+    expect(validateMalaysianIC('991301-14-5678')).toBe(false);
+    expect(validateMalaysianIC('990132-14-5678')).toBe(false);
+    expect(validateMalaysianIC('990230-14-5678')).toBe(false);
+    expect(validateMalaysianIC('990000-14-5678')).toBe(false);
+  });
+
+  it('accepts 29 February when either century reading is a leap year', () => {
+    expect(validateMalaysianIC('000229-14-5678')).toBe(true);
+    expect(validateMalaysianIC('960229-14-5678')).toBe(true);
+    expect(validateMalaysianIC('990229-14-5678')).toBe(false);
+  });
+
+  it('rejects birthplace codes JPN has never assigned', () => {
+    expect(validateMalaysianIC('990101-00-5678')).toBe(false);
+    expect(validateMalaysianIC('990101-17-5678')).toBe(false);
+    expect(validateMalaysianIC('990101-73-5678')).toBe(false);
+    expect(validateMalaysianIC('990101-97-5678')).toBe(false);
+  });
+
+  it('accepts assigned state, federal territory and foreign birthplace codes', () => {
+    expect(validateMalaysianIC('990101-01-5678')).toBe(true);
+    expect(validateMalaysianIC('990101-16-5678')).toBe(true);
+    expect(validateMalaysianIC('990101-71-5678')).toBe(true);
+    expect(validateMalaysianIC('990101-99-5678')).toBe(true);
+  });
 });
 
 describe('buildSessionUser', () => {

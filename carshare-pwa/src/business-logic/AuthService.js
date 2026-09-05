@@ -11,11 +11,41 @@ function validatePassword(password) {
   return typeof password === 'string' && password.length >= 8;
 }
 
+// Birthplace codes that JPN has never assigned. Everything else in 01-99 is a
+// state, a federal territory, a foreign country of birth, or a documented
+// "unknown" marker, so only this set can be rejected without turning away real
+// MyKad holders.
+const UNASSIGNED_BIRTHPLACE_CODES = new Set([
+  '00', '17', '18', '19', '20', '69', '70', '73', '80', '81', '94', '95', '96', '97'
+]);
+
+// MyKad carries no check digit, so structural validity is the most an offline
+// gate can prove: the YYMMDD segment must be a real calendar date and the
+// birthplace code must be one JPN actually issues. The last four digits are a
+// registration serial with no public rule, so they stay unchecked.
+function isRealBirthDate(yymmdd) {
+  const year = Number(yymmdd.slice(0, 2));
+  const month = Number(yymmdd.slice(2, 4));
+  const day = Number(yymmdd.slice(4, 6));
+  if (month < 1 || month > 12 || day < 1) return false;
+  // The century is not encoded, so the date is real when either reading is -
+  // this only changes the answer for 29 February.
+  return [1900 + year, 2000 + year].some(
+    (fullYear) => day <= new Date(Date.UTC(fullYear, month, 0)).getUTCDate()
+  );
+}
+
 // Malaysian MyKad format: 6-digit birthdate (YYMMDD) + 2-digit birthplace/state
 // code + 4-digit serial, with or without the conventional dashes. This is a
-// format-only sign-up gate - the value is never persisted or sent to Supabase.
+// structural sign-up gate, not identity verification: nothing here proves the
+// number belongs to the person entering it, so it must never grant a verified
+// badge or reputation. The value itself is never persisted or sent to Supabase.
 export function validateMalaysianIC(ic) {
-  return /^\d{6}-?\d{2}-?\d{4}$/.test((ic || '').trim());
+  const trimmed = (ic || '').trim();
+  if (!/^\d{6}-?\d{2}-?\d{4}$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/-/g, '');
+  if (!isRealBirthDate(digits.slice(0, 6))) return false;
+  return !UNASSIGNED_BIRTHPLACE_CODES.has(digits.slice(6, 8));
 }
 
 export function buildSignUpResult({ authUser, session, appUser }) {
@@ -66,7 +96,11 @@ export const AuthService = {
     }
 
     if (isSupabaseConfigured) {
-      const options = { data: { full_name: fullName.trim() } };
+      // Migration 088 has handle_new_user() stamp profile_private.ic_checked_at
+      // from this flag at account creation - the only point both the confirmed
+      // and pending-confirmation sign-up paths pass through. The IC number
+      // itself is still never sent.
+      const options = { data: { full_name: fullName.trim(), ic_format_checked: true } };
       if (typeof window !== 'undefined') options.emailRedirectTo = window.location.origin;
 
       const { data, error } = await supabase.auth.signUp({ email, password, options });

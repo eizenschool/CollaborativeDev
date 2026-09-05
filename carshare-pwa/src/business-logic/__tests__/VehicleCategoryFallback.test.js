@@ -49,6 +49,7 @@ const draft = {
   vehicleType: 'hatchback',
   plate: 'VAA 1234',
   driverLicenseNumber: 'D1234567',
+  driverLicenseExpiry: '2099-12-31',
   colour: 'Blue',
   seats: 4,
   year: 2024,

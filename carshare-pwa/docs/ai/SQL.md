@@ -17,7 +17,7 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-082
+Repository SQL history: 001-088 (`087_m1` and `088_m1` are authored and not deployed)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -58,7 +58,7 @@ confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that. `082_m4` is deployed;
-the next unused repository sequence is `083`.)
+the next unused repository sequence is `089`.)
 ```
 
 The repository has one documented historical numbering collision at `075`
@@ -463,7 +463,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
 - `profile_visibility` (deployed `073_m1`): owner-managed switches for public photo, languages, completed-trip count, and CO2 impact.
 - `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, at most one active vehicle per owner, and deployed nullable `vehicle_type` from `039`.
-- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Deployed `072_m1` adds a 70-point default, safety hold, and reputation update timestamp.
+- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Deployed `072_m1` adds a 70-point default, safety hold, and reputation update timestamp; authored `087_m1` moves that default to 100 and rebases existing scores by +30 clamped at 100.
 - `reputation_events` (deployed `072_m1`): owner-readable, trigger-written, idempotent verified-Ride reputation ledger with a +3 positive cap per Ride.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, pickup instructions, one nullable private pickup-photo path after undeployed `059`, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
@@ -511,7 +511,7 @@ public table; deployed `039` changes the two classification columns above):
   on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce
   ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
-- Deployed `072_m1` makes reputation authoritative in database triggers: three evidence Rides are provisional, then publishing requires 65 and requesting 50; a safety hold overrides score. Browser clients receive SELECT-only ledger access and cannot manufacture events.
+- Deployed `072_m1` makes reputation authoritative in database triggers: three evidence Rides are provisional, then publishing requires 65 and requesting 50; a safety hold overrides score. Browser clients receive SELECT-only ledger access and cannot manufacture events. Authored `087_m1` moves that origin to 100 and those gates to 90/75 (D034) without changing the ledger, the +3 per-Ride cap or the provisional window.
 - Deployed `073_m1` exposes only the privacy-filtered `get_public_profile(uuid)` projection to `anon`/`authenticated`; owner-private contact data is never selected.
 - Messaging mutations are RPC-only; lifecycle, membership, terminal-only personal controls, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
 - Authored `079` serializes friendship-pair transitions, rejects self/duplicate/
@@ -671,6 +671,24 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
   `reputation_hold` reachable for the first time since `072_m1` defined them,
   without a client-facing admin surface.
+- `087_m1_reputation_starts_at_ceiling.sql` - authored, not deployed;
+  moves the reputation origin from 70 to 100, rebases live scores by +30
+  clamped at 100 (guarded by the current column default, so re-running is a
+  no-op), and raises the publish/request gates to 90/75 in
+  `private.enforce_ride_reputation_eligibility`,
+  `private.enforce_request_reputation_eligibility`,
+  `public.get_reputation_summary` and `public.get_ride_eligibility`. It
+  replaces constants only: the `072_m1` ledger, per-event clamp, +3 per-Ride
+  positive cap, event deltas and three-Ride provisional window are untouched.
+- `088_m1_identity_gate_hardening.sql` - authored, not deployed; adds
+  `profile_private.ic_checked_at` (written only by `handle_new_user()` from
+  the sign-up payload, with no insert/update grant to browser roles, and never
+  storing the IC number itself) and `vehicles.driver_license_expiry`, plus the
+  `enforce_ride_driver_license_before_publish` trigger that requires a present
+  and unexpired licence on the selected vehicle before a Ride reaches
+  `Published`. A vehicle registered before this file has a null expiry, which
+  is treated as unknown rather than expired so no existing Host is locked out.
+  Deliberately no document photos, no Storage bucket, and no verified badge.
 - `079_m3_friendships_and_persistent_chat.sql` - authored, not deployed;
   adds mutually confirmed account-pair friendships, authenticated RPC-only
   transitions, one separate permanent direct conversation per friendship,

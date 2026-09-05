@@ -12,6 +12,7 @@
 import { DEPARTURE_GRACE_MINUTES, rideIntervalsOverlap } from '../business-logic/rideDateTime.js';
 import {
   cancellationReputationEvent,
+  clampReputationScore,
   describeReputationEvent,
   getRideEligibility,
   isReputationEventType,
@@ -79,6 +80,8 @@ const seedData = {
         model: 'Camry',
         vehicleType: 'sedan',
         plate: 'NSW 4KL 291',
+        driverLicenseNumber: 'D1102934',
+        driverLicenseExpiry: '2030-06-30',
         colour: 'Pearl White',
         seats: 4,
         year: 2021,
@@ -90,30 +93,32 @@ const seedData = {
         model: 'Civic',
         vehicleType: 'sedan',
         plate: 'VIC 8BM 774',
+        driverLicenseNumber: 'D1102934',
+        driverLicenseExpiry: '2030-06-30',
         colour: 'Midnight Blue',
         seats: 3,
         year: 2019,
         active: false
       }
     ],
-    u_host_ahmad: [{ id: 'v_ahmad', make: 'Perodua', model: 'Alza', vehicleType: 'mpv', plate: 'WXX 101', colour: 'Silver', seats: 6, year: 2023, active: true }],
-    u_host_sarah: [{ id: 'v_sarah', make: 'Honda', model: 'HR-V', vehicleType: 'suv', plate: 'BXX 202', colour: 'White', seats: 4, year: 2022, active: true }],
-    u_host_raj: [{ id: 'v_raj', make: 'Perodua', model: 'Myvi', vehicleType: 'hatchback', plate: 'VXX 303', colour: 'Blue', seats: 3, year: 2021, active: true }],
-    u_host_nurul: [{ id: 'v_nurul', make: 'Toyota', model: 'Hiace', vehicleType: 'van', plate: 'WXX 404', colour: 'Black', seats: 8, year: 2020, active: true }]
+    u_host_ahmad: [{ id: 'v_ahmad', make: 'Perodua', model: 'Alza', vehicleType: 'mpv', plate: 'WXX 101', driverLicenseNumber: 'D2201455', driverLicenseExpiry: '2029-03-14', colour: 'Silver', seats: 6, year: 2023, active: true }],
+    u_host_sarah: [{ id: 'v_sarah', make: 'Honda', model: 'HR-V', vehicleType: 'suv', plate: 'BXX 202', driverLicenseNumber: 'D3308761', driverLicenseExpiry: '2028-11-02', colour: 'White', seats: 4, year: 2022, active: true }],
+    u_host_raj: [{ id: 'v_raj', make: 'Perodua', model: 'Myvi', vehicleType: 'hatchback', plate: 'VXX 303', driverLicenseNumber: 'D4417820', driverLicenseExpiry: '2027-08-21', colour: 'Blue', seats: 3, year: 2021, active: true }],
+    u_host_nurul: [{ id: 'v_nurul', make: 'Toyota', model: 'Hiace', vehicleType: 'van', plate: 'WXX 404', driverLicenseNumber: 'D5526093', driverLicenseExpiry: '2031-01-09', colour: 'Black', seats: 8, year: 2020, active: true }]
   },
   // Reputation Score Engine inputs (3.1.2.a) - completed trips, CO2 saved, and
   // reputation score feed the weighted Composite Impact Score on the Host Dashboard.
   impact: {
-    u_demo_1: { completedTrips: 34, co2SavedKg: 287, reputationScore: 78, rating: 4.9 },
+    u_demo_1: { completedTrips: 34, co2SavedKg: 287, reputationScore: 96, rating: 4.9 },
     // Ratings shown on Ride Hub cards (Module 2) are a separate public "star"
     // average (Module 2 FR-2.12 Rate & Review) from the 0-100 reputation score -
     // seeded directly here since the Rate & Review screen isn't built yet.
     // completedTrips/co2SavedKg/reputationScore still feed the same Host Impact
     // Engine composite-score formula used on My Profile, so tier badges match.
-    u_host_ahmad: { completedTrips: 40, co2SavedKg: 120, reputationScore: 85, rating: 4.9 },
-    u_host_sarah: { completedTrips: 25, co2SavedKg: 60, reputationScore: 70, rating: 4.7 },
-    u_host_raj: { completedTrips: 8, co2SavedKg: 15, reputationScore: 45, rating: 4.5 },
-    u_host_nurul: { completedTrips: 38, co2SavedKg: 110, reputationScore: 84, rating: 4.8 }
+    u_host_ahmad: { completedTrips: 40, co2SavedKg: 120, reputationScore: 97, rating: 4.9 },
+    u_host_sarah: { completedTrips: 25, co2SavedKg: 60, reputationScore: 92, rating: 4.7 },
+    u_host_raj: { completedTrips: 8, co2SavedKg: 15, reputationScore: 68, rating: 4.5 },
+    u_host_nurul: { completedTrips: 38, co2SavedKg: 110, reputationScore: 96, rating: 4.8 }
   },
   profileVisibility: {},
   reputationEvents: {},
@@ -343,7 +348,7 @@ function recordMockReputationEvent(db, event) {
     createdAt: event.createdAt || new Date().toISOString()
   };
   db.reputationEvents[key] = stored;
-  db.impact[event.userId].reputationScore = Math.min(100, Math.max(0, Number(db.impact[event.userId].reputationScore ?? REPUTATION_POLICY.baseScore) + delta));
+  db.impact[event.userId].reputationScore = clampReputationScore(Number(db.impact[event.userId].reputationScore ?? REPUTATION_POLICY.baseScore) + delta);
   return stored;
 }
 

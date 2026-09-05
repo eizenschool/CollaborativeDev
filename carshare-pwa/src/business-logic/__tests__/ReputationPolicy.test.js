@@ -3,13 +3,14 @@ import {
   calculateReputationScore,
   cancellationReputationEvent,
   getRideEligibility,
+  REPUTATION_POLICY,
   reputationStanding,
   reviewReputationDelta
 } from '../ReputationPolicy.js';
 
 describe('Module 1 reputation policy', () => {
   it('does not award points for ordinary login activity', () => {
-    expect(calculateReputationScore([{ type: 'daily_login', delta: 2 }])).toBe(70);
+    expect(calculateReputationScore([{ type: 'daily_login', delta: 2 }])).toBe(100);
   });
 
   it('balances verified positive and negative ride outcomes', () => {
@@ -17,7 +18,26 @@ describe('Module 1 reputation policy', () => {
       { type: 'ride_completed', delta: 1 },
       { type: 'review_5_star', delta: 2 },
       { type: 'no_show', delta: -10 }
-    ])).toBe(63);
+    ])).toBe(90);
+  });
+
+  it('does not bank positive credit earned at the 100 ceiling', () => {
+    const goodThenBad = calculateReputationScore([
+      { type: 'ride_completed', delta: 1 },
+      { type: 'review_5_star', delta: 2 },
+      { type: 'no_show', delta: -10 }
+    ]);
+    const badOnly = calculateReputationScore([{ type: 'no_show', delta: -10 }]);
+    expect(goodThenBad).toBe(badOnly);
+    expect(calculateReputationScore([{ type: 'review_5_star', delta: 2 }])).toBe(100);
+  });
+
+  it('lets positive outcomes restore standing that was actually lost', () => {
+    expect(calculateReputationScore([
+      { type: 'no_show', delta: -10 },
+      { type: 'ride_completed', delta: 1 },
+      { type: 'review_5_star', delta: 2 }
+    ])).toBe(93);
   });
 
   it('maps review ratings to deliberately asymmetric trust changes', () => {
@@ -32,8 +52,18 @@ describe('Module 1 reputation policy', () => {
 
   it('allows provisional members but applies a higher Driver threshold afterwards', () => {
     expect(getRideEligibility({ score: 40, evidenceCount: 2 }, 'host').eligible).toBe(true);
-    expect(getRideEligibility({ score: 60, evidenceCount: 3 }, 'host').eligible).toBe(false);
-    expect(getRideEligibility({ score: 60, evidenceCount: 3 }, 'traveller').eligible).toBe(true);
+    expect(getRideEligibility({ score: 85, evidenceCount: 3 }, 'host').eligible).toBe(false);
+    expect(getRideEligibility({ score: 85, evidenceCount: 3 }, 'traveller').eligible).toBe(true);
+    expect(getRideEligibility({ score: 90, evidenceCount: 3 }, 'host').eligible).toBe(true);
+    expect(getRideEligibility({ score: 74, evidenceCount: 3 }, 'traveller').eligible).toBe(false);
+  });
+
+  it('aligns every tier boundary with a capability boundary', () => {
+    expect(reputationStanding(100).label).toBe('Trusted');
+    expect(reputationStanding(REPUTATION_POLICY.hostMinimum).label).toBe('Standard');
+    expect(reputationStanding(REPUTATION_POLICY.hostMinimum - 1).label).toBe('Limited');
+    expect(reputationStanding(REPUTATION_POLICY.travellerMinimum).label).toBe('Limited');
+    expect(reputationStanding(REPUTATION_POLICY.travellerMinimum - 1).label).toBe('Restricted');
   });
 
   it('lets a confirmed safety hold override a high score', () => {

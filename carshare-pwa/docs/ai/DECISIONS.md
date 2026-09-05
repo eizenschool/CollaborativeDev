@@ -473,7 +473,11 @@ action area. A Completed Ride shows its review action above `Publish again`,
 and Review opens only after that explicit action is selected.
 
 ## D030 — Evidence-based Reputation and Privacy-filtered Public Profiles
-**Status:** Accepted in application; migrations 065-066 authored and not deployed
+**Status:** Accepted in application; migrations 065-066 authored and not deployed.
+Its starting score and thresholds are superseded by D034; every other part of
+this decision (event-driven changes, the +3 per-Ride cap, idempotent source
+events, the three-Ride provisional window, and the public-profile projection)
+still stands.
 
 Reputation starts at 70/100 and remains provisional for the first three
 evidence rides. Only verified Ride events may change it: completion +1,
@@ -601,6 +605,45 @@ GuideTranscript.jsx; the composer's speech-recognition language selector
 gained a visible "Voice input" caption, since it was previously
 indistinguishable from a reply-language control despite governing only
 transcription.
+
+## D034 — Reputation starts at the 100 ceiling; identity gates hardened without documents
+**Status:** Accepted in application; migrations 087_m1 and 088_m1 authored and not deployed
+
+Reputation now starts at 100/100 instead of 70 and is clamped to that ceiling
+per event, so it is standing a member keeps rather than points they collect.
+Positive Ride outcomes are unchanged (+1 completion, +1 on-time Check-in, +1/+2
+for 4/5-star reviews, capped at +3 per user per Ride) but at 100 they are spent
+rather than banked: credit earned while already at the ceiling cannot cushion a
+later penalty. Negative events, the three-Ride provisional window and the
+safety hold are unchanged.
+
+Because nobody now starts below a threshold, the thresholds move to where
+losses matter: publishing requires 90 (was 65) and requesting requires 75 (was
+50). Tier boundaries are aligned to those capability boundaries rather than
+chosen separately - Trusted 95+, Standard 90+ (may publish), Limited 75+ (may
+request), Restricted 50+, and below 50 reads as a safety problem. Live scores
+are rebased by +30 clamped at 100, which reproduces each member's existing
+event history against the new origin.
+
+Reputation still ignores login, profile completion, identity documents and CO2
+impact. The reference model that prompted this change (a lost-and-found system
+awarding points for posting and for helping, with no upper bound) was
+deliberately not adopted: unbounded points reward volume rather than
+reliability, and posting is not evidence that somebody carried another person
+safely.
+
+Identity checks are strengthened without collecting document photos. The MyKad
+sign-up gate now requires a real calendar birth date and an assigned birthplace
+code instead of only a 12-digit shape; MyKad carries no check digit, so this
+remains structural validation. The IC number is still never persisted or
+transmitted - `088_m1` records only `profile_private.ic_checked_at`, written by
+the account-creation trigger and not writable by any client. A vehicle's
+driver's license gains a required expiry date, and a license that is present
+and unexpired becomes a server-enforced condition of publishing a Ride, beside
+the existing reputation gate. None of this is identity verification: it grants
+no badge, no public signal and no reputation. Document photos, and the
+reviewer surface they would require, remain out of scope and depend on the open
+Trust & Safety console decision.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);

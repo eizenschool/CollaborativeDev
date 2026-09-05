@@ -542,7 +542,7 @@ function EmergencyContactCard({ user, onSaved }) {
 
 // ---------- MY VEHICLES ----------
 
-const emptyVehicleForm = { id: null, make: '', model: '', vehicleType: '', plate: '', driverLicenseNumber: '', colour: '', seats: 4, year: new Date().getFullYear() };
+const emptyVehicleForm = { id: null, make: '', model: '', vehicleType: '', plate: '', driverLicenseNumber: '', driverLicenseExpiry: '', colour: '', seats: 4, year: new Date().getFullYear() };
 
 function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount }) {
   const [form, setForm] = useState(null);
@@ -630,6 +630,18 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
                 />
               </div>
             </div>
+            <div className="field">
+              <label>Driver's License Expiry <span className="hint">a lapsed licence cannot publish rides</span></label>
+              <div className="input-wrap">
+                <input
+                  type="date"
+                  value={form.driverLicenseExpiry || ''}
+                  onChange={(e) => setForm({ ...form, driverLicenseExpiry: e.target.value })}
+                  min={new Date().toISOString().slice(0, 10)}
+                  required
+                />
+              </div>
+            </div>
             <div className="field"><label>Colour</label><div className="input-wrap"><input value={form.colour} onChange={(e) => setForm({ ...form, colour: e.target.value })} /></div></div>
             <div className="field"><label>Seats available</label><div className="input-wrap"><input type="number" min="1" max="8" value={form.seats} onChange={(e) => setForm({ ...form, seats: e.target.value })} required /></div></div>
             <div className="field"><label>Year</label><div className="input-wrap"><input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} required /></div></div>
@@ -691,7 +703,7 @@ function ReputationImpactPanel({ summary, reputation }) {
         <div>
           <div className="card">
             <p className="card-title">Public reputation score</p>
-            <p className="card-subtitle">Verified ride behaviour, separate from your rating and environmental impact</p>
+            <p className="card-subtitle">Verified ride behaviour, separate from your rating and environmental impact. This is standing you keep, not points you collect.</p>
             <div className="rep-score">
               <span className="icon"><IconStar size={26} /></span>
               <span className="num">{reputation.score}</span>
@@ -708,6 +720,7 @@ function ReputationImpactPanel({ summary, reputation }) {
           <div className="card">
             <p className="card-title" style={{ color: 'var(--ink)' }}>How the score changes</p>
             <ul className="reputation-rules">
+              <li>Everyone starts at {REPUTATION_POLICY.baseScore}/100 &mdash; positive outcomes restore standing you have lost, they never bank above it</li>
               <li>Completed ride +1; on-time check-in +1</li>
               <li>4-star review +1; 5-star review +2</li>
               <li>Cancellation −1 to −6 depending on notice</li>

@@ -5,6 +5,9 @@ async function read(relativeUrl) {
 }
 
 describe('Module 1 reputation and public-profile SQL contracts', () => {
+  // Asserts what 072 itself still contains, not the current policy: D034's
+  // 100 origin and 90/75 gates supersede its constants through 087_m1, which
+  // Module1IdentityGate.test.js covers. Deployed history is never rewritten.
   it('keeps reputation event-driven, idempotent and enforced at ride mutations', async () => {
     const sql = await read('../../../database/sql/072_m1_reputation_events_and_eligibility.sql');
     expect(sql).toContain('create table public.reputation_events');

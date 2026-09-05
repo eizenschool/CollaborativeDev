@@ -3,13 +3,21 @@
 // completeness, CO2 impact and identity documents deliberately do not award
 // points: those are engagement, impact or eligibility signals, not evidence
 // that somebody reliably carried or travelled with another person.
+//
+// Every member starts at the 100 ceiling, so the score is standing that is
+// kept rather than points that are earned. Positive ride outcomes still count,
+// but they can only restore standing already lost - never exceed 100. Because
+// nobody starts below the line, the thresholds are set where losses matter:
+// each tier boundary is an actual capability boundary (95 spotless, 90 may
+// publish, 75 may request, below 50 reads as a safety problem).
 
 export const REPUTATION_POLICY = Object.freeze({
-  baseScore: 70,
+  baseScore: 100,
+  maxScore: 100,
   minEvidenceRides: 3,
   positivePointsPerRideCap: 3,
-  hostMinimum: 65,
-  travellerMinimum: 50
+  hostMinimum: 90,
+  travellerMinimum: 75
 });
 
 export const REPUTATION_EVENT_DELTAS = Object.freeze({
@@ -80,17 +88,26 @@ export function reputationStanding(score, { provisional = false, hold = false } 
   if (hold) return { key: 'suspended', label: 'Safety hold' };
   if (provisional) return { key: 'new', label: 'New member' };
   const value = Number(score);
-  if (value >= 80) return { key: 'trusted', label: 'Trusted' };
-  if (value >= 65) return { key: 'standard', label: 'Standard' };
-  if (value >= 50) return { key: 'limited', label: 'Limited' };
-  if (value >= 35) return { key: 'restricted', label: 'Restricted' };
+  if (value >= 95) return { key: 'trusted', label: 'Trusted' };
+  if (value >= REPUTATION_POLICY.hostMinimum) return { key: 'standard', label: 'Standard' };
+  if (value >= REPUTATION_POLICY.travellerMinimum) return { key: 'limited', label: 'Limited' };
+  if (value >= 50) return { key: 'restricted', label: 'Restricted' };
   return { key: 'suspended', label: 'Safety hold' };
 }
 
+export function clampReputationScore(score) {
+  return Math.min(REPUTATION_POLICY.maxScore, Math.max(0, Number(score)));
+}
+
+// Clamped per event, not once at the end, to match the server ledger in
+// migration 072. It matters now that everybody starts on the ceiling: credit
+// earned while already at 100 is spent, not banked against a later penalty.
 export function calculateReputationScore(events = [], baseScore = REPUTATION_POLICY.baseScore) {
-  return Math.min(100, Math.max(0, events.reduce((score, event) => (
-    isReputationEventType(event.type ?? event.event_type) ? score + Number(event.delta || 0) : score
-  ), Number(baseScore))));
+  return events.reduce((score, event) => (
+    isReputationEventType(event.type ?? event.event_type)
+      ? clampReputationScore(score + Number(event.delta || 0))
+      : score
+  ), clampReputationScore(baseScore));
 }
 
 export function reputationEvidenceCount(events = [], completedTrips = 0) {

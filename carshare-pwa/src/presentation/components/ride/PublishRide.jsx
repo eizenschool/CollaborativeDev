@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { isRouteQuoteFresh, RideService } from '../../../business-logic/RideService.js';
 import { departureParts, formatMalaysiaDeparture } from '../../../business-logic/rideDateTime.js';
-import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
+import { hasPublishableVehicle, hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
 import { ReputationService } from '../../../business-logic/ReputationService.js';
 import {
   GooglePlacesService,
@@ -150,7 +150,7 @@ export default function PublishRide() {
   }, [draftRideId, form.vehicleCapacity, form.vehicleId, vehicles]);
 
   useEffect(() => {
-    if (!reputationEligibility?.eligible || !hasRegisteredVehicle(vehicles) || locationRequested.current) return;
+    if (!reputationEligibility?.eligible || !hasPublishableVehicle(vehicles) || locationRequested.current) return;
     locationRequested.current = true;
     let active = true;
     setPreviewStatus({ state: 'locating', message: 'Finding your current location to place a pin on the map…' });
@@ -354,6 +354,24 @@ export default function PublishRide() {
           <div>
             <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
             <button className="btn-primary" onClick={() => navigate('/profile')}>Add a vehicle</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  // Migration 088 enforces the same condition on the Ride row itself; this
+  // check only moves the refusal in front of the form instead of after it.
+  if (!hasPublishableVehicle(vehicles)) {
+    return (
+      <main className="publish-access-state">
+        <section className="publish-access-card" role="alert">
+          <span className="publish-access-icon"><IconCar size={24} /></span>
+          <h1>Update your driver&apos;s license first</h1>
+          <p>Publishing needs a vehicle with a current driver&apos;s license on record. Add the license number and a valid expiry date to one of your vehicles. We did not request your location.</p>
+          <div>
+            <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
+            <button className="btn-primary" onClick={() => navigate('/profile')}>Update my vehicle</button>
           </div>
         </section>
       </main>

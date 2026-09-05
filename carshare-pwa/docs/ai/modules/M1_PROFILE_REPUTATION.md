@@ -48,12 +48,23 @@ an asymmetric Reputation effect while preserving rating as a separate signal.
 existing `handle_new_user()` trigger already covers Google's profile/avatar
 metadata shape. Still needs Google Cloud + Supabase Dashboard provider setup
 (see `docs/SUPABASE-SETUP.md`) before it works against the live project.
-Sign-up now also validates a Malaysian IC (MyKad) number format
+Sign-up now also validates a Malaysian IC (MyKad) number
 (`AuthService.validateMalaysianIC`) as an identity gate before an account can
-be created; the value is never persisted or sent to Supabase - format check
-only. Adding a vehicle now also requires a driver's license number
-(`vehicles.driver_license_number`, `database/sql/019`), an input-capture
-eligibility gate rather than identity verification.
+be created: 12 digits, a real calendar birth date, and a birthplace code JPN
+actually assigns. MyKad has no check digit, so this stays structural
+validation, and the number itself is never persisted or sent to Supabase.
+Authored migration `088_m1` records only that the gate ran
+(`profile_private.ic_checked_at`, written by `handle_new_user()` from the
+sign-up payload and not client-writable). Adding a vehicle requires a driver's
+license number (`vehicles.driver_license_number`, `database/sql/019`) and now
+also an expiry date (`vehicles.driver_license_expiry`, `088_m1`); a present,
+unexpired license is a condition of publishing a Ride, enforced by the
+`enforce_ride_driver_license_before_publish` trigger and pre-checked by
+`hasPublishableVehicle`. A vehicle saved before `088_m1` has no expiry on
+record, and that unknown is deliberately not treated as expired. None of this
+is identity verification - no badge, no public signal, no reputation effect -
+and document photos remain out of scope pending the Trust & Safety console
+decision.
 `/home` is now the public website entry rather than a post-login-only route.
 Guests can browse Home, Search, Ride listings, and Published Ride Detail; the
 shared auth gate is applied only when they enter account-specific services.
@@ -80,16 +91,23 @@ backfilled, and the live save actions report the deployment requirement until `0
 allowed into Module 4's public card projection; vehicle make/model/plate and
 other private profile data remain owner-only.
 
-The application now implements accepted decision D030. Reputation begins at
-70, is provisional for three evidence rides, caps positive credit at +3 per
-Ride, and changes only for verified completion, Check-in, participant review,
+The application now implements accepted decisions D030 and D034. Reputation
+begins at 100 and is clamped to that ceiling per event, so positive credit
+earned at 100 is spent rather than banked against a later penalty. It stays
+provisional for three evidence rides, caps positive credit at +3 per Ride, and
+changes only for verified completion, Check-in, participant review,
 cancellation, No-show, or confirmed conduct events. Publishing is restricted
-below 65 after the provisional period; requesting is restricted below 50; a
-safety hold overrides both. Ordinary login never changes trust. Client checks
+below 90 after the provisional period; requesting is restricted below 75; a
+safety hold overrides both. Tier boundaries follow those gates: Trusted 95+,
+Standard 90+, Limited 75+, Restricted 50+, safety problem below 50. Ordinary login never changes trust. Client checks
 in `RideService` and `RideRequestService` provide early feedback. Deployed
 migration `072` supplies the authoritative ledger, triggers and server
 enforcement; deployed compensating migration `074` keeps its Ride-status
 trigger within the actual `rides` row contract and restores recruitment close.
+Authored migration `087_m1` moves the server-side origin and thresholds to
+match D034 and rebases existing scores by +30 clamped at 100; until it is
+deployed the live database still starts members at 70 and gates at 65/50 while
+the client shows the new policy.
 
 `/users/:userId` is the safe public profile linked from Ride cards/details,
 request management and direct-message headers. Account Settings has switches
