@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   badgeIsWithheld,
   calculateCompositeHostImpact,
-  getBadgeForStats
+  getBadgeForStats,
+  HostImpactEngine
 } from '../HostImpactEngine.js';
 import { REPUTATION_POLICY } from '../ReputationPolicy.js';
 
@@ -40,6 +41,18 @@ describe('Host Impact badge', () => {
 
   it('never raises a tier that contribution has not earned', () => {
     expect(getBadgeForStats({ completedTrips: 1, co2SavedKg: 0, reputationScore: 100 }).name).toBe('Bronze Host');
+  });
+
+  // Let's Tumpang is non-monetary (PROJECT.md): a Ride's contribution is free
+  // text, and there is no fee, fare or payment path in the codebase. A perk
+  // promising a commission discount would be the only place the app claims
+  // otherwise, so it must not come back.
+  it('never advertises a monetary perk', () => {
+    const perks = HostImpactEngine.badgeTiers.flatMap((tier) => tier.perks);
+    expect(perks.length).toBeGreaterThan(0);
+    perks.forEach((perk) => {
+      expect(perk).not.toMatch(/fee|fare|price|payment|commission|RM\s*\d|%/i);
+    });
   });
 
   it('treats an absent score as unknown rather than restricted', () => {

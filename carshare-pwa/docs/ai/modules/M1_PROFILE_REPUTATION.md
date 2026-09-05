@@ -137,5 +137,7 @@ tiers are implemented (`HostImpactEngine.js`). Per D034 the composite is
 contribution only (`trips x 2.0 + co2 x 0.5`, tiers 0/50/120/200) and
 reputation acts as a ceiling through `badgeIsWithheld` rather than as a term:
 a safety hold or a score below `hostMinimum` withholds every tier above
-Bronze. Badge "reduced platform fee" perks are display labels only - no
-fee/payment system exists yet to enforce them.
+Bronze. Badge perks are display
+labels only and are now non-monetary: the scaffold's "platform fee" ladder
+contradicted the platform's non-monetary definition and was replaced with
+visibility, support and discovery perks, guarded by a test.

@@ -642,10 +642,15 @@ reputation acting as a ceiling: a confirmed safety hold, or a score below the
 Driver publishing threshold, withholds every tier above Bronze. Reputation can
 withhold a badge but never grant one. Search ranking uses the same contribution
 formula; a member below the publish threshold cannot list a new Ride anyway, so
-ranking does not penalise reputation a second time. The badge perks remain
-display labels only - no fee or payment system exists to enforce them, and
-showing a fee discount to an unproven account is the part of this screen most
-worth revisiting when one does.
+ranking does not penalise reputation a second time. The badge perks are also now non-monetary. The original
+scaffold gave each tier a "platform fee (15%/12%/8%/5%)" ladder borrowed from
+commercial ride-hailing, which contradicted the platform's own definition:
+Let's Tumpang is non-monetary (PROJECT.md), a Ride's contribution is free text
+such as "snacks & drinks", and no fee, fare, amount, currency or payment
+provider exists anywhere in the codebase. Those four labels were the only
+place the app claimed a commission, and they are replaced with listing
+visibility, priority support, discovery placement and verified-badge perks.
+A test asserts no perk can reintroduce monetary language.
 
 Identity checks are strengthened without collecting document photos. The MyKad
 sign-up gate now requires a real calendar birth date and an assigned birthplace

@@ -19,15 +19,27 @@ const WEIGHTS = { trips: 2.0, co2: 0.5 };
 // were set when roughly 56-80 points of reputation were baked into every
 // score, so they are lowered by about that much to keep the same real spread:
 // ~25 trips reaches Silver, ~60 reaches Gold, ~100 reaches Platinum.
+// Perks are display labels, and they must stay non-monetary: Let's Tumpang is
+// a non-monetary ride-sharing platform (PROJECT.md), a Ride's contribution is
+// free text like "snacks & drinks", and no fee, fare or payment path exists
+// anywhere in the codebase. The original scaffold carried a "platform fee
+// (15%/12%/8%/5%)" ladder borrowed from commercial ride-hailing, which told
+// every Host the platform took a commission it has no way to charge.
 const BADGE_TIERS = [
-  { name: 'Bronze Host', minScore: 0, perks: ['Standard platform fee (15%)'] },
-  { name: 'Silver Host', minScore: 50, perks: ['Reduced platform fee (12%)', 'Priority support'] },
+  { name: 'Bronze Host', minScore: 0, perks: ['Standard listing visibility'] },
+  {
+    name: 'Silver Host',
+    minScore: 50,
+    perks: [
+      'Priority support',
+      'Higher placement when passengers sort by Host Impact'
+    ]
+  },
   {
     name: 'Gold Host',
     minScore: 120,
     perks: [
       'Gold verified badge',
-      'Reduced platform fee (8%)',
       'Priority support',
       'Featured in host discovery'
     ]
@@ -37,7 +49,6 @@ const BADGE_TIERS = [
     minScore: 200,
     perks: [
       'Platinum verified badge',
-      'Reduced platform fee (5%)',
       'Priority support',
       'Featured in host discovery',
       'Early access to new routes'
