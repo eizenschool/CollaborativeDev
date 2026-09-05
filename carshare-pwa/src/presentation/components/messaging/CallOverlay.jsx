@@ -61,9 +61,46 @@ function callStatusText(callState, durationSeconds) {
   return callState.endedReason || 'Call ended';
 }
 
+const PARTICIPANT_STATUS_LABELS = Object.freeze({
+  accepted: 'Connected',
+  ringing: 'Ringing',
+  declined: 'Declined',
+  missed: 'Missed',
+  left: 'Left',
+  failed: 'Failed',
+});
+
+function GroupCallParticipant({ participant, isCallActive, isSpeaking }) {
+  const isConnected = isCallActive && participant?.status === 'accepted';
+  const statusLabel = isSpeaking && isConnected
+    ? 'Speaking'
+    : (PARTICIPANT_STATUS_LABELS[participant?.status] || 'Unavailable');
+  const isUnavailable = ['declined', 'missed', 'left', 'failed'].includes(participant?.status);
+  return (
+    <div
+      className={`call-participant ${isConnected ? 'is-connected' : ''} ${isSpeaking && isConnected ? 'is-speaking' : ''} ${isUnavailable ? 'is-unavailable' : ''}`}
+      role="listitem"
+      aria-label={`${participant?.name || 'Member'}, ${statusLabel}`}
+    >
+      <span className="call-participant-avatar-frame">
+        <CallAvatar participant={participant} />
+        <span className="call-participant-presence" aria-hidden="true" />
+        {isSpeaking && isConnected && (
+          <span className="call-participant-wave" aria-hidden="true">
+            <i /><i /><i />
+          </span>
+        )}
+      </span>
+      <strong title={participant?.name}>{participant?.name || 'Member'}</strong>
+      <span className="call-participant-label">{statusLabel}</span>
+    </div>
+  );
+}
+
 export default function CallOverlay() {
   const {
     callState,
+    speakingUserIds,
     acceptCall,
     declineCall,
     hangUp,
@@ -173,6 +210,8 @@ export default function CallOverlay() {
   const isEnded = callState.phase === 'ended';
   const showMute = ['outgoing', 'connecting', 'connected', 'reconnecting'].includes(callState.phase);
   const canMinimize = showMute;
+  const speakingUsers = new Set(speakingUserIds || []);
+  const showSpeaking = ['connected', 'reconnecting'].includes(callState.phase);
 
   if (callState.isMinimized && canMinimize) {
     return (
@@ -202,7 +241,7 @@ export default function CallOverlay() {
     <div className={`call-overlay-backdrop call-overlay-${callState.phase}`} role="presentation">
       <section
         ref={dialogRef}
-        className="call-overlay-card"
+        className={`call-overlay-card ${isGroup ? 'call-overlay-card-group' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="call-overlay-title"
@@ -225,13 +264,30 @@ export default function CallOverlay() {
             <IconX size={19} />
           </button>
         )}
-        <div className={`call-overlay-avatar-ring ${isGroup ? 'call-overlay-avatar-group' : ''}`}>
-          {(isGroup ? visibleParticipants.slice(0, 3) : [participant]).map((member, index) => (
-            <span className="call-overlay-avatar-slot" key={member?.id || index}>
-              <CallAvatar participant={member} />
+        {isGroup ? (
+          <div
+            className="call-participant-strip"
+            aria-label="Group call participants"
+            tabIndex={visibleParticipants.length > 4 ? 0 : undefined}
+          >
+            <div className="call-participant-row" role="list">
+              {visibleParticipants.map((member, index) => (
+                <GroupCallParticipant
+                  key={member?.id || index}
+                  participant={member}
+                  isCallActive={!isEnded}
+                  isSpeaking={showSpeaking && speakingUsers.has(member?.id)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="call-overlay-avatar-ring">
+            <span className="call-overlay-avatar-slot">
+              <CallAvatar participant={participant} />
             </span>
-          ))}
-        </div>
+          </div>
+        )}
         <div className="call-overlay-copy">
           <span className="call-overlay-eyebrow">{isGroup ? 'Group voice call' : 'Private voice call'}</span>
           <h2 id="call-overlay-title">{displayName}</h2>

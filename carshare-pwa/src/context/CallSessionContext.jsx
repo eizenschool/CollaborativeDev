@@ -17,12 +17,17 @@ import {
   relayNotice,
   remainingCallDurationMs,
 } from '../business-logic/CallService.js';
+import {
+  advanceVoiceActivity,
+  rmsFromTimeDomain,
+} from '../business-logic/CallVoiceActivity.js';
 import { useAuth } from './AuthContext.jsx';
 import { useNotifications } from './NotificationContext.jsx';
 
 const CallSessionContext = createContext(null);
 const CALL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CALL_HEARTBEAT_INTERVAL_MS = 15_000;
+const VOICE_ACTIVITY_INTERVAL_MS = 80;
 
 function clearIncomingCallFromUrl() {
   if (!globalThis.location?.href || !globalThis.history?.replaceState) return;
@@ -48,6 +53,7 @@ const EMPTY_STATE = Object.freeze({
   error: '',
   relayNotice: '',
   isMinimized: false,
+  speakingUserIds: [],
 });
 
 function createDeviceId() {
@@ -97,6 +103,11 @@ function createActiveCall(call, role) {
     iceServers: null,
     offerStarted: new Set(),
     finishing: false,
+    voiceActivityContext: null,
+    voiceActivityEntries: new Map(),
+    voiceActivityTimerId: null,
+    voiceActivityUnavailable: false,
+    speakingKey: '',
   };
 }
 
@@ -106,7 +117,14 @@ function releaseResources(active) {
   active.disconnectTimerIds?.forEach((timerId) => globalThis.clearTimeout(timerId));
   if (active.maxDurationTimerId) globalThis.clearTimeout(active.maxDurationTimerId);
   if (active.heartbeatTimerId) globalThis.clearInterval(active.heartbeatTimerId);
+  if (active.voiceActivityTimerId) globalThis.clearInterval(active.voiceActivityTimerId);
   active.heartbeatCleanup?.();
+  active.voiceActivityEntries?.forEach((entry) => {
+    entry.source?.disconnect?.();
+    entry.analyser?.disconnect?.();
+  });
+  active.voiceActivityEntries?.clear?.();
+  void active.voiceActivityContext?.close?.().catch?.(() => {});
   stopStream(active.localStream);
   active.remoteStreams?.forEach((stream) => stopStream(stream));
   active.peers?.forEach((peer) => {
@@ -257,6 +275,95 @@ export function CallSessionProvider({ children }) {
     return configuration;
   }, [updateState]);
 
+  const publishSpeakingUsers = useCallback((active) => {
+    if (activeRef.current !== active || active.finishing) return;
+    const speakingUserIds = [...active.voiceActivityEntries.entries()]
+      .filter(([, entry]) => entry.activity.speaking)
+      .map(([entryUserId]) => entryUserId)
+      .sort();
+    const speakingKey = speakingUserIds.join('|');
+    if (speakingKey === active.speakingKey) return;
+    active.speakingKey = speakingKey;
+    updateState((current) => ({ ...current, speakingUserIds }));
+  }, [updateState]);
+
+  const syncVoiceActivity = useCallback((active) => {
+    if (!active || active.finishing || active.voiceActivityUnavailable) return;
+    const streams = new Map(active.remoteStreams);
+    if (active.localStream && userId) streams.set(userId, active.localStream);
+
+    active.voiceActivityEntries.forEach((entry, entryUserId) => {
+      if (streams.get(entryUserId) === entry.stream) return;
+      entry.source?.disconnect?.();
+      entry.analyser?.disconnect?.();
+      active.voiceActivityEntries.delete(entryUserId);
+    });
+
+    try {
+      const AudioContextConstructor = globalThis.AudioContext || globalThis.webkitAudioContext;
+      if (!AudioContextConstructor) {
+        active.voiceActivityUnavailable = true;
+        return;
+      }
+      if (!active.voiceActivityContext) active.voiceActivityContext = new AudioContextConstructor();
+      void active.voiceActivityContext.resume?.().catch(() => {});
+
+      streams.forEach((stream, streamUserId) => {
+        if (active.voiceActivityEntries.has(streamUserId) || !stream?.getAudioTracks?.().length) return;
+        const source = active.voiceActivityContext.createMediaStreamSource(stream);
+        const analyser = active.voiceActivityContext.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.2;
+        source.connect(analyser);
+        active.voiceActivityEntries.set(streamUserId, {
+          stream,
+          source,
+          analyser,
+          samples: new Float32Array(analyser.fftSize),
+          byteSamples: new Uint8Array(analyser.fftSize),
+          activity: { speaking: false, loudSamples: 0, quietSamples: 0 },
+        });
+      });
+
+      if (!active.voiceActivityTimerId && active.voiceActivityEntries.size) {
+        active.voiceActivityTimerId = globalThis.setInterval(() => {
+          if (activeRef.current !== active || active.finishing) return;
+          active.voiceActivityEntries.forEach((entry) => {
+            const enabled = entry.stream.getAudioTracks().some(
+              (track) => track.enabled && track.readyState !== 'ended',
+            );
+            let level = 0;
+            if (enabled && typeof entry.analyser.getFloatTimeDomainData === 'function') {
+              entry.analyser.getFloatTimeDomainData(entry.samples);
+              level = rmsFromTimeDomain(entry.samples);
+            } else if (enabled) {
+              entry.analyser.getByteTimeDomainData(entry.byteSamples);
+              for (let index = 0; index < entry.byteSamples.length; index += 1) {
+                entry.samples[index] = (entry.byteSamples[index] - 128) / 128;
+              }
+              level = rmsFromTimeDomain(entry.samples);
+            }
+            entry.activity = advanceVoiceActivity(entry.activity, level);
+          });
+          publishSpeakingUsers(active);
+        }, VOICE_ACTIVITY_INTERVAL_MS);
+      }
+      publishSpeakingUsers(active);
+    } catch {
+      if (active.voiceActivityTimerId) globalThis.clearInterval(active.voiceActivityTimerId);
+      active.voiceActivityTimerId = null;
+      active.voiceActivityEntries.forEach((entry) => {
+        entry.source?.disconnect?.();
+        entry.analyser?.disconnect?.();
+      });
+      active.voiceActivityEntries.clear();
+      void active.voiceActivityContext?.close?.().catch?.(() => {});
+      active.voiceActivityContext = null;
+      active.voiceActivityUnavailable = true;
+      publishSpeakingUsers(active);
+    }
+  }, [publishSpeakingUsers, userId]);
+
   const publishRemoteStreams = useCallback((active) => {
     const remoteStreams = [...active.remoteStreams.entries()].map(([remoteUserId, stream]) => ({
       userId: remoteUserId,
@@ -268,7 +375,8 @@ export function CallSessionProvider({ children }) {
       remoteStream: active.remoteStream,
       remoteStreams,
     }));
-  }, [updateState]);
+    syncVoiceActivity(active);
+  }, [syncVoiceActivity, updateState]);
 
   const removePeer = useCallback((active, remoteUserId) => {
     const timerId = active.disconnectTimerIds.get(remoteUserId);
@@ -625,6 +733,7 @@ export function CallSessionProvider({ children }) {
       active = createActiveCall(call, 'caller');
       active.localStream = localStream;
       activeRef.current = active;
+      syncVoiceActivity(active);
       startHeartbeat(active);
       updateState({ ...EMPTY_STATE, phase: 'outgoing', call, isPending: true });
       scheduleRingTimeout(active);
@@ -652,7 +761,7 @@ export function CallSessionProvider({ children }) {
       }
       throw error;
     }
-  }, [clearTerminalTimer, loadIceConfiguration, openSignalChannel, scheduleRingTimeout, sendSignal, startHeartbeat, updateState]);
+  }, [clearTerminalTimer, loadIceConfiguration, openSignalChannel, scheduleRingTimeout, sendSignal, startHeartbeat, syncVoiceActivity, updateState]);
 
   const acceptCall = useCallback(async () => {
     const active = activeRef.current;
@@ -680,6 +789,7 @@ export function CallSessionProvider({ children }) {
       }
       active.localStream = localStream;
       active.signalChannel = channel;
+      syncVoiceActivity(active);
       const call = await CallService.respondToCall(
         active.call.id,
         true,
@@ -707,7 +817,10 @@ export function CallSessionProvider({ children }) {
         });
         return;
       }
-      if (active.localStream === localStream) active.localStream = null;
+      if (active.localStream === localStream) {
+        active.localStream = null;
+        syncVoiceActivity(active);
+      }
       if (active.signalChannel === channel) active.signalChannel = null;
       stopStream(localStream);
       void channel?.unsubscribe?.();
@@ -717,7 +830,7 @@ export function CallSessionProvider({ children }) {
         error: error.message || 'Unable to answer this call.',
       }));
     }
-  }, [loadIceConfiguration, openSignalChannel, scheduleCallLimit, sendSignal, updateState]);
+  }, [loadIceConfiguration, openSignalChannel, scheduleCallLimit, sendSignal, syncVoiceActivity, updateState]);
 
   const declineCall = useCallback(async () => {
     const active = activeRef.current;
@@ -763,6 +876,7 @@ export function CallSessionProvider({ children }) {
 
   const value = useMemo(() => ({
     callState: state,
+    speakingUserIds: state.speakingUserIds,
     isBusy: !['idle', 'ended'].includes(state.phase),
     startCall,
     acceptCall,

@@ -24,6 +24,17 @@ describe('voice-call browsing UI', () => {
     expect(overlay).toContain('remoteStreams.map');
   });
 
+  it('shows every invited group participant with connection and speaking states', async () => {
+    const overlay = await read('../../presentation/components/messaging/CallOverlay.jsx');
+    const styles = await read('../../presentation/styles/call.css');
+    expect(overlay).not.toContain('visibleParticipants.slice');
+    expect(overlay).toContain('visibleParticipants.map');
+    expect(overlay).toContain('speakingUserIds');
+    expect(overlay).toContain("participant?.status === 'accepted'");
+    expect(styles).toContain('overflow-x: auto');
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+
   it('opens a group-member picker and calls only selected members', async () => {
     const chatWindow = await read('../../presentation/components/messaging/ChatWindow.jsx');
     expect(chatWindow).toContain('Choose people to call');
