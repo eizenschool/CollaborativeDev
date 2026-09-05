@@ -74,12 +74,12 @@ Editor, since a client-facing reviewer surface depends on the open Trust &
 Safety console decision. `malaysianIdentity.js` holds the shared MyKad
 validator and licence-currency rule.
 
-Known live issue: submitting writes through a direct `.upsert()`, which needs
-a table-level insert/update grant on `identity_verifications` rather than the
-column-restricted one `093_m1`/`094_m1` currently grant - Postgres refuses a
-column-restricted UPDATE grant for the `INSERT ... ON CONFLICT DO UPDATE`
-`.upsert()` emits and returns `42501 permission denied`, the same trap
-`071_project` hit on `profile_visibility`. Not yet fixed.
+Submitting writes through a direct `.upsert()`, which PostgREST turns into
+`INSERT ... ON CONFLICT DO UPDATE`; `094_m1` only granted a column-restricted
+UPDATE, which Postgres refuses for that statement shape with a
+`42501 permission denied` error - the same trap `071_project` hit on
+`profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
+needs; RLS still does the real gatekeeping underneath it.
 
 `/home` is now the public website entry rather than a post-login-only route.
 Guests can browse Home, Search, Ride listings, and Published Ride Detail; the

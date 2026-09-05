@@ -17,7 +17,8 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-094 (`087_m1`, `088_m1`, `093_m1` and `094_m1` are authored and not deployed)
+Repository SQL history: 001-095 (`087_m1`, `088_m1`, `093_m1`, `094_m1` and
+  `095_m1` are authored and not deployed)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -683,6 +684,12 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   expiry recorded is treated as valid, not lapsed.
   `vehicles.driver_license_number`/`driver_license_expiry` are deliberately
   left in place and unused.
+- `095_m1_grant_table_level_identity_verifications_update.sql` - authored, not
+  deployed; `094_m1` only granted a column-restricted UPDATE, which Postgres
+  refuses for the `INSERT ... ON CONFLICT DO UPDATE` supabase-js's `.upsert()`
+  emits (`42501 permission denied`) - the same trap `071_project` hit on
+  `profile_visibility`. Grants the plain table-level UPDATE that shape needs;
+  RLS still does the real gatekeeping.
 - `093_m1_identity_document_verification.sql` - authored, not deployed;
   moves identity verification from sign-up to the point of use (D035). Adds the
   PRIVATE `identity-documents` bucket with owner-folder Storage policies and no

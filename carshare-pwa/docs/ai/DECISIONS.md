@@ -719,12 +719,13 @@ differently.
 Review itself is still manual: a reviewer runs
 `private.review_identity_verification` from the Supabase SQL Editor, following
 the `078_m1` service-role pattern, because a client-facing reviewer surface
-depends on the open Trust & Safety console decision. Submitting still writes
-through a direct `.upsert()`; the client's write grant on this table needs to
-be table-level rather than column-restricted or Postgres refuses the
-`INSERT ... ON CONFLICT DO UPDATE` that `.upsert()` emits with a
+depends on the open Trust & Safety console decision. Submitting writes through
+a direct `.upsert()`, which PostgREST turns into
+`INSERT ... ON CONFLICT DO UPDATE`; `094_m1` only granted a column-restricted
+UPDATE, so Postgres refused that statement shape with a
 `42501 permission denied` error - the same trap `071_project` already hit on
-`profile_visibility`. Fixing that grant is a follow-up.
+`profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
+needs; RLS still does the real gatekeeping underneath it.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);

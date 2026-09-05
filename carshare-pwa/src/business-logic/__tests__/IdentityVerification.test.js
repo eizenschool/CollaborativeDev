@@ -133,4 +133,13 @@ describe('Module 1 identity verification SQL contract', () => {
     expect(dropAt).toBeGreaterThan(restoreAt);
     expect(sql.slice(restoreAt, dropAt)).not.toContain('ic_checked_at');
   });
+
+  // 094_m1 only granted a column-restricted UPDATE, which Postgres refuses for
+  // the INSERT ... ON CONFLICT DO UPDATE supabase-js's .upsert() emits - the
+  // same trap 071_project already hit on profile_visibility. 095_m1 clears it
+  // with the same plain table-level grant; RLS still does the real gatekeeping.
+  it('grants a table-level update so .upsert() no longer hits 42501', async () => {
+    const sql = await read('../../../database/sql/095_m1_grant_table_level_identity_verifications_update.sql');
+    expect(sql).toContain('grant update on table public.identity_verifications to authenticated;');
+  });
 });
