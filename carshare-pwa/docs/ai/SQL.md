@@ -17,7 +17,7 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-090 (`087_m1` and `088_m1` are authored and not deployed)
+Repository SQL history: 001-092 (`087_m1` and `088_m1` are authored and not deployed)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -58,7 +58,7 @@ confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that. `082_m4` is deployed;
-the next unused repository sequence is `091`.)
+the next unused repository sequence is `093`.)
 ```
 
 The repository has one documented historical numbering collision at `075`
@@ -793,3 +793,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - Deployed `089_m3_personal_message_deletion.sql` (`m3_personal_message_deletion`): owner-readable, RPC-written `chat_item_deletions`, account-local message visibility, Realtime refreshes, and the security-invoker `chat_call_history` view. Call signalling continues to read `call_sessions`.
 - Deployed `090_m3_delete_all_message_types.sql` (`m3_delete_all_message_types`): shared deletion accepts text, media, location, voice and Ride invitations; requires the sender, writable/visible conversation, and no other member read cursor at or beyond the message. Member locks serialize the read check. Shared media/invitation payloads are removed atomically; messages retain tombstones.
 - `database/tests/m3_personal_deletion.sql` verifies real authenticated-role isolation and deletion gates inside a fully rolled-back transaction on a seeded database.
+
+## Ride invitation label rollback (2026-09-05)
+
+- Deployed `091_m3_ride_invitation_viewer_role.sql`, then immediately superseded it with deployed `092_m3_restore_ride_invitation_card_contract.sql` at the user's request. The live `get_friend_ride_invitation_cards` response contract and client label behaviour are restored to their pre-091 state; both files remain in history because deployed migrations are immutable.
