@@ -133,6 +133,9 @@ service-role-only path (`private.apply_conduct_outcome`,
 are reachable without a client-facing admin surface; a shared Trust & Safety
 admin UI is still an open, whole-team decision per
 `docs/ai/modules/TRUST_SAFETY_HANDOVER.md`. Host Impact formula and badge
-tiers are implemented (`HostImpactEngine.js`); badge "reduced platform fee"
-perks are display labels only - no fee/payment system exists yet to enforce
-them.
+tiers are implemented (`HostImpactEngine.js`). Per D034 the composite is
+contribution only (`trips x 2.0 + co2 x 0.5`, tiers 0/50/120/200) and
+reputation acts as a ceiling through `badgeIsWithheld` rather than as a term:
+a safety hold or a score below `hostMinimum` withholds every tier above
+Bronze. Badge "reduced platform fee" perks are display labels only - no
+fee/payment system exists yet to enforce them.

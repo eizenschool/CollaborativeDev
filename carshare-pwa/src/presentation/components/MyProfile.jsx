@@ -752,7 +752,11 @@ function ReputationImpactPanel({ summary, reputation }) {
               <div className="impact-badge-icon"><IconMedal size={19} /></div>
               <div>
                 <div className="impact-badge">{summary.badge.name}</div>
-                <div className="impact-owner">Active perks below</div>
+                <div className="impact-owner">
+                  {summary.badgeWithheld
+                    ? `Higher tiers are held back until your reputation returns to ${REPUTATION_POLICY.hostMinimum}`
+                    : 'Active perks below'}
+                </div>
               </div>
             </div>
             <ul className="perk-list">
@@ -774,11 +778,9 @@ function ReputationImpactPanel({ summary, reputation }) {
               <div><div className="formula-value">{summary.co2SavedKg}</div><div className="formula-label">CO₂ Saved (kg)</div></div>
               <span className="formula-weight">× {summary.weights.co2.toFixed(1)}</span>
             </div>
-            <div className="formula-row">
-              <span className="formula-icon"><IconStar size={14} /></span>
-              <div><div className="formula-value">{summary.reputationScore}</div><div className="formula-label">Reputation Score</div></div>
-              <span className="formula-weight">× {summary.weights.reputation.toFixed(1)}</span>
-            </div>
+            <p className="card-subtitle" style={{ marginTop: 8 }}>
+              Reputation is not part of this total &mdash; it decides whether a tier is shown at all, not how large the score is.
+            </p>
             <div className="composite-bar">
               <p className="card-title" style={{ marginBottom: 0 }}>Composite Impact Score</p>
               <div className="composite-track"><div className="composite-fill" style={{ width: pct + '%' }} /></div>

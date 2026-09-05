@@ -343,7 +343,9 @@ describe('Module 5 community leaderboard', () => {
   it('reuses the profile composite score so ranks match a host\'s own page', async () => {
     const board = await TripHistoryEngine.getLeaderboard(USER, 2026, 7, NOW);
     const me = board.entries.find((entry) => entry.isCurrentUser);
-    expect(me).toMatchObject({ rank: 1, compositeScore: 273.9 });
+    // 34 completed trips x 2.0 + 287 kg x 0.5. Reputation is no longer a term
+    // in the formula, so the leaderboard total is contribution only.
+    expect(me).toMatchObject({ rank: 1, compositeScore: 211.5 });
     expect(me.badge.name).toBeTruthy();
   });
 });

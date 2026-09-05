@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
-import { IconCar, IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf, IconStar } from './icons.jsx';
+import { IconCar, IconMedal, IconCheck, IconTrendUp, IconTrendDown, IconBolt, IconLeaf } from './icons.jsx';
 
 export default function HostDashboard() {
   const { user } = useAuth();
@@ -79,15 +79,6 @@ export default function HostDashboard() {
               <div className="formula-label">CO₂ Saved (kg)</div>
             </div>
             <span className="formula-weight">× {summary.weights.co2.toFixed(1)}</span>
-          </div>
-
-          <div className="formula-row">
-            <span className="formula-icon"><IconStar size={16} /></span>
-            <div>
-              <div className="formula-value">{summary.reputationScore}</div>
-              <div className="formula-label">Reputation Score</div>
-            </div>
-            <span className="formula-weight">× {summary.weights.reputation.toFixed(1)}</span>
           </div>
 
           <div className="composite-bar">

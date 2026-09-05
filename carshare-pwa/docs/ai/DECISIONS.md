@@ -632,6 +632,21 @@ deliberately not adopted: unbounded points reward volume rather than
 reliability, and posting is not evidence that somebody carried another person
 safely.
 
+Module 5's Host Impact composite drops its reputation term as a direct
+consequence. While reputation was additive at weight 0.8, a 100 base scored
+every brand-new account at 80 - exactly the Silver threshold - so an account
+with zero completed trips was shown a Silver badge and a reduced-fee perk.
+Host Impact is now contribution only (`trips x 2.0 + co2 x 0.5`), with tiers
+recalibrated to 0/50/120/200 to preserve the previous real spread, and
+reputation acting as a ceiling: a confirmed safety hold, or a score below the
+Driver publishing threshold, withholds every tier above Bronze. Reputation can
+withhold a badge but never grant one. Search ranking uses the same contribution
+formula; a member below the publish threshold cannot list a new Ride anyway, so
+ranking does not penalise reputation a second time. The badge perks remain
+display labels only - no fee or payment system exists to enforce them, and
+showing a fee discount to an unproven account is the part of this screen most
+worth revisiting when one does.
+
 Identity checks are strengthened without collecting document photos. The MyKad
 sign-up gate now requires a real calendar birth date and an assigned birthplace
 code instead of only a 12-digit shape; MyKad carries no check digit, so this
