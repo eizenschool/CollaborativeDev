@@ -15,6 +15,7 @@ import { mockDb } from '../data-access/mockDataStore.js';
 import {
   formatMalaysianIC,
   isDriverLicenseCurrent,
+  isOldEnoughToDrive,
   normalizeMalaysianIC,
   validateMalaysianIC
 } from './malaysianIdentity.js';
@@ -73,9 +74,22 @@ export function canInteractWithIdentity(state) {
   return state.status === IDENTITY_STATUS.PENDING || state.status === IDENTITY_STATUS.APPROVED;
 }
 
+// A submission made before the licence moved onto this record has no MyKad
+// number stored either (093_m1/094_m1 deploy together, so this is only ever a
+// partial state in a test). Unknown is treated as valid, not underage - the
+// same fail-open rule the licence-expiry check below uses.
+export function identityBelowDrivingAge(state) {
+  return Boolean(state?.icNumber) && !isOldEnoughToDrive(state.icNumber);
+}
+
 export function canPublishWithIdentity(state) {
   if (!canInteractWithIdentity(state)) return false;
   if (state.deploymentPending) return true;
+  // Publishing puts the member behind the wheel, so it is the one gate that
+  // checks driving age - requesting to join or messaging another member does
+  // not. The MyKad's own birth date is what's checked, not a self-reported
+  // field, so this cannot be talked past by resubmitting the same number.
+  if (identityBelowDrivingAge(state)) return false;
   // A submission made before the licence moved onto this record has no expiry
   // stored. Unknown is treated as valid, not lapsed, so nobody who already
   // verified is locked out by a field that did not exist at the time.

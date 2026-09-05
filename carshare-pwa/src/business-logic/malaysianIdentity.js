@@ -64,3 +64,47 @@ export function isDriverLicenseCurrent(expiry, now = new Date()) {
   const today = new Date(`${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`);
   return expiryDate >= today;
 }
+
+// JPJ's minimum age for a Class D (car) licence.
+export const MIN_DRIVING_AGE = 17;
+
+// The century is not encoded, so it is inferred the only sane way for a
+// currently-living applicant: whichever reading does not put the birth date in
+// the future. This resolves the same two-digit year differently depending on
+// when it is asked - correct for "how old are they today", unlike
+// isRealBirthDate above, which deliberately leaves the century open because it
+// only needs "could this date have ever existed".
+function resolveBirthYear(twoDigitYear, referenceYear) {
+  const century = twoDigitYear <= referenceYear % 100 ? 2000 : 1900;
+  return century + twoDigitYear;
+}
+
+// Returns the age a MyKad's birth date implies as of `now`, or null when the
+// number is not a well-formed MyKad. Not identity verification - an offline
+// gate can only prove the number's own structure, never that it belongs to
+// the person who typed it.
+export function ageFromMalaysianIC(value, now = new Date()) {
+  const digits = normalizeMalaysianIC(value);
+  if (digits.length !== 12) return null;
+  const referenceYear = now.getUTCFullYear();
+  const year = resolveBirthYear(Number(digits.slice(0, 2)), referenceYear);
+  const month = Number(digits.slice(2, 4));
+  const day = Number(digits.slice(4, 6));
+  const birthDate = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(birthDate.getTime())) return null;
+
+  let age = referenceYear - year;
+  const hadBirthdayThisYear = now.getUTCMonth() > month - 1
+    || (now.getUTCMonth() === month - 1 && now.getUTCDate() >= day);
+  if (!hadBirthdayThisYear) age -= 1;
+  return age;
+}
+
+// Publishing puts the member behind the wheel, so it is the one gate that
+// needs this - requesting to join a ride or messaging another member does
+// not. Kept separate from validateIdentitySubmission for exactly that reason:
+// submission is shared by every member, this check is not.
+export function isOldEnoughToDrive(icNumber, now = new Date()) {
+  const age = ageFromMalaysianIC(icNumber, now);
+  return age !== null && age >= MIN_DRIVING_AGE;
+}

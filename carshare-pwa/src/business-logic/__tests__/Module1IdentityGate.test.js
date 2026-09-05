@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDriverLicenseCurrent } from '../malaysianIdentity.js';
+import { ageFromMalaysianIC, isDriverLicenseCurrent, isOldEnoughToDrive, MIN_DRIVING_AGE } from '../malaysianIdentity.js';
 
 async function read(relativeUrl) {
   return import('node:fs/promises').then(({ readFile }) => readFile(new URL(relativeUrl, import.meta.url), 'utf8'));
@@ -21,6 +21,41 @@ describe("driver's licence currency", () => {
 
   it('accepts a full timestamp by reading its date part', () => {
     expect(isDriverLicenseCurrent('2030-01-01T00:00:00.000Z', now)).toBe(true);
+  });
+});
+
+describe('age implied by a MyKad birth date', () => {
+  it('resolves the century to whichever reading is not in the future', () => {
+    // yy=05 read as 2005 (21 as of `now`) - 1905 would make them 121.
+    expect(ageFromMalaysianIC('050615-14-5678', now)).toBe(21);
+    // yy=30 read as 1930 (96 as of `now`) - 2030 has not happened yet.
+    expect(ageFromMalaysianIC('300101-14-1234', now)).toBe(96);
+  });
+
+  it('has not yet counted a birthday later this year', () => {
+    // Born 2009-09-06: one day past `now` (2026-09-05), so still 16.
+    expect(ageFromMalaysianIC('090906-14-1234', now)).toBe(16);
+    // Born 2009-09-05: turns 17 on exactly `now`.
+    expect(ageFromMalaysianIC('090905-14-1234', now)).toBe(17);
+  });
+
+  it('returns null for anything that is not a well-formed MyKad', () => {
+    expect(ageFromMalaysianIC('', now)).toBeNull();
+    expect(ageFromMalaysianIC(null, now)).toBeNull();
+    expect(ageFromMalaysianIC('not-a-mykad', now)).toBeNull();
+  });
+});
+
+describe("JPJ's minimum driving age", () => {
+  it(`requires at least ${MIN_DRIVING_AGE}, the Class D minimum`, () => {
+    expect(isOldEnoughToDrive('090905-14-1234', now)).toBe(true); // turns 17 today
+    expect(isOldEnoughToDrive('090906-14-1234', now)).toBe(false); // still 16
+    expect(isOldEnoughToDrive('050615-14-5678', now)).toBe(true); // 21
+  });
+
+  it('rejects a missing or unparseable MyKad rather than defaulting to eligible', () => {
+    expect(isOldEnoughToDrive('', now)).toBe(false);
+    expect(isOldEnoughToDrive(null, now)).toBe(false);
   });
 });
 

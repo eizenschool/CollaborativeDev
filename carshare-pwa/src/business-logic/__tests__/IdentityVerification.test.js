@@ -19,6 +19,7 @@ const {
   canInteractWithIdentity,
   canPublishWithIdentity,
   describeIdentityStatus,
+  identityBelowDrivingAge,
   identityLicenseHasLapsed,
   IDENTITY_STATUS,
   IdentityVerificationService,
@@ -148,6 +149,26 @@ describe('publish gate', () => {
   // migration must not take Ride publishing down.
   it('stays open when migration 093 is not deployed', () => {
     expect(canPublishWithIdentity({ status: IDENTITY_STATUS.NONE, deploymentPending: true })).toBe(true);
+  });
+
+  it("blocks publishing below JPJ's minimum driving age, even once submitted", () => {
+    const tooYoung = { status: IDENTITY_STATUS.APPROVED, icNumber: '150615-14-1234' }; // 11 as of 2026
+    expect(canPublishWithIdentity(tooYoung)).toBe(false);
+    expect(identityBelowDrivingAge(tooYoung)).toBe(true);
+  });
+
+  it('unlocks publishing once the MyKad birth date clears the minimum age', () => {
+    const oldEnough = { status: IDENTITY_STATUS.APPROVED, icNumber: '050615-14-5678' }; // 21 as of 2026
+    expect(canPublishWithIdentity(oldEnough)).toBe(true);
+    expect(identityBelowDrivingAge(oldEnough)).toBe(false);
+  });
+
+  // 093_m1/094_m1 deploy together, so a real row never lacks ic_number; this
+  // only exercises a partial state, matching the missing-expiry fail-open
+  // case above.
+  it('does not block on age when no MyKad number is on the state at all', () => {
+    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.PENDING })).toBe(true);
+    expect(identityBelowDrivingAge({ status: IDENTITY_STATUS.PENDING })).toBe(false);
   });
 
   it('describes each status for the member', () => {

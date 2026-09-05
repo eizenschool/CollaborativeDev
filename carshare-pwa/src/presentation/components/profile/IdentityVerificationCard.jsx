@@ -9,10 +9,12 @@
 import { useState } from 'react';
 import {
   describeIdentityStatus,
+  identityBelowDrivingAge,
   identityLicenseHasLapsed,
   IDENTITY_STATUS,
   IdentityVerificationService
 } from '../../../business-logic/IdentityVerificationService.js';
+import { MIN_DRIVING_AGE } from '../../../business-logic/malaysianIdentity.js';
 import { IconShield, IconCheck } from '../icons.jsx';
 
 const STATUS_TONE = {
@@ -26,6 +28,7 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
   const status = state?.status || IDENTITY_STATUS.NONE;
   const lapsed = identityLicenseHasLapsed(state);
   const submitted = status === IDENTITY_STATUS.PENDING || status === IDENTITY_STATUS.APPROVED;
+  const tooYoung = submitted && identityBelowDrivingAge(state);
 
   const [open, setOpen] = useState(!compact);
   const [file, setFile] = useState(null);
@@ -124,6 +127,12 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
             Your licence has lapsed, so publishing is paused. Submit a renewed expiry date to host again.
           </div>
         )}
+        {tooYoung && (
+          <div className="alert alert-error">
+            This MyKad is below JPJ&apos;s minimum driving age of {MIN_DRIVING_AGE}, so hosting stays paused.
+            Riding as a passenger is unaffected.
+          </div>
+        )}
         {status === IDENTITY_STATUS.REJECTED && state?.reviewNote && (
           <div className="alert alert-error">Reviewer note: {state.reviewNote}</div>
         )}
@@ -142,7 +151,7 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
     <section className="publish-access-card" aria-labelledby="identity-gate-heading">
       <span className="publish-access-icon"><IconShield size={24} /></span>
       <h1 id="identity-gate-heading">
-        {lapsed ? 'Your driver’s licence has expired' : status === IDENTITY_STATUS.REJECTED
+        {tooYoung ? `You must be at least ${MIN_DRIVING_AGE} to host` : lapsed ? 'Your driver’s licence has expired' : status === IDENTITY_STATUS.REJECTED
           ? 'Upload a clearer photo of your MyKad'
           : 'Verify your identity to host'}
       </h1>
@@ -158,6 +167,12 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
         <li><span className="perk-check"><IconCheck size={12} /></span>You can publish as soon as it is uploaded</li>
       </ul>
 
+      {tooYoung && (
+        <div className="alert alert-error">
+          The birth date on this MyKad number is below JPJ&apos;s minimum driving age of {MIN_DRIVING_AGE}.
+          You can still ride as a passenger - hosting opens up once you meet the age requirement.
+        </div>
+      )}
       {status === IDENTITY_STATUS.REJECTED && state?.reviewNote && (
         <div className="alert alert-error">Reviewer note: {state.reviewNote}</div>
       )}
