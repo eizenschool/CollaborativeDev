@@ -48,8 +48,6 @@ const draft = {
   model: 'Myvi',
   vehicleType: 'hatchback',
   plate: 'VAA 1234',
-  driverLicenseNumber: 'D1234567',
-  driverLicenseExpiry: '2099-12-31',
   colour: 'Blue',
   seats: 4,
   year: 2024,
@@ -79,7 +77,6 @@ describe('vehicle saving against an environment without migration 039', () => {
     expect(harness.calls[1].values).toMatchObject({
       owner_id: 'user-a',
       model: 'Myvi',
-      driver_license_number: 'D1234567',
       seats: 4
     });
   });

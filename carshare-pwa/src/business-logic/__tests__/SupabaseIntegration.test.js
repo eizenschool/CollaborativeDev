@@ -65,7 +65,6 @@ describe('Supabase integration contracts', () => {
       model: ' Myvi ',
       vehicleType: 'hatchback',
       plate: ' VAA 1234 ',
-      driverLicenseNumber: ' D1234567 ',
       colour: ' Blue ',
       seats: 4,
       year: 2024,
@@ -79,7 +78,6 @@ describe('Supabase integration contracts', () => {
       owner_id: 'user-a',
       make: 'Perodua',
       plate: 'VAA 1234',
-      driver_license_number: 'D1234567',
       vehicle_type: 'hatchback'
     });
   });

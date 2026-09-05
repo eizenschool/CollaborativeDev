@@ -44,7 +44,7 @@ describe('Module 4 mock favourite persistence', () => {
     await mockDb.updateProfile('u_demo_1', { spokenLanguages: ['english', 'tamil'] });
     await mockDb.upsertVehicle('u_demo_1', {
       id: 'v_1', make: 'Toyota', model: 'Camry', vehicleType: 'sedan', plate: 'TEST 1',
-      driverLicenseNumber: 'D1234567', colour: 'White', seats: 4, year: 2021, active: true
+      colour: 'White', seats: 4, year: 2021, active: true
     });
 
     expect((await mockDb.getCurrentUser()).spokenLanguages).toEqual(['english', 'tamil']);

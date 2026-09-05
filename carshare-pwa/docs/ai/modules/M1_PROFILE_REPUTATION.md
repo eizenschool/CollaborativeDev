@@ -48,23 +48,39 @@ an asymmetric Reputation effect while preserving rating as a separate signal.
 existing `handle_new_user()` trigger already covers Google's profile/avatar
 metadata shape. Still needs Google Cloud + Supabase Dashboard provider setup
 (see `docs/SUPABASE-SETUP.md`) before it works against the live project.
-Sign-up now also validates a Malaysian IC (MyKad) number
-(`AuthService.validateMalaysianIC`) as an identity gate before an account can
-be created: 12 digits, a real calendar birth date, and a birthplace code JPN
-actually assigns. MyKad has no check digit, so this stays structural
-validation, and the number itself is never persisted or sent to Supabase.
-Authored migration `088_m1` records only that the gate ran
-(`profile_private.ic_checked_at`, written by `handle_new_user()` from the
-sign-up payload and not client-writable). Adding a vehicle requires a driver's
-license number (`vehicles.driver_license_number`, `database/sql/019`) and now
-also an expiry date (`vehicles.driver_license_expiry`, `088_m1`); a present,
-unexpired license is a condition of publishing a Ride, enforced by the
-`enforce_ride_driver_license_before_publish` trigger and pre-checked by
-`hasPublishableVehicle`. A vehicle saved before `088_m1` has no expiry on
-record, and that unknown is deliberately not treated as expired. None of this
-is identity verification - no badge, no public signal, no reputation effect -
-and document photos remain out of scope pending the Trust & Safety console
-decision.
+Identity verification happens where it is used, not at sign-up (D035).
+Sign-up collects no IC number at all - the old gate was skippable through
+`signInWithGoogle()` and asked every member for a document only a Host needs.
+A Host uploads a photo of their MyKad before publishing a Ride
+(`IdentityVerificationService`, `IdentityVerificationCard`, authored migration
+`093_m1`): submitting unlocks publishing, approval earns the verified label,
+and review runs through a service-role-only
+`private.review_identity_verification` because the shared Trust & Safety
+reviewer surface is still undecided. The images live in the PRIVATE
+`identity-documents` bucket under owner-folder policies with no anon policy,
+and never reach a public profile or Ride card. `093_m1` also retires
+`profile_private.ic_checked_at` (restoring `handle_new_user()` before dropping
+the column). The MyKad number and the driver's licence expiry are captured in that same
+step and stored on `identity_verifications` (`094_m1`), not per vehicle: a
+Malaysian licence carries the holder's IC, and a Host with three cars used to
+retype it three times. The vehicle form no longer asks for a licence, `094_m1`
+retires the `088_m1` per-vehicle trigger, and the expiry check moves into
+`enforce_ride_identity_verification`. Publishing needs a non-rejected
+submission, an unlapsed licence, a registered vehicle and the D034 reputation
+gate. Status is visible in Profile > Info & Security, rendered from the same
+`IdentityVerificationCard` as the publish gate. Review is still manual - a
+reviewer runs `private.review_identity_verification` from the Supabase SQL
+Editor, since a client-facing reviewer surface depends on the open Trust &
+Safety console decision. `malaysianIdentity.js` holds the shared MyKad
+validator and licence-currency rule.
+
+Known live issue: submitting writes through a direct `.upsert()`, which needs
+a table-level insert/update grant on `identity_verifications` rather than the
+column-restricted one `093_m1`/`094_m1` currently grant - Postgres refuses a
+column-restricted UPDATE grant for the `INSERT ... ON CONFLICT DO UPDATE`
+`.upsert()` emits and returns `42501 permission denied`, the same trap
+`071_project` hit on `profile_visibility`. Not yet fixed.
+
 `/home` is now the public website entry rather than a post-login-only route.
 Guests can browse Home, Search, Ride listings, and Published Ride Detail; the
 shared auth gate is applied only when they enter account-specific services.

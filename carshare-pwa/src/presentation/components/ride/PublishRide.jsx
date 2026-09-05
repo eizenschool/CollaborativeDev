@@ -4,7 +4,9 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { isRouteQuoteFresh, RideService } from '../../../business-logic/RideService.js';
 import { departureParts, formatMalaysiaDeparture } from '../../../business-logic/rideDateTime.js';
-import { hasPublishableVehicle, hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
+import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
+import { canPublishWithIdentity, IdentityVerificationService } from '../../../business-logic/IdentityVerificationService.js';
+import IdentityVerificationCard from '../profile/IdentityVerificationCard.jsx';
 import { ReputationService } from '../../../business-logic/ReputationService.js';
 import {
   GooglePlacesService,
@@ -69,6 +71,8 @@ export default function PublishRide() {
   const [saving, setSaving] = useState(false);
   const [vehicles, setVehicles] = useState(null);
   const [vehicleGateError, setVehicleGateError] = useState('');
+  const [identityState, setIdentityState] = useState(null);
+  const [identityGateError, setIdentityGateError] = useState('');
   const [vehicleGateAttempt, setVehicleGateAttempt] = useState(0);
   const [reputationEligibility, setReputationEligibility] = useState(null);
   const [reputationGateError, setReputationGateError] = useState('');
@@ -135,6 +139,16 @@ export default function PublishRide() {
 
   useEffect(() => {
     let active = true;
+    setIdentityState(null);
+    setIdentityGateError('');
+    IdentityVerificationService.getStatus(user.id)
+      .then((result) => active && setIdentityState(result))
+      .catch((err) => active && setIdentityGateError(err.message || 'Your identity check could not be read.'));
+    return () => { active = false; };
+  }, [user.id, vehicleGateAttempt]);
+
+  useEffect(() => {
+    let active = true;
     setReputationEligibility(null);
     setReputationGateError('');
     ReputationService.getEligibility(user.id, 'host')
@@ -150,7 +164,7 @@ export default function PublishRide() {
   }, [draftRideId, form.vehicleCapacity, form.vehicleId, vehicles]);
 
   useEffect(() => {
-    if (!reputationEligibility?.eligible || !hasPublishableVehicle(vehicles) || locationRequested.current) return;
+    if (!reputationEligibility?.eligible || !hasRegisteredVehicle(vehicles) || !canPublishWithIdentity(identityState) || locationRequested.current) return;
     locationRequested.current = true;
     let active = true;
     setPreviewStatus({ state: 'locating', message: 'Finding your current location to place a pin on the map…' });
@@ -168,7 +182,7 @@ export default function PublishRide() {
         setPreviewStatus({ state: 'error', message: err.message });
       });
     return () => { active = false; };
-  }, [reputationEligibility, vehicles]);
+  }, [identityState, reputationEligibility, vehicles]);
 
   function patch(fields) {
     setForm((f) => ({ ...f, ...fields }));
@@ -308,17 +322,21 @@ export default function PublishRide() {
 
   if (draftLoadError) return <main className="publish-access-state"><section className="publish-access-card" role="alert"><h1>Draft unavailable</h1><p>{draftLoadError}</p><button className="btn-primary" onClick={() => navigate('/ride')}>Back to My rides</button></section></main>;
 
-  if ((!vehicles && !vehicleGateError) || (!reputationEligibility && !reputationGateError)) {
+  if (
+    (!vehicles && !vehicleGateError)
+    || (!reputationEligibility && !reputationGateError)
+    || (!identityState && !identityGateError)
+  ) {
     return <main className="publish-access-state" role="status">Checking your Driver eligibility…</main>;
   }
 
-  if (vehicleGateError || reputationGateError) {
+  if (vehicleGateError || reputationGateError || identityGateError) {
     return (
       <main className="publish-access-state">
         <section className="publish-access-card" role="alert">
           <span className="publish-access-icon"><IconCar size={24} /></span>
           <h1>We couldn't check your Driver access</h1>
-          <p>{vehicleGateError || reputationGateError} Location permission has not been requested.</p>
+          <p>{vehicleGateError || reputationGateError || identityGateError} Location permission has not been requested.</p>
           <div>
             <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
             <button className="btn-primary" onClick={() => setVehicleGateAttempt((attempt) => attempt + 1)}>Try again</button>
@@ -344,6 +362,22 @@ export default function PublishRide() {
     );
   }
 
+  // Migration 093 enforces the same condition on the Ride row itself; this only
+  // moves the refusal in front of the form. Uploading unlocks publishing -
+  // waiting for approval would dead-end every Host while the reviewer surface
+  // is still an open Trust & Safety decision.
+  if (!canPublishWithIdentity(identityState)) {
+    return (
+      <main className="publish-access-state">
+        <IdentityVerificationCard
+          userId={user.id}
+          state={identityState}
+          onSubmitted={setIdentityState}
+        />
+      </main>
+    );
+  }
+
   if (!hasRegisteredVehicle(vehicles)) {
     return (
       <main className="publish-access-state">
@@ -354,24 +388,6 @@ export default function PublishRide() {
           <div>
             <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
             <button className="btn-primary" onClick={() => navigate('/profile')}>Add a vehicle</button>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  // Migration 088 enforces the same condition on the Ride row itself; this
-  // check only moves the refusal in front of the form instead of after it.
-  if (!hasPublishableVehicle(vehicles)) {
-    return (
-      <main className="publish-access-state">
-        <section className="publish-access-card" role="alert">
-          <span className="publish-access-icon"><IconCar size={24} /></span>
-          <h1>Update your driver&apos;s license first</h1>
-          <p>Publishing needs a vehicle with a current driver&apos;s license on record. Add the license number and a valid expiry date to one of your vehicles. We did not request your location.</p>
-          <div>
-            <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
-            <button className="btn-primary" onClick={() => navigate('/profile')}>Update my vehicle</button>
           </div>
         </section>
       </main>

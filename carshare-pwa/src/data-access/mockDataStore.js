@@ -80,7 +80,7 @@ const seedData = {
         model: 'Camry',
         vehicleType: 'sedan',
         plate: 'NSW 4KL 291',
-        driverLicenseNumber: 'D1102934',
+        driverLicenseNumber: '880214-14-5321',
         driverLicenseExpiry: '2030-06-30',
         colour: 'Pearl White',
         seats: 4,
@@ -93,7 +93,7 @@ const seedData = {
         model: 'Civic',
         vehicleType: 'sedan',
         plate: 'VIC 8BM 774',
-        driverLicenseNumber: 'D1102934',
+        driverLicenseNumber: '880214-14-5321',
         driverLicenseExpiry: '2030-06-30',
         colour: 'Midnight Blue',
         seats: 3,
@@ -101,10 +101,10 @@ const seedData = {
         active: false
       }
     ],
-    u_host_ahmad: [{ id: 'v_ahmad', make: 'Perodua', model: 'Alza', vehicleType: 'mpv', plate: 'WXX 101', driverLicenseNumber: 'D2201455', driverLicenseExpiry: '2029-03-14', colour: 'Silver', seats: 6, year: 2023, active: true }],
-    u_host_sarah: [{ id: 'v_sarah', make: 'Honda', model: 'HR-V', vehicleType: 'suv', plate: 'BXX 202', driverLicenseNumber: 'D3308761', driverLicenseExpiry: '2028-11-02', colour: 'White', seats: 4, year: 2022, active: true }],
-    u_host_raj: [{ id: 'v_raj', make: 'Perodua', model: 'Myvi', vehicleType: 'hatchback', plate: 'VXX 303', driverLicenseNumber: 'D4417820', driverLicenseExpiry: '2027-08-21', colour: 'Blue', seats: 3, year: 2021, active: true }],
-    u_host_nurul: [{ id: 'v_nurul', make: 'Toyota', model: 'Hiace', vehicleType: 'van', plate: 'WXX 404', driverLicenseNumber: 'D5526093', driverLicenseExpiry: '2031-01-09', colour: 'Black', seats: 8, year: 2020, active: true }]
+    u_host_ahmad: [{ id: 'v_ahmad', make: 'Perodua', model: 'Alza', vehicleType: 'mpv', plate: 'WXX 101', driverLicenseNumber: '900517-08-6112', driverLicenseExpiry: '2029-03-14', colour: 'Silver', seats: 6, year: 2023, active: true }],
+    u_host_sarah: [{ id: 'v_sarah', make: 'Honda', model: 'HR-V', vehicleType: 'suv', plate: 'BXX 202', driverLicenseNumber: '930822-10-4408', driverLicenseExpiry: '2028-11-02', colour: 'White', seats: 4, year: 2022, active: true }],
+    u_host_raj: [{ id: 'v_raj', make: 'Perodua', model: 'Myvi', vehicleType: 'hatchback', plate: 'VXX 303', driverLicenseNumber: '970103-01-7745', driverLicenseExpiry: '2027-08-21', colour: 'Blue', seats: 3, year: 2021, active: true }],
+    u_host_nurul: [{ id: 'v_nurul', make: 'Toyota', model: 'Hiace', vehicleType: 'van', plate: 'WXX 404', driverLicenseNumber: '851130-14-2290', driverLicenseExpiry: '2031-01-09', colour: 'Black', seats: 8, year: 2020, active: true }]
   },
   // Reputation Score Engine inputs (3.1.2.a) - completed trips, CO2 saved, and
   // reputation score feed the weighted Composite Impact Score on the Host Dashboard.
@@ -121,6 +121,7 @@ const seedData = {
     u_host_nurul: { completedTrips: 38, co2SavedKg: 110, reputationScore: 96, rating: 4.8 }
   },
   profileVisibility: {},
+  identityVerifications: {},
   reputationEvents: {},
   // Ride Sharing Management (Module 2, FR-2.x) - Ride Management Component's
   // records. Seeded with 4 published rides so Find a Ride has something to browse.
@@ -665,6 +666,38 @@ export const mockDb = {
     db.vehicles[userId] = list;
     save(db);
     return db.vehicles[userId];
+  },
+
+  // Identity verification (Module 1). The mock never holds a real image - it
+  // records the same status transitions the Supabase path does so the publish
+  // gate can be exercised offline.
+  async getIdentityVerification(userId) {
+    await delay();
+    const db = load();
+    return (db.identityVerifications || {})[userId] || null;
+  },
+
+  async submitIdentityVerification(userId, submission) {
+    await delay();
+    const db = load();
+    db.identityVerifications ||= {};
+    db.identityVerifications[userId] = {
+      status: 'pending',
+      document_path: `${userId}/mykad-${Date.now()}.mock`,
+      document_name: submission?.file?.name || 'mykad.jpg',
+      ic_number: (submission?.icNumber || '').replace(/-/g, ''),
+      license_expiry: submission?.licenseExpiry || null,
+      submitted_at: new Date().toISOString(),
+      reviewed_at: null,
+      review_note: ''
+    };
+    save(db);
+    return db.identityVerifications[userId];
+  },
+
+  async getIdentityDocumentPreview() {
+    // No object store offline, so there is nothing to sign a URL for.
+    return null;
   },
 
   async removeVehicle(userId, vehicleId) {
