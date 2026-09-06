@@ -13,6 +13,12 @@
       "runtimeArgs": ["--prefix", "carshare-pwa", "run", "dev:fixture"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "carshare-pwa-fixture-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "carshare-pwa", "run", "dev:fixture", "--", "--port", "5199", "--strictPort"],
+      "port": 5199
     }
   ]
 }
