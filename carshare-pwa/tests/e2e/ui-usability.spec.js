@@ -97,9 +97,7 @@ async function mockGooglePickupServices(page, { nearbyFails = false } = {}) {
 }
 
 test('public browsing preserves Discover to Search hand-off', async ({ page }) => {
-  await openPage(page, '/home', 'Where should you go?');
-  await page.getByRole('link', { name: 'Search' }).click();
-  await expect(page.getByRole('heading', { name: 'Find the right ride' })).toBeVisible();
+  await openPage(page, '/search', 'Find the right ride');
 
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
@@ -112,12 +110,23 @@ test('public browsing preserves Discover to Search hand-off', async ({ page }) =
     });
     localStorage.setItem(storageKey, JSON.stringify(database));
   }, MOCK_STORAGE_KEY);
-  await openPage(page, '/discover?date=2026-09-15', 'Where should you go?');
-  await page.locator('.dsc-hero').click();
-  await expect(page).toHaveURL(/\/discover\/[^/?]+\?date=/);
+  await openPage(page, '/discover/p_georgetown?date=2026-09-14', 'George Town Heritage Core');
+  await expect(page.getByText('Nobody is driving here yet')).toBeVisible();
   await page.getByRole('button', { name: /Find a ride/i }).click();
   await expect(page).toHaveURL(/\/search\?.*destination=/);
   await expect(page.getByRole('heading', { name: 'Find the right ride' })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('pickup')).toBeNull();
+  expect(new URL(page.url()).searchParams.get('date')).toBeNull();
+  await expect(page.getByRole('combobox', { name: 'Pickup', exact: true })).toHaveValue('');
+  await expect(page.getByRole('heading', { name: '1 journey found', exact: true })).toBeVisible();
+
+  await openPage(page, '/discover/p_georgetown?date=2026-09-15', 'George Town Heritage Core');
+  await expect(page.getByText(/1 ride going/)).toBeVisible();
+  await page.getByRole('button', { name: /Find a ride/i }).click();
+  expect(new URL(page.url()).searchParams.get('date')).toBe('2026-09-15');
+
+  await openPage(page, '/discover/p_georgetown', 'George Town Heritage Core');
+  await expect(page.getByText(/1 upcoming ride/)).toBeVisible();
 });
 
 test('authentication returns the member to the guarded destination', async ({ page }) => {

@@ -15,6 +15,7 @@ import AdaptiveDialog from '../../../shared/components/ui/AdaptiveDialog.jsx';
 import { Button } from '../../../shared/components/ui/Button.jsx';
 import { IconEdit, IconMapPin } from '../../../shared/components/icons.jsx';
 import ConfirmedLocationInput from '../../../shared/components/maps/ConfirmedLocationInput.jsx';
+import { GooglePlacesService } from '../../../../business-logic/shared/GooglePlacesService.js';
 
 function formatDateRange(plan, copy) {
   if (!plan.startDate) return copy.dateNotDecided;
@@ -37,7 +38,7 @@ function summaryParts(plan, copy, language, languagePack) {
 }
 
 export default function GuideContextBar({
-  plan, copy, language, languagePack, onChange, onUseLocation, onSavePreferences, locationBusy, locationError, canSave
+  plan, copy, language, languagePack, onChange, onSavePreferences, canSave
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
@@ -90,11 +91,9 @@ export default function GuideContextBar({
             value={plan.origin?.label || ''}
             location={originLocation}
             onChange={updateOrigin}
+            allowCurrentLocation
+            loadNearbySuggestions={GooglePlacesService.searchNearbyPickupLocations}
           />
-          <button className="guide-location-button" type="button" onClick={onUseLocation} disabled={locationBusy}>
-            <IconMapPin size={16} /> {locationBusy ? copy.locating : copy.useLocation}
-          </button>
-          {locationError && <p className="guide-field-error" role="alert">{locationError}</p>}
           <div className="guide-plan__row">
             <label>{copy.from}<input aria-label={copy.from} type="date" value={plan.startDate || ''} onChange={(event) => patch({ startDate: event.target.value, endDate: event.target.value })} /></label>
             <label>{copy.until}<input aria-label={copy.until} type="date" min={plan.startDate || undefined} value={plan.endDate || ''} onChange={(event) => patch({ endDate: event.target.value })} /></label>

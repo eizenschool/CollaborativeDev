@@ -169,7 +169,8 @@ export default function DestinationDetail() {
   const location = useLocation();
   const { user } = useAuth();
 
-  const travelDate = searchParams.get('date') || today();
+  const requestedTravelDate = searchParams.get('date');
+  const travelDate = requestedTravelDate || today();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
@@ -188,12 +189,15 @@ export default function DestinationDetail() {
     setLoading(true);
     (async () => {
       const detail = await DestinationDiscoveryService.getDestination(placeId, {
-        userId: user?.id, origin: DEFAULT_ORIGIN, travelDate
+        userId: user?.id,
+        origin: DEFAULT_ORIGIN,
+        travelDate,
+        rideDate: requestedTravelDate || null
       });
       if (!cancelled) { setData(detail); setLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [placeId, travelDate, user?.id]);
+  }, [placeId, requestedTravelDate, travelDate, user?.id]);
 
   if (loading) {
     return <div className="dsc-page"><p className="dsc-empty">Loading…</p></div>;
@@ -220,6 +224,10 @@ export default function DestinationDetail() {
   const guideReasons = (guideContext?.reasonCodes || [])
     .map((code) => guideReasonText(code, place, guideContext.planState, guideLanguage))
     .filter(Boolean);
+
+  const findRide = () => navigate(DestinationDiscoveryService.buildPrefillUrl(
+    'search', place, { travelDate: rides.length > 0 ? requestedTravelDate : null }
+  ));
 
   const notifyMe = async () => {
     if (!user) {
@@ -333,7 +341,7 @@ export default function DestinationDetail() {
                 <div className="dsc-availability dsc-served">
                   <IconCar size={16} />
                   <span>
-                    <strong>{rides.length}</strong> ride{rides.length > 1 ? 's' : ''} going
+                    <strong>{rides.length}</strong> {requestedTravelDate ? 'ride' : 'upcoming ride'}{rides.length > 1 ? 's' : ''}{requestedTravelDate ? ' going' : ''}
                     {' · '}<strong>{seatsLeft}</strong> seat{seatsLeft === 1 ? '' : 's'} left
                   </span>
                 </div>
@@ -341,9 +349,7 @@ export default function DestinationDetail() {
                   <button
                     className="dsc-btn dsc-btn-primary"
                     type="button"
-                    onClick={() => navigate(DestinationDiscoveryService.buildPrefillUrl(
-                      'search', place, { origin: DEFAULT_ORIGIN, travelDate }
-                    ))}
+                    onClick={findRide}
                   >
                     <IconCar size={16} /> Find a ride
                   </button>
@@ -371,6 +377,9 @@ export default function DestinationDetail() {
                   </button>
                   <button className="dsc-btn" onClick={notifyMe} type="button">
                     <IconBell size={16} /> Tell me when there is a ride
+                  </button>
+                  <button className="dsc-btn" onClick={findRide} type="button">
+                    <IconCar size={16} /> Find a ride
                   </button>
                 </div>
               </>

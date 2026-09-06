@@ -166,13 +166,24 @@ export const DestinationDiscoveryService = {
    * from the card the user just tapped. Reusing the ranking guarantees the detail
    * screen and the list can never disagree.
    */
-  async getDestination(placeId, { userId, origin, travelDate } = {}) {
+  async getDestination(placeId, { userId, origin, travelDate, rideDate = travelDate } = {}) {
     const place = await discoveryDb.getPlace(placeId);
     if (!place) return null;
 
-    const ranked = await this.getRecommendations({ userId, origin, travelDate });
+    const [ranked, publishedRides] = await Promise.all([
+      this.getRecommendations({ userId, origin, travelDate }),
+      DiscoveryContractAdapter.getPublishedRides()
+    ]);
     const candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
       .find((entry) => entry.placeId === placeId);
+
+    // Recommendation scores remain specific to the selected travel date. Ride
+    // availability is exact when Detail carries a date, while an undated Detail
+    // deliberately lists every Published ride for this place.
+    const rides = (DiscoveryContractAdapter
+      .getRidesByPlace([place], publishedRides, rideDate)
+      .get(place.id) || [])
+      .sort((left, right) => String(left.departureAt || '').localeCompare(String(right.departureAt || '')));
 
     // A place withheld by the weather gate never reaches scoring, so the detail
     // screen still opens - it simply has no score to explain.
@@ -181,7 +192,7 @@ export const DestinationDiscoveryService = {
     return {
       place,
       candidate: candidate || null,
-      rides: candidate?.rides || [],
+      rides,
       interestedUsers: candidate?.interestedUsers || 0,
       distanceKm: candidate?.distanceKm ?? null,
       weatherWithheld: Boolean(weatherWithheld),

@@ -5,16 +5,22 @@
 // destination string, the catalogue stores a place record, and the two rarely
 // spell a location the same way.
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RideService } from '../../../m2-rides/RideService.js';
 import {
   departureDates,
+  getPublishedRides,
   getRidesByPlace,
+  rideReferencesPlace,
   referencesPlace
 } from '../DiscoveryContractAdapter.js';
 
-const place = (id, name, aliases = []) => ({ id, name, rideDestinationAliases: aliases });
-const ride = (id, destination, date, seatsTotal = 4, seatsAvailable = 2) =>
-  ({ id, destination, date, seatsTotal, seatsAvailable });
+const place = (id, name, aliases = [], sourcePlaceId = '') =>
+  ({ id, name, rideDestinationAliases: aliases, sourcePlaceId });
+const ride = (id, destination, date, seatsTotal = 4, seatsAvailable = 2, destinationPlaceId = '') =>
+  ({ id, destination, date, seatsTotal, seatsAvailable, destinationPlaceId });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('referencesPlace', () => {
   it('matches an exact name', () => {
@@ -44,6 +50,58 @@ describe('referencesPlace', () => {
   it('does not match an empty destination', () => {
     expect(referencesPlace('', place('p', 'Jonker Street'))).toBe(false);
     expect(referencesPlace(null, place('p', 'Jonker Street'))).toBe(false);
+  });
+});
+
+describe('rideReferencesPlace', () => {
+  const catStatue = place(
+    'p_cat_statue',
+    'Cat Statue, Kuching, Sarawak.',
+    ['Kuching'],
+    'google-cat-statue'
+  );
+
+  it('rejects a broad text match when the confirmed destination is a different place', () => {
+    const waterfrontRide = ride(
+      'r_waterfront', 'Kuching Waterfront', '2026-09-15', 4, 3, 'google-waterfront'
+    );
+
+    expect(rideReferencesPlace(waterfrontRide, catStatue)).toBe(false);
+  });
+
+  it('matches the confirmed destination Place ID even when its display text differs', () => {
+    const exactRide = ride(
+      'r_cat', 'Jalan Tunku Abdul Rahman', '2026-09-15', 4, 3, 'google-cat-statue'
+    );
+
+    expect(rideReferencesPlace(exactRide, catStatue)).toBe(true);
+  });
+
+  it('keeps text matching for a legacy ride with no confirmed destination ID', () => {
+    expect(rideReferencesPlace(
+      ride('r_legacy', 'Cat Statue, Kuching', '2026-09-15'),
+      catStatue
+    )).toBe(true);
+  });
+});
+
+describe('getPublishedRides', () => {
+  it('preserves the confirmed destination Place ID used for exact matching', async () => {
+    vi.spyOn(RideService, 'searchRides').mockResolvedValue([{
+      id: 'r_cat',
+      destination: 'Kuching',
+      destinationPhotoPlaceId: 'google-cat-statue',
+      date: '2026-09-15',
+      seatsTotal: 4,
+      seatsAvailable: 3
+    }]);
+
+    await expect(getPublishedRides()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'r_cat',
+        destinationPlaceId: 'google-cat-statue'
+      })
+    ]);
   });
 });
 
@@ -78,6 +136,17 @@ describe('getRidesByPlace', () => {
   it('returns every matching ride when no date is given', () => {
     const result = getRidesByPlace(places, rides, null);
     expect(result.get('p_gt')).toHaveLength(2);
+  });
+
+  it('does not group a ride under a text alias when its confirmed Place ID differs', () => {
+    const catStatue = place('p_cat', 'Cat Statue', ['Kuching'], 'google-cat');
+    const result = getRidesByPlace([
+      catStatue
+    ], [
+      ride('r_other', 'Kuching Waterfront', '2026-08-15', 4, 3, 'google-waterfront')
+    ], null);
+
+    expect(result.has('p_cat')).toBe(false);
   });
 });
 
