@@ -6,7 +6,7 @@ import { isRouteQuoteFresh, RideService } from '../../../business-logic/RideServ
 import { departureParts, formatMalaysiaDeparture } from '../../../business-logic/rideDateTime.js';
 import { hasRegisteredVehicle, VehicleService } from '../../../business-logic/VehicleService.js';
 import { canPublishWithIdentity, IdentityVerificationService } from '../../../business-logic/IdentityVerificationService.js';
-import IdentityVerificationCard from '../profile/IdentityVerificationCard.jsx';
+
 import { ReputationService } from '../../../business-logic/ReputationService.js';
 import {
   GooglePlacesService,
@@ -362,38 +362,26 @@ export default function PublishRide() {
     );
   }
 
-  // Migration 093 enforces the same condition on the Ride row itself; this only
-  // moves the refusal in front of the form. Uploading unlocks publishing -
-  // waiting for approval would dead-end every Host while the reviewer surface
-  // is still an open Trust & Safety decision.
-  if (!canPublishWithIdentity(identityState)) {
-    return (
-      <main className="publish-access-state">
-        <IdentityVerificationCard
-          userId={user.id}
-          state={identityState}
-          onSubmitted={setIdentityState}
-        />
-      </main>
-    );
-  }
-
-  if (!hasRegisteredVehicle(vehicles)) {
+  if (!hasRegisteredVehicle(vehicles) || !canPublishWithIdentity(identityState)) {
+    const needsVehicle = !hasRegisteredVehicle(vehicles);
+    const returnTo = draftRideId ? `/ride/${draftRideId}/publish` : '/ride/publish';
     return (
       <main className="publish-access-state">
         <section className="publish-access-card" role="alert">
           <span className="publish-access-icon"><IconCar size={24} /></span>
-          <h1>Add a vehicle before publishing</h1>
-          <p>You need at least one registered vehicle to publish a ride. We did not request your location.</p>
+          <h1>{needsVehicle ? 'Add a vehicle before publishing a ride.' : 'Complete your driver documents before publishing'}</h1>
+          <p>{needsVehicle ? 'Add your driver documents and a vehicle in Profile > My Vehicles.'
+            : 'Check your MyKad, driving licence photo and expiry in Profile > My Vehicles. You must be at least 17 to host.'}</p>
           <div>
             <button className="btn-secondary" onClick={() => navigate('/ride')}>Back to rides</button>
-            <button className="btn-primary" onClick={() => navigate('/profile')}>Add a vehicle</button>
+            <button className="btn-primary" onClick={() => navigate(`/profile?panel=vehicles&returnTo=${encodeURIComponent(returnTo)}`)}>
+              {needsVehicle ? 'Add Vehicle' : 'Complete driver documents'}
+            </button>
           </div>
         </section>
       </main>
     );
   }
-
   return (
     <main className="publish-ride">
       <header className="publish-mobile-header">

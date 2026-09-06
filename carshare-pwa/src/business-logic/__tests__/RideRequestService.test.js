@@ -39,6 +39,7 @@ describe('requesting to join a ride requires a submitted MyKad', () => {
   it('lets a traveller who has submitted a MyKad request a seat', async () => {
     const requesterId = 'u_verified_traveller';
     await IdentityVerificationService.submit(requesterId, {
+      mode: 'passenger',
       file: photo(),
       icNumber: '990101-14-5678',
       licenseExpiry: '2099-12-31'

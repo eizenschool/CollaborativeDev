@@ -667,7 +667,8 @@ reviewer surface they would require, remain out of scope and depend on the open
 Trust & Safety console decision.
 
 ## D035 - Identity is verified where it is used, not at sign-up
-**Status:** Accepted in application; migrations 093_m1 and 094_m1 authored and not deployed
+**Status:** Accepted and live; migrations 093_m1-097_m1 are live without tracked
+migration entries, and tracked 099_m1 repaired the identity INSERT grants
 
 Sign-up no longer asks for a MyKad number. That gate (D034, `088_m1`) only
 covered email sign-up: `signInWithGoogle()` created a full account without it,
@@ -727,6 +728,12 @@ UPDATE, so Postgres refused that statement shape with a
 `profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
 needs; RLS still does the real gatekeeping underneath it.
 
+Live verification on 2026-09-06 found a second grant drift: INSERT still covered
+only `093_m1`'s original `user_id`, `status`, and `document_path`, not the
+`ic_number` and `license_expiry` added by `094_m1`. Tracked `099_m1` restores
+only those two column INSERT privileges. It leaves broad table INSERT disabled,
+keeps RLS enabled, and preserves the owner INSERT/UPDATE policies.
+
 Nothing stopped the same MyKad number appearing on two accounts either: a
 member whose reputation dropped, or whose document was rejected, could sign up
 again under a fresh email and resubmit the same number to start clean.
@@ -735,6 +742,21 @@ ic_number is not null`, so legacy rows captured before `094_m1` never collide
 on a shared null). A member's own resubmission still lands on their existing
 row through `093_m1`'s `onConflict: 'user_id'` upsert, so only a *second
 account* reusing the number is ever refused.
+
+## D036 - Driver documents are captured before adding a vehicle
+
+Accepted 2026-09-06. Publish routes members without vehicles to My Vehicles.
+Add Vehicle first collects account-level MyKad number/photo and licence
+expiry/photo; subsequent vehicles reuse the documents. Existing owners must
+supplement missing licence photos before publishing, without creating another
+vehicle. Info & Security retains a separate passenger IC-only flow.
+Pending complete submissions can publish; approval remains the verified label.
+Admin reviews the combined application and can preview both private photos.
+Replacing documents resets review state. Photos stay in the existing private
+bucket, one licence image, JPEG/PNG/WebP at most 5 MB each. No OCR or external
+identity provider is introduced. 100/101 expand the backend; 102 activates
+server enforcement only after frontend release. This supersedes D035's former
+Publish-page upload form and licence-expiry requirement for passenger capture.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);

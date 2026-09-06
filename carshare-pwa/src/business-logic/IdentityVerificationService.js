@@ -51,10 +51,7 @@ export function isIdentityReviewAdmin(user) {
   return Boolean(user?.email) && IDENTITY_REVIEW_ADMIN_EMAILS.includes(user.email);
 }
 
-// Until migration 093 is deployed the table and bucket do not exist. Blocking
-// every Host on a missing migration would take Ride publishing down, so the
-// service reports the dependency and the gate stays open, exactly as
-// VehicleService does for the vehicle_type and licence-expiry columns.
+// Missing identity contracts are unavailable, never an eligibility bypass.
 function isUndeployedIdentityContract(error) {
   const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
   if (['PGRST202', 'PGRST205', '42P01'].includes(error?.code)) return true;
@@ -90,30 +87,24 @@ export function describeIdentityStatus(status) {
 // licence-currency check on top of it, below.
 export function canInteractWithIdentity(state) {
   if (!state) return false;
-  if (state.deploymentPending) return true;
+  if (state.deploymentPending) return false;
   return state.status === IDENTITY_STATUS.PENDING || state.status === IDENTITY_STATUS.APPROVED;
 }
 
-// A submission made before the licence moved onto this record has no MyKad
-// number stored either (093_m1/094_m1 deploy together, so this is only ever a
-// partial state in a test). Unknown is treated as valid, not underage - the
-// same fail-open rule the licence-expiry check below uses.
 export function identityBelowDrivingAge(state) {
   return Boolean(state?.icNumber) && !isOldEnoughToDrive(state.icNumber);
 }
 
 export function canPublishWithIdentity(state) {
   if (!canInteractWithIdentity(state)) return false;
-  if (state.deploymentPending) return true;
+  if (state.deploymentPending) return false;
   // Publishing puts the member behind the wheel, so it is the one gate that
   // checks driving age - requesting to join or messaging another member does
   // not. The MyKad's own birth date is what's checked, not a self-reported
   // field, so this cannot be talked past by resubmitting the same number.
   if (identityBelowDrivingAge(state)) return false;
-  // A submission made before the licence moved onto this record has no expiry
-  // stored. Unknown is treated as valid, not lapsed, so nobody who already
-  // verified is locked out by a field that did not exist at the time.
-  return !state.licenseExpiry || isDriverLicenseCurrent(state.licenseExpiry);
+  return Boolean(state.documentPath && state.licenseDocumentPath
+    && validateMalaysianIC(state.icNumber) && isDriverLicenseCurrent(state.licenseExpiry));
 }
 
 export function identityLicenseHasLapsed(state) {
@@ -140,11 +131,15 @@ export function validateIdentityDocument(file) {
 // The number and the licence expiry are captured once, here, instead of being
 // retyped on every vehicle: a Malaysian licence carries the holder's MyKad
 // number, and one person holds one licence.
-export function validateIdentitySubmission({ file, icNumber, licenseExpiry } = {}) {
-  validateIdentityDocument(file);
+export function validateIdentitySubmission({ file, icNumber, licenseExpiry, licenseFile, mode = 'driver' } = {}, existing = {}) {
+  if (file || !existing.documentPath) validateIdentityDocument(file);
   if (!validateMalaysianIC(icNumber)) {
     throw new Error('Enter your MyKad number as printed on the card, e.g. 990101-14-5678.');
   }
+  if (mode === 'passenger') return true;
+  if (licenseFile) validateIdentityDocument(licenseFile);
+  else if (!existing.licenseDocumentPath) throw new Error('Choose a photo of your driving licence.');
+  if (!isOldEnoughToDrive(icNumber)) throw new Error('You must be at least 17 to host.');
   if (!licenseExpiry) throw new Error("Enter your driver's licence expiry date.");
   if (!isDriverLicenseCurrent(licenseExpiry)) {
     throw new Error("That driver's licence has already expired. Renew it before hosting.");
@@ -176,6 +171,7 @@ function mapRow(row) {
     reviewedAt: row.reviewed_at ?? row.reviewedAt ?? null,
     reviewNote: row.review_note ?? row.reviewNote ?? '',
     documentPath: row.document_path ?? row.documentPath ?? '',
+    licenseDocumentPath: row.license_document_path ?? row.licenseDocumentPath ?? '',
     // Displayed back to its owner only, and always in the dashed spelling the
     // card itself uses.
     icNumber: formatMalaysianIC(row.ic_number ?? row.icNumber ?? ''),
@@ -191,13 +187,13 @@ export const IdentityVerificationService = {
 
     const { data, error } = await supabase
       .from('identity_verifications')
-      .select('status, document_path, submitted_at, reviewed_at, review_note, ic_number, license_expiry')
+      .select('status, document_path, license_document_path, submitted_at, reviewed_at, review_note, ic_number, license_expiry')
       .eq('user_id', userId)
       .maybeSingle();
 
     if (error) {
       if (isUndeployedIdentityContract(error)) {
-        return { ...mapRow(null), deploymentPending: true };
+        throw new Error('Document submission is temporarily unavailable. Please try again after the service update.');
       }
       throw error;
     }
@@ -207,8 +203,7 @@ export const IdentityVerificationService = {
   // Mirrors ReputationService.requireEligibility: fetches the caller's own
   // status fresh and throws with a matchable code, rather than every call
   // site re-fetching getStatus and re-running canInteractWithIdentity itself.
-  // There is no admin surface to approve submissions, so this only ever
-  // demands submission, never approval - approval is still just the label.
+  // Submission unlocks interaction; approval is reserved for the reviewed label.
   async requireVerifiedIdentity(userId) {
     const state = await this.getStatus(userId);
     if (!canInteractWithIdentity(state)) {
@@ -220,46 +215,59 @@ export const IdentityVerificationService = {
   },
 
   async submit(userId, submission) {
-    const { file, icNumber, licenseExpiry } = submission || {};
-    validateIdentitySubmission(submission);
+    const existing = await this.getStatus(userId);
+    const { file, licenseFile, icNumber, licenseExpiry, mode = 'driver' } = submission || {};
+    validateIdentitySubmission(submission, existing);
     if (!isSupabaseConfigured) return mapRow(await mockDb.submitIdentityVerification(userId, submission));
 
-    // Owner-folder path, matching the avatars policy in 009: the first path
-    // segment must be the uploader's own id or Storage rejects the write.
-    const path = `${userId}/mykad-${Date.now()}.${extensionFor(file)}`;
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) {
-      if (isUndeployedIdentityContract(uploadError)) {
-        throw new Error('Identity verification is not available until migration 093 is deployed.');
+    const uploaded = [];
+    let documentPath = existing.documentPath;
+    let licenseDocumentPath = existing.licenseDocumentPath;
+    let writeAttempted = false;
+    try {
+      for (const [kind, photo] of [['mykad', file], ['licence', mode === 'driver' && licenseFile]]) {
+        if (!photo) continue;
+        const path = `${userId}/${kind}-${crypto.randomUUID()}.${extensionFor(photo)}`;
+        const { error } = await supabase.storage.from(BUCKET)
+          .upload(path, photo, { contentType: photo.type, upsert: false });
+        if (error) throw error;
+        uploaded.push(path);
+        if (kind === 'mykad') documentPath = path;
+        else licenseDocumentPath = path;
       }
-      throw uploadError;
-    }
-
-    // A resubmission after a rejection returns the row to pending; RLS forbids
-    // any client from writing 'approved'.
-    const { data, error } = await supabase
-      .from('identity_verifications')
-      .upsert(
-        {
-          user_id: userId,
-          status: IDENTITY_STATUS.PENDING,
-          document_path: path,
-          ic_number: normalizeMalaysianIC(icNumber),
-          license_expiry: licenseExpiry
-        },
-        { onConflict: 'user_id' }
-      )
-      .select('status, document_path, submitted_at, reviewed_at, review_note, ic_number, license_expiry')
-      .single();
-    if (error) {
-      if (isDuplicateIcNumber(error)) {
-        throw new Error('That MyKad number is already registered to another account.');
+      writeAttempted = true;
+      const { data, error } = await supabase.rpc('submit_identity_documents', {
+        p_document_path: documentPath,
+        p_ic_number: normalizeMalaysianIC(icNumber),
+        p_license_expiry: mode === 'driver' ? licenseExpiry : null,
+        p_license_document_path: mode === 'driver' ? licenseDocumentPath : null,
+        p_driver: mode === 'driver'
+      });
+      if (error) throw error;
+      return mapRow(data);
+    } catch (error) {
+      // A response may have been lost after committing. Read before allowing a
+      // retry, and never delete files while a write outcome is uncertain.
+      if (writeAttempted) {
+        try {
+          const saved = await this.getStatus(userId);
+          if (saved.status === 'pending' && saved.documentPath === documentPath
+            && normalizeMalaysianIC(saved.icNumber) === normalizeMalaysianIC(icNumber)
+            && (mode !== 'driver' || (saved.licenseDocumentPath === licenseDocumentPath
+              && saved.licenseExpiry === licenseExpiry))) return saved;
+          // Only a definite SQL rejection proves this write cannot still commit.
+          if (/^[0-9A-Z]{5}$/.test(error.code || '') && !error.code.startsWith('08')) {
+            const unused = uploaded.filter((p) => p !== saved.documentPath && p !== saved.licenseDocumentPath);
+            if (unused.length) await supabase.storage.from(BUCKET).remove(unused);
+          }
+        } catch { /* Preserve files if read-back or cleanup is unavailable. */ }
+      } else if (uploaded.length) {
+        await supabase.storage.from(BUCKET).remove(uploaded).catch(() => {});
       }
+      if (isDuplicateIcNumber(error)) throw new Error('That MyKad number is already registered to another account.');
+      if (isUndeployedIdentityContract(error)) throw new Error('Document submission is temporarily unavailable. Please try again after the service update.');
       throw error;
     }
-    return mapRow(data);
   },
 
   // Short-lived and owner-only, so the member can check what they sent without
@@ -285,7 +293,7 @@ export const IdentityVerificationService = {
 
     let query = supabase
       .from('identity_verifications')
-      .select('user_id, status, document_path, submitted_at, reviewed_at, review_note, ic_number, license_expiry')
+      .select('user_id, status, document_path, license_document_path, submitted_at, reviewed_at, review_note, ic_number, license_expiry')
       .order('submitted_at', { ascending: true });
     if (status) query = query.eq('status', status);
 
