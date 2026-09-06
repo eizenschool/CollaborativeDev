@@ -6,6 +6,19 @@ import { ExpirationPlugin } from 'workbox-expiration';
 
 self.skipWaiting();
 clientsClaim();
+
+// HTML changes on every deploy and decides which hashed bundles the app loads.
+// Fetch navigations from the network first so an already-installed worker does
+// not show the previous deploy once before its replacement takes control. The
+// latest successful page response remains available as the offline fallback.
+registerRoute(
+  ({ url, request }) => url.origin === self.location.origin && request.mode === 'navigate',
+  new NetworkFirst({
+    cacheName: 'page-navigation-cache',
+    plugins: [new ExpirationPlugin({ maxEntries: 30 })],
+  }),
+);
+
 precacheAndRoute(self.__WB_MANIFEST);
 
 registerRoute(

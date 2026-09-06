@@ -56,7 +56,9 @@ export default defineConfig({
         // Core GUI screens (app shell) - cached for read-only offline viewing.
         // Runtime Supabase caching stays in src/service-worker.js so the same
         // worker can also handle Web Push and notification clicks.
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Navigation HTML is network-first in the custom worker. Precaching it
+        // would let the previous worker serve the previous deploy on first load.
+        globPatterns: ['**/*.{js,css,ico,png,svg}'],
       }
     })
   ],
