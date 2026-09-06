@@ -113,10 +113,12 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
         <p className="card-title">Identity verification</p>
         <p className="card-subtitle">Required once before you can host. Riding as a passenger never needs it.</p>
 
-        <div className={`reputation-standing ${STATUS_TONE[status] || ''}`}>{describeIdentityStatus(status)}</div>
+        <div className={`reputation-standing ${STATUS_TONE[status] || ''}`} style={{ marginBottom: 16 }}>
+          {describeIdentityStatus(status)}
+        </div>
 
         {submitted && (
-          <ul className="reputation-rules">
+          <ul className="reputation-rules" style={{ marginBottom: 16 }}>
             {state?.icNumber && <li>MyKad {state.icNumber}</li>}
             {state?.licenseExpiry && (
               <li>
@@ -150,11 +152,13 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
         )}
         {error && <div className="alert alert-error">{error}</div>}
 
-        {open ? form : (
-          <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>
-            {submitted ? 'Update my details' : 'Verify my identity'}
-          </button>
-        )}
+        <div style={{ marginTop: 4 }}>
+          {open ? form : (
+            <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>
+              {submitted ? 'Update my details' : 'Verify my identity'}
+            </button>
+          )}
+        </div>
       </div>
     );
   }

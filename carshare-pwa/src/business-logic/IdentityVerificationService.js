@@ -37,7 +37,15 @@ export const IDENTITY_STATUS = Object.freeze({
 // admin page, not whether a request succeeds. The real gate is the SQL
 // function's own private.is_identity_review_admin() check, which a client
 // cannot bypass by editing this array.
-export const IDENTITY_REVIEW_ADMIN_EMAILS = Object.freeze(['donghuanlin25@gmail.com']);
+export const IDENTITY_REVIEW_ADMIN_EMAILS = Object.freeze([
+  'donghuanlin25@gmail.com',
+  'p4862@tarc.edu.my',
+  'zaviertang051212@gmail.com',
+  'eizenlhy-wp23@student.tarc.edu.my',
+  'chongzz-wp23@student.tarc.edu.my',
+  'yeezy-wp23@student.tarc.edu.my',
+  'rok470205@gmail.com'
+]);
 
 export function isIdentityReviewAdmin(user) {
   return Boolean(user?.email) && IDENTITY_REVIEW_ADMIN_EMAILS.includes(user.email);

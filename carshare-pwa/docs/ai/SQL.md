@@ -700,8 +700,8 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `097_m1_admin_identity_review.sql` - authored, not deployed; adds a single
   email-allowlisted admin path for the review surface `093_m1` deliberately
   left service-role-only. `private.is_identity_review_admin()` checks
-  `auth.email()` against a hardcoded array (currently just
-  `donghuanlin25@gmail.com`) - deliberately not a roles table, given
+  `auth.email()` against a hardcoded array (currently seven team emails) -
+  deliberately not a roles table, given
   `055_m2_remove_trust_admin` already removed one general admin-role system.
   Adds permissive RLS SELECT policies on `identity_verifications` and the
   `identity-documents` bucket's storage objects for that allowlist (additive to

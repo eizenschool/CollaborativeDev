@@ -55,9 +55,9 @@ function SubmissionCard({ submission, onReviewed }) {
   }
 
   return (
-    <div className="card">
-      <p className="card-title">{submission.fullName || submission.userId}</p>
-      <ul className="reputation-rules">
+    <div className="card" style={{ marginBottom: 20 }}>
+      <p className="card-title" style={{ marginBottom: 10 }}>{submission.fullName || submission.userId}</p>
+      <ul className="reputation-rules" style={{ marginBottom: 18 }}>
         <li>MyKad {submission.icNumber || 'not recorded'}</li>
         {submission.licenseExpiry && (
           <li>Licence expires {new Date(submission.licenseExpiry).toLocaleDateString('en-MY')}</li>
@@ -71,9 +71,9 @@ function SubmissionCard({ submission, onReviewed }) {
         )}
       </ul>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <button type="button" className="btn-secondary" style={BUTTON_STYLE} onClick={openPhoto} disabled={busy}>
           View photo
         </button>
@@ -96,7 +96,7 @@ function SubmissionCard({ submission, onReviewed }) {
       </div>
 
       {rejecting && (
-        <div className="field" style={{ marginTop: 12 }}>
+        <div className="field" style={{ marginTop: 18 }}>
           <label htmlFor={`reject-note-${submission.userId}`}>Reason shown to the member</label>
           <div className="input-wrap">
             <input
@@ -106,7 +106,7 @@ function SubmissionCard({ submission, onReviewed }) {
               placeholder="e.g. Photo is blurry - please retake in good lighting."
             />
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
             <button
               type="button"
               className="btn-primary"
@@ -175,12 +175,12 @@ export default function AdminIdentityReview() {
 
   return (
     <div>
-      <div className="panel-head">
+      <div className="panel-head" style={{ marginBottom: 24 }}>
         <h2>Identity verification review</h2>
         <p>Approve or reject submitted MyKad documents</p>
       </div>
 
-      <div className="dsc-filters" role="group" aria-label="Filter by status" style={{ marginBottom: 16 }}>
+      <div className="dsc-filters" role="group" aria-label="Filter by status" style={{ gap: 12, marginBottom: 28 }}>
         {STATUS_TABS.map((status) => (
           <Chip key={status} selected={statusFilter === status} onClick={() => setStatusFilter(status)}>
             {describeIdentityStatus(status)}
@@ -188,7 +188,7 @@ export default function AdminIdentityReview() {
         ))}
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
       {loading && <p className="card-subtitle">Loading…</p>}
       {!loading && submissions.length === 0 && <p className="card-subtitle">Nothing here.</p>}
 

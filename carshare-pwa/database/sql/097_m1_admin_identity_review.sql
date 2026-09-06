@@ -16,7 +16,15 @@ stable
 security definer
 set search_path = ''
 as $BODY$
-  select coalesce(auth.email(), '') = any (array['donghuanlin25@gmail.com']);
+  select coalesce(auth.email(), '') = any (array[
+    'donghuanlin25@gmail.com',
+    'p4862@tarc.edu.my',
+    'zaviertang051212@gmail.com',
+    'eizenlhy-wp23@student.tarc.edu.my',
+    'chongzz-wp23@student.tarc.edu.my',
+    'yeezy-wp23@student.tarc.edu.my',
+    'rok470205@gmail.com'
+  ]);
 $BODY$;
 
 -- Needed by both the RLS policies below and the wrapper function further

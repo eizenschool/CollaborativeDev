@@ -205,8 +205,9 @@ describe('publish gate', () => {
 });
 
 describe('admin review (offline path)', () => {
-  it('only recognises the allowlisted email as a reviewer', () => {
+  it('only recognises an allowlisted email as a reviewer', () => {
     expect(isIdentityReviewAdmin({ email: 'donghuanlin25@gmail.com' })).toBe(true);
+    expect(isIdentityReviewAdmin({ email: 'rok470205@gmail.com' })).toBe(true);
     expect(isIdentityReviewAdmin({ email: 'someone-else@example.com' })).toBe(false);
     expect(isIdentityReviewAdmin(null)).toBe(false);
     expect(isIdentityReviewAdmin({})).toBe(false);
@@ -315,7 +316,9 @@ describe('Module 1 identity verification SQL contract', () => {
   it('gives admin review no wider a grant than a checked wrapper function', async () => {
     const sql = await read('../../../database/sql/097_m1_admin_identity_review.sql');
     expect(sql).toContain('create or replace function private.is_identity_review_admin()');
-    expect(sql).toContain("select coalesce(auth.email(), '') = any (array['donghuanlin25@gmail.com']);");
+    expect(sql).toContain("select coalesce(auth.email(), '') = any (array[");
+    expect(sql).toContain("'donghuanlin25@gmail.com',");
+    expect(sql).toContain("'rok470205@gmail.com'");
     expect(sql).toContain('create or replace function public.admin_review_identity_verification(');
     expect(sql).toContain('if not private.is_identity_review_admin() then');
     expect(sql).toContain('perform private.review_identity_verification(p_user_id, p_outcome, p_note);');
