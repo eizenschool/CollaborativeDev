@@ -628,6 +628,23 @@ export const mockDb = {
     return true;
   },
 
+  // Same lenient check as changePassword above, reused for deactivateAccount's
+  // credential re-verification - the mock store has no OAuth/email-identity
+  // distinction, so every mock account is treated as password-based.
+  async verifyPassword(userId, currentPassword) {
+    await delay();
+    const db = load();
+    const user = db.users[userId];
+    if (!user) throw new Error('Account not found.');
+
+    const isSeedAccount = user.passwordHash === 'demo-hash';
+    const suppliedHash = 'hashed:' + (currentPassword || '').length;
+    if (!isSeedAccount && user.passwordHash !== suppliedHash) {
+      throw new Error('Current password is incorrect.');
+    }
+    return true;
+  },
+
   // ---------- Account Settings (FR-1.x) ----------
   async setAccountStatus(userId, status) {
     await delay();

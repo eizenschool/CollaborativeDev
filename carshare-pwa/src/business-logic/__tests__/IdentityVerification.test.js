@@ -302,9 +302,9 @@ describe('Module 1 identity verification SQL contract', () => {
 
   // The live database later drifted back to 093_m1's original three-column
   // INSERT grant. The same upsert also inserts the two 094_m1 identity fields,
-  // so 098_m1 restores only those missing columns while owner RLS stays intact.
+  // so 099_m1 restores only those missing columns while owner RLS stays intact.
   it('grants identity fields required by the submission upsert', async () => {
-    const sql = await read('../../../database/sql/098_m1_restore_identity_insert_privileges.sql');
+    const sql = await read('../../../database/sql/099_m1_restore_identity_insert_privileges.sql');
     expect(sql).toContain('grant insert (ic_number, license_expiry)');
     expect(sql).toContain('on table public.identity_verifications to authenticated;');
     expect(sql).not.toMatch(/grant insert on table public\.identity_verifications/i);
