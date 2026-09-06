@@ -65,6 +65,28 @@ export function isDriverLicenseCurrent(expiry, now = new Date()) {
   return expiryDate >= today;
 }
 
+// Whole calendar days from `now` to `expiry`, or null when `expiry` cannot be
+// parsed. Negative once the licence has already lapsed.
+export function daysUntilLicenseExpiry(expiry, now = new Date()) {
+  if (!expiry) return null;
+  const expiryDay = new Date(`${String(expiry).slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(expiryDay.getTime())) return null;
+  const today = new Date(`${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`);
+  return Math.round((expiryDay.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+// A lapsed licence blocks publishing with no warning beforehand today. This
+// gives a Host a heads-up while there is still time to renew, without
+// treating an already-lapsed licence as merely "soon" - that case is
+// isDriverLicenseCurrent's to report.
+export const LICENSE_EXPIRY_WARNING_DAYS = 30;
+
+export function isDriverLicenseExpiringSoon(expiry, now = new Date(), withinDays = LICENSE_EXPIRY_WARNING_DAYS) {
+  if (!isDriverLicenseCurrent(expiry, now)) return false;
+  const daysRemaining = daysUntilLicenseExpiry(expiry, now);
+  return daysRemaining !== null && daysRemaining <= withinDays;
+}
+
 // JPJ's minimum age for a Class D (car) licence.
 export const MIN_DRIVING_AGE = 17;
 

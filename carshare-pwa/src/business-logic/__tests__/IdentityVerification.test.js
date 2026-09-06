@@ -20,6 +20,7 @@ const {
   canPublishWithIdentity,
   describeIdentityStatus,
   identityBelowDrivingAge,
+  identityLicenseExpiringSoon,
   identityLicenseHasLapsed,
   IDENTITY_STATUS,
   IdentityVerificationService,
@@ -32,6 +33,14 @@ async function read(relativeUrl) {
 }
 
 const photo = (type = 'image/jpeg', size = 1024) => ({ type, size, name: 'mykad.jpg' });
+
+// Offset from the real current date rather than a fixed string, so the test
+// stays valid no matter when the suite runs.
+function daysFromNow(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 describe('identity document capture', () => {
   it('accepts the photo formats a phone camera produces', () => {
@@ -149,6 +158,21 @@ describe('publish gate', () => {
   // migration must not take Ride publishing down.
   it('stays open when migration 093 is not deployed', () => {
     expect(canPublishWithIdentity({ status: IDENTITY_STATUS.NONE, deploymentPending: true })).toBe(true);
+  });
+
+  // A heads-up, not a gate: publishing stays unlocked while the licence is
+  // merely close to lapsing, so a Host only ever learns about the deadline
+  // early, never gets blocked by this warning itself.
+  it('warns before a licence lapses without blocking publishing yet', () => {
+    const expiringSoon = { status: IDENTITY_STATUS.APPROVED, licenseExpiry: daysFromNow(15) };
+    expect(canPublishWithIdentity(expiringSoon)).toBe(true);
+    expect(identityLicenseExpiringSoon(expiringSoon)).toBe(true);
+    expect(identityLicenseHasLapsed(expiringSoon)).toBe(false);
+  });
+
+  it('does not warn about a licence that is not close to expiring', () => {
+    const farOut = { status: IDENTITY_STATUS.APPROVED, licenseExpiry: daysFromNow(60) };
+    expect(identityLicenseExpiringSoon(farOut)).toBe(false);
   });
 
   it("blocks publishing below JPJ's minimum driving age, even once submitted", () => {

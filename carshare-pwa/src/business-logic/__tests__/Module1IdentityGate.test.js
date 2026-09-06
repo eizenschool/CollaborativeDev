@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ageFromMalaysianIC, isDriverLicenseCurrent, isOldEnoughToDrive, MIN_DRIVING_AGE } from '../malaysianIdentity.js';
+import {
+  ageFromMalaysianIC,
+  daysUntilLicenseExpiry,
+  isDriverLicenseCurrent,
+  isDriverLicenseExpiringSoon,
+  isOldEnoughToDrive,
+  LICENSE_EXPIRY_WARNING_DAYS,
+  MIN_DRIVING_AGE
+} from '../malaysianIdentity.js';
 
 async function read(relativeUrl) {
   return import('node:fs/promises').then(({ readFile }) => readFile(new URL(relativeUrl, import.meta.url), 'utf8'));
@@ -21,6 +29,32 @@ describe("driver's licence currency", () => {
 
   it('accepts a full timestamp by reading its date part', () => {
     expect(isDriverLicenseCurrent('2030-01-01T00:00:00.000Z', now)).toBe(true);
+  });
+});
+
+describe("driver's licence expiry warning", () => {
+  it('counts whole calendar days to expiry, negative once lapsed', () => {
+    expect(daysUntilLicenseExpiry('2026-09-05', now)).toBe(0);
+    expect(daysUntilLicenseExpiry('2026-10-05', now)).toBe(30);
+    expect(daysUntilLicenseExpiry('2026-09-04', now)).toBe(-1);
+  });
+
+  it('returns null for a missing or unparseable expiry', () => {
+    expect(daysUntilLicenseExpiry('', now)).toBeNull();
+    expect(daysUntilLicenseExpiry(null, now)).toBeNull();
+    expect(daysUntilLicenseExpiry('not-a-date', now)).toBeNull();
+  });
+
+  it(`warns inside the ${LICENSE_EXPIRY_WARNING_DAYS}-day window but not just outside it`, () => {
+    expect(isDriverLicenseExpiringSoon('2026-10-05', now)).toBe(true); // exactly 30 days
+    expect(isDriverLicenseExpiringSoon('2026-10-06', now)).toBe(false); // 31 days
+    expect(isDriverLicenseExpiringSoon('2026-09-05', now)).toBe(true); // expires today
+  });
+
+  // An already-lapsed licence is isDriverLicenseCurrent's problem to report,
+  // not a "renew soon" nudge past the point renewal would help before Publish.
+  it('does not call an already-lapsed licence "expiring soon"', () => {
+    expect(isDriverLicenseExpiringSoon('2026-09-04', now)).toBe(false);
   });
 });
 

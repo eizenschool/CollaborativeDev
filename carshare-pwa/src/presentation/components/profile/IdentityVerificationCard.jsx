@@ -10,11 +10,12 @@ import { useState } from 'react';
 import {
   describeIdentityStatus,
   identityBelowDrivingAge,
+  identityLicenseExpiringSoon,
   identityLicenseHasLapsed,
   IDENTITY_STATUS,
   IdentityVerificationService
 } from '../../../business-logic/IdentityVerificationService.js';
-import { MIN_DRIVING_AGE } from '../../../business-logic/malaysianIdentity.js';
+import { daysUntilLicenseExpiry, MIN_DRIVING_AGE } from '../../../business-logic/malaysianIdentity.js';
 import { IconShield, IconCheck } from '../icons.jsx';
 
 const STATUS_TONE = {
@@ -29,6 +30,8 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
   const lapsed = identityLicenseHasLapsed(state);
   const submitted = status === IDENTITY_STATUS.PENDING || status === IDENTITY_STATUS.APPROVED;
   const tooYoung = submitted && identityBelowDrivingAge(state);
+  const expiringSoon = submitted && identityLicenseExpiringSoon(state);
+  const daysToExpiry = expiringSoon ? daysUntilLicenseExpiry(state.licenseExpiry) : null;
 
   const [open, setOpen] = useState(!compact);
   const [file, setFile] = useState(null);
@@ -116,7 +119,10 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
           <ul className="reputation-rules">
             {state?.icNumber && <li>MyKad {state.icNumber}</li>}
             {state?.licenseExpiry && (
-              <li>Licence expires {new Date(state.licenseExpiry).toLocaleDateString('en-MY')}{lapsed ? ' — expired' : ''}</li>
+              <li>
+                Licence expires {new Date(state.licenseExpiry).toLocaleDateString('en-MY')}
+                {lapsed ? ' — expired' : expiringSoon ? ' — renew soon' : ''}
+              </li>
             )}
             {state?.submittedAt && <li>Submitted {new Date(state.submittedAt).toLocaleDateString('en-MY')}</li>}
           </ul>
@@ -125,6 +131,12 @@ export default function IdentityVerificationCard({ userId, state, onSubmitted, c
         {lapsed && (
           <div className="alert alert-error">
             Your licence has lapsed, so publishing is paused. Submit a renewed expiry date to host again.
+          </div>
+        )}
+        {expiringSoon && (
+          <div className="alert alert-info">
+            Your driver&apos;s licence expires in {daysToExpiry} day{daysToExpiry === 1 ? '' : 's'}. Renew it before
+            then to keep hosting without interruption.
           </div>
         )}
         {tooYoung && (

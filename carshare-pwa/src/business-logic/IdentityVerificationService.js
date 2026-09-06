@@ -15,6 +15,7 @@ import { mockDb } from '../data-access/mockDataStore.js';
 import {
   formatMalaysianIC,
   isDriverLicenseCurrent,
+  isDriverLicenseExpiringSoon,
   isOldEnoughToDrive,
   normalizeMalaysianIC,
   validateMalaysianIC
@@ -98,6 +99,12 @@ export function canPublishWithIdentity(state) {
 
 export function identityLicenseHasLapsed(state) {
   return Boolean(state?.licenseExpiry) && !isDriverLicenseCurrent(state.licenseExpiry);
+}
+
+// A lapsed licence only surfaces once it already blocks Publish. This lets
+// Profile warn a Host while there is still time to renew.
+export function identityLicenseExpiringSoon(state) {
+  return Boolean(state?.licenseExpiry) && isDriverLicenseExpiringSoon(state.licenseExpiry);
 }
 
 export function validateIdentityDocument(file) {
