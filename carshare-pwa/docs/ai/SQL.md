@@ -17,8 +17,8 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-096 (`087_m1`, `088_m1`, `093_m1`, `094_m1`,
-  `095_m1` and `096_m1` are authored and not deployed)
+Repository SQL history: 001-097 (`087_m1`, `088_m1`, `093_m1`, `094_m1`,
+  `095_m1`, `096_m1` and `097_m1` are authored and not deployed)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -697,6 +697,20 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   legacy rows with no stored number (pre-`094_m1`) never collide on null. A
   member's own resubmission keeps their existing row via `093_m1`'s
   `onConflict: 'user_id'` upsert, so this only ever blocks a second account.
+- `097_m1_admin_identity_review.sql` - authored, not deployed; adds a single
+  email-allowlisted admin path for the review surface `093_m1` deliberately
+  left service-role-only. `private.is_identity_review_admin()` checks
+  `auth.email()` against a hardcoded array (currently just
+  `donghuanlin25@gmail.com`) - deliberately not a roles table, given
+  `055_m2_remove_trust_admin` already removed one general admin-role system.
+  Adds permissive RLS SELECT policies on `identity_verifications` and the
+  `identity-documents` bucket's storage objects for that allowlist (additive to
+  the existing owner-only policies), and
+  `public.admin_review_identity_verification(uuid, text, text)`, an
+  authenticated-grantable wrapper that re-checks the allowlist before calling
+  `private.review_identity_verification`, which itself keeps zero grants to
+  `anon`/`authenticated`. Depends on `093_m1` (table/bucket) being deployed
+  first.
 - `093_m1_identity_document_verification.sql` - authored, not deployed;
   moves identity verification from sign-up to the point of use (D035). Adds the
   PRIVATE `identity-documents` bucket with owner-folder Storage policies and no

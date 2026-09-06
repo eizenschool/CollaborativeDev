@@ -710,6 +710,31 @@ export const mockDb = {
     return null;
   },
 
+  // Mirrors 097_m1's admin-only Supabase RLS/RPC path offline: any caller can
+  // reach these in the mock (there is no session/email to check against the
+  // allowlist here), so this offline path is for demoing the admin screen,
+  // not for exercising its authorization boundary - that is covered by the
+  // SQL contract tests against 097_m1 itself.
+  async adminListIdentityVerifications(status = 'pending') {
+    await delay();
+    const db = load();
+    const all = Object.entries(db.identityVerifications || {}).map(([userId, record]) => ({ userId, ...record }));
+    return (status ? all.filter((record) => record.status === status) : all)
+      .sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));
+  },
+
+  async adminReviewIdentityVerification(userId, outcome, note = null) {
+    await delay();
+    const db = load();
+    const record = (db.identityVerifications || {})[userId];
+    if (!record) throw new Error('No identity submission for this member.');
+    record.status = outcome;
+    record.reviewed_at = new Date().toISOString();
+    record.review_note = note || '';
+    save(db);
+    return { userId, ...record };
+  },
+
   async removeVehicle(userId, vehicleId) {
     await delay();
     const db = load();

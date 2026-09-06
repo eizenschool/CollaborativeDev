@@ -32,6 +32,17 @@ export const IDENTITY_STATUS = Object.freeze({
   REJECTED: 'rejected'
 });
 
+// Mirrors the allowlist in database/sql/097_m1_admin_identity_review.sql.
+// This check is a UX convenience only - it decides whether to show the
+// admin page, not whether a request succeeds. The real gate is the SQL
+// function's own private.is_identity_review_admin() check, which a client
+// cannot bypass by editing this array.
+export const IDENTITY_REVIEW_ADMIN_EMAILS = Object.freeze(['donghuanlin25@gmail.com']);
+
+export function isIdentityReviewAdmin(user) {
+  return Boolean(user?.email) && IDENTITY_REVIEW_ADMIN_EMAILS.includes(user.email);
+}
+
 // Until migration 093 is deployed the table and bucket do not exist. Blocking
 // every Host on a missing migration would take Ride publishing down, so the
 // service reports the dependency and the gate stays open, exactly as
@@ -244,12 +255,52 @@ export const IdentityVerificationService = {
   },
 
   // Short-lived and owner-only, so the member can check what they sent without
-  // the image ever becoming a durable URL.
+  // the image ever becoming a durable URL. An admin reviewer can also call
+  // this for another member's document: the storage SELECT policy added by
+  // 097_m1 is what makes that succeed, not anything in this function.
   async previewUrl(documentPath, expiresInSeconds = 60) {
     if (!documentPath) return null;
     if (!isSupabaseConfigured) return mockDb.getIdentityDocumentPreview(documentPath);
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(documentPath, expiresInSeconds);
     if (error) throw error;
     return data?.signedUrl || null;
+  },
+
+  // Admin-only (097_m1). RLS restricts this select to rows the caller owns or,
+  // for an allowlisted reviewer email, every row - so a non-admin calling this
+  // simply gets back their own single submission, never an error.
+  async adminListSubmissions(status = IDENTITY_STATUS.PENDING) {
+    if (!isSupabaseConfigured) {
+      const rows = await mockDb.adminListIdentityVerifications(status);
+      return rows.map((row) => ({ userId: row.userId, ...mapRow(row) }));
+    }
+
+    let query = supabase
+      .from('identity_verifications')
+      .select('user_id, status, document_path, submitted_at, reviewed_at, review_note, ic_number, license_expiry')
+      .order('submitted_at', { ascending: true });
+    if (status) query = query.eq('status', status);
+
+    const { data, error } = await query;
+    if (error) {
+      if (isUndeployedIdentityContract(error)) return [];
+      throw error;
+    }
+    return (data || []).map((row) => ({ userId: row.user_id, ...mapRow(row) }));
+  },
+
+  // Admin-only (097_m1). Routes through public.admin_review_identity_verification,
+  // which re-checks the caller's email server-side before ever touching
+  // private.review_identity_verification - so this call fails outright for
+  // anyone not on that allowlist, regardless of what this client sends.
+  async adminReview(userId, outcome, note = null) {
+    if (!isSupabaseConfigured) return mockDb.adminReviewIdentityVerification(userId, outcome, note);
+
+    const { error } = await supabase.rpc('admin_review_identity_verification', {
+      p_user_id: userId,
+      p_outcome: outcome,
+      p_note: note
+    });
+    if (error) throw error;
   }
 };

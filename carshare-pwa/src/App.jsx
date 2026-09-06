@@ -43,6 +43,7 @@ const FavouritePage = lazy(() => import('./presentation/components/search/Favour
 const FamilyLocationShare = lazy(() => import('./presentation/components/ride/FamilyLocationShare.jsx'));
 const TrustedFamilyInvite = lazy(() => import('./presentation/components/ride/TrustedFamilyInvite.jsx'));
 const SOSFamilyView = lazy(() => import('./presentation/components/ride/SOSFamilyView.jsx'));
+const AdminIdentityReview = lazy(() => import('./presentation/components/admin/AdminIdentityReview.jsx'));
 const SOS_ENABLED = import.meta.env.VITE_M2_SOS_ENABLED === 'true';
 
 function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
@@ -108,6 +109,10 @@ function AppShell({ routeLocation }) {
             section rail) - see MyProfile.jsx. Old links to /vehicles, /reputation,
             /host still land on the right panel. */}
         <Route path="/profile" element={<RequireAuth reason="Sign in to view your profile."><MyProfile /></RequireAuth>} />
+        {/* Not on the primary nav - reachable only by URL, same as /assistant.
+            Server-side admin allowlist (097_m1) is the real gate; RequireAuth
+            here only rules out a signed-out visitor. */}
+        <Route path="/admin/identity" element={<RequireAuth reason="Sign in to review identity submissions."><AdminIdentityReview /></RequireAuth>} />
         <Route path="/users/:userId" element={<PublicProfile />} />
         <Route path="/vehicles" element={<Navigate to="/profile" replace />} />
         <Route path="/reputation" element={<Navigate to="/profile" replace />} />

@@ -24,6 +24,7 @@ const {
   identityLicenseHasLapsed,
   IDENTITY_STATUS,
   IdentityVerificationService,
+  isIdentityReviewAdmin,
   validateIdentityDocument,
   validateIdentitySubmission
 } = await import('../IdentityVerificationService.js');
@@ -203,6 +204,52 @@ describe('publish gate', () => {
   });
 });
 
+describe('admin review (offline path)', () => {
+  it('only recognises the allowlisted email as a reviewer', () => {
+    expect(isIdentityReviewAdmin({ email: 'donghuanlin25@gmail.com' })).toBe(true);
+    expect(isIdentityReviewAdmin({ email: 'someone-else@example.com' })).toBe(false);
+    expect(isIdentityReviewAdmin(null)).toBe(false);
+    expect(isIdentityReviewAdmin({})).toBe(false);
+  });
+
+  it('lists a submitted document under the requested status and approves it', async () => {
+    const submission = { file: photo(), icNumber: '910203-14-5566', licenseExpiry: '2099-12-31' };
+    await IdentityVerificationService.submit('user-admin-review', submission);
+
+    const pending = await IdentityVerificationService.adminListSubmissions(IDENTITY_STATUS.PENDING);
+    expect(pending.some((row) => row.userId === 'user-admin-review')).toBe(true);
+
+    await IdentityVerificationService.adminReview('user-admin-review', IDENTITY_STATUS.APPROVED);
+
+    const stillPending = await IdentityVerificationService.adminListSubmissions(IDENTITY_STATUS.PENDING);
+    expect(stillPending.some((row) => row.userId === 'user-admin-review')).toBe(false);
+
+    const approved = await IdentityVerificationService.adminListSubmissions(IDENTITY_STATUS.APPROVED);
+    expect(approved.find((row) => row.userId === 'user-admin-review')).toMatchObject({
+      status: IDENTITY_STATUS.APPROVED
+    });
+  });
+
+  it('records a reviewer note on rejection', async () => {
+    const submission = { file: photo(), icNumber: '850707-08-1122', licenseExpiry: '2099-12-31' };
+    await IdentityVerificationService.submit('user-admin-reject', submission);
+
+    await IdentityVerificationService.adminReview('user-admin-reject', IDENTITY_STATUS.REJECTED, 'Blurry photo.');
+
+    const rejected = await IdentityVerificationService.adminListSubmissions(IDENTITY_STATUS.REJECTED);
+    expect(rejected.find((row) => row.userId === 'user-admin-reject')).toMatchObject({
+      status: IDENTITY_STATUS.REJECTED,
+      reviewNote: 'Blurry photo.'
+    });
+  });
+
+  it('rejects reviewing a member with no submission on file', async () => {
+    await expect(
+      IdentityVerificationService.adminReview('user-with-no-submission', IDENTITY_STATUS.APPROVED)
+    ).rejects.toThrow(/no identity submission/i);
+  });
+});
+
 describe('Module 1 identity verification SQL contract', () => {
   it('keeps the document bucket private and owner-scoped', async () => {
     const sql = await read('../../../database/sql/093_m1_identity_document_verification.sql');
@@ -261,5 +308,32 @@ describe('Module 1 identity verification SQL contract', () => {
     // Partial, not a bare unique constraint: a null ic_number (rows from
     // before 094_m1) must never collide with another null.
     expect(sql).toContain('where ic_number is not null');
+  });
+
+  // 097_m1 must not widen private.review_identity_verification's own grants -
+  // it wraps it with a fresh admin check instead.
+  it('gives admin review no wider a grant than a checked wrapper function', async () => {
+    const sql = await read('../../../database/sql/097_m1_admin_identity_review.sql');
+    expect(sql).toContain('create or replace function private.is_identity_review_admin()');
+    expect(sql).toContain("select coalesce(auth.email(), '') = any (array['donghuanlin25@gmail.com']);");
+    expect(sql).toContain('create or replace function public.admin_review_identity_verification(');
+    expect(sql).toContain('if not private.is_identity_review_admin() then');
+    expect(sql).toContain('perform private.review_identity_verification(p_user_id, p_outcome, p_note);');
+    expect(sql).toMatch(
+      /revoke all on function public\.admin_review_identity_verification\(uuid, text, text\) from public, anon;/
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.admin_review_identity_verification\(uuid, text, text\) to authenticated;/
+    );
+    // Never grants the underlying service-role-only function directly.
+    expect(sql).not.toMatch(/grant\s+execute\s+on\s+function\s+private\.review_identity_verification/i);
+  });
+
+  it('adds admin read access as new policies rather than widening the owner-only ones', async () => {
+    const sql = await read('../../../database/sql/097_m1_admin_identity_review.sql');
+    expect(sql).toContain('create policy "admins read every identity verification"');
+    expect(sql).toContain('create policy "admins read any identity document"');
+    // Still no anon policy on either surface.
+    expect(sql).not.toMatch(/on (public\.identity_verifications|storage\.objects) for \w+ to anon/i);
   });
 });
