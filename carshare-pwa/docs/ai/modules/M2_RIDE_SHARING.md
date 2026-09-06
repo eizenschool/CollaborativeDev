@@ -10,8 +10,11 @@ Core ride publishing, ride requests, host request management, and lifecycle beha
 Publish ride, pickup/destination/date/time/seats/vehicle, non-monetary contribution/restrictions, request to join, details/status, accept/reject, edit/cancel, lifecycle, review, route/waypoints.
 
 ## Existing Repository Areas
-Presentation: `src/presentation/components/ride/` including `RideHub.jsx`, `PublishRide.jsx`, `RideCard.jsx`, `RideDetail.jsx`, `ManageRequests.jsx`, `MyRequests.jsx`, `EditRide.jsx`, `RateReview.jsx`.
-Business logic: `src/business-logic/RideService.js`.
+Presentation: `src/presentation/m2-rides/` including Ride, SOS, and inherited
+trip-verification surfaces.
+Business logic: `src/business-logic/m2-rides/`, including `verification/`.
+Data access: `src/data-access/m2-rides/` contains Ride Supabase/mock adapters,
+the Family Live Share HTTP adapter, and the inherited verification fixture store.
 
 ## Owns
 Ride entity behaviour, publishing/request flows, host decisions, ride lifecycle contract.
@@ -210,6 +213,13 @@ the legacy direct `start_ride` RPC.
 Visible Trip mode refreshes
 Ride, Request, and lifecycle context every 15 seconds and immediately after
 focus or a local mutation without adding a new Realtime publication.
+These refreshes are silent: RideDetail and RideHub initial-load callbacks
+depend on the account ID, not the replaceable AuthContext user object. A
+same-account profile/token refresh must not display the page loader, unmount
+Trip Mode, or stop its consented live-location watcher. Explicit stop, leaving
+Trip Mode, and genuine loss of trip eligibility still use normal cleanup.
+Regression: `tests/e2e/trip-refresh.spec.js` uses an isolated watcher/service
+fixture to cover profile refresh plus focus/visibility events and manual stop.
 
 Module 4 Search and Published Ride Detail are public browsing surfaces. The
 bare `/ride` route is the authenticated workspace for hosted and joining rides;

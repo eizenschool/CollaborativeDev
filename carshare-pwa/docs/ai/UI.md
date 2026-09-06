@@ -24,16 +24,16 @@ Use this order when UI sources disagree:
 3. Verified current source code for implementation reality.
 4. `docs/figma/` prompts as design references, not frozen specifications.
 
-For exact implemented design-token values, `src/presentation/styles/theme.css`
+For exact implemented design-token values, `src/presentation/shared/styles/theme.css`
 is the runtime source of truth. Do not silently copy an older Figma value over a
 current shared token. Surface meaningful conflicts before changing a shared
 contract.
 
 Shared implementation locations:
 
-- `src/presentation/styles/theme.css` - global tokens, app shell, navigation,
+- `src/presentation/shared/styles/theme.css` - global tokens, app shell, navigation,
   and shared presentation primitives.
-- `src/presentation/components/ui/` - shared `Button`, `IconButton`, page,
+- `src/presentation/shared/components/ui/` - shared `Button`, `IconButton`, page,
   card, field, status, async-state, adaptive-dialog, route-loading, route
   error/focus, `Skeleton`, and `Chip` primitives. These components are
   presentation-only and never read Supabase or business data directly.
@@ -42,11 +42,11 @@ Shared implementation locations:
   discover.css's `.dsc-filter`) - reach for these before adding a new one.
   Trip's `.m5-chip` is intentionally not yet migrated; out of scope for the
   change that introduced the shared primitive.
-- `src/presentation/components/nav/TopNav.jsx` - the shared responsive
+- `src/presentation/shared/components/nav/TopNav.jsx` - the shared responsive
   navigation component.
-- `src/presentation/components/notifications/NotificationCenter.jsx` - shared
+- `src/presentation/shared/components/notifications/NotificationCenter.jsx` - shared
   notification bell popover and protected full inbox.
-- `src/presentation/components/icons.jsx` - shared icon set.
+- `src/presentation/shared/components/icons.jsx` - shared icon set.
 - Module style files - module-specific layouts and states only.
 
 ## Core Experience

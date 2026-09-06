@@ -16,6 +16,26 @@ async function openPage(page, path, heading) {
   if (heading) await expect(page.getByRole('heading', { name: heading, exact: true }).first()).toBeVisible();
 }
 
+async function seedEligibleDriver(page) {
+  await openPage(page, '/home', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.identityVerifications ||= {};
+    database.identityVerifications.u_demo_1 = {
+      status: 'pending',
+      document_path: 'u_demo_1/mykad-e2e.mock',
+      license_document_path: 'u_demo_1/licence-e2e.mock',
+      document_name: 'mykad-e2e.png',
+      ic_number: '990101145678',
+      license_expiry: '2099-12-31',
+      submitted_at: '2026-09-01T00:00:00.000Z',
+      reviewed_at: null,
+      review_note: '',
+    };
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+}
+
 async function expectNoPageOverflow(page) {
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
@@ -158,6 +178,7 @@ test('desktop Auth car stays on the journey route and keeps moving', async ({ pa
 });
 
 test('Ride workspace foregrounds responsibility and publishing recovery', async ({ page }) => {
+  await seedEligibleDriver(page);
   await openPage(page, '/ride', 'My rides');
   const nextStep = page.locator('.ride-next-action');
   await expect(nextStep).toContainText('YOUR NEXT STEP');
@@ -176,6 +197,7 @@ test('Create Ride offers nearby confirmed places without requiring typed search'
   await mockGooglePickupServices(page);
   await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
   await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 35 });
+  await seedEligibleDriver(page);
   await openPage(page, '/ride/publish', 'Route');
 
   const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
@@ -212,6 +234,7 @@ test('Create Ride offers nearby alternatives without selecting an inaccurate GPS
   await mockGooglePickupServices(page);
   await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
   await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 250 });
+  await seedEligibleDriver(page);
   await openPage(page, '/ride/publish', 'Route');
 
   const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
@@ -226,6 +249,7 @@ test('Create Ride keeps an accurate GPS pickup when Google Nearby fails', async 
   await mockGooglePickupServices(page, { nearbyFails: true });
   await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
   await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 35 });
+  await seedEligibleDriver(page);
   await openPage(page, '/ride/publish', 'Route');
 
   const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
@@ -239,6 +263,7 @@ test('Create Ride skips Google for very inaccurate GPS and preserves manual reco
   await mockGooglePickupServices(page);
   await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
   await context.setGeolocation({ latitude: 3.139, longitude: 101.6869, accuracy: 650 });
+  await seedEligibleDriver(page);
   await openPage(page, '/ride/publish', 'Route');
 
   const pickup = page.getByRole('combobox', { name: 'Pickup point', exact: true });
@@ -320,7 +345,7 @@ test('Ride cards use lazy destination photos while pickup photos stay on Publish
 });
 
 test('Draft review aligns waypoint durations and keeps the pickup photo inside its summary', async ({ page }) => {
-  await openPage(page, '/home', 'Where should you go?');
+  await seedEligibleDriver(page);
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
     Object.assign(database.rides.r_5, {
@@ -584,7 +609,10 @@ test('Ride workspace keeps long route names inside compact cards', async ({ page
   }, MOCK_STORAGE_KEY);
 
   await openPage(page, '/ride', 'My rides');
-  const card = page.locator('.ride-grid-upcoming .ride-card').filter({ hasText: 'Sempalit Fresh Mart' });
+  // The same published ride may correctly move into Needs attention when its
+  // seeded pending request wins the asynchronous workspace load. This test owns
+  // card geometry, not journey grouping, so locate it across workspace groups.
+  const card = page.locator('.ride-grid .ride-card').filter({ hasText: 'Sempalit Fresh Mart' });
   await expect(card).toBeVisible();
   const layout = await card.evaluate((element) => {
     const action = element.querySelector('.ride-card-next')?.getBoundingClientRect();
@@ -678,6 +706,7 @@ test('publishing recovers when location permission is denied', async ({ page, co
     permission: { name: 'geolocation' },
     setting: 'denied',
   });
+  await seedEligibleDriver(page);
   await openPage(page, '/ride/publish', 'Route');
   await expect(page.locator('.map-location-status')).toContainText('Location permission was denied');
   await expect(page.getByLabel('Pickup point')).toBeEnabled();

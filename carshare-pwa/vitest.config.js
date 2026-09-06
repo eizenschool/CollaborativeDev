@@ -26,10 +26,11 @@ export default defineConfig({
       VITE_M2_SOS_ENABLED: 'false'
     },
     include: [
-      'src/business-logic/verification/__tests__/**/*.test.js',
-      'src/business-logic/discovery/__tests__/**/*.test.js',
-      'src/business-logic/__tests__/**/*.test.js',
-      'src/presentation/components/nav/__tests__/primaryNavigation.test.js',
+      'src/business-logic/**/__tests__/**/*.test.js',
+      'src/presentation/**/__tests__/**/*.test.js',
+      'src/data-access/**/__tests__/**/*.test.js',
+      'tests/contracts/**/*.test.js',
+      'tests/integration/**/*.test.js',
       // Module 6's Edge Functions are Deno, not Vite, so their logic sits
       // outside src/ and would otherwise be untestable - which is exactly how
       // FR-6.7 classification shipped two catalogue-wide bugs. Only each

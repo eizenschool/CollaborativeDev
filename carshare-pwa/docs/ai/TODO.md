@@ -17,7 +17,7 @@ Project-level coordination only. Module work belongs in `docs/ai/modules/Mx_*.md
 Module 6 now serves place data so Modules 2 and 4 do not have to build or
 maintain a catalogue of their own. Both are callable today against the fixture
 catalogue and need no API key, no Supabase deployment, and no work from Brayden
-first. Import from `src/business-logic/discovery/PlaceQueryService.js`.
+first. Import from `src/business-logic/m6-discovery/discovery/PlaceQueryService.js`.
 
 - **Module 4 (FR-4.1)** — now consumes
   `getPlaceBySourcePlaceId(sourcePlaceId)` and

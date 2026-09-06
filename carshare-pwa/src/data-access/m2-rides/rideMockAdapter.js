@@ -1,0 +1,32 @@
+import { mockDb } from '../shared/fixture/legacyMockDataStore.js';
+
+export const rideMockAdapter = {
+  listRides: (...args) => mockDb.listRides(...args),
+  listMyRides: (...args) => mockDb.listMyRides(...args),
+  getRide: (...args) => mockDb.getRide(...args),
+  setRidePickupPhoto: (...args) => mockDb.setRidePickupPhoto(...args),
+  getRidePickupPhotoUrl: (...args) => mockDb.getRidePickupPhotoUrl(...args),
+  updateRide: (...args) => mockDb.updateRide(...args),
+  createRide: (...args) => mockDb.createRide(...args),
+  quoteRide: (...args) => mockDb.quoteRide(...args),
+  publishDraft: (...args) => mockDb.publishDraft(...args),
+  deleteDraft: (...args) => mockDb.deleteDraft(...args),
+  republishRideAsDraft: (...args) => mockDb.republishRideAsDraft(...args),
+  cancelRide: (...args) => mockDb.cancelRide(...args),
+  closeRideRecruitment: (...args) => mockDb.closeRideRecruitment(...args),
+  reopenRideRecruitment: (...args) => mockDb.reopenRideRecruitment(...args),
+  submitRideRequest: (...args) => mockDb.submitRideRequest(...args),
+  listMyRideRequests: (...args) => mockDb.listMyRideRequests(...args),
+  listRideRequests: (...args) => mockDb.listRideRequests(...args),
+  respondToRideRequest: (...args) => mockDb.respondToRideRequest(...args),
+  cancelRideRequest: (...args) => mockDb.cancelRideRequest(...args),
+  checkInRideRequest: (...args) => mockDb.checkInRideRequest(...args),
+  markRideRequestNoShow: (...args) => mockDb.markRideRequestNoShow(...args),
+  confirmPassengerArrival: (...args) => mockDb.confirmPassengerArrival(...args),
+  startRide: (...args) => mockDb.startRide(...args),
+  confirmDriverArrival: (...args) => mockDb.confirmDriverArrival(...args),
+  getRideLifecycleContext: (...args) => mockDb.getRideLifecycleContext(...args),
+  submitRideReview: (...args) => mockDb.submitRideReview(...args),
+  listProfileReviews: (...args) => mockDb.listProfileReviews(...args),
+  getRideReviewEligibility: (...args) => mockDb.getRideReviewEligibility(...args)
+};

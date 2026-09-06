@@ -108,8 +108,11 @@ The current repository already uses:
 src/presentation/
 src/business-logic/
 src/data-access/
-src/context/
 ```
+Each layer is divided into `shared/` plus `m1-profile/`, `m2-rides/`,
+`m3-messaging/`, `m4-search/`, `m5-trips/`, and `m6-discovery/` module
+directories. `src/main.jsx` is the composition root. React contexts live in
+the owning presentation directory; there is no separate `src/context/` layer.
 Do not restructure these folders unless the task explicitly requires an architecture change.
 
 ## Current Architecture Rule
@@ -117,12 +120,15 @@ The project follows a three-tier separation:
 ```text
 Presentation -> Business Logic -> Data Access / backend adapter
 ```
-Current repository reality includes business-logic services importing the shared Supabase client from `src/data-access/supabaseClient.js`.
 Therefore:
 - Presentation must not import `src/data-access/` directly.
 - Presentation should call business-logic services.
-- Keep backend-specific access out of presentation components.
+- Business Logic may import module-owned Data Access adapters, but not the
+  shared Supabase client directly.
+- Data Access must not import Business Logic or Presentation.
+- Keep backend-specific access out of presentation components and business rules.
 - Do not introduce a repository-per-domain abstraction unless a real task justifies it.
+- Run `npm run check:layers` after import or structure changes.
 
 ## Flexible Planning Rule
 The original proposal and module documents define academic intent and early design ideas. They are requirement references, not automatically final implementation designs.

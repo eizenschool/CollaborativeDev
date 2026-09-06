@@ -10,9 +10,12 @@ Trip/history presentation, environmental impact calculations, reports, and leade
 Hosted/joined history, lifecycle filters, trip details, carbon calculation/display, eco aggregation, monthly reports, monthly Host Impact leaderboard.
 
 ## Existing Repository Areas
-Presentation: `src/presentation/components/trip/` including `TripModule.jsx`, `TripDetail.jsx`, `RideHistory.jsx`, `ImpactDashboard.jsx`, `MonthlyReport.jsx`, `Leaderboard.jsx`, and the shared `tripStates.jsx` error/not-found surfaces.
-Business logic: `src/business-logic/TripHistoryEngine.js`.
-Tests: `src/business-logic/__tests__/TripHistoryEngine.test.js`.
+Presentation: `src/presentation/m5-trips/` including `TripModule.jsx`, `TripDetail.jsx`, `RideHistory.jsx`, `ImpactDashboard.jsx`, `MonthlyReport.jsx`, and `Leaderboard.jsx`.
+Business logic: `src/business-logic/m5-trips/`.
+Data access: `src/data-access/m5-trips/` owns leaderboard Supabase and history
+fixture adapters.
+Tests: `src/business-logic/m5-trips/__tests__/` and
+`src/presentation/m5-trips/__tests__/`.
 
 ## Depends On
 Module 2 authoritative lifecycle/ride data; Module 1 Host Impact.

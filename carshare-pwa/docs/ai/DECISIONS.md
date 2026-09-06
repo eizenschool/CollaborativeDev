@@ -62,7 +62,7 @@ Agents should load only relevant context.
 Use Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution.
 
 ## D007 — Preserve Existing Top-Level Source Layering for Now
-**Status:** Accepted
+**Status:** Superseded by D037
 Keep `src/presentation/`, `src/business-logic/`, `src/data-access/`, and `src/context/` unless a concrete accepted need justifies a structural refactor.
 
 ## D008 — `Development` Is the Shared Integration Branch
@@ -137,7 +137,7 @@ provider quotas remain mandatory operational controls.
 **Status:** Accepted
 `docs/ai/UI.md` is the shared cross-module UI/UX contract. Phone is the primary
 design target; tablet and desktop use intentional responsive reflow rather than
-stretched phone layouts. `src/presentation/styles/theme.css` remains the runtime
+stretched phone layouts. `src/presentation/shared/styles/theme.css` remains the runtime
 source of truth for exact implemented token values. Files under `docs/figma/`
 are design references and do not silently override accepted decisions, this
 contract, or verified current implementation.
@@ -369,9 +369,9 @@ contract without changing an Edge Function RPC signature.
 ## D026 — Shared Semantic UI Runtime and Deterministic Accessibility Gate
 **Status:** Accepted
 
-`src/presentation/styles/theme.css` remains the only runtime design-token
+`src/presentation/shared/styles/theme.css` remains the only runtime design-token
 authority. Cross-module presentation uses the small primitive set under
-`src/presentation/components/ui/`; these components remain independent of
+`src/presentation/shared/components/ui/`; these components remain independent of
 Supabase and business services. Existing green identity, Poppins/Inter type,
 seven navigation destinations, URLs, English flows, and service contracts are
 preserved. `AdaptiveDialog` standardizes phone sheets and wider dialogs with a
@@ -757,6 +757,55 @@ bucket, one licence image, JPEG/PNG/WebP at most 5 MB each. No OCR or external
 identity provider is introduced. 100/101 expand the backend; 102 activates
 server enforcement only after frontend release. This supersedes D035's former
 Publish-page upload form and licence-expiry requirement for passenger capture.
+
+## D037 — Three Layers Use Shared Plus M1-M6 Module Directories
+
+**Status:** Accepted
+
+Accepted 2026-09-06. The source tree keeps the three directional layers but
+each layer is divided into `shared/` plus `m1-profile/`, `m2-rides/`,
+`m3-messaging/`, `m4-search/`, `m5-trips/`, and `m6-discovery/`.
+
+The allowed dependency direction is:
+
+```text
+Presentation -> Business Logic -> Data Access / backend adapters
+```
+
+Presentation cannot import Data Access. Business Logic reaches Supabase through
+module-owned adapters rather than importing the shared client. Data Access
+cannot import Business Logic or Presentation. Direct HTTP transport also belongs
+in Data Access, including external weather and Edge Function calls. `npm run
+check:layers` enforces these rules for production source imports.
+
+`src/main.jsx` remains the composition root. Auth and notification contexts
+are presentation-shared; messaging and call-session contexts belong to M3.
+Therefore the former `src/context/` pseudo-layer is removed.
+
+Data Access `shared/` is limited to the Supabase client/configuration, the
+cross-module notification repository, and the atomic legacy offline-fixture
+foundation. Module-specific Supabase, repository, mock, persistence, and
+fixture adapters live in their M1-M6 directories. The legacy fixture stays
+physically shared because its profile, ride, favourite, history, and reputation
+updates are one localStorage transaction; module-owned facades limit what each
+service consumes. No repository base class or speculative abstraction is added.
+
+Cross-module behaviour continues through explicit Business Logic services and
+accepted contracts. Moving a file does not transfer product ownership.
+
+## D038 - Passenger identity accepts IC or Passport with a photo
+
+Accepted 2026-09-06. Supersedes D036's passenger IC-only capture. Passengers
+choose IC/MyKad or Passport, enter its number and upload one matching photo;
+no driving licence is required. Use basic format checks only: IC 12 digits
+(spaces/dashes accepted), Passport 5–20 ASCII letters/digits (uppercase storage),
+and nonempty JPEG/PNG/WebP up to 5 MB. No OCR or new passenger age checks.
+Reuse the private identity record/bucket and reviewer flow. Changing type or
+number requires a replacement photo. Existing driver licence requirements stay;
+Passport does not qualify a member to host. Retain existing licence fields on
+passenger updates. 103 was deployed with separate user approval on 2026-09-06.
+Preflight found the live publish guard checks status only, so 103 adds a narrow
+Passport-only publish restriction without activating pending 102.
 
 ## Open Decisions
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);

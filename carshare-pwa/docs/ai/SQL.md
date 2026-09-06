@@ -17,7 +17,7 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, and 099_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-102 (`087_m1` and `088_m1` are authored and not
+Repository SQL history: 001-103 (`087_m1` and `088_m1` are authored and not
   deployed; `093_m1`-`097_m1` are live without tracked migration entries;
   `099_m1` is deployed as a tracked migration)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
@@ -60,10 +60,39 @@ confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that. `082_m4` and `099_m1`
-are deployed; the next unused repository sequence is `103`.)
+are deployed; the next unused repository sequence is `104`.)
 ```
 
 ### Driver document rollout (2026-09-06)
+
+- `103_m1_passenger_identity_documents.sql` is deployed with user approval as
+  `20260906134759_m1_passenger_identity_documents` (2026-09-06).
+  Requires 100/101; does not activate pending 102. Adds `document_type`
+  (legacy/default `mykad`) and private `passport_number`, plus authenticated
+  SECURITY INVOKER `submit_identity_documents_v2`. Passenger IC uses 12 digits;
+  Passport uses 5–20 ASCII letters/digits and one existing owner-scoped image.
+  A changed type/number requires a replacement image. Driver checks remain
+  strict, passenger updates preserve licence fields, and review resets to pending.
+  The RPC also has column-level grants to clear review metadata on resubmission;
+  owner RLS still requires pending status (no self-approval).
+  Live preflight found the older status-only publish guard (not 094's IC
+  check). 103 adds a separate Passport-only publish trigger; it does not
+  replace the existing guard or activate 102. Published rides are unchanged.
+  Passport also clears `ic_number`. RLS, private
+  bucket image/5 MB restrictions, and reviewer access are unchanged.
+  The connected local frontend can now use the deployed v2 contract.
+  Legacy driver RPC/read fallback remains available before 103. No silent
+  passenger fallback to the MyKad-only RPC. After Passport use, prefer frontend
+  rollback with columns/data retained; do not drop stored Passport records.
+  Post-deploy checks confirm SECURITY INVOKER, authenticated-only execution,
+  RLS/private bucket, required column grants, unchanged legacy publish function,
+  and all 3 existing identity rows retained. No real Passport upload yet.
+  Authenticated-role transactional acceptance could not run: the MCP query
+  role cannot SET ROLE authenticated. No submission changes were performed.
+  Real owner upload/readback and rejection cases remain browser acceptance gates.
+  Advisors report existing identity admin SECURITY DEFINER RPC notices and
+  overlapping owner/admin SELECT policies; none name the new v2 RPC or trigger.
+  These notices were not changed as part of 103.
 
 - `100_m1_driver_document_submission.sql` is deployed as
   `20260906072749_m1_driver_document_submission`; adds nullable

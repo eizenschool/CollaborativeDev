@@ -51,7 +51,7 @@ test('passenger can submit IC without a licence and existing driver can suppleme
   await expect(page.getByLabel('Driving licence expiry (required)')).toHaveCount(0);
   await page.getByLabel('MyKad number (required)').fill('880505081234');
   await page.getByLabel('MyKad photo (required)', { exact: true }).setInputFiles(photo);
-  await page.getByRole('button', { name: 'Submit MyKad' }).click();
+  await page.getByRole('button', { name: 'Submit identity document' }).click();
   await expect(page.getByText('Documents submitted. Awaiting review.')).toBeVisible();
   await page.goto('/ride/r_5/publish');
   await expect(page.getByRole('heading', { name: 'Complete your driver documents before publishing' })).toBeVisible();
@@ -69,4 +69,33 @@ test('passenger can submit IC without a licence and existing driver can suppleme
   await expect(page.getByRole('combobox', { name: 'Pickup point', exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Pickup point', exact: true })).toHaveValue('Bangsar LRT, Kuala Lumpur');
   await expect(page.getByRole('heading', { name: 'Complete your driver documents before publishing' })).toHaveCount(0);
+});
+
+test('passenger submits Passport with a photo, reloads it and changes back to IC', async ({ page }) => {
+  await setup(page, false);
+  await page.goto('/profile?panel=info');
+  await page.getByRole('button', { name: 'Update my documents' }).click();
+  await page.getByLabel('Identity document', { exact: true }).selectOption('passport');
+  await expect(page.getByLabel('Driving licence expiry (required)')).toHaveCount(0);
+  await expect(page.getByLabel('Driving licence photo (required)', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Passport number (required)').fill('a12345678');
+  await page.getByRole('button', { name: 'Submit identity document' }).click();
+  await expect(page.getByText('Choose a photo of your Passport.', { exact: true })).toBeVisible();
+  await page.getByLabel('Passport photo (required)', { exact: true }).setInputFiles(photo);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('passenger-passport.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Submit identity document' }).click();
+  await expect(page.getByText('Documents submitted. Awaiting review.')).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Update my documents' }).click();
+  await expect(page.getByLabel('Identity document', { exact: true })).toHaveValue('passport');
+  await expect(page.getByLabel('Passport number (required)')).toHaveValue('A12345678');
+  await expect(page.getByLabel('Passport photo (optional replacement)', { exact: true })).toBeVisible();
+  await page.getByLabel('Identity document', { exact: true }).selectOption('mykad');
+  await page.getByLabel('MyKad number (required)').fill('123456-78-9012');
+  await page.getByRole('button', { name: 'Submit identity document' }).click();
+  await expect(page.getByText('Choose a photo of your MyKad.', { exact: true })).toBeVisible();
+  await page.getByLabel('MyKad photo (required)', { exact: true }).setInputFiles(photo);
+  await page.getByRole('button', { name: 'Submit identity document' }).click();
+  await expect(page.getByText('Documents submitted. Awaiting review.')).toBeVisible();
 });

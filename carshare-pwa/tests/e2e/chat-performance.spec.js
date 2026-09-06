@@ -3,10 +3,10 @@ import { expect, test } from '@playwright/test';
 test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/src/context/MessagingSessionContext.jsx', (route) => route.fulfill({
+  await page.route('**/src/presentation/m3-messaging/context/MessagingSessionContext.jsx', (route) => route.fulfill({
     contentType: 'application/javascript', body: 'export const useMessagingSession = () => window.chatTestSession;',
   }));
-  await page.route('**/src/context/CallSessionContext.jsx', (route) => route.fulfill({
+  await page.route('**/src/presentation/m3-messaging/context/CallSessionContext.jsx', (route) => route.fulfill({
     contentType: 'application/javascript', body: 'export const useCallSession = () => ({ isBusy: false, startCall: async () => {} });',
   }));
   await page.route('**/__chat-performance', async (route) => {

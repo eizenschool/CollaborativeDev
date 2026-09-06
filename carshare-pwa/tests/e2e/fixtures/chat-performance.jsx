@@ -1,10 +1,10 @@
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import ChatWindow from '../../../src/presentation/components/messaging/ChatWindow.jsx';
-import { MessagingService } from '../../../src/business-logic/MessagingService.js';
-import '../../../src/presentation/styles/theme.css';
-import '../../../src/presentation/styles/message.css';
+import ChatWindow from '../../../src/presentation/m3-messaging/components/ChatWindow.jsx';
+import { MessagingService } from '../../../src/business-logic/m3-messaging/MessagingService.js';
+import '../../../src/presentation/shared/styles/theme.css';
+import '../../../src/presentation/m3-messaging/styles/message.css';
 
 window.chatMetrics = { messageReads: 0, refreshes: 0, deletes: 0, edits: 0 };
 const conversation = {

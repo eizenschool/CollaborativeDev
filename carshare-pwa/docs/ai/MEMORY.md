@@ -12,6 +12,10 @@ Keep this file intentionally small.
 - The repository is shared by six module owners; reduce unnecessary edits to shared context files.
 - Codex and Claude Code should follow the same project working rules.
 - Google Maps work is zero-charge-first: use only Maps Embed API unless the team explicitly approves a billable SKU and its cost controls. Never rely on budget alerts alone as a spending limit.
+- Source architecture uses three directional layers, each split into `shared/`
+  plus M1-M6 module directories. Contexts belong to Presentation, Supabase is
+  reached through module Data Access adapters, and `npm run check:layers`
+  protects the boundary (D037).
 
 ## Development Mindset
 1. Think Before Coding.

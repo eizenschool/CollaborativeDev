@@ -13,7 +13,8 @@ modules never need to edit the same file.
 ## Why this module has no real Supabase table yet
 
 Module 6 currently runs entirely against its own mock store
-(`src/data-access/module6Store.js`, localStorage key `letstumpang_module6_v1`),
+(`src/data-access/m2-rides/verificationFixtureStore.js`, localStorage key
+`letstumpang_module6_v1`),
 mirroring the same `isSupabaseConfigured` fallback pattern the rest of the app
 uses. It does not yet read `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` because a
 real `trip_verification` table depends on Module 2's `rides` table carrying a

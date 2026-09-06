@@ -1,0 +1,790 @@
+// ===== BUSINESS LOGIC LAYER (MessagingService) =====
+import { supabaseMessagingRepository } from '../../data-access/m3-messaging/supabaseMessagingRepository.js';
+import { callHistoryLabel } from './CallService.js';
+
+export const MESSAGE_TYPE = {
+  TEXT: 'text',
+  IMAGE: 'image',
+  VIDEO: 'video',
+  AUDIO: 'audio',
+  LOCATION: 'location',
+  RIDE_INVITATION: 'ride_invitation',
+  SYSTEM: 'system',
+};
+
+export const CONVERSATION_TYPE = {
+  DIRECT: 'direct',
+  GROUP: 'group',
+};
+
+export const CONVERSATION_SCOPE = {
+  RIDE: 'ride',
+  FRIEND: 'friend',
+};
+
+export const TERMINAL_RIDE_STATUSES = Object.freeze([
+  'Completed',
+  'Cancelled',
+  'Expired',
+]);
+
+export function isTerminalRideStatus(status) {
+  return TERMINAL_RIDE_STATUSES.includes(status);
+}
+
+export const MAX_MESSAGE_LENGTH = 1000;
+export const MAX_MEDIA_COUNT = 10;
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+export const MAX_VOICE_BYTES = 10 * 1024 * 1024;
+export const MAX_VOICE_DURATION_SECONDS = 180;
+export const MAX_MESSAGE_MEDIA_BYTES = 100 * 1024 * 1024;
+
+export const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+export const AUDIO_MIME_TYPES = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav'];
+export const TRANSLATION_LANGUAGES = Object.freeze({
+  en: 'English',
+  zh: '中文',
+  ms: 'Bahasa Melayu',
+  ta: 'தமிழ்',
+});
+
+export function countUnreadMessages(conversations = []) {
+  return conversations.reduce((total, conversation) => {
+    const unreadCount = Number(conversation?.unreadCount);
+    return total + (Number.isFinite(unreadCount) && unreadCount > 0 ? unreadCount : 0);
+  }, 0);
+}
+
+function cleanText(text) {
+  return typeof text === 'string' ? text.trim() : '';
+}
+
+function normalizedMimeType(value) {
+  return typeof value === 'string' ? value.split(';')[0].trim().toLowerCase() : '';
+}
+
+function mediaKind(file) {
+  const mimeType = normalizedMimeType(file?.type);
+  if (IMAGE_MIME_TYPES.includes(mimeType)) return MESSAGE_TYPE.IMAGE;
+  if (VIDEO_MIME_TYPES.includes(mimeType)) return MESSAGE_TYPE.VIDEO;
+  if (AUDIO_MIME_TYPES.includes(mimeType)) return MESSAGE_TYPE.AUDIO;
+  return null;
+}
+
+function validateVoiceRecording(voiceRecording) {
+  if (voiceRecording == null) return null;
+  const file = voiceRecording.file;
+  if (mediaKind(file) !== MESSAGE_TYPE.AUDIO) {
+    throw new Error('This recording is not a supported voice-message format.');
+  }
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    throw new Error('The voice recording is empty. Please record it again.');
+  }
+  if (file.size > MAX_VOICE_BYTES) {
+    throw new Error('Voice message exceeds the 10 MB limit.');
+  }
+  const durationSeconds = Number(voiceRecording.durationSeconds);
+  if (!Number.isInteger(durationSeconds)
+      || durationSeconds < 1
+      || durationSeconds > MAX_VOICE_DURATION_SECONDS) {
+    throw new Error(`Voice message must be between 1 and ${MAX_VOICE_DURATION_SECONDS} seconds.`);
+  }
+  return { file, durationSeconds };
+}
+
+export function validateLocation(location) {
+  if (location == null) return null;
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
+      || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new Error('Shared location coordinates are invalid.');
+  }
+  return { latitude, longitude };
+}
+
+export function validateMessageDraft({ text, files = [], location = null, voiceRecording = null }) {
+  const messageText = cleanText(text);
+  const mediaFiles = files.map((item) => item?.file || item);
+  const cleanVoiceRecording = validateVoiceRecording(voiceRecording);
+
+  if (messageText.length > MAX_MESSAGE_LENGTH) {
+    throw new Error(`Message must not exceed ${MAX_MESSAGE_LENGTH} characters.`);
+  }
+  if (mediaFiles.length > MAX_MEDIA_COUNT) {
+    throw new Error(`A message can contain at most ${MAX_MEDIA_COUNT} photos or videos.`);
+  }
+
+  let totalBytes = 0;
+  mediaFiles.forEach((file) => {
+    const kind = mediaKind(file);
+    if (!kind || kind === MESSAGE_TYPE.AUDIO) {
+      throw new Error(`${file?.name || 'This file'} is not a supported photo or video.`);
+    }
+    if (kind === MESSAGE_TYPE.IMAGE && file.size > MAX_IMAGE_BYTES) {
+      throw new Error(`${file.name} exceeds the 10 MB image limit.`);
+    }
+    if (kind === MESSAGE_TYPE.VIDEO && file.size > MAX_VIDEO_BYTES) {
+      throw new Error(`${file.name} exceeds the 50 MB video limit.`);
+    }
+    totalBytes += file.size;
+  });
+
+  if (totalBytes > MAX_MESSAGE_MEDIA_BYTES) {
+    throw new Error('Message media must not exceed 100 MB in total.');
+  }
+
+  const cleanLocation = validateLocation(location);
+  if (cleanVoiceRecording && (messageText || mediaFiles.length || cleanLocation)) {
+    throw new Error('Voice messages must be sent on their own.');
+  }
+  if (!messageText && !mediaFiles.length && !cleanLocation && !cleanVoiceRecording) {
+    throw new Error('Add text, media, a location, or a voice message before sending.');
+  }
+
+  return {
+    text: messageText,
+    files: mediaFiles,
+    location: cleanLocation,
+    voiceRecording: cleanVoiceRecording,
+  };
+}
+
+function formatMessageTime(timestamp) {
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('en-MY', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date(timestamp));
+}
+
+function formatConversationTime(timestamp) {
+  if (!timestamp) return '';
+  const value = new Date(timestamp);
+  const now = new Date();
+  if (value.toDateString() === now.toDateString()) {
+    return new Intl.DateTimeFormat('en-MY', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: 'Asia/Kuala_Lumpur',
+    }).format(value);
+  }
+  return new Intl.DateTimeFormat('en-MY', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(value);
+}
+
+function formatTripDate(timestamp) {
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('en-MY', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date(timestamp));
+}
+
+function formatTripTime(timestamp) {
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('en-MY', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date(timestamp));
+}
+
+function mapMember(row) {
+  return {
+    id: row.user_id,
+    role: row.role,
+    joinedAt: row.joined_at,
+    leftAt: row.left_at,
+    archivedAt: row.archived_at,
+    deletedBefore: row.deleted_before,
+    accessExpiresAt: row.access_expires_at,
+    mutedAt: row.muted_at,
+    lastReadAt: row.last_read_at,
+    profileAvailable: Boolean(row.profile),
+    accountActive: row.profile?.status === 'active',
+    name: row.profile?.full_name || 'Member',
+    avatarUrl: row.profile?.profile_photo_url || null,
+  };
+}
+
+function messagePreview(message) {
+  if (!message) return 'No messages yet';
+  if (message.deleted_at) return 'message deleted';
+  if (message.text_content) return message.text_content;
+  if (message.ride_invitation) return 'Ride invitation';
+  const kinds = (message.attachments || []).map((item) => item.kind);
+  if (kinds.includes(MESSAGE_TYPE.IMAGE)) return 'Photo';
+  if (kinds.includes(MESSAGE_TYPE.VIDEO)) return 'Video';
+  if (kinds.includes(MESSAGE_TYPE.AUDIO)) return 'Voice message';
+  if (kinds.includes(MESSAGE_TYPE.LOCATION)) return 'Location';
+  return message.kind === 'system' ? 'Group update' : 'Message';
+}
+
+function mapRideInvitation(row) {
+  if (!row) return null;
+  return {
+    rideId: row.ride_id,
+    pickup: row.pickup || '',
+    destination: row.destination || '',
+    departureAt: row.departure_at || null,
+    seatsAvailable: Number(row.seats_available ?? 0),
+    contribution: row.contribution || '',
+    rideStatus: row.ride_status || 'Unavailable',
+    requestStatus: row.request_status || null,
+    canRequest: row.can_request === undefined ? Boolean(row.source_role) : Boolean(row.can_request),
+    sourceRole: row.source_role || null,
+  };
+}
+
+export function mapConversationRow(row, currentUserId) {
+  const allMembers = (row.members || []).map(mapMember);
+  const members = allMembers.filter((member) => !member.leftAt);
+  const currentMembership = allMembers.find((member) => member.id === currentUserId);
+  const otherMember = members.find((member) => member.id !== currentUserId);
+  const contextualRide = row.ride;
+  const scope = row.scope === CONVERSATION_SCOPE.FRIEND
+    ? CONVERSATION_SCOPE.FRIEND
+    : CONVERSATION_SCOPE.RIDE;
+  const friendship = Array.isArray(row.friendship) ? row.friendship[0] : row.friendship;
+  const rawFriendshipStatus = friendship?.status;
+  const friendshipStatus = scope === CONVERSATION_SCOPE.FRIEND
+    ? rawFriendshipStatus === 'accepted' ? 'accepted' : 'removed'
+    : null;
+  const route = row.trip_route
+    || [contextualRide?.pickup, contextualRide?.destination].filter(Boolean).join(' to ')
+    || null;
+  const title = row.type === CONVERSATION_TYPE.GROUP
+    ? row.title || `${route || 'Ride'} Trip Group`
+    : otherMember?.name || 'Private conversation';
+  const lastMessage = Array.isArray(row.last_message)
+    ? row.last_message[0]
+    : row.last_message;
+  const lastCall = Array.isArray(row.latest_call) ? row.latest_call[0] : row.latest_call;
+  const messageAt = lastMessage?.created_at || null;
+  const callAt = lastCall?.created_at || null;
+  const isCallLatest = Boolean(
+    callAt && (!messageAt || new Date(callAt).getTime() >= new Date(messageAt).getTime()),
+  );
+  const latestVisibleActivityAt = isCallLatest ? callAt : messageAt;
+  const lastAt = latestVisibleActivityAt || row.last_message_at || row.created_at;
+  const deletedBefore = currentMembership?.deletedBefore;
+  const isHiddenByDelete = Boolean(
+    deletedBefore
+    && (!latestVisibleActivityAt
+      || new Date(latestVisibleActivityAt) <= new Date(deletedBefore)),
+  );
+  const rideStatus = row.ride_status || contextualRide?.status || null;
+  const isFormerMember = Boolean(currentMembership?.leftAt);
+  const friendAccountsAvailable = scope !== CONVERSATION_SCOPE.FRIEND
+    || members.every((member) => member.profileAvailable && member.accountActive);
+  const isReadOnly = isFormerMember
+    || (scope === CONVERSATION_SCOPE.FRIEND
+      ? friendshipStatus !== 'accepted' || !friendAccountsAvailable
+      : (row.type === CONVERSATION_TYPE.GROUP
+        && ['Cancelled', 'Expired'].includes(rideStatus)));
+  const expiryDates = scope === CONVERSATION_SCOPE.FRIEND ? [] : [row.expires_at, currentMembership?.accessExpiresAt]
+    .filter(Boolean)
+    .map((value) => new Date(value));
+  const effectiveExpiresAt = expiryDates.length
+    ? new Date(Math.min(...expiryDates)).toISOString()
+    : null;
+
+  return {
+    id: row.id,
+    rideId: row.ride_id || null,
+    type: row.type,
+    scope,
+    friendshipStatus,
+    title,
+    members,
+    currentMembership,
+    isArchived: Boolean(currentMembership?.archivedAt),
+    isMuted: Boolean(currentMembership?.mutedAt),
+    isHiddenByDelete,
+    isReadOnly,
+    isFormerMember,
+    isTerminal: isTerminalRideStatus(rideStatus),
+    expiresAt: row.expires_at || null,
+    accessExpiresAt: currentMembership?.accessExpiresAt || null,
+    effectiveExpiresAt,
+    interactionBlocked: scope === CONVERSATION_SCOPE.FRIEND && friendshipStatus !== 'accepted',
+    friendAccountsAvailable,
+    blockedByMe: false,
+    otherUserId: otherMember?.id || null,
+    rideStatus,
+    pickup: contextualRide?.pickup || null,
+    destination: contextualRide?.destination || null,
+    tripRoute: route,
+    tripDate: formatTripDate(row.trip_departure_at || contextualRide?.departure_at),
+    tripTime: formatTripTime(row.trip_departure_at || contextualRide?.departure_at),
+    hasMessages: Boolean(lastMessage),
+    hasCalls: Boolean(lastCall),
+    hasActivity: Boolean(lastMessage || lastCall),
+    lastMessage: isCallLatest
+      ? callHistoryLabel(
+        lastCall.status,
+        lastCall.caller_id === currentUserId ? 'outgoing' : 'incoming',
+        lastCall.call_type || 'direct',
+      )
+      : messagePreview(lastMessage),
+    lastMessageAt: lastAt,
+    lastTime: formatConversationTime(lastAt),
+    unreadCount: row.unread_count || 0,
+  };
+}
+
+function mapAttachment(row) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    sortOrder: row.sort_order,
+    storagePath: row.storage_path,
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    durationSeconds: row.duration_seconds,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    url: row.signed_url || null,
+    loadError: row.media_error || null,
+  };
+}
+
+export function mapMessageRow(row, conversation, currentUserId) {
+  const attachments = (row.attachments || [])
+    .map(mapAttachment)
+    .sort((first, second) => first.sortOrder - second.sortOrder);
+  const messageTypes = [];
+  if (row.kind === 'system') messageTypes.push(MESSAGE_TYPE.SYSTEM);
+  if (row.text_content) messageTypes.push(MESSAGE_TYPE.TEXT);
+  if (row.ride_invitation) messageTypes.push(MESSAGE_TYPE.RIDE_INVITATION);
+  attachments.forEach((attachment) => {
+    if (!messageTypes.includes(attachment.kind)) messageTypes.push(attachment.kind);
+  });
+  const sender = row.sender;
+  const isRead = Boolean(
+    conversation?.members?.some((member) =>
+      member.id !== row.sender_id
+      && member.lastReadAt
+      && new Date(member.lastReadAt) >= new Date(row.created_at),
+    ),
+  );
+
+  return {
+    id: row.id,
+    conversationId: row.conversation_id,
+    kind: row.kind,
+    text: row.text_content || '',
+    senderId: row.sender_id,
+    senderName: sender?.full_name || (row.kind === 'system' ? 'System' : 'Member'),
+    senderAvatar: sender?.profile_photo_url || null,
+    attachments,
+    rideInvitation: mapRideInvitation(row.ride_invitation),
+    messageTypes,
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    deletedAt: row.deleted_at,
+    timestamp: formatMessageTime(row.created_at),
+    isRead,
+    canEdit: row.sender_id === currentUserId
+      && row.kind === 'user'
+      && !row.deleted_at
+      && !isRead
+      && !row.ride_invitation
+      && !attachments.some((attachment) => attachment.kind === MESSAGE_TYPE.AUDIO)
+      && !conversation?.isReadOnly
+      && !conversation?.interactionBlocked,
+    canDelete: true,
+    canDeleteForEveryone: row.sender_id === currentUserId
+      && row.kind === 'user'
+      && !row.deleted_at
+      && !isRead
+      && !conversation?.isReadOnly
+      && !conversation?.interactionBlocked,
+  };
+}
+
+function fileDescriptor(file, storagePath, sortOrder, durationSeconds = null) {
+  return {
+    kind: mediaKind(file),
+    sort_order: sortOrder,
+    storage_path: storagePath,
+    file_name: file.name,
+    mime_type: normalizedMimeType(file.type),
+    file_size: file.size,
+    duration_seconds: durationSeconds,
+  };
+}
+
+function locationDescriptor(location) {
+  if (!location) return null;
+  return {
+    kind: MESSAGE_TYPE.LOCATION,
+    sort_order: 10,
+    latitude: location.latitude,
+    longitude: location.longitude,
+  };
+}
+
+function createUuid() {
+  if (!globalThis.crypto?.randomUUID) {
+    throw new Error('This browser cannot create secure message identifiers.');
+  }
+  return globalThis.crypto.randomUUID();
+}
+
+async function uploadAll(repository, conversationId, messageId, versionId, fileEntries) {
+  const results = await Promise.allSettled(fileEntries.map(async (entry) => ({
+    entry,
+    storagePath: await repository.uploadMedia({
+      conversationId,
+      messageId,
+      versionId,
+      file: entry.file,
+    }),
+  })));
+  const uploaded = results
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => result.value);
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) {
+    await repository.removeMedia(uploaded.map((item) => item.storagePath)).catch(() => {});
+    throw failed.reason;
+  }
+  return uploaded;
+}
+
+function containsKeyword(message, keyword) {
+  const normalized = keyword.toLocaleLowerCase();
+  return message.text.toLocaleLowerCase().includes(normalized)
+    || message.senderName.toLocaleLowerCase().includes(normalized)
+    || message.rideInvitation?.pickup.toLocaleLowerCase().includes(normalized)
+    || message.rideInvitation?.destination.toLocaleLowerCase().includes(normalized)
+    || message.attachments.some((attachment) =>
+      attachment.fileName?.toLocaleLowerCase().includes(normalized),
+    );
+}
+
+export function getMessagingChangeConversationId(change) {
+  const row = change?.new && Object.keys(change.new).length
+    ? change.new
+    : change?.old;
+  if (!row) return null;
+  if (change.table === 'conversations') return row.id || null;
+  if (['conversation_members', 'messages', 'chat_item_deletions'].includes(change.table)) {
+    return row.conversation_id || null;
+  }
+  if (change.table === 'call_sessions') return row.conversation_id || null;
+  return null;
+}
+
+/** Creates the Module 3 service against a compatible data repository. */
+export function createMessagingService(repository = supabaseMessagingRepository) {
+  return {
+    backend: repository.backend,
+
+    async openRideDirectConversation(rideId) {
+      if (!rideId) throw new Error('A ride is required to start a conversation.');
+      return repository.openRideDirectConversation(rideId);
+    },
+
+    async listConversations(folder = 'active') {
+      if (!['active', 'archived'].includes(folder)) {
+        throw new Error('Unsupported conversation folder.');
+      }
+      const currentUserId = await repository.getCurrentUserId();
+      const rows = await repository.listConversations();
+      const conversations = rows.map((row) => mapConversationRow(row, currentUserId));
+      return conversations
+        .filter((conversation) => !conversation.isHiddenByDelete)
+        .filter((conversation) =>
+          conversation.scope === CONVERSATION_SCOPE.FRIEND
+          || conversation.type === CONVERSATION_TYPE.GROUP
+          || conversation.hasActivity,
+        )
+        .filter((conversation) =>
+          folder === 'archived' ? conversation.isArchived : !conversation.isArchived,
+        )
+        .sort((first, second) =>
+          new Date(second.lastMessageAt) - new Date(first.lastMessageAt),
+        );
+    },
+
+    async getConversation(conversationId) {
+      const currentUserId = await repository.getCurrentUserId();
+      const row = await repository.getConversation(conversationId);
+      if (!row) return null;
+      return mapConversationRow(row, currentUserId);
+    },
+
+    async listMessages(conversationId, { conversation: loadedConversation, currentUserId: loadedUserId } = {}) {
+      const currentUserId = loadedUserId || await repository.getCurrentUserId();
+      const conversation = loadedConversation?.id === conversationId
+        ? loadedConversation
+        : await this.getConversation(conversationId);
+      if (!conversation) throw new Error('Unable to load messages.');
+      const rows = await repository.listMessages(conversationId);
+      return rows
+        .map((row) => mapMessageRow(row, conversation, currentUserId))
+        .sort((first, second) => {
+          const timeDifference = new Date(first.createdAt) - new Date(second.createdAt);
+          return timeDifference || first.id.localeCompare(second.id);
+        });
+    },
+
+    async searchMessages(conversationId, keyword) {
+      const query = cleanText(keyword);
+      const messages = await this.listMessages(conversationId);
+      if (!query) return messages;
+      return messages.filter((message) => containsKeyword(message, query));
+    },
+
+    async listRideInviteOptions(conversationId) {
+      const rows = await repository.listRideInviteOptions(conversationId);
+      return rows.map((row) => mapRideInvitation(row));
+    },
+
+    async sendRideInvitation({ conversationId, rideId, text = '' }) {
+      const messageText = cleanText(text);
+      if (!conversationId || !rideId) throw new Error('Choose a Ride to invite your friend.');
+      if (messageText.length > MAX_MESSAGE_LENGTH) {
+        throw new Error(`Message must not exceed ${MAX_MESSAGE_LENGTH} characters.`);
+      }
+      const messageId = createUuid();
+      const savedMessageId = await repository.sendRideInvitation({
+        conversationId,
+        messageId,
+        rideId,
+        text: messageText,
+      });
+      const [currentUserId, conversation, row] = await Promise.all([
+        repository.getCurrentUserId(),
+        this.getConversation(conversationId),
+        repository.getMessage(savedMessageId),
+      ]);
+      return mapMessageRow(row, conversation, currentUserId);
+    },
+
+    async sendMessage({
+      conversationId,
+      text,
+      files = [],
+      location = null,
+      voiceRecording = null,
+    }) {
+      const draft = validateMessageDraft({ text, files, location, voiceRecording });
+      const fileEntries = draft.files.map((file, index) => ({
+        file,
+        clientId: `new-${index}`,
+      }));
+      if (draft.voiceRecording) {
+        fileEntries.push({
+          file: draft.voiceRecording.file,
+          clientId: 'voice',
+          durationSeconds: draft.voiceRecording.durationSeconds,
+        });
+      }
+      const messageId = createUuid();
+      const versionId = createUuid();
+      const uploaded = await uploadAll(
+        repository,
+        conversationId,
+        messageId,
+        versionId,
+        fileEntries,
+      );
+      const attachments = uploaded.map(({ entry, storagePath }, index) =>
+        fileDescriptor(entry.file, storagePath, index, entry.durationSeconds),
+      );
+      const locationItem = locationDescriptor(draft.location);
+      if (locationItem) attachments.push(locationItem);
+
+      try {
+        const savedMessageId = await repository.sendMessage({
+          conversationId,
+          messageId,
+          text: draft.text,
+          attachments,
+        });
+        const [currentUserId, conversation, row] = await Promise.all([
+          repository.getCurrentUserId(),
+          this.getConversation(conversationId),
+          repository.getMessage(savedMessageId),
+        ]);
+        return mapMessageRow(row, conversation, currentUserId);
+      } catch (error) {
+        await repository.removeMedia(uploaded.map((item) => item.storagePath)).catch(() => {});
+        throw error;
+      }
+    },
+
+    async editMessage({
+      messageId,
+      text,
+      existingAttachmentIds = [],
+      newFiles = [],
+      location = null,
+      mediaOrder = [],
+    }) {
+      const original = await repository.getMessage(messageId);
+      if (!original) throw new Error('Message not found.');
+      const originalMedia = (original.attachments || []).filter(
+        (attachment) => attachment.kind !== MESSAGE_TYPE.LOCATION,
+      );
+      if (originalMedia.some((attachment) => attachment.kind === MESSAGE_TYPE.AUDIO)) {
+        throw new Error('Voice messages cannot be edited.');
+      }
+      const existingById = new Map(originalMedia.map((item) => [item.id, item]));
+      const selectedExisting = existingAttachmentIds.map((id) => {
+        const attachment = existingById.get(id);
+        if (!attachment) throw new Error('An existing attachment is unavailable.');
+        return attachment;
+      });
+      const normalizedNewFiles = newFiles.map((item, index) => ({
+        file: item.file || item,
+        clientId: item.clientId || `new-${index}`,
+      }));
+      const draft = validateMessageDraft({
+        text,
+        files: [
+          ...selectedExisting.map((item) => ({
+            name: item.file_name || item.fileName,
+            type: item.mime_type || item.mimeType,
+            size: Number(item.file_size || item.fileSize),
+          })),
+          ...normalizedNewFiles.map((item) => item.file),
+        ],
+        location,
+      });
+      const uploaded = await uploadAll(
+        repository,
+        original.conversation_id,
+        messageId,
+        createUuid(),
+        normalizedNewFiles,
+      );
+      try {
+        const newByClientId = new Map(uploaded.map((item) => [item.entry.clientId, item]));
+        const defaultOrder = [
+          ...selectedExisting.map((item) => `existing:${item.id}`),
+          ...normalizedNewFiles.map((item) => `new:${item.clientId}`),
+        ];
+        const requestedOrder = mediaOrder.length ? mediaOrder : defaultOrder;
+        const attachments = requestedOrder.map((token, index) => {
+          const [source, id] = token.split(':');
+          if (source === 'existing') {
+            const item = existingById.get(id);
+            if (!item || !existingAttachmentIds.includes(id)) {
+              throw new Error('An attachment order item is invalid.');
+            }
+            return {
+              kind: item.kind,
+              sort_order: index,
+              storage_path: item.storage_path || item.storagePath,
+              file_name: item.file_name || item.fileName,
+              mime_type: item.mime_type || item.mimeType,
+              file_size: Number(item.file_size || item.fileSize),
+            };
+          }
+          const uploadedItem = newByClientId.get(id);
+          if (!uploadedItem) throw new Error('A new attachment order item is invalid.');
+          return fileDescriptor(uploadedItem.entry.file, uploadedItem.storagePath, index);
+        });
+        const locationItem = locationDescriptor(draft.location);
+        if (locationItem) attachments.push(locationItem);
+
+        await repository.editMessage({ messageId, text: draft.text, attachments });
+
+        const keptPaths = new Set(attachments.map((item) => item.storage_path).filter(Boolean));
+        const removedPaths = originalMedia
+          .map((item) => item.storage_path || item.storagePath)
+          .filter((path) => path && !keptPaths.has(path));
+        await repository.removeMedia(removedPaths).catch(() => {});
+      } catch (error) {
+        await repository.removeMedia(uploaded.map((item) => item.storagePath)).catch(() => {});
+        throw error;
+      }
+      const [currentUserId, conversation, row] = await Promise.all([
+        repository.getCurrentUserId(),
+        this.getConversation(original.conversation_id),
+        repository.getMessage(messageId),
+      ]);
+      return mapMessageRow(row, conversation, currentUserId);
+    },
+
+    async deleteForMe(itemId, itemType = 'message') {
+      if (!itemId || !['message', 'call'].includes(itemType)) {
+        throw new Error('Choose a message or call record to delete.');
+      }
+      await repository.deleteForMe(itemId, itemType);
+      return true;
+    },
+
+    async deleteMessage(messageId) {
+      // The RPC atomically checks ownership, chat access and the read cursor.
+      // Re-fetching content/media here adds latency without preventing a read race.
+      const paths = await repository.deleteMessage(messageId);
+      await repository.removeMedia(paths).catch(() => {});
+      return true;
+    },
+
+    async translateMessage(messageId, targetLanguage) {
+      if (!messageId) throw new Error('A message is required for translation.');
+      if (!Object.hasOwn(TRANSLATION_LANGUAGES, targetLanguage)) {
+        throw new Error('Choose English, Chinese, Bahasa Melayu, or Tamil.');
+      }
+      const result = await repository.translateMessage({ messageId, targetLanguage });
+      const translatedText = cleanText(result.translatedText);
+      if (!translatedText) throw new Error('Translation returned no text.');
+      return {
+        sourceLanguage: result.sourceLanguage,
+        transcript: result.transcript || null,
+        translatedText,
+        targetLanguage: result.targetLanguage,
+        cached: Boolean(result.cached),
+      };
+    },
+
+    async markConversationRead(conversationId) {
+      return repository.markConversationRead(conversationId);
+    },
+
+    async archiveConversation(conversationId) {
+      return repository.archiveConversation(conversationId);
+    },
+
+    async unarchiveConversation(conversationId) {
+      return repository.unarchiveConversation(conversationId);
+    },
+
+    async deleteConversationForMe(conversationId) {
+      return repository.deleteConversationForMe(conversationId);
+    },
+
+    async setConversationMuted(conversationId, muted) {
+      return repository.setConversationMuted(conversationId, Boolean(muted));
+    },
+
+    subscribeToMessaging(listener) {
+      return repository.subscribe(listener);
+    },
+
+    subscribe(listener) {
+      return repository.subscribe(listener);
+    },
+  };
+}
+
+export const MessagingService = createMessagingService();

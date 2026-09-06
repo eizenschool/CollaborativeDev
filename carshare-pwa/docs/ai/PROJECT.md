@@ -60,6 +60,7 @@ Run from `carshare-pwa/`.
 ```bash
 npm ci
 npm run dev
+npm run check:layers
 npm test
 npm run build
 npm run preview
@@ -68,27 +69,36 @@ npm run preview
 ## Current Source Structure
 ```text
 src/
-├── App.jsx
 ├── main.jsx
-├── context/
 ├── presentation/
+│   ├── shared/          # app shell, UI primitives, shared contexts/styles
+│   └── m1-profile/ ... m6-discovery/
 ├── business-logic/
+│   ├── shared/
+│   └── m1-profile/ ... m6-discovery/
 └── data-access/
+    ├── shared/          # Supabase client/config and cross-module foundations
+    └── m1-profile/ ... m6-discovery/
 ```
 
 Current architectural boundary:
 ```text
-Presentation -> Business Logic -> backend/data adapters
+Presentation -> Business Logic -> Data Access / backend adapters
 ```
-Presentation code must not directly import/use Supabase.
-Existing business-logic services may use the shared Supabase client from `src/data-access/supabaseClient.js`.
-Do not replace this established pattern with a new repository architecture unless a concrete need is accepted.
+`src/main.jsx` is the composition root. Presentation code may import only
+Presentation and Business Logic. Business Logic may import Business Logic and
+Data Access, but reaches Supabase through module-owned adapters. Data Access
+imports only Data Access. `npm run check:layers` enforces these directions.
+React contexts are presentation state: shared auth/notification contexts live
+under `presentation/shared/context`, while messaging/call session contexts live
+under `presentation/m3-messaging/context`.
 
 ## Current Implementation Reality
 `Development` already contains implementation from several modules, including Module 1 profile/auth/vehicle/reputation-related UI and services, Module 2 ride-management components, Module 3 messaging UI/data prototypes, Module 4 search UI components, Module 5 trip/eco components, and the safety/verification logic and UI built under
 Module 6's former Trust & Safety scope, now owned by Modules 1/2/3/5
 (`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`). Module 6's current Destination
-Discovery work is the scoring and lifecycle logic in `src/business-logic/discovery/`.
+Discovery work is the scoring and lifecycle logic in
+`src/business-logic/m6-discovery/discovery/`.
 
 Some routes, integration points, data persistence, and real backend behaviour are incomplete or prototype/mock based.
 Do not assume "not wired in App.jsx" means "not implemented anywhere".

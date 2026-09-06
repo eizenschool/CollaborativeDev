@@ -26,8 +26,9 @@ This module previously covered Trust & Safety. That scope was redistributed and
 | Module 5 | FR-6.11, 6.12, 6.23 | Trip overdue detection and escalation |
 
 The existing prototype code for that scope stays where it is and now belongs to
-its new owners — `src/business-logic/verification/`,
-`src/presentation/components/safety/`, `src/data-access/module6Store.js`, the
+its new owners — `src/business-logic/m2-rides/verification/`,
+`src/presentation/m2-rides/components/verification/`,
+`src/data-access/m2-rides/verificationFixtureStore.js`, the
 `/safety` route, and `docs/MODULE6-SCHEMA.md`. Destination Discovery does not
 modify any of it.
 
@@ -153,14 +154,14 @@ The accepted FR-6.35 handoff shape is defined in
 2 and 4; it does not require the Google ingestion API.
 
 ## Repository Areas
-Business logic: `src/business-logic/discovery/`
+Business logic: `src/business-logic/m6-discovery/discovery/`
 - `constants.js` — every weight and threshold in one place
 - `DestinationScoringEngine.js` — the two-axis score and presentation rule
 - `SeasonalCalendar.js` — FR-6.24 declared windows, wrap-around and leap-day safe
 - `PlaceLifecycle.js` — Pending Enrichment → Active/Provisional → Stale → Retired
 - `ChainDetection.js` — state-scoped name recurrence
 - `AffinityResolver.js` — trip history → stated preference → neutral
-- `WeatherGate.js` — UC6.11, pure rules plus a thin Open-Meteo fetcher
+- `WeatherGate.js` — UC6.11 weather rules and adapter orchestration
 - `PlaceQueryService.js` — **the interface Modules 2 and 4 consume**
 - `DiscoveryContractAdapter.js` — the only file importing another module
 - `DestinationDiscoveryService.js` — orchestration
@@ -172,16 +173,18 @@ Business logic: `src/business-logic/discovery/`
 - `geo.js`, `__tests__/`
 
 Presentation: the hub content that used to be `discover/DiscoverHub.jsx` now
-lives in `src/presentation/components/HomeScreen.jsx` (D032); `discover/`
+lives in `src/presentation/m6-discovery/HomeScreen.jsx` (D032); `components/discover/`
 keeps detail, card, preference prompt, score breakdown, unmet demand view, and
 `PlaceImage.jsx` (renders a live photo, falling back to `PlacePoster.jsx`'s
 FR-6.17 illustration tier when none is fetchable). `DiscoverRail.jsx` was
 removed - its home-screen strip is now the same content Home itself renders.
 
-Data: `src/data-access/discoveryStore.js` (fixture catalogue, own localStorage
-key; still the default) and `src/data-access/discoverySupabaseRepository.js`
-(live adapter, opt-in via `VITE_DISCOVERY_DATA_SOURCE=supabase`, never used
-under test).
+Data: `src/data-access/m6-discovery/discoveryStore.js` (fixture catalogue, own
+localStorage key; still the default), `discoverySupabaseRepository.js` (live
+adapter, opt-in via `VITE_DISCOVERY_DATA_SOURCE=supabase`, never used under
+test), plus `weatherForecastAdapter.js` and `streetViewCoverageAdapter.js` for
+external HTTP transport. Fixture/test builds do not call those external services
+unless a test explicitly injects a transport.
 Schema: `database/sql/024_m6_destination_discovery.sql` (deployed as
 `m6_destination_discovery`), `027_m6_place_reviews.sql` (reviews column),
 `029_m6_anon_place_browsing.sql` + `030_m6_anon_source_place_id.sql` (anon

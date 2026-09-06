@@ -10,9 +10,29 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('Driver republishes an expired History ride into a separate editable Draft', async ({ page }) => {
+async function seedEligibleDriver(page) {
   await page.goto('/home');
   await expect(page.getByRole('heading', { name: 'Where should you go?' })).toBeVisible();
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.identityVerifications ||= {};
+    database.identityVerifications.u_demo_1 = {
+      status: 'pending',
+      document_path: 'u_demo_1/mykad-e2e.mock',
+      license_document_path: 'u_demo_1/licence-e2e.mock',
+      document_name: 'mykad-e2e.png',
+      ic_number: '990101145678',
+      license_expiry: '2099-12-31',
+      submitted_at: '2026-09-01T00:00:00.000Z',
+      reviewed_at: null,
+      review_note: '',
+    };
+    localStorage.setItem(storageKey, JSON.stringify(database));
+  }, MOCK_STORAGE_KEY);
+}
+
+test('Driver republishes an expired History ride into a separate editable Draft', async ({ page }) => {
+  await seedEligibleDriver(page);
   await page.goto('/ride');
   await expect(page.getByRole('heading', { name: 'My rides' })).toBeVisible();
 

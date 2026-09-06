@@ -10,9 +10,12 @@ User identity/profile, vehicle information, reputation/impact presentation, emer
 Registration/profile management, photo, vehicles, evidence-based reputation/standing, privacy-filtered public profile, ride eligibility support, Host Impact Score/badge presentation, emergency contact, deactivation/deletion.
 
 ## Existing Repository Areas
-Presentation: `AuthPage.jsx`, `MyProfile.jsx`, `MyVehicles.jsx`, `ProfileSettings.jsx`, `Reputation.jsx`, `HostDashboard.jsx`, `Sidebar.jsx`.
-Business logic: `AuthService.js`, `ProfileService.js`, `PublicProfilePolicy.js`, `ReputationPolicy.js`, `ReputationService.js`, `VehicleService.js`, `HostImpactEngine.js`.
-Shared: `AuthContext.jsx`, `supabaseClient.js`, `mockDataStore.js`.
+Presentation: `src/presentation/m1-profile/`, with shared auth state in
+`src/presentation/shared/context/AuthContext.jsx`.
+Business logic: `src/business-logic/m1-profile/`.
+Data access: `src/data-access/m1-profile/` contains M1 Supabase and mock
+adapters; the Supabase client and atomic legacy fixture foundation remain in
+`src/data-access/shared/`.
 
 ## Owns
 Profile/account-facing behaviour, vehicles, profile-side reputation/impact display, host eligibility inputs exposed to Module 2.
@@ -53,16 +56,25 @@ metadata shape. Still needs Google Cloud + Supabase Dashboard provider setup
 My Vehicles now collects account-level driver documents before the first
 vehicle form: IC number/photo, licence expiry and one licence photo. Complete
 drivers skip this step for additional vehicles. Existing owners supplement
-missing documents here. Info & Security retains passenger IC-only submission;
+missing documents here. Info & Security offers passenger IC/MyKad or Passport;
 it never requires a licence and preserves any existing driver fields.
 The shared identity form uses private previews and specific field errors.
-Admin review displays both photos and explicitly labels missing licence photos.
+Admin review labels the selected identity photo; licence photos appear only
+when driver fields are present. Passenger IC has a basic 12-digit check;
+Passport has a 5–20 ASCII letter/digit check. Both require a nonempty
+JPEG/PNG/WebP photo up to 5 MB. Changing type/number requires a matching new photo.
 Submission resets the combined application to pending; approval remains a badge,
-not a prerequisite for hosting. The new service calls `submit_identity_documents`
+not a prerequisite for hosting. The service calls `submit_identity_documents_v2`
 and reads back ambiguous outcomes before reporting success or allowing retries.
 `panel=vehicles&returnTo=...` deep-links to My Vehicles and preserves only an
 allowlisted publish/new-draft return path. 100/101 are live; 102's stricter publish
-trigger is pending frontend release. See SQL.md for rollout status.
+trigger is pending frontend release. 103 adds passenger Passport storage/RPC
+and is deployed as `20260906134759_m1_passenger_identity_documents` with approval.
+It adds a Passport-only publish guard because the live legacy guard only checks
+status. 102 remains undeployed. Real passenger upload acceptance is pending.
+Legacy reads and driver-only RPC fallback keep
+existing drivers compatible; passenger capture needs 103. Passport alone never
+unlocks hosting, even when previous licence files are retained. See SQL.md.
 
 Identity verification happens where it is used, not at sign-up (D035).
 Sign-up collects no IC number at all - the old gate was skippable through

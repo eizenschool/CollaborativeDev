@@ -10,7 +10,7 @@ Advanced search, filters, favourites, alternative/multi-leg suggestions, and rou
 Advanced search, event/cultural/culinary proximity, filters, journey-scale filtering, favourites, alternative routes, Host Impact sorting, unavailable notifications, multi-leg suggestions.
 
 ## Existing Repository Areas
-Presentation: `src/presentation/components/search/` including `SearchModule.jsx`, `SearchForm.jsx`, `RideCards.jsx`.
+Presentation: `src/presentation/m4-search/` including `SearchModule.jsx`, `SearchForm.jsx`, `RideCards.jsx`.
 The public `/search` route is the application's sole ride-listing surface.
 
 ## Depends On
@@ -95,8 +95,10 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   safe route/Host/schedule data and open each real ride independently. Migration
   `068` is deployed; no paid Routes request is made for matching.
 
-Business logic: `src/business-logic/SmartSearchService.js` and
-`src/business-logic/FavouriteService.js`.
+Business logic: `src/business-logic/m4-search/`.
+
+Data access: `src/data-access/m4-search/` owns favourite Supabase and mock
+adapters.
 
 Search and Favourite hydrate destination Place IDs with Module 2's bounded
 batch RPC, then share `DestinationRidePhoto` with the `/ride` workspace. Photos
@@ -105,8 +107,8 @@ fixed contrast scrim, include Google/photographer attribution, and fall back to
 the original white-green card when unavailable. Pickup meeting photos never
 appear on cards.
 
-Presentation: `src/presentation/components/search/` and
-`src/presentation/styles/search.css`.
+Presentation: `src/presentation/m4-search/components/` and
+`src/presentation/m4-search/styles/search.css`.
 
 Database: `database/sql/034_m4_smart_search_favourites.sql` and
 `database/sql/035_m4_destination_proximity_search.sql` (both deployed and
