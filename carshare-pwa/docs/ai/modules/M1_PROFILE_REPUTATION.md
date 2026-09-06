@@ -48,6 +48,22 @@ an asymmetric Reputation effect while preserving rating as a separate signal.
 existing `handle_new_user()` trigger already covers Google's profile/avatar
 metadata shape. Still needs Google Cloud + Supabase Dashboard provider setup
 (see `docs/SUPABASE-SETUP.md`) before it works against the live project.
+### Driver onboarding update (2026-09-06; supersedes the older capture flow below)
+
+My Vehicles now collects account-level driver documents before the first
+vehicle form: IC number/photo, licence expiry and one licence photo. Complete
+drivers skip this step for additional vehicles. Existing owners supplement
+missing documents here. Info & Security retains passenger IC-only submission;
+it never requires a licence and preserves any existing driver fields.
+The shared identity form uses private previews and specific field errors.
+Admin review displays both photos and explicitly labels missing licence photos.
+Submission resets the combined application to pending; approval remains a badge,
+not a prerequisite for hosting. The new service calls `submit_identity_documents`
+and reads back ambiguous outcomes before reporting success or allowing retries.
+`panel=vehicles&returnTo=...` deep-links to My Vehicles and preserves only an
+allowlisted publish/new-draft return path. 100/101 are live; 102's stricter publish
+trigger is pending frontend release. See SQL.md for rollout status.
+
 Identity verification happens where it is used, not at sign-up (D035).
 Sign-up collects no IC number at all - the old gate was skippable through
 `signInWithGoogle()` and asked every member for a document only a Host needs.
@@ -80,6 +96,11 @@ UPDATE, which Postgres refuses for that statement shape with a
 `42501 permission denied` error - the same trap `071_project` hit on
 `profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
 needs; RLS still does the real gatekeeping underneath it.
+
+Live ACL verification on 2026-09-06 then found that INSERT still covered only
+`093_m1`'s original three columns. Deployed tracked migration `099_m1` restores
+column-scoped INSERT for `ic_number` and `license_expiry`; broad table INSERT
+remains disabled and the owner-only RLS policies remain in force.
 
 `096_m1` adds a partial unique index on `ic_number` so the same MyKad cannot
 back two accounts - a rejected or reputation-damaged member could otherwise

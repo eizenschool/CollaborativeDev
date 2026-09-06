@@ -710,10 +710,13 @@ export const mockDb = {
     }
     db.identityVerifications[userId] = {
       status: 'pending',
-      document_path: `${userId}/mykad-${Date.now()}.mock`,
+      document_path: submission.file ? `${userId}/mykad-${Date.now()}.mock` : db.identityVerifications[userId]?.document_path,
+      license_document_path: submission.mode !== 'passenger' && submission.licenseFile
+        ? `${userId}/licence-${Date.now()}.mock` : db.identityVerifications[userId]?.license_document_path,
       document_name: submission?.file?.name || 'mykad.jpg',
       ic_number: icNumber,
-      license_expiry: submission?.licenseExpiry || null,
+      license_expiry: submission.mode === 'passenger'
+        ? db.identityVerifications[userId]?.license_expiry || null : submission?.licenseExpiry || null,
       submitted_at: new Date().toISOString(),
       reviewed_at: null,
       review_note: ''

@@ -33,6 +33,8 @@ async function read(relativeUrl) {
   return import('node:fs/promises').then(({ readFile }) => readFile(new URL(relativeUrl, import.meta.url), 'utf8'));
 }
 
+const completeDriver = { documentPath: 'owner/ic.jpg', licenseDocumentPath: 'owner/licence.jpg', icNumber: '990101-14-5678', licenseExpiry: '2099-12-31' };
+
 const photo = (type = 'image/jpeg', size = 1024) => ({ type, size, name: 'mykad.jpg' });
 
 // Offset from the real current date rather than a fixed string, so the test
@@ -58,7 +60,7 @@ describe('identity document capture', () => {
 });
 
 describe('one-time MyKad capture', () => {
-  const submission = { file: photo(), icNumber: '990101-14-5678', licenseExpiry: '2099-12-31' };
+  const submission = { file: photo(), licenseFile: photo(), icNumber: '990101-14-5678', licenseExpiry: '2099-12-31' };
 
   // The licence number is the MyKad number, and one person holds one licence,
   // so both are captured here once instead of on every vehicle.
@@ -79,7 +81,7 @@ describe('one-time MyKad capture', () => {
 
 describe('one MyKad, one account', () => {
   it('refuses a MyKad number already registered to another account', async () => {
-    const submission = { file: photo(), icNumber: '990101-14-5678', licenseExpiry: '2099-12-31' };
+    const submission = { file: photo(), licenseFile: photo(), icNumber: '990101-14-5678', licenseExpiry: '2099-12-31' };
     await IdentityVerificationService.submit('user-a', submission);
     await expect(IdentityVerificationService.submit('user-b', submission)).rejects.toThrow(
       /already registered to another account/i
@@ -87,7 +89,7 @@ describe('one MyKad, one account', () => {
   });
 
   it('still lets a member resubmit under their own account', async () => {
-    const submission = { file: photo(), icNumber: '880505-08-1234', licenseExpiry: '2099-12-31' };
+    const submission = { file: photo(), licenseFile: photo(), icNumber: '880505-08-1234', licenseExpiry: '2099-12-31' };
     await IdentityVerificationService.submit('user-c', submission);
     await expect(IdentityVerificationService.submit('user-c', submission)).resolves.toMatchObject({
       status: IDENTITY_STATUS.PENDING
@@ -107,8 +109,8 @@ describe('interaction gate (requesting to join a ride, messaging another member)
     expect(canInteractWithIdentity({ status: IDENTITY_STATUS.APPROVED, licenseExpiry: '2020-01-01' })).toBe(true);
   });
 
-  it('stays open when migration 093 is not deployed', () => {
-    expect(canInteractWithIdentity({ status: IDENTITY_STATUS.NONE, deploymentPending: true })).toBe(true);
+  it('blocks when the identity contract is unavailable', () => {
+    expect(canInteractWithIdentity({ status: IDENTITY_STATUS.NONE, deploymentPending: true })).toBe(false);
   });
 
   it('requireVerifiedIdentity resolves silently once submitted, and throws a matchable error otherwise', async () => {
@@ -117,7 +119,7 @@ describe('interaction gate (requesting to join a ride, messaging another member)
     });
 
     await IdentityVerificationService.submit('user-verified', {
-      file: photo(),
+      file: photo(), licenseFile: photo(),
       icNumber: '770815-10-2468',
       licenseExpiry: '2099-12-31'
     });
@@ -138,8 +140,8 @@ describe('publish gate', () => {
   // any publish would dead-end every Host, since the reviewer surface is still
   // an open Trust & Safety decision.
   it('unlocks publishing on submission, before review completes', () => {
-    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.PENDING })).toBe(true);
-    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.APPROVED })).toBe(true);
+    expect(canPublishWithIdentity({ ...completeDriver, status: IDENTITY_STATUS.PENDING })).toBe(true);
+    expect(canPublishWithIdentity({ ...completeDriver, status: IDENTITY_STATUS.APPROVED })).toBe(true);
   });
 
   it('pauses publishing when the stored licence has lapsed', () => {
@@ -150,22 +152,22 @@ describe('publish gate', () => {
 
   // A submission made before the licence moved onto this record has no expiry
   // stored; unknown must not read as lapsed.
-  it('treats a submission with no expiry on record as still valid', () => {
-    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.APPROVED, licenseExpiry: '' })).toBe(true);
+  it('requires an expiry for driver publishing', () => {
+    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.APPROVED, licenseExpiry: '' })).toBe(false);
     expect(identityLicenseHasLapsed({ status: IDENTITY_STATUS.APPROVED })).toBe(false);
   });
 
   // Same fail-open rule VehicleService uses for undeployed columns: a missing
   // migration must not take Ride publishing down.
-  it('stays open when migration 093 is not deployed', () => {
-    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.NONE, deploymentPending: true })).toBe(true);
+  it('blocks when the identity contract is unavailable', () => {
+    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.NONE, deploymentPending: true })).toBe(false);
   });
 
   // A heads-up, not a gate: publishing stays unlocked while the licence is
   // merely close to lapsing, so a Host only ever learns about the deadline
   // early, never gets blocked by this warning itself.
   it('warns before a licence lapses without blocking publishing yet', () => {
-    const expiringSoon = { status: IDENTITY_STATUS.APPROVED, licenseExpiry: daysFromNow(15) };
+    const expiringSoon = { ...completeDriver, status: IDENTITY_STATUS.APPROVED, licenseExpiry: daysFromNow(15) };
     expect(canPublishWithIdentity(expiringSoon)).toBe(true);
     expect(identityLicenseExpiringSoon(expiringSoon)).toBe(true);
     expect(identityLicenseHasLapsed(expiringSoon)).toBe(false);
@@ -183,7 +185,7 @@ describe('publish gate', () => {
   });
 
   it('unlocks publishing once the MyKad birth date clears the minimum age', () => {
-    const oldEnough = { status: IDENTITY_STATUS.APPROVED, icNumber: '050615-14-5678' }; // 21 as of 2026
+    const oldEnough = { ...completeDriver, status: IDENTITY_STATUS.APPROVED, icNumber: '050615-14-5678' }; // 21 as of 2026
     expect(canPublishWithIdentity(oldEnough)).toBe(true);
     expect(identityBelowDrivingAge(oldEnough)).toBe(false);
   });
@@ -192,7 +194,7 @@ describe('publish gate', () => {
   // only exercises a partial state, matching the missing-expiry fail-open
   // case above.
   it('does not block on age when no MyKad number is on the state at all', () => {
-    expect(canPublishWithIdentity({ status: IDENTITY_STATUS.PENDING })).toBe(true);
+    expect(canPublishWithIdentity({ ...completeDriver, status: IDENTITY_STATUS.PENDING })).toBe(true);
     expect(identityBelowDrivingAge({ status: IDENTITY_STATUS.PENDING })).toBe(false);
   });
 
@@ -214,7 +216,7 @@ describe('admin review (offline path)', () => {
   });
 
   it('lists a submitted document under the requested status and approves it', async () => {
-    const submission = { file: photo(), icNumber: '910203-14-5566', licenseExpiry: '2099-12-31' };
+    const submission = { file: photo(), licenseFile: photo(), icNumber: '910203-14-5566', licenseExpiry: '2099-12-31' };
     await IdentityVerificationService.submit('user-admin-review', submission);
 
     const pending = await IdentityVerificationService.adminListSubmissions(IDENTITY_STATUS.PENDING);
@@ -232,7 +234,7 @@ describe('admin review (offline path)', () => {
   });
 
   it('records a reviewer note on rejection', async () => {
-    const submission = { file: photo(), icNumber: '850707-08-1122', licenseExpiry: '2099-12-31' };
+    const submission = { file: photo(), licenseFile: photo(), icNumber: '850707-08-1122', licenseExpiry: '2099-12-31' };
     await IdentityVerificationService.submit('user-admin-reject', submission);
 
     await IdentityVerificationService.adminReview('user-admin-reject', IDENTITY_STATUS.REJECTED, 'Blurry photo.');
@@ -296,6 +298,16 @@ describe('Module 1 identity verification SQL contract', () => {
   it('grants a table-level update so .upsert() no longer hits 42501', async () => {
     const sql = await read('../../../database/sql/095_m1_grant_table_level_identity_verifications_update.sql');
     expect(sql).toContain('grant update on table public.identity_verifications to authenticated;');
+  });
+
+  // The live database later drifted back to 093_m1's original three-column
+  // INSERT grant. The same upsert also inserts the two 094_m1 identity fields,
+  // so 099_m1 restores only those missing columns while owner RLS stays intact.
+  it('grants identity fields required by the submission upsert', async () => {
+    const sql = await read('../../../database/sql/099_m1_restore_identity_insert_privileges.sql');
+    expect(sql).toContain('grant insert (ic_number, license_expiry)');
+    expect(sql).toContain('on table public.identity_verifications to authenticated;');
+    expect(sql).not.toMatch(/grant insert on table public\.identity_verifications/i);
   });
 
   // A second account reusing an already-registered MyKad number is a fraud

@@ -5,13 +5,13 @@
 // reference. All five screens are Module 1 data about the same user, so this
 // is one read/write surface instead of five.
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ProfileService } from '../../business-logic/ProfileService.js';
 import { VehicleService } from '../../business-logic/VehicleService.js';
 import { HostImpactEngine } from '../../business-logic/HostImpactEngine.js';
 import { ReputationService } from '../../business-logic/ReputationService.js';
-import { IdentityVerificationService } from '../../business-logic/IdentityVerificationService.js';
+import { canPublishWithIdentity, IdentityVerificationService } from '../../business-logic/IdentityVerificationService.js';
 import IdentityVerificationCard from './profile/IdentityVerificationCard.jsx';
 import { describeReputationEvent, REPUTATION_POLICY } from '../../business-logic/ReputationPolicy.js';
 import { sharePublicProfile } from '../../business-logic/ProfileShareService.js';
@@ -48,7 +48,10 @@ function initialsOf(name) {
 export default function MyProfile() {
   const { user, setUser, signOut } = useAuth();
   const navigate = useNavigate();
-  const [panel, setPanel] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedPanel = searchParams.get('panel');
+  const panel = RAIL_ITEMS.some((item) => item.id === requestedPanel) ? requestedPanel : 'overview';
+  const setPanel = (value) => setSearchParams((params) => { params.set('panel', value); return params; });
   const [vehicles, setVehicles] = useState([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(true);
   const [summary, setSummary] = useState(null);
@@ -568,14 +571,40 @@ function EmergencyContactCard({ user, onSaved }) {
 const emptyVehicleForm = { id: null, make: '', model: '', vehicleType: '', plate: '', colour: '', seats: 4, year: new Date().getFullYear() };
 
 function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount }) {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const requestedReturn = params.get('returnTo') || '';
+  const returnTo = /^\/ride\/(?:[a-zA-Z0-9_-]+\/)?publish$/.test(requestedReturn) ? requestedReturn : '';
+  const [identity, setIdentity] = useState(null);
+  const [identityError, setIdentityError] = useState('');
+  const [documentStep, setDocumentStep] = useState(false);
+  const [addingAfterDocuments, setAddingAfterDocuments] = useState(false);
+  const [saving, setSaving] = useState(false);
+  async function loadIdentity() {
+    setIdentityError('');
+    try { setIdentity(await IdentityVerificationService.getStatus(userId)); }
+    catch (cause) { setIdentityError(cause.message); }
+  }
+  useEffect(() => { loadIdentity(); }, [userId]);
+  const driverReady = canPublishWithIdentity(identity);
+  function addVehicle() {
+    setError('');
+    setNotice('');
+    if (driverReady) setForm(emptyVehicleForm);
+    else { setAddingAfterDocuments(true); setDocumentStep(true); }
+  }
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
   async function handleSave(e) {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     setError('');
     try {
+      const current = await IdentityVerificationService.getStatus(userId);
+      if (!canPublishWithIdentity(current)) throw new Error('Complete your driver documents before saving a vehicle.');
       const saved = await VehicleService.saveVehicle(userId, { ...form, seats: Number(form.seats), year: Number(form.year) });
       // The vehicle is stored either way; say so plainly when the category
       // could not be, rather than letting the chosen value disappear.
@@ -586,6 +615,8 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
       await refresh();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -604,11 +635,35 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
     <>
       <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div><h2>My Vehicles</h2><p>Manage vehicles available for your rides</p></div>
-        <button className="btn-primary" style={{ width: 'auto', padding: '9px 16px' }} onClick={() => { setError(''); setNotice(''); setForm(emptyVehicleForm); }}>
+        <button className="btn-primary" style={{ width: 'auto', padding: '9px 16px' }} disabled={!identity || Boolean(identityError) || documentStep || saving} onClick={addVehicle}>
           <IconPlus size={13} /> Add Vehicle
         </button>
       </div>
 
+      {identityError && <div role="alert" className="alert alert-error">{identityError} <button type="button" onClick={loadIdentity}>Retry</button></div>}
+      {!identity && !identityError && <p role="status">Checking driver documents…</p>}
+      {identity && !documentStep && <div className="card">
+        <h3>Driver documents</h3>
+        <p>{driverReady ? 'Your driver documents are complete.' : 'Complete your MyKad and driving licence documents before hosting.'}</p>
+        <button type="button" className="btn-secondary" onClick={() => { setAddingAfterDocuments(false); setDocumentStep(true); }}>
+          {driverReady ? 'Update driver documents' : 'Complete driver documents'}
+        </button>
+      </div>}
+      {documentStep && identity && <>
+        <p>{addingAfterDocuments ? 'Step 1 of 2: Driver documents' : 'Complete driver documents'}</p>
+        <IdentityVerificationCard key={identity.submittedAt || 'new'} userId={userId} state={identity} mode="driver"
+          onCancel={() => { setDocumentStep(false); setAddingAfterDocuments(false); }}
+          onSubmitted={(next) => {
+            setIdentity(next);
+            setDocumentStep(false);
+            setNotice('Driver documents submitted. Awaiting review.');
+            if (addingAfterDocuments) setForm(emptyVehicleForm);
+            setAddingAfterDocuments(false);
+          }} />
+      </>}
+      {returnTo && driverReady && vehicles.length > 0 && !documentStep && !form && (
+        <button type="button" className="btn-primary" onClick={() => navigate(returnTo)}>Continue to Publish Ride</button>
+      )}
       <div className="grid-3">
         <div className="card snap-card">
           <span className="snap-icon"><IconCar size={16} /></span>
@@ -635,7 +690,7 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
 
       {form && (
         <div className="card">
-          <p className="card-title">{form.id ? 'Edit Vehicle' : 'Add Vehicle'}</p>
+          <p className="card-title">{form.id ? 'Edit Vehicle' : 'Step 2 of 2: Add Vehicle'}</p>
           {error && <div className="alert alert-error">{error}</div>}
           <form onSubmit={handleSave}>
             <div className="field"><label>Make</label><div className="input-wrap"><input value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} required /></div></div>
@@ -646,7 +701,7 @@ function VehiclesPanel({ vehicles, loading, userId, refresh, activeVehicleCount 
             <div className="field"><label>Seats available</label><div className="input-wrap"><input type="number" min="1" max="8" value={form.seats} onChange={(e) => setForm({ ...form, seats: e.target.value })} required /></div></div>
             <div className="field"><label>Year</label><div className="input-wrap"><input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} required /></div></div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }}>Save Vehicle</button>
+              <button className="btn-primary" disabled={saving} style={{ width: 'auto', padding: '10px 20px' }}>{saving ? 'Saving…' : 'Save Vehicle'}</button>
               <button type="button" className="btn-secondary" onClick={() => setForm(null)}>Cancel</button>
             </div>
           </form>

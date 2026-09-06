@@ -18,6 +18,7 @@ import {
   isIdentityReviewAdmin
 } from '../../../business-logic/IdentityVerificationService.js';
 import { ProfileService } from '../../../business-logic/ProfileService.js';
+import { IdentityDocumentPreview } from '../profile/IdentityVerificationCard.jsx';
 import { Chip } from '../ui/Primitives.jsx';
 
 const STATUS_TABS = [IDENTITY_STATUS.PENDING, IDENTITY_STATUS.APPROVED, IDENTITY_STATUS.REJECTED];
@@ -30,17 +31,6 @@ function SubmissionCard({ submission, onReviewed }) {
   const [error, setError] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState('');
-
-  async function openPhoto() {
-    setError('');
-    try {
-      const url = await IdentityVerificationService.previewUrl(submission.documentPath);
-      if (!url) { setError('No photo on file for this submission.'); return; }
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (cause) {
-      setError(cause.message || 'Could not open the photo.');
-    }
-  }
 
   async function review(outcome, reviewNote) {
     setBusy(true);
@@ -74,9 +64,8 @@ function SubmissionCard({ submission, onReviewed }) {
       {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <button type="button" className="btn-secondary" style={BUTTON_STYLE} onClick={openPhoto} disabled={busy}>
-          View photo
-        </button>
+        <IdentityDocumentPreview path={submission.documentPath} label="MyKad photo" />
+        <IdentityDocumentPreview path={submission.licenseDocumentPath} label="Driving licence photo" />
         {submission.status !== IDENTITY_STATUS.APPROVED && (
           <button
             type="button"

@@ -22,6 +22,18 @@ Module 1 eligibility/profile/vehicle; Google Maps; Module 3 group membership aft
 ## Provides
 Ride data, accepted participation context, lifecycle state, searchable rides.
 
+## Driver onboarding update (2026-09-06)
+
+PublishRide no longer embeds an identity upload form. Missing vehicles route
+to Profile > My Vehicles with an Add Vehicle message; existing owners missing
+driver documents receive Complete driver documents. The return query preserves
+the original publish/draft route. The frontend requires both photos, IC number,
+current expiry, age and existing reputation eligibility. Pending submissions
+remain eligible; rejected submissions are blocked. Location permission is not
+requested before eligibility passes. Passenger requests still require only IC.
+The server activation migration 102 is pending frontend release; 100/101's
+compatible submission contract is already deployed.
+
 ## Current Status
 Module 2 is connected to the shared Supabase project through `RideService.js`,
 `RideRequestService.js`, and `RideReviewService.js`. Deployed SQL `006-015`,

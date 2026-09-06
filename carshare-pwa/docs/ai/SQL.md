@@ -14,11 +14,12 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 search/favourites and favourite availability alerts
 Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m4, 068_m4,
-  069_project, 070_project, 072_m1, 073_m1, 074_m1, and 082_m4 as tracked Supabase
+  069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, and 099_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-097 (`087_m1`, `088_m1`, `093_m1`, `094_m1`,
-  `095_m1`, `096_m1` and `097_m1` are authored and not deployed)
+Repository SQL history: 001-102 (`087_m1` and `088_m1` are authored and not
+  deployed; `093_m1`-`097_m1` are live without tracked migration entries;
+  `099_m1` is deployed as a tracked migration)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -58,9 +59,32 @@ rejects that column-restricted `update` grant for the
 confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
-is authored locally, not yet deployed, and grants that. `082_m4` is deployed;
-the next unused repository sequence is `093`.)
+is authored locally, not yet deployed, and grants that. `082_m4` and `099_m1`
+are deployed; the next unused repository sequence is `103`.)
 ```
+
+### Driver document rollout (2026-09-06)
+
+- `100_m1_driver_document_submission.sql` is deployed as
+  `20260906072749_m1_driver_document_submission`; adds nullable
+  `license_document_path` and the authenticated SECURITY INVOKER RPC
+  `submit_identity_documents(text,text,date,text,boolean)`. It verifies owner
+  Storage paths/objects, preserves driver fields during passenger submissions,
+  and resets submission/review timestamps and status to pending.
+- `101_m1_validate_driver_document_birth_date.sql` is deployed as
+  `20260906073043_m1_validate_driver_document_birth_date`; replaces the RPC's
+  date validation with inferred-century `make_date`, including leap birthdays,
+  and rejects underage driver submissions. Apply 100 then 101.
+- `102_m1_require_driver_documents_to_publish.sql` is authored, NOT deployed.
+  Activate after the new frontend is released. It checks both stored owner
+  photos, number, expiry and age on transitions into Published only. Existing
+  published rides remain untouched. The current live trigger still checks the
+  earlier identity status rule until this activation.
+- Live checks confirm private bucket, RLS, authenticated column grants,
+  no anonymous read/RPC execution and SECURITY INVOKER submission. Transactional
+  negative checks cover missing session, other-owner photo paths and underage
+  submissions without retaining test data. Real signed-in upload acceptance
+  and frontend deployment still need the target Netlify site.
 
 The repository has one documented historical numbering collision at `075`
 (`075_m3_conversation_lifecycle_redesign.sql` and the deployed
@@ -676,7 +700,8 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
   `reputation_hold` reachable for the first time since `072_m1` defined them,
   without a client-facing admin surface.
-- `094_m1_identity_holds_the_licence.sql` - authored, not deployed; adds
+- `094_m1_identity_holds_the_licence.sql` - live without a tracked migration
+  entry; adds
   `ic_number` and `license_expiry` to `identity_verifications` so the MyKad is
   entered once instead of on every vehicle, drops the `088_m1`
   `enforce_ride_driver_license_before_publish` trigger, and folds the expiry
@@ -684,20 +709,20 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   expiry recorded is treated as valid, not lapsed.
   `vehicles.driver_license_number`/`driver_license_expiry` are deliberately
   left in place and unused.
-- `095_m1_grant_table_level_identity_verifications_update.sql` - authored, not
-  deployed; `094_m1` only granted a column-restricted UPDATE, which Postgres
+- `095_m1_grant_table_level_identity_verifications_update.sql` - live without a
+  tracked migration entry; `094_m1` only granted a column-restricted UPDATE, which Postgres
   refuses for the `INSERT ... ON CONFLICT DO UPDATE` supabase-js's `.upsert()`
   emits (`42501 permission denied`) - the same trap `071_project` hit on
   `profile_visibility`. Grants the plain table-level UPDATE that shape needs;
   RLS still does the real gatekeeping.
-- `096_m1_unique_ic_number.sql` - authored, not deployed; a partial unique
+- `096_m1_unique_ic_number.sql` - live without a tracked migration entry; a partial unique
   index on `identity_verifications.ic_number` (`where ic_number is not null`)
   so a rejected or reputation-damaged member cannot sign up again under a new
   email and resubmit the same MyKad. Partial rather than a bare constraint so
   legacy rows with no stored number (pre-`094_m1`) never collide on null. A
   member's own resubmission keeps their existing row via `093_m1`'s
   `onConflict: 'user_id'` upsert, so this only ever blocks a second account.
-- `097_m1_admin_identity_review.sql` - authored, not deployed; adds a single
+- `097_m1_admin_identity_review.sql` - live without a tracked migration entry; adds a single
   email-allowlisted admin path for the review surface `093_m1` deliberately
   left service-role-only. `private.is_identity_review_admin()` checks
   `auth.email()` against a hardcoded array (currently seven team emails) -
@@ -711,7 +736,16 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `private.review_identity_verification`, which itself keeps zero grants to
   `anon`/`authenticated`. Depends on `093_m1` (table/bucket) being deployed
   first.
-- `093_m1_identity_document_verification.sql` - authored, not deployed;
+- `099_m1_restore_identity_insert_privileges.sql` - deployed and live-verified
+  on 2026-09-06 as tracked migration `m1_restore_identity_insert_privileges`
+  (`20260906065405`). The live ACL had drifted back to `093_m1`'s original
+  three-column INSERT grant, so the submission upsert was rejected before RLS
+  when it included `ic_number` and `license_expiry`. `099_m1` restores only
+  those two column privileges. Live verification confirms both are granted,
+  broad table INSERT remains false for `authenticated` and `anon`, RLS remains
+  enabled, and the owner INSERT/UPDATE policies remain present.
+- `093_m1_identity_document_verification.sql` - live without a tracked migration
+  entry;
   moves identity verification from sign-up to the point of use (D035). Adds the
   PRIVATE `identity-documents` bucket with owner-folder Storage policies and no
   anon policy, `public.identity_verifications` (owner may only ever insert or
