@@ -7,8 +7,42 @@ import {
   DEFAULT_PROFILE_VISIBILITY,
   normalizeProfileVisibility
 } from './PublicProfilePolicy.js';
+// Module 2 read-only lookups, for the active-obligations check below (UC1.11).
+// This is the same cross-module pattern HomeScreen.jsx already uses for its
+// account status strip - ProfileService only reads these, it never writes them.
+import { RideService } from './RideService.js';
+import { RideRequestService } from './RideRequestService.js';
+
+// A host mid-ride-lifecycle, or a traveller with a request still in play,
+// has an obligation to someone else on the platform that deactivating would
+// silently strand. Draft/terminal statuses carry no such obligation.
+const ACTIVE_HOST_RIDE_STATUSES = ['Published', 'Matched', 'In Transit'];
+const ACTIVE_RIDE_REQUEST_STATUSES = ['Pending', 'Accepted'];
 
 const EMPTY_EMERGENCY_CONTACT = { name: '', phone: '', relationship: '' };
+
+// Same lenient-but-real shape as the phone placeholder already shown in the
+// form ("+60 19-876 5432" / "0104507792") - local (0...) or international
+// (+60.../60...) form, spaces and dashes ignored. Not a full JPJ/MCMC
+// numbering-plan check, matching malaysianIdentity.js's own "structure only"
+// stance on MyKad numbers.
+const MALAYSIAN_PHONE_SHAPE = /^(\+?60|0)[1-9]\d{7,9}$/;
+
+export function normalizePhoneDigits(value) {
+  return (value || '').replace(/[\s-]/g, '');
+}
+
+export function validateMalaysianPhone(value) {
+  return MALAYSIAN_PHONE_SHAPE.test(normalizePhoneDigits(value));
+}
+
+// Collapses the local and international spellings of the same number to one
+// form, so "012-345 6789" and "+60123456789" compare equal.
+export function canonicalMalaysianPhone(value) {
+  const digitsOnly = normalizePhoneDigits(value).replace(/\D/g, '');
+  if (digitsOnly.startsWith('60') && digitsOnly.length > 10) return `0${digitsOnly.slice(2)}`;
+  return digitsOnly;
+}
 const PROFILE_SELECT = `
   id,
   full_name,
@@ -241,7 +275,18 @@ export const ProfileService = {
     return mockDb.changePassword(userId, currentPassword, newPassword);
   },
 
-  async updateEmergencyContact(userId, contact) {
+  // ownPhone comes from the caller's already-loaded profile (UC1.10) rather
+  // than a fresh fetch here - this guards against a typo, not an attack, so
+  // the extra round trip isn't worth it.
+  async updateEmergencyContact(userId, contact, { ownPhone } = {}) {
+    const phone = contact?.phone || '';
+    if (phone && !validateMalaysianPhone(phone)) {
+      throw new Error('Enter a valid phone number, e.g. 012-345 6789 or +60 12-345 6789.');
+    }
+    if (phone && ownPhone && canonicalMalaysianPhone(phone) === canonicalMalaysianPhone(ownPhone)) {
+      throw new Error('Your emergency contact cannot be your own phone number.');
+    }
+
     if (isSupabaseConfigured) {
       const { error } = await supabase
         .from('profile_private')
@@ -282,8 +327,48 @@ export const ProfileService = {
     return mockDb.updateProfile(userId, { profilePhotoUrl: dataUrl });
   },
 
-  async deactivateAccount(userId) {
+  // Blocks deactivation while the member still has an obligation to someone
+  // else on the platform (UC1.11's active-obligations check). Reads only -
+  // Module 2's own services already abstract mock vs Supabase, so this one
+  // check works unchanged on both backends.
+  async assertNoActiveObligations(userId) {
+    const [rides, requests] = await Promise.all([
+      RideService.listMyRides(userId).catch(() => ({ hosting: [] })),
+      RideRequestService.listMyRequests(userId).catch(() => [])
+    ]);
+    const hasActiveRide = (rides?.hosting || []).some((ride) => ACTIVE_HOST_RIDE_STATUSES.includes(ride.status));
+    const hasActiveRequest = (requests || []).some((request) => ACTIVE_RIDE_REQUEST_STATUSES.includes(request.status));
+    if (hasActiveRide || hasActiveRequest) {
+      const error = new Error(
+        'You cannot deactivate your account with an active ride or a pending request. Please resolve them first.'
+      );
+      error.code = 'ACCOUNT_HAS_ACTIVE_OBLIGATIONS';
+      throw error;
+    }
+  },
+
+  // currentPassword is required for a password-based account, re-verified via
+  // sign-in exactly like changePassword() above - the confirmation dialog
+  // itself is presentation-layer (MyProfile.jsx), this is what actually
+  // enforces it. A Google-only account has no password to check, so it skips
+  // straight to the obligations check.
+  async deactivateAccount(userId, { currentPassword } = {}) {
+    await ProfileService.assertNoActiveObligations(userId);
+
     if (isSupabaseConfigured) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      const hasPassword = (userData.user?.identities || []).some((identity) => identity.provider === 'email');
+
+      if (hasPassword) {
+        if (!currentPassword) throw new Error('Enter your password to confirm.');
+        const { error: verifyError } = await supabase.auth.signInWithPassword({
+          email: userData.user.email,
+          password: currentPassword
+        });
+        if (verifyError) throw new Error('Current password is incorrect.');
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update({ status: 'deactivated' })
@@ -291,6 +376,8 @@ export const ProfileService = {
       if (error) throw error;
       return true;
     }
+
+    await mockDb.verifyPassword(userId, currentPassword);
     await mockDb.setAccountStatus(userId, 'deactivated');
     return true;
   },

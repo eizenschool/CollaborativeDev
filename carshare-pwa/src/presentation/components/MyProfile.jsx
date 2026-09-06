@@ -518,7 +518,7 @@ function EmergencyContactCard({ user, onSaved }) {
     setSaving(true);
     setStatus(null);
     try {
-      const updated = await ProfileService.updateEmergencyContact(user.id, { name, phone, relationship });
+      const updated = await ProfileService.updateEmergencyContact(user.id, { name, phone, relationship }, { ownPhone: user?.phone });
       onSaved(updated);
       setStatus({ type: 'success', text: 'Emergency contact saved.' });
     } catch (err) {
@@ -895,13 +895,16 @@ function ProfileVisibilityCard({ user }) {
 
 function AccountSettingsPanel({ user }) {
   const { signOut } = useAuth();
+  const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const deactivateTriggerRef = useRef(null);
 
   function openConfirm() {
     setError('');
+    setPassword('');
     setConfirm(true);
   }
 
@@ -909,8 +912,12 @@ function AccountSettingsPanel({ user }) {
     setBusy(true);
     setError('');
     try {
-      await ProfileService.deactivateAccount(user.id);
+      await ProfileService.deactivateAccount(user.id, { currentPassword: password });
       await signOut();
+      // Matches TopNav's own handleSignOut - /profile is RequireAuth-guarded,
+      // so without this the deactivated session would otherwise land on the
+      // sign-in screen rather than the public homepage.
+      navigate('/home', { replace: true });
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -952,7 +959,21 @@ function AccountSettingsPanel({ user }) {
       >
         <div className="profile-deactivate-warning">
           <IconAlertTriangle size={22} aria-hidden="true" />
-          <p>Your profile will be hidden and ride hosting paused until you sign in again.</p>
+          <p>Your profile will be hidden and ride hosting paused until you sign in again. You cannot deactivate with an active ride or pending request still open.</p>
+        </div>
+        <div className="field" style={{ marginTop: 12 }}>
+          <label htmlFor="deactivate-password">Confirm your password</label>
+          <div className="input-wrap">
+            <input
+              id="deactivate-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => { setPassword(event.target.value); setError(''); }}
+              disabled={busy}
+            />
+          </div>
+          <p className="card-subtitle" style={{ marginBottom: 0 }}>Leave blank if you signed in with Google.</p>
         </div>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
       </AdaptiveDialog>
