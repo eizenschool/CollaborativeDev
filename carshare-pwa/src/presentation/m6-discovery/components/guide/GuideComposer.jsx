@@ -8,7 +8,7 @@
 // "Voice input" label exists specifically so the two are not confused with
 // each other, which was previously a real source of the "language switching
 // felt broken" reports.
-import { IconButton } from '../../../shared/components/ui/Button.jsx';
+import { Button, IconButton } from '../../../shared/components/ui/Button.jsx';
 import { IconMicrophone, IconSend, IconStop } from '../../../shared/components/icons.jsx';
 
 const GUIDE_SPEECH_LANGUAGE_OPTIONS = Object.freeze([
@@ -37,7 +37,7 @@ export default function GuideComposer({
           maxLength="1200"
           value={draft}
           onChange={(event) => onDraftChange(event.target.value)}
-          placeholder=""
+          placeholder={copy.composerPlaceholder || 'Tell me what you have in mind…'}
         />
         <label className="guide-voice-language">
           <span className="guide-voice-language__label">{copy.voiceInputLabel || 'Voice input'}</span>
@@ -58,9 +58,9 @@ export default function GuideComposer({
         >
           {speech.listening ? <IconStop size={19} /> : <IconMicrophone size={19} />}
         </IconButton>
-        <IconButton label={copy.sendMessage} variant="primary" type="submit" disabled={busy || !draft.trim()}>
-          <IconSend size={19} />
-        </IconButton>
+        <Button variant="primary" type="submit" disabled={busy || !draft.trim()}>
+          <IconSend size={19} /> {copy.sendMessage}
+        </Button>
       </div>
       {voicePreview && <small className="guide-voice-preview" aria-live="polite">{voicePreview}</small>}
       <small>{copy.voiceNote}</small>

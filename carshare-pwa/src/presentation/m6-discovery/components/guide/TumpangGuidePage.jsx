@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../shared/context/AuthContext.jsx';
-import { resolveCurrentLocation } from '../../../../business-logic/shared/GooglePlacesService.js';
 import { TumpangGuideService } from '../../../../business-logic/m6-discovery/guide/TumpangGuideService.js';
 import { GUIDE_ACTION, GUIDE_CORE_LANGUAGES, GUIDE_LANGUAGES, GUIDE_LIMITS, GUIDE_STORAGE } from '../../../../business-logic/m6-discovery/guide/constants.js';
 import {
@@ -237,8 +236,6 @@ export default function TumpangGuidePage() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [locationBusy, setLocationBusy] = useState(false);
-  const [locationError, setLocationError] = useState('');
   const [onboardingOpen, setOnboardingOpen] = useState(() => !onboardingSeen());
   const [pendingAction, setPendingAction] = useState(null);
   const [actionStates, setActionStates] = useState({});
@@ -627,7 +624,6 @@ export default function TumpangGuidePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, requestedSessionId, currentCopy.sessionDeletedElsewhere]);
 
-  const useCurrentLocation = async () => { setLocationBusy(true); setLocationError(''); try { const resolved = await resolveCurrentLocation(); setPlanState((current) => normalizePlanState({ ...current, origin: { label: resolved.label, placeId: resolved.location.placeId, lat: resolved.location.latitude, lng: resolved.location.longitude } })); } catch (error) { setLocationError(error?.message || currentCopy.actionFailed); } finally { setLocationBusy(false); } };
 
   const requestAction = (type, recommendation, cardPlan) => {
     if (!user) { navigate('/auth', { state: { from: '/assistant', reason: 'Sign in before saving a Tumpang Guide action.' } }); return; }
@@ -702,7 +698,7 @@ export default function TumpangGuidePage() {
 
       <GuideToolbar hasConversation={hasConversation} languageBusy={languageBusy} copy={currentCopy} onNewChat={startNewChat} />
 
-      <section className="guide-chat" aria-label={`Tumpang Guide · ${currentCopy.smart}`}>
+      <section className={`guide-chat${hasConversation ? '' : ' guide-chat--welcome'}`} aria-label={`Tumpang Guide · ${currentCopy.smart}`}>
         <GuideTranscript
           messages={messages} copy={currentCopy} language={language} languagePack={languagePack}
           unlimitedTurns={Boolean(user)} actionStates={actionStates} feedbackStates={feedbackStates}
@@ -716,8 +712,7 @@ export default function TumpangGuidePage() {
         <div className="guide-dock">
           <GuideContextBar
             plan={planState} copy={currentCopy} language={language} languagePack={languagePack}
-            onChange={setPlanState} onUseLocation={useCurrentLocation} onSavePreferences={requestPreferenceSave}
-            locationBusy={locationBusy} locationError={locationError} canSave={Boolean(user)}
+            onChange={setPlanState} onSavePreferences={requestPreferenceSave} canSave={Boolean(user)}
           />
           <GuideComposer
             copy={currentCopy} draft={draft} onDraftChange={handleDraftChange} onSubmit={() => send()}

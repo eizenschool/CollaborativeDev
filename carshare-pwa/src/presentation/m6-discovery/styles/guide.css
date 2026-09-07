@@ -1,6 +1,16 @@
 /* Module 6: Tumpang Guide. Every selector is namespaced; shared tokens and
    primitives remain untouched. */
 .guide-page, .guide-page * { box-sizing: border-box; }
+/* Keep the first message close to a clearly outlined, full-width composer. */
+.guide-chat.guide-chat--welcome .guide-chat__messages { min-height: 120px; }
+.guide-page .guide-composer { gap: 12px; }
+.guide-page .guide-composer__header label { font-size: 16px; }
+.guide-page .guide-composer__input-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; }
+.guide-page .guide-composer textarea { grid-column: 1 / -1; min-height: 112px; padding: 16px; border: 2px solid var(--teal); border-radius: 16px; background: #fff; color: var(--ink); font: inherit; font-size: 16px; line-height: 1.6; }
+.guide-page .guide-composer textarea::placeholder { color: var(--muted); opacity: 1; }
+.guide-page .guide-composer textarea:focus { outline: 3px solid var(--teal-tint); outline-offset: 3px; }
+.guide-page .guide-voice-language { max-width: 180px; }
+.guide-page .guide-voice-language select { min-height: 44px; }
 .guide-page { width: min(100%, 1380px); min-width: 0; max-width: 1380px; margin: 0 auto; padding: 24px clamp(16px, 3vw, 36px) calc(56px + env(safe-area-inset-bottom)); overflow-wrap: anywhere; }
 .guide-page h1, .guide-page h2, .guide-page h3 { font-family: var(--font-display); margin-top: 0; color: var(--ink); }
 .guide-eyebrow { margin: 0 0 8px; font-size: 12px; font-weight: 800; letter-spacing: .16em; color: var(--teal-dark); }
@@ -32,9 +42,15 @@
 .guide-context-bar__edit { flex: none; display: inline-flex; align-items: center; color: var(--teal-dark); }
 .guide-trip-badge { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--teal-dark); background: var(--teal-tint); }
 /* Field styling reused inside the context bar's edit dialog. */
-.guide-plan-fields { display: grid; gap: 16px; min-width: 0; }
+.guide-plan-fields { display: grid; gap: 20px; min-width: 0; }
 .guide-plan-fields label, .guide-plan-fields fieldset { display: grid; gap: 6px; min-width: 0; margin: 0; border: 0; padding: 0; color: var(--ink); font-size: 13px; font-weight: 750; }
-.guide-plan-fields input, .guide-plan-fields select { display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: #fff; font-size: 16px; }
+.guide-plan-fields input, .guide-plan-fields select { display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; font-size: 16px; }
+.guide-plan-fields input:not([type="checkbox"]), .guide-plan-fields select { min-height: 52px; border: 1px solid color-mix(in srgb, var(--muted) 45%, white); border-radius: 12px; background: var(--bg); color: var(--ink); font-family: var(--font); font-weight: 400; }
+.guide-plan-fields input:not([type="checkbox"]):hover, .guide-plan-fields select:hover { border-color: var(--teal); }
+.guide-plan-fields input:not([type="checkbox"]):focus, .guide-plan-fields select:focus { border-color: var(--teal); outline: 3px solid var(--teal-tint); outline-offset: 2px; box-shadow: none; }
+.guide-plan-fields fieldset legend { margin-bottom: 10px; }
+.guide-plan-fields .current-location-button { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; margin-top: 12px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--teal-tint); color: var(--teal-dark); font: inherit; font-weight: 700; cursor: pointer; }
+.guide-plan-fields .current-location-button:disabled { opacity: .6; cursor: wait; }
 /* ConfirmedLocationInput manages its own icon-padded input (see .input-wrap
    input in theme.css); the generic rule above matches equal specificity and
    loads later, so it must not overwrite that left padding here. */

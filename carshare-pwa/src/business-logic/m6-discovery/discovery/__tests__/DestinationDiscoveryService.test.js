@@ -144,6 +144,28 @@ describe('FR-6.26 - chain detection reaches the score', () => {
   });
 });
 
+describe('getDestination - dated and undated ride availability', () => {
+  beforeEach(() => discoveryDb.__reset());
+
+  it('shows only rides on the requested date', async () => {
+    const quietDay = await DestinationDiscoveryService.getDestination('p_georgetown', {
+      userId: 'u_demo_1', origin: KL, travelDate: '2026-08-14'
+    });
+
+    expect(quietDay.candidate.rides).toHaveLength(0);
+    expect(quietDay.rides).toHaveLength(0);
+  });
+
+  it('shows rides across all dates when Detail has no ride date', async () => {
+    const undated = await DestinationDiscoveryService.getDestination('p_georgetown', {
+      userId: 'u_demo_1', origin: KL, travelDate: '2026-08-14', rideDate: null
+    });
+
+    expect(undated.rides.map((ride) => ride.id)).toContain('r_1');
+    expect(undated.rides[0].date).toBe(RIDE_DATE);
+  });
+});
+
 describe('FR-6.16 - thin data is ranked down, not dressed up', () => {
   beforeEach(() => discoveryDb.__reset());
 

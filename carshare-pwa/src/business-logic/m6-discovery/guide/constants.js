@@ -139,9 +139,12 @@ const hasLiveDiscoverySource = String(import.meta.env.VITE_DISCOVERY_DATA_SOURCE
   .trim().toLowerCase() === 'supabase';
 export const GUIDE_LIVE_CATALOGUE_MODE = GUIDE_LIVE_MODE && hasLiveDiscoverySource;
 
+// Plain Vite builds (including a dist folder uploaded to Netlify) do not read
+// netlify.toml. Enable configured live builds by default; retain an explicit
+// production maintenance switch instead of requiring a host-specific opt-in.
 export const GUIDE_FEATURE_ENABLED = import.meta.env.DEV
   || fixtureBuild
-  || (import.meta.env.VITE_TUMPANG_GUIDE_ENABLED === 'true' && GUIDE_LIVE_MODE);
+  || (import.meta.env.VITE_TUMPANG_GUIDE_ENABLED !== 'false' && GUIDE_LIVE_MODE);
 
 // QA controls are visible during local development and still require the
 // Edge Function's account allowlist in a deployed environment. This flag is

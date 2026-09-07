@@ -23,19 +23,7 @@ function normalise(text) {
   return String(text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-/**
- * Does a ride's free-text destination refer to this catalogue place?
- *
- * Matching is by text because Module 2 stores a typed destination string while
- * the catalogue stores a place record - there is no shared key yet. Places carry
- * explicit `rideDestinationAliases` for the cases text alone cannot bridge
- * ("Georgetown, Penang" as typed by a Host vs "George Town Heritage Core" as
- * named by the source).
- *
- * This whole function disappears once ingestion is live: both sides will carry
- * the same Google Place ID and this becomes an equality check. It is confined to
- * the adapter precisely so that swap touches one file.
- */
+/** Does legacy free-text destination data refer to this catalogue place? */
 export function referencesPlace(rideDestination, place) {
   const destination = normalise(rideDestination);
   if (!destination) return false;
@@ -44,6 +32,28 @@ export function referencesPlace(rideDestination, place) {
   return candidates.some((candidate) =>
     candidate && (destination.includes(candidate) || candidate.includes(destination))
   );
+}
+
+/**
+ * Match a published ride to a catalogue place without overriding confirmed
+ * Google location data with a broader text guess. Text aliases remain only for
+ * legacy rides that predate confirmed destination Place IDs.
+ */
+export function rideReferencesPlace(ride, place) {
+  const confirmedDestinationId = String(
+    ride?.destinationPlaceId
+      || ride?.destinationLocation?.placeId
+      || ride?.destinationPhotoPlaceId
+      || ride?.destination_place_id
+      || ''
+  ).trim();
+
+  if (confirmedDestinationId) {
+    return Boolean(place?.sourcePlaceId)
+      && confirmedDestinationId === String(place.sourcePlaceId).trim();
+  }
+
+  return referencesPlace(ride?.destination, place);
 }
 
 /**
@@ -61,6 +71,11 @@ export async function getPublishedRides() {
     return rides.map((ride) => ({
       id: ride.id,
       destination: ride.destination,
+      destinationPlaceId: ride.destinationLocation?.placeId
+        || ride.destinationPlaceId
+        || ride.destinationPhotoPlaceId
+        || ride.destination_place_id
+        || null,
       date: ride.date,
       seatsTotal: Number(ride.seatsTotal ?? 0),
       seatsAvailable: Number(ride.seatsAvailable ?? 0),
@@ -80,7 +95,7 @@ export function getRidesByPlace(places = [], rides = [], travelDate) {
   const byPlace = new Map();
   for (const place of places) {
     const serving = rides.filter(
-      (ride) => (!travelDate || ride.date === travelDate) && referencesPlace(ride.destination, place)
+      (ride) => (!travelDate || ride.date === travelDate) && rideReferencesPlace(ride, place)
     );
     if (serving.length) byPlace.set(place.id, serving);
   }
@@ -164,5 +179,6 @@ export const DiscoveryContractAdapter = {
   departureDates,
   getCompletedTripCategories,
   getHostPublishingAnchor,
+  rideReferencesPlace,
   referencesPlace
 };
