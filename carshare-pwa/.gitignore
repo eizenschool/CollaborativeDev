@@ -5,6 +5,7 @@ dist-ssr/
 .env.local
 *.local
 npm-debug.log*
+debug.log
 .DS_Store
 .agents
 # Supabase CLI local project link cache - carries the linked account's email
