@@ -10,9 +10,12 @@ User identity/profile, vehicle information, reputation/impact presentation, emer
 Registration/profile management, photo, vehicles, evidence-based reputation/standing, privacy-filtered public profile, ride eligibility support, Host Impact Score/badge presentation, emergency contact, deactivation/deletion.
 
 ## Existing Repository Areas
-Presentation: `AuthPage.jsx`, `MyProfile.jsx`, `MyVehicles.jsx`, `ProfileSettings.jsx`, `Reputation.jsx`, `HostDashboard.jsx`, `Sidebar.jsx`.
-Business logic: `AuthService.js`, `ProfileService.js`, `PublicProfilePolicy.js`, `ReputationPolicy.js`, `ReputationService.js`, `VehicleService.js`, `HostImpactEngine.js`.
-Shared: `AuthContext.jsx`, `supabaseClient.js`, `mockDataStore.js`.
+Presentation: `src/presentation/m1-profile/`, with shared auth state in
+`src/presentation/shared/context/AuthContext.jsx`.
+Business logic: `src/business-logic/m1-profile/`.
+Data access: `src/data-access/m1-profile/` contains M1 Supabase and mock
+adapters; the Supabase client and atomic legacy fixture foundation remain in
+`src/data-access/shared/`.
 
 ## Owns
 Profile/account-facing behaviour, vehicles, profile-side reputation/impact display, host eligibility inputs exposed to Module 2.
@@ -48,12 +51,75 @@ an asymmetric Reputation effect while preserving rating as a separate signal.
 existing `handle_new_user()` trigger already covers Google's profile/avatar
 metadata shape. Still needs Google Cloud + Supabase Dashboard provider setup
 (see `docs/SUPABASE-SETUP.md`) before it works against the live project.
-Sign-up now also validates a Malaysian IC (MyKad) number format
-(`AuthService.validateMalaysianIC`) as an identity gate before an account can
-be created; the value is never persisted or sent to Supabase - format check
-only. Adding a vehicle now also requires a driver's license number
-(`vehicles.driver_license_number`, `database/sql/019`), an input-capture
-eligibility gate rather than identity verification.
+### Driver onboarding update (2026-09-06; supersedes the older capture flow below)
+
+My Vehicles now collects account-level driver documents before the first
+vehicle form: IC number/photo, licence expiry and one licence photo. Complete
+drivers skip this step for additional vehicles. Existing owners supplement
+missing documents here. Info & Security offers passenger IC/MyKad or Passport;
+it never requires a licence and preserves any existing driver fields.
+The shared identity form uses private previews and specific field errors.
+Admin review labels the selected identity photo; licence photos appear only
+when driver fields are present. Passenger IC has a basic 12-digit check;
+Passport has a 5–20 ASCII letter/digit check. Both require a nonempty
+JPEG/PNG/WebP photo up to 5 MB. Changing type/number requires a matching new photo.
+Submission resets the combined application to pending; approval remains a badge,
+not a prerequisite for hosting. The service calls `submit_identity_documents_v2`
+and reads back ambiguous outcomes before reporting success or allowing retries.
+`panel=vehicles&returnTo=...` deep-links to My Vehicles and preserves only an
+allowlisted publish/new-draft return path. 100/101 are live; 102's stricter publish
+trigger is pending frontend release. 103 adds passenger Passport storage/RPC
+and is deployed as `20260906134759_m1_passenger_identity_documents` with approval.
+It adds a Passport-only publish guard because the live legacy guard only checks
+status. 102 remains undeployed. Real passenger upload acceptance is pending.
+Legacy reads and driver-only RPC fallback keep
+existing drivers compatible; passenger capture needs 103. Passport alone never
+unlocks hosting, even when previous licence files are retained. See SQL.md.
+
+Identity verification happens where it is used, not at sign-up (D035).
+Sign-up collects no IC number at all - the old gate was skippable through
+`signInWithGoogle()` and asked every member for a document only a Host needs.
+A Host uploads a photo of their MyKad before publishing a Ride
+(`IdentityVerificationService`, `IdentityVerificationCard`, authored migration
+`093_m1`): submitting unlocks publishing, approval earns the verified label,
+and review runs through a service-role-only
+`private.review_identity_verification` because the shared Trust & Safety
+reviewer surface is still undecided. The images live in the PRIVATE
+`identity-documents` bucket under owner-folder policies with no anon policy,
+and never reach a public profile or Ride card. `093_m1` also retires
+`profile_private.ic_checked_at` (restoring `handle_new_user()` before dropping
+the column). The MyKad number and the driver's licence expiry are captured in that same
+step and stored on `identity_verifications` (`094_m1`), not per vehicle: a
+Malaysian licence carries the holder's IC, and a Host with three cars used to
+retype it three times. The vehicle form no longer asks for a licence, `094_m1`
+retires the `088_m1` per-vehicle trigger, and the expiry check moves into
+`enforce_ride_identity_verification`. Publishing needs a non-rejected
+submission, an unlapsed licence, a registered vehicle and the D034 reputation
+gate. Status is visible in Profile > Info & Security, rendered from the same
+`IdentityVerificationCard` as the publish gate. Review is still manual - a
+reviewer runs `private.review_identity_verification` from the Supabase SQL
+Editor, since a client-facing reviewer surface depends on the open Trust &
+Safety console decision. `malaysianIdentity.js` holds the shared MyKad
+validator and licence-currency rule.
+
+Submitting writes through a direct `.upsert()`, which PostgREST turns into
+`INSERT ... ON CONFLICT DO UPDATE`; `094_m1` only granted a column-restricted
+UPDATE, which Postgres refuses for that statement shape with a
+`42501 permission denied` error - the same trap `071_project` hit on
+`profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
+needs; RLS still does the real gatekeeping underneath it.
+
+Live ACL verification on 2026-09-06 then found that INSERT still covered only
+`093_m1`'s original three columns. Deployed tracked migration `099_m1` restores
+column-scoped INSERT for `ic_number` and `license_expiry`; broad table INSERT
+remains disabled and the owner-only RLS policies remain in force.
+
+`096_m1` adds a partial unique index on `ic_number` so the same MyKad cannot
+back two accounts - a rejected or reputation-damaged member could otherwise
+sign up again under a new email and resubmit the same number. A member's own
+resubmission is unaffected: it lands on their existing row through the
+`onConflict: 'user_id'` upsert.
+
 `/home` is now the public website entry rather than a post-login-only route.
 Guests can browse Home, Search, Ride listings, and Published Ride Detail; the
 shared auth gate is applied only when they enter account-specific services.
@@ -80,16 +146,23 @@ backfilled, and the live save actions report the deployment requirement until `0
 allowed into Module 4's public card projection; vehicle make/model/plate and
 other private profile data remain owner-only.
 
-The application now implements accepted decision D030. Reputation begins at
-70, is provisional for three evidence rides, caps positive credit at +3 per
-Ride, and changes only for verified completion, Check-in, participant review,
+The application now implements accepted decisions D030 and D034. Reputation
+begins at 100 and is clamped to that ceiling per event, so positive credit
+earned at 100 is spent rather than banked against a later penalty. It stays
+provisional for three evidence rides, caps positive credit at +3 per Ride, and
+changes only for verified completion, Check-in, participant review,
 cancellation, No-show, or confirmed conduct events. Publishing is restricted
-below 65 after the provisional period; requesting is restricted below 50; a
-safety hold overrides both. Ordinary login never changes trust. Client checks
+below 90 after the provisional period; requesting is restricted below 75; a
+safety hold overrides both. Tier boundaries follow those gates: Trusted 95+,
+Standard 90+, Limited 75+, Restricted 50+, safety problem below 50. Ordinary login never changes trust. Client checks
 in `RideService` and `RideRequestService` provide early feedback. Deployed
 migration `072` supplies the authoritative ledger, triggers and server
 enforcement; deployed compensating migration `074` keeps its Ride-status
 trigger within the actual `rides` row contract and restores recruitment close.
+Authored migration `087_m1` moves the server-side origin and thresholds to
+match D034 and rebases existing scores by +30 clamped at 100; until it is
+deployed the live database still starts members at 70 and gates at 65/50 while
+the client shows the new policy.
 
 `/users/:userId` is the safe public profile linked from Ride cards/details,
 request management and direct-message headers. Account Settings has switches
@@ -99,11 +172,27 @@ vehicle registration, companion names and precise Ride data. Deployed migration
 `073` stores these choices and exposes `get_public_profile`. Home and desktop
 navigation use the owner's photo as a direct Profile shortcut.
 
-Authored migration `075` adds account-level blocking. While both accounts are
-signed in, a blocked pair cannot view each other's public profile unless an
-Accepted Ride relationship must preserve trip safety/history. Private-message
-history remains available, but its profile shortcut is hidden while blocked.
+The same safe public profile is now the privacy-preserving friendship discovery
+surface: other members see Add friend, pending-response, or Message actions,
+while guests authenticate and return to the same profile. Owners can invoke the
+system share sheet for `/users/:userId`, with clipboard fallback and visible
+feedback. There is no username/directory search. Authored migration `079_m3`
+extends raw safe-profile relevance only to current or retained friend-chat
+co-members; Auth email and `profile_private` phone/emergency contact remain
+outside that policy.
 
 ## Open Questions
-Host Impact formula and badge perks; hard account deletion; phone OTP; final
-Trust & Safety administrator path for applying confirmed conduct events.
+Hard account deletion; phone OTP. Authored migration `078_m1` adds a
+service-role-only path (`private.apply_conduct_outcome`,
+`private.clear_reputation_hold`) so confirmed conduct events and safety holds
+are reachable without a client-facing admin surface; a shared Trust & Safety
+admin UI is still an open, whole-team decision per
+`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`. Host Impact formula and badge
+tiers are implemented (`HostImpactEngine.js`). Per D034 the composite is
+contribution only (`trips x 2.0 + co2 x 0.5`, tiers 0/50/120/200) and
+reputation acts as a ceiling through `badgeIsWithheld` rather than as a term:
+a safety hold or a score below `hostMinimum` withholds every tier above
+Bronze. Badge perks are display
+labels only and are now non-monetary: the scaffold's "platform fee" ladder
+contradicted the platform's non-monetary definition and was replaced with
+visibility, support and discovery perks, guarded by a test.

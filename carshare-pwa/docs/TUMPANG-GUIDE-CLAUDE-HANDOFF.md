@@ -150,7 +150,7 @@ Each tool needs its own mutually exclusive schema. Do not restore a shared
 
 ## 5. Reliability and migration 081
 
-`database/sql/081_m6_guide_agent_reliability.sql` is currently untracked locally.
+`database/sql/085_m6_guide_agent_reliability.sql` is currently untracked locally.
 The user says it is already applied remotely. Verify before relying on it.
 
 Expected responsibilities:
@@ -255,11 +255,11 @@ Limitations:
 5. `supabase/functions/m6-tumpang-guide/namedPlaceRoute.ts`
 6. `supabase/functions/m6-tumpang-guide/placeInfo.ts`
 7. `supabase/functions/m6-tumpang-guide/reliability.ts`
-8. `src/business-logic/guide/TumpangGuideService.js`
-9. `src/presentation/components/guide/TumpangGuidePage.jsx`
-10. `src/presentation/components/guide/useGuideSpeechInput.js`
-11. `src/presentation/components/maps/ConfirmedLocationInput.jsx`
-12. `database/sql/081_m6_guide_agent_reliability.sql`
+8. `src/business-logic/m6-discovery/guide/TumpangGuideService.js`
+9. `src/presentation/m6-discovery/components/guide/TumpangGuidePage.jsx`
+10. `src/presentation/m6-discovery/components/guide/useGuideSpeechInput.js`
+11. `src/presentation/shared/components/maps/ConfirmedLocationInput.jsx`
+12. `database/sql/085_m6_guide_agent_reliability.sql`
 
 Use `git status` and `git diff` before editing. Several new files are untracked;
 that does not mean they are disposable.

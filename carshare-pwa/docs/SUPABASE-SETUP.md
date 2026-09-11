@@ -98,8 +98,10 @@ the shared project; the Function is active as version 2. The project-owner setup
 below remains the required process for another environment or a controlled
 redeployment.
 
-`043_m3_add_voice_calls.sql`, `044_m3_turn_guard.sql`, `045_m3_reliable_voice_call_delivery.sql`, and the two TURN Edge
-Functions are the voice-call production boundary. Follow
+`043_m3_add_voice_calls.sql`, `044_m3_turn_guard.sql`,
+`045_m3_reliable_voice_call_delivery.sql`, `077_m3_voice_call_presence_recovery.sql`,
+`080_m3_group_voice_calls.sql`, and the two TURN Edge Functions are the
+voice-call production boundary. Follow
 `docs/VOICE-CALL-DEPLOYMENT.md` for the Cloudflare key, server-only secrets,
 five-minute quota monitor, Netlify HTTPS, and two-device acceptance sequence.
 

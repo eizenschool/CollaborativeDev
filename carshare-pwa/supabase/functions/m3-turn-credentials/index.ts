@@ -14,8 +14,6 @@ import {
 type CredentialInput = { callId?: unknown };
 type CallRow = {
   id: string;
-  caller_id: string;
-  callee_id: string;
   status: string;
   answered_at: string | null;
 };
@@ -140,12 +138,19 @@ async function activeParticipantCall(
   userId: string,
 ) {
   const { data, error } = await admin.from("call_sessions")
-    .select("id, caller_id, callee_id, status, answered_at")
+    .select("id, status, answered_at")
     .eq("id", callId)
     .maybeSingle();
   if (error) throw error;
   const call = data as CallRow | null;
-  if (!call || ![call.caller_id, call.callee_id].includes(userId)) {
+  const { data: participant, error: participantError } = await admin
+    .from("call_participants")
+    .select("status")
+    .eq("call_id", callId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (participantError) throw participantError;
+  if (!call || !participant || !["ringing", "accepted"].includes(participant.status)) {
     throw new HttpError(403, "CALL_UNAVAILABLE", "This call is unavailable.");
   }
   const overlong = call.status === "accepted" && call.answered_at &&

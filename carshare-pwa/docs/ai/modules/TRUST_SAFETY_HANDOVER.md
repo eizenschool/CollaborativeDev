@@ -20,17 +20,17 @@ each receiving owner should fold the relevant parts into their own
 ## Existing code (Module 2's, in practice)
 
 ```text
-src/business-logic/verification/       PinService, GeoVerification,
+src/business-logic/m2-rides/verification/ PinService, GeoVerification,
                                        TripConfirmationService,
                                        ExchangeSettlementService,
                                        DisputeConfidenceEngine,
                                        DisputeResolutionService,
                                        TripContractAdapter,
                                        VerificationEventFeed, DemoClockService
-src/presentation/components/safety/    SafetyRoutes, TripVerificationPanel,
+src/presentation/m2-rides/components/verification/ SafetyRoutes, TripVerificationPanel,
                                        DisputeEvidenceCard, VerificationDemoConsole
-src/data-access/module6Store.js        browser-local prototype store
-src/App.jsx                            the /safety route
+src/data-access/m2-rides/verificationFixtureStore.js browser-local prototype store
+src/presentation/shared/app/App.jsx   the /safety route
 docs/MODULE6-SCHEMA.md                 draft schema for this scope
 ```
 
@@ -39,7 +39,7 @@ Trust Admin/ride-dispute/GPS-evidence experiment. `/safety/admin` and its Admin
 Edge Functions are not part of the accepted Module 2 scope; any future shared
 Trust & Safety administration requires a new team decision.
 
-Unit tests live in `src/business-logic/verification/__tests__/` and cover the
+Unit tests live in `src/business-logic/m2-rides/verification/__tests__/` and cover the
 numeric thresholds by Boundary Value Analysis (100 m GPS tolerance, 0.75
 auto-resolve, 15-minute no-show, 48-hour default confirmation, PIN exact match).
 They make no API calls.

@@ -14,10 +14,12 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 search/favourites and favourite availability alerts
 Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m4, 068_m4,
-  069_project, 070_project, 072_m1, 073_m1, and 074_m1 as tracked Supabase
+  069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, and 099_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-077
+Repository SQL history: 001-103 (`087_m1` and `088_m1` are authored and not
+  deployed; `093_m1`-`097_m1` are live without tracked migration entries;
+  `099_m1` is deployed as a tracked migration)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -33,8 +35,8 @@ Repository SQL history: 001-077
   `061_m2`, `062_m2`, and `064_m2` are deployed as tracked migrations;
   `063_m2` remains authored locally and undeployed; `065_m3` is deployed as
   `m3_terminal_chat_and_call_history`; `066_m2` is deployed as
-`m2_fix_pickup_photo_storage_path_policy`; `075_m3` and `077_m3` are authored
-locally and pending deployment. Module 1 migrations `072_m1`
+`m2_fix_pickup_photo_storage_path_policy`; `077_m3`, `078_m1`, and `079_m3`
+are authored locally and pending deployment. Module 1 migrations `072_m1`
 and `073_m1` are deployed through the Dashboard SQL Editor (verified
 2026-08-27: `reputation_events`, `profile_visibility`,
 `get_reputation_summary`, and `get_public_profile` all exist live), but
@@ -57,8 +59,67 @@ rejects that column-restricted `update` grant for the
 confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
-is authored locally, not yet deployed, and grants that.)
+is authored locally, not yet deployed, and grants that. `082_m4` and `099_m1`
+are deployed; the next unused repository sequence is `104`.)
 ```
+
+### Driver document rollout (2026-09-06)
+
+- `103_m1_passenger_identity_documents.sql` is deployed with user approval as
+  `20260906134759_m1_passenger_identity_documents` (2026-09-06).
+  Requires 100/101; does not activate pending 102. Adds `document_type`
+  (legacy/default `mykad`) and private `passport_number`, plus authenticated
+  SECURITY INVOKER `submit_identity_documents_v2`. Passenger IC uses 12 digits;
+  Passport uses 5–20 ASCII letters/digits and one existing owner-scoped image.
+  A changed type/number requires a replacement image. Driver checks remain
+  strict, passenger updates preserve licence fields, and review resets to pending.
+  The RPC also has column-level grants to clear review metadata on resubmission;
+  owner RLS still requires pending status (no self-approval).
+  Live preflight found the older status-only publish guard (not 094's IC
+  check). 103 adds a separate Passport-only publish trigger; it does not
+  replace the existing guard or activate 102. Published rides are unchanged.
+  Passport also clears `ic_number`. RLS, private
+  bucket image/5 MB restrictions, and reviewer access are unchanged.
+  The connected local frontend can now use the deployed v2 contract.
+  Legacy driver RPC/read fallback remains available before 103. No silent
+  passenger fallback to the MyKad-only RPC. After Passport use, prefer frontend
+  rollback with columns/data retained; do not drop stored Passport records.
+  Post-deploy checks confirm SECURITY INVOKER, authenticated-only execution,
+  RLS/private bucket, required column grants, unchanged legacy publish function,
+  and all 3 existing identity rows retained. No real Passport upload yet.
+  Authenticated-role transactional acceptance could not run: the MCP query
+  role cannot SET ROLE authenticated. No submission changes were performed.
+  Real owner upload/readback and rejection cases remain browser acceptance gates.
+  Advisors report existing identity admin SECURITY DEFINER RPC notices and
+  overlapping owner/admin SELECT policies; none name the new v2 RPC or trigger.
+  These notices were not changed as part of 103.
+
+- `100_m1_driver_document_submission.sql` is deployed as
+  `20260906072749_m1_driver_document_submission`; adds nullable
+  `license_document_path` and the authenticated SECURITY INVOKER RPC
+  `submit_identity_documents(text,text,date,text,boolean)`. It verifies owner
+  Storage paths/objects, preserves driver fields during passenger submissions,
+  and resets submission/review timestamps and status to pending.
+- `101_m1_validate_driver_document_birth_date.sql` is deployed as
+  `20260906073043_m1_validate_driver_document_birth_date`; replaces the RPC's
+  date validation with inferred-century `make_date`, including leap birthdays,
+  and rejects underage driver submissions. Apply 100 then 101.
+- `102_m1_require_driver_documents_to_publish.sql` is authored, NOT deployed.
+  Activate after the new frontend is released. It checks both stored owner
+  photos, number, expiry and age on transitions into Published only. Existing
+  published rides remain untouched. The current live trigger still checks the
+  earlier identity status rule until this activation.
+- Live checks confirm private bucket, RLS, authenticated column grants,
+  no anonymous read/RPC execution and SECURITY INVOKER submission. Transactional
+  negative checks cover missing session, other-owner photo paths and underage
+  submissions without retaining test data. Real signed-in upload acceptance
+  and frontend deployment still need the target Netlify site.
+
+The repository has one documented historical numbering collision at `075`
+(`075_m3_conversation_lifecycle_redesign.sql` and the deployed
+`075_m6_place_lifecycle_notification.sql`). Neither file is renamed or
+overwritten; new work continues at the next unused number, which is why the
+friendship migration is `079`.
 
 `001-010` were applied atomically as the initial schema on 2026-08-12.
 `011-012` are deployed follow-ups for advisor findings and the confirmed
@@ -269,6 +330,19 @@ slots `065`/`066` to `067`/`068` after deployment because newer Development
 work had already claimed `065_m3` and `066_m2`. This repository-only rename
 does not require either deployed migration to be executed again.
 
+`082_m4_confirmed_location_search.sql` was deployed on 2026-09-03 as
+`m4_confirmed_location_search`. It adds narrow anonymous/authenticated invoker
+RPCs for direct and two-leg searches
+whose entered Pickup/Destination came from Google Places autocomplete. Private
+helpers compare passenger-supplied Place IDs against confirmed Ride endpoint
+IDs and preserve the legacy text fallback only when a Ride has no stored ID.
+The safe result shapes still exclude Ride Place IDs, coordinates, pickup
+instructions, waypoints, and route geometry. Two partial endpoint indexes
+support Published rides with remaining seats. Both RPCs were smoke-tested under
+the `anon` role after deployment. The post-deployment advisors reported no new
+Module 4 security finding; the destination index was initially reported as
+unused, which is expected before normal confirmed-location traffic.
+
 `041_m6_ride_available_notification.sql` is **deployed and live-verified,
 2026-08-24**
 and must follow `033_project_notifications.sql`. FR-6.33/UC6.12: a trigger on
@@ -443,20 +517,27 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `profile_private`: owner-only phone and emergency contact. Email remains solely in Supabase Auth.
 - `profile_visibility` (deployed `073_m1`): owner-managed switches for public photo, languages, completed-trip count, and CO2 impact.
 - `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, at most one active vehicle per owner, and deployed nullable `vehicle_type` from `039`.
-- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Deployed `072_m1` adds a 70-point default, safety hold, and reputation update timestamp.
+- `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Deployed `072_m1` adds a 70-point default, safety hold, and reputation update timestamp; authored `087_m1` moves that default to 100 and rebases existing scores by +30 clamped at 100.
 - `reputation_events` (deployed `072_m1`): owner-readable, trigger-written, idempotent verified-Ride reputation ledger with a +3 positive cap per Ride.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, pickup instructions, one nullable private pickup-photo path after undeployed `059`, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
 - `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
-- `conversations`: after authored `075`, one persistent row per unordered direct-user pair plus one group per Ride; groups alone retain `ride_id`/ride status and close when their final Traveller leaves.
-- `conversation_members`: role, join/leave, reversible personal archive, personal `deleted_before` history boundary, and trusted read cursor.
-- `conversation_ride_contexts` (authored `075`): optional Ride references for persistent direct conversations; context never controls conversation lifecycle.
-- `conversation_aliases` (authored `075`): authenticated legacy ride-chat ID redirects to the canonical pair conversation.
-- `user_blocks` (authored `075`): blocker-owned account relationship used by narrow helpers/RPCs for private contact and authenticated profile/Ride/request visibility.
+- `friendships` (in authored `079`): one canonical account pair with a
+  versioned pending/accepted/declined/removed state. Participants have SELECT
+  only; every transition is an authenticated RPC.
+- `conversations`: one ride/traveller direct chat, one ride group, and (after
+  `079`) at most one separate non-expiring direct chat per friendship.
+- `conversation_members`: ride/friend role, join/retained-leave, personal
+  archive/delete/mute state, access expiry, and trusted read cursor.
 - `messages`: user/system message rows with edit/delete tombstone state.
 - `message_attachments`: ordered image/video Storage metadata, one coordinate pair, or one standalone audio object with a 1-180 second duration.
+- `message_ride_invitations` (deployed `20260905093400`): one `ride_id`
+  reference per Friend-chat message. Visible members have SELECT only; current
+  Ride fields and recipient request eligibility come from an authenticated RPC
+  instead of being copied into message history.
 - `message_translations` (in deployed `036`): one source-versioned shared translation per message and target language; current visible members read it and only the translation Edge Function writes it.
-- `call_sessions` (in live `043`): direct-chat caller/callee invitation and lifecycle rows; authored `075` applies personal deletion boundaries and membership/closure visibility without Ride-age expiry, while authored `077` adds device-bound heartbeats and orphan recovery.
+- `call_sessions` (in live `043`, extended by deployed `080`): direct/group call lifecycle rows; participants receive SELECT only and mutate through authenticated RPCs. Deployed `065_m3` requires current conversation visibility, the live `077` schema adds device-bound heartbeats and orphan recovery, and deployed `080` adds independent per-member state.
+- `call_participants` (in deployed `080`): one caller/invitee row per call member with ringing, accepted, declined, missed, left, or failed state; browser roles receive RLS-filtered SELECT only.
 - `turn_usage_guard` and `turn_credential_issues` (in live `044`): service-only relay cutoff state and revocable temporary-username metadata; no TURN password or long-lived provider token is stored.
 
 Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
@@ -466,8 +547,8 @@ Module 6 (in deployed `024`; the live catalogue remains opt-in in the frontend):
 - `ride_notify_registration`: owner-only; unique per (user, place, travel date) so a repeat request shows the existing registration. Read (in deployed `041_m6`) by a `public.rides` trigger that dispatches through `private.create_user_notification(...)` and flips matched rows to `fulfilled`; a daily Cron job expires past-date rows still `active`.
 - `user_travel_preferences`: owner-only stated categories and a dismissal flag.
 
-Module 4 (deployed `034`; deployed `035`, `040`, `067`, and `068` add no public
-table; deployed `039` changes the two classification columns above):
+Module 4 (deployed `034`; deployed `035`, `040`, `067`, `068`, and `079` add no
+public table; deployed `039` changes the two classification columns above):
 
 - `ride_favourites`: one owner-scoped saved reference per user and ride. The
   reference survives ride lifecycle changes and is deleted with either parent.
@@ -488,9 +569,13 @@ table; deployed `039` changes the two classification columns above):
   on rides, requests, or reviews. Narrow `SECURITY DEFINER` RPCs enforce
   ownership and cross-row invariants with an empty `search_path`.
 - `private.process_ride_lifecycle()` runs every minute through active Cron job `m2-ride-lifecycle`. `transition_verified_ride()` is executable only by `service_role`.
-- Deployed `072_m1` makes reputation authoritative in database triggers: three evidence Rides are provisional, then publishing requires 65 and requesting 50; a safety hold overrides score. Browser clients receive SELECT-only ledger access and cannot manufacture events.
+- Deployed `072_m1` makes reputation authoritative in database triggers: three evidence Rides are provisional, then publishing requires 65 and requesting 50; a safety hold overrides score. Browser clients receive SELECT-only ledger access and cannot manufacture events. Authored `087_m1` moves that origin to 100 and those gates to 90/75 (D034) without changing the ledger, the +3 per-Ride cap or the provisional window.
 - Deployed `073_m1` exposes only the privacy-filtered `get_public_profile(uuid)` projection to `anon`/`authenticated`; owner-private contact data is never selected.
-- Messaging mutations are RPC-only; lifecycle, membership, archive/leave, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Messaging mutations are RPC-only; lifecycle, membership, terminal-only personal controls, ownership, Storage metadata, bundle limits, and edit/read races are checked inside locked transactions.
+- Authored `079` serializes friendship-pair transitions, rejects self/duplicate/
+  unauthorized/inactive-account requests, and lets friend-chat message/media/
+  call writes pass only while the relationship is accepted and both profiles
+  are active. Removed-friend history remains participant-readable.
 - Translation-cache browser access is SELECT-only and follows the same visible-conversation/tombstone boundary; the authenticated Edge Function rechecks access before using its server credential to cache a result.
 - Messaging read cursors update only when a newer inbound message exists, preventing no-op `conversation_members` updates from feeding Realtime refresh loops.
 - All four messaging tables and `call_sessions` are in the `supabase_realtime` publication. Private call-signal Broadcast topics authorize only the active row's caller and callee.
@@ -515,6 +600,9 @@ table; deployed `039` changes the two classification columns above):
 - `reputation_events_ride_user_idx` (in deployed `072_m1`)
 - `conversations_one_direct_per_ride_user_idx`
 - `conversations_one_group_per_ride_idx`
+- `conversations_one_friend_per_friendship_idx` (in authored `079`)
+- `friendships_unique_pair` (in authored `079`)
+- `friendships_member_high_status_idx` (in authored `079`)
 - `conversations_direct_user_id_idx`
 - `conversation_members_user_active_idx`
 - `messages_conversation_created_idx`
@@ -558,6 +646,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 - `040_m4_favourites_advisor_followup.sql` - deployed 2026-08-27; adds the covering `ride_favourites(ride_id)` index requested by the post-034 performance advisor without rewriting deployed migration history.
 - `067_m4_favourite_unavailable_notifications.sql` - deployed 2026-08-27; shared in-app/Web Push producer for deduplicated unavailable-favourite transitions and safe similar-search links.
 - `068_m4_multi_leg_journey_search.sql` - deployed 2026-08-27; public-safe two-leg fallback over confirmed endpoints, approved catalogue transfers, stored schedules, and existing Module 4 filters.
+- `082_m4_confirmed_location_search.sql` - deployed 2026-09-03 as `m4_confirmed_location_search`; anonymously smoke-tested private exact/legacy-null endpoint matching behind safe public direct and multi-leg invoker RPCs, plus Published endpoint indexes.
 - `041_m6_ride_available_notification.sql` - deployed and live-verified 2026-08-24; FR-6.33/UC6.12 `public.rides` trigger dispatching through `private.create_user_notification(...)` to matching `ride_notify_registration` rows, plus a daily Cron job expiring past-date active registrations.
 - `042_m6_scheduled_ingestion.sql` - deployed and live-verified 2026-08-24; weekly pg_cron + pg_net sweep calling `m6-ingest` with `maxDetails: 0`. Its FR-6.3/6.4/6.5 auto-decay counterpart in the Edge Function was found unsafe and removed the same day - see this file's `042_m6` entry above.
 - `043_m3_add_voice_calls.sql` - applied outside tracked migration history on 2026-08-24; one-to-one call-session rows, locked participant RPCs, busy-call serialization, Realtime publication, and caller/callee-only private Broadcast signalling policies. WebRTC audio remains peer-to-peer.
@@ -625,16 +714,116 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   Realtime system message, and tightens call-history SELECT with current
   conversation visibility.
 - `075_m3_conversation_lifecycle_redesign.sql` - authored, not deployed;
-  migrates ride-bound direct duplicates into one persistent pair conversation,
-  adds contextual Ride links and legacy aliases, personal archive/delete state,
-  account blocks, terminal-but-messageable groups, final-Traveller atomic group
-  closure, updated call/translation/media RLS, and block-aware profile/Ride/search
-  boundaries. It supersedes `016`/`065` lifecycle behavior without rewriting
-  deployed history.
+  keeps conversations Ride-bound, adds terminal-only archive/unarchive,
+  delete-for-me, mute/unmute for direct and group conversations, suppresses only
+  muted message notifications, removes manual group leave, retains a requester
+  who cancels an Accepted request as a read-only former member for seven days,
+  and applies the earliest personal or Ride-terminal expiry through RLS.
 - `077_m3_voice_call_presence_recovery.sql` - authored, not deployed; adds
   caller-device ownership, participant heartbeat timestamps, 90-second orphan
   expiry, same-device refresh recovery, and compatible one-/two-argument call
   start RPCs without granting browser roles direct call-session mutations.
+- `078_m1_conduct_outcome_and_hold_reversal.sql` - authored, not deployed;
+  adds `private.apply_conduct_outcome` and `private.clear_reputation_hold`,
+  service-role-only functions (no grant to `anon`/`authenticated`) that make
+  `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
+  `reputation_hold` reachable for the first time since `072_m1` defined them,
+  without a client-facing admin surface.
+- `094_m1_identity_holds_the_licence.sql` - live without a tracked migration
+  entry; adds
+  `ic_number` and `license_expiry` to `identity_verifications` so the MyKad is
+  entered once instead of on every vehicle, drops the `088_m1`
+  `enforce_ride_driver_license_before_publish` trigger, and folds the expiry
+  check into `private.enforce_ride_identity_verification`. A submission with no
+  expiry recorded is treated as valid, not lapsed.
+  `vehicles.driver_license_number`/`driver_license_expiry` are deliberately
+  left in place and unused.
+- `095_m1_grant_table_level_identity_verifications_update.sql` - live without a
+  tracked migration entry; `094_m1` only granted a column-restricted UPDATE, which Postgres
+  refuses for the `INSERT ... ON CONFLICT DO UPDATE` supabase-js's `.upsert()`
+  emits (`42501 permission denied`) - the same trap `071_project` hit on
+  `profile_visibility`. Grants the plain table-level UPDATE that shape needs;
+  RLS still does the real gatekeeping.
+- `096_m1_unique_ic_number.sql` - live without a tracked migration entry; a partial unique
+  index on `identity_verifications.ic_number` (`where ic_number is not null`)
+  so a rejected or reputation-damaged member cannot sign up again under a new
+  email and resubmit the same MyKad. Partial rather than a bare constraint so
+  legacy rows with no stored number (pre-`094_m1`) never collide on null. A
+  member's own resubmission keeps their existing row via `093_m1`'s
+  `onConflict: 'user_id'` upsert, so this only ever blocks a second account.
+- `097_m1_admin_identity_review.sql` - live without a tracked migration entry; adds a single
+  email-allowlisted admin path for the review surface `093_m1` deliberately
+  left service-role-only. `private.is_identity_review_admin()` checks
+  `auth.email()` against a hardcoded array (currently seven team emails) -
+  deliberately not a roles table, given
+  `055_m2_remove_trust_admin` already removed one general admin-role system.
+  Adds permissive RLS SELECT policies on `identity_verifications` and the
+  `identity-documents` bucket's storage objects for that allowlist (additive to
+  the existing owner-only policies), and
+  `public.admin_review_identity_verification(uuid, text, text)`, an
+  authenticated-grantable wrapper that re-checks the allowlist before calling
+  `private.review_identity_verification`, which itself keeps zero grants to
+  `anon`/`authenticated`. Depends on `093_m1` (table/bucket) being deployed
+  first.
+- `099_m1_restore_identity_insert_privileges.sql` - deployed and live-verified
+  on 2026-09-06 as tracked migration `m1_restore_identity_insert_privileges`
+  (`20260906065405`). The live ACL had drifted back to `093_m1`'s original
+  three-column INSERT grant, so the submission upsert was rejected before RLS
+  when it included `ic_number` and `license_expiry`. `099_m1` restores only
+  those two column privileges. Live verification confirms both are granted,
+  broad table INSERT remains false for `authenticated` and `anon`, RLS remains
+  enabled, and the owner INSERT/UPDATE policies remain present.
+- `093_m1_identity_document_verification.sql` - live without a tracked migration
+  entry;
+  moves identity verification from sign-up to the point of use (D035). Adds the
+  PRIVATE `identity-documents` bucket with owner-folder Storage policies and no
+  anon policy, `public.identity_verifications` (owner may only ever insert or
+  return its own row to `pending`), the
+  `enforce_ride_identity_before_publish` trigger requiring a non-rejected
+  submission before a Ride reaches `Published`, and service-role-only
+  `private.review_identity_verification`. It also restores
+  `handle_new_user()` to a body that does not write `ic_checked_at` and then
+  drops that column, retiring the `088_m1` sign-up flag - the restore must stay
+  ahead of the drop or account creation breaks.
+- `087_m1_reputation_starts_at_ceiling.sql` - authored, not deployed;
+  moves the reputation origin from 70 to 100, rebases live scores by +30
+  clamped at 100 (guarded by the current column default, so re-running is a
+  no-op), and raises the publish/request gates to 90/75 in
+  `private.enforce_ride_reputation_eligibility`,
+  `private.enforce_request_reputation_eligibility`,
+  `public.get_reputation_summary` and `public.get_ride_eligibility`. It
+  replaces constants only: the `072_m1` ledger, per-event clamp, +3 per-Ride
+  positive cap, event deltas and three-Ride provisional window are untouched.
+- `088_m1_identity_gate_hardening.sql` - authored, not deployed; adds
+  `profile_private.ic_checked_at` (written only by `handle_new_user()` from
+  the sign-up payload, with no insert/update grant to browser roles, and never
+  storing the IC number itself) and `vehicles.driver_license_expiry`, plus the
+  `enforce_ride_driver_license_before_publish` trigger that requires a present
+  and unexpired licence on the selected vehicle before a Ride reaches
+  `Published`. A vehicle registered before this file has a null expiry, which
+  is treated as unknown rather than expired so no existing Host is locked out.
+  Deliberately no document photos, no Storage bucket, and no verified badge.
+- `079_m3_friendships_and_persistent_chat.sql` - deployed;
+  adds mutually confirmed account-pair friendships, authenticated RPC-only
+  transitions, one separate permanent direct conversation per friendship,
+  friend-member profile relevance, accepted/active-account message and call
+  gates, read-only retained history after removal, Realtime publication, and
+  deduplicated request/acceptance notifications. It depends on authored `075`
+  and `077` and does not alter existing Ride chat identities or seven-day rules.
+- `20260905093400_m3_friend_ride_invitations` - deployed 2026-09-05;
+  adds Friend-chat Ride cards, Host or Pending/Accepted passenger sharing,
+  recipient eligibility rechecks, live Ride-state reads, deletion cleanup, and
+  deduplicated invitation notifications without changing seat/request state.
+- `080_m3_group_voice_calls.sql` - deployed 2026-09-03 as tracked migration
+  `m3_group_voice_calls`; adds direct/group
+  call types, per-member invitations and lifecycle state, independent
+  answer/reject/leave behavior, max-eight peer-mesh rooms, per-invitee push
+  notifications, participant-scoped TURN authorization, and participant-table
+  Realtime publication. It depends on authored `075`, `077`, and `079`.
+- `081_m3_selective_group_voice_calls.sql` - deployed 2026-09-03 as tracked
+  migration `m3_selective_group_voice_calls`; adds a separately named RPC that
+  validates and rings only the active group members selected by the caller,
+  while preserving the existing direct-call RPC.
 - `066_m2_fix_pickup_photo_storage_path_policy.sql` - deployed as tracked
   migration `m2_fix_pickup_photo_storage_path_policy`; corrects the pickup
   photo Storage policies to treat `user-id/ride-id/filename` as two folders,
@@ -708,3 +897,13 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 5. Update this file after confirmed database changes.
 6. Run security and performance advisors after DDL changes.
 7. Never expose service-role/server secrets in frontend code or commit local environment files.
+
+## Individual chat deletion (2026-09-05)
+
+- Deployed `089_m3_personal_message_deletion.sql` (`m3_personal_message_deletion`): owner-readable, RPC-written `chat_item_deletions`, account-local message visibility, Realtime refreshes, and the security-invoker `chat_call_history` view. Call signalling continues to read `call_sessions`.
+- Deployed `090_m3_delete_all_message_types.sql` (`m3_delete_all_message_types`): shared deletion accepts text, media, location, voice and Ride invitations; requires the sender, writable/visible conversation, and no other member read cursor at or beyond the message. Member locks serialize the read check. Shared media/invitation payloads are removed atomically; messages retain tombstones.
+- `database/tests/m3_personal_deletion.sql` verifies real authenticated-role isolation and deletion gates inside a fully rolled-back transaction on a seeded database.
+
+## Ride invitation label rollback (2026-09-05)
+
+- Deployed `091_m3_ride_invitation_viewer_role.sql`, then immediately superseded it with deployed `092_m3_restore_ride_invitation_card_contract.sql` at the user's request. The live `get_friend_ride_invitation_cards` response contract and client label behaviour are restored to their pre-091 state; both files remain in history because deployed migrations are immutable.

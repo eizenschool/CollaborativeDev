@@ -62,7 +62,7 @@ Agents should load only relevant context.
 Use Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution.
 
 ## D007 — Preserve Existing Top-Level Source Layering for Now
-**Status:** Accepted
+**Status:** Superseded by D037
 Keep `src/presentation/`, `src/business-logic/`, `src/data-access/`, and `src/context/` unless a concrete accepted need justifies a structural refactor.
 
 ## D008 — `Development` Is the Shared Integration Branch
@@ -137,7 +137,7 @@ provider quotas remain mandatory operational controls.
 **Status:** Accepted
 `docs/ai/UI.md` is the shared cross-module UI/UX contract. Phone is the primary
 design target; tablet and desktop use intentional responsive reflow rather than
-stretched phone layouts. `src/presentation/styles/theme.css` remains the runtime
+stretched phone layouts. `src/presentation/shared/styles/theme.css` remains the runtime
 source of truth for exact implemented token values. Files under `docs/figma/`
 are design references and do not silently override accepted decisions, this
 contract, or verified current implementation.
@@ -156,16 +156,21 @@ Supabase provider and matching Redirect URLs - tracked in
 `docs/SUPABASE-SETUP.md` and `docs/ai/TODO.md`.
 
 ## D016 — Module 3 Supabase Messaging and Retention Contract
-**Status:** Superseded by D031
+**Status:** Accepted
 Published rides allow any signed-in non-Host to create/reuse one ride-bound
 direct chat without a ride request. The first Accepted request creates the one
 ride group transactionally; every accepted account holder joins and companions
 do not. A message is one atomic text/media/location bundle with up to ten mixed
 photos/videos and one coordinate pair. Sender-only edits are allowed only before
 another member reads the message; sender-only deletion always tombstones the
-whole bundle. Completed private chats can be archived per user, Completed group
-travellers can leave, and Hosts cannot leave. Completed, Cancelled, and Expired
-conversation access ends permanently seven days after the terminal timestamp,
+whole bundle. Archive, unarchive, delete-for-me, mute, and unmute are personal
+controls available to both direct and group conversations only after the Ride is
+Completed, Cancelled, or Expired. Archive is a reversible folder state; deletion
+hides only the member's existing history, and muting suppresses message alerts
+without suppressing delivery or unread state. A requester who cancels an Accepted
+request immediately leaves the group but retains read-only access to messages sent
+before cancellation for at most seven days. Manual group leave is removed.
+Completed, Cancelled, and Expired conversation access ends permanently seven days after the terminal timestamp,
 overriding UC3.8's older permanent archive wording. Translation/UC3.6 is an
 explicit, on-demand four-language action for English, Simplified Chinese,
 Bahasa Melayu, and Tamil. An authenticated Supabase Edge Function resolves the
@@ -364,9 +369,9 @@ contract without changing an Edge Function RPC signature.
 ## D026 — Shared Semantic UI Runtime and Deterministic Accessibility Gate
 **Status:** Accepted
 
-`src/presentation/styles/theme.css` remains the only runtime design-token
+`src/presentation/shared/styles/theme.css` remains the only runtime design-token
 authority. Cross-module presentation uses the small primitive set under
-`src/presentation/components/ui/`; these components remain independent of
+`src/presentation/shared/components/ui/`; these components remain independent of
 Supabase and business services. Existing green identity, Poppins/Inter type,
 seven navigation destinations, URLs, English flows, and service contracts are
 preserved. `AdaptiveDialog` standardizes phone sheets and wider dialogs with a
@@ -468,7 +473,11 @@ action area. A Completed Ride shows its review action above `Publish again`,
 and Review opens only after that explicit action is selected.
 
 ## D030 — Evidence-based Reputation and Privacy-filtered Public Profiles
-**Status:** Accepted in application; migrations 065-066 authored and not deployed
+**Status:** Accepted in application; migrations 065-066 authored and not deployed.
+Its starting score and thresholds are superseded by D034; every other part of
+this decision (event-driven changes, the +3 per-Ride cap, idempotent source
+events, the three-Ride provisional window, and the public-profile projection)
+still stands.
 
 Reputation starts at 70/100 and remains provisional for the first three
 evidence rides. Only verified Ride events may change it: completion +1,
@@ -494,21 +503,56 @@ standing remain visible on Published Ride cards. Migration 066 stores the
 switches, exposes the filtered RPC, and narrows raw cross-profile visibility;
 until deployed, the app uses non-persistent defaults and labels that state.
 
-## D031 — People-own-private, Rides-own-groups Messaging Lifecycle
-**Status:** Accepted; migration 075 authored and pending deployment
+## D031 — Confirmed Friendships and Separate Permanent Direct Chats
+**Status:** Accepted and deployed
 
-An unordered user pair owns one persistent private conversation. Rides may be
-recorded as context but never control private-chat availability. Archive is
-personal and reversible; Delete chat for me permanently hides history through
-a per-member timestamp without deleting the other participant's data. Blocking
-is an account-level future-contact and discovery boundary while signed in, but
-does not erase prior private history or revoke accepted-trip safety/history.
+A friendship is one normalized account pair and requires explicit acceptance.
+It is not inferred from a Ride, request, message, contact list, or profile view.
+Discovery is limited to privacy-filtered `/users/:userId` profiles and shared
+profile links; this release has no global search, contact import, or blocking.
 
-Each Ride continues to own one Host-plus-accepted-Travellers group. Completed,
-Cancelled, and Expired groups remain messageable. Travellers leave
-individually; the final Traveller departure atomically removes the Host and
-closes the group. Archive never means Leave, and neither direct nor group
-conversation access expires seven days after a terminal Ride.
+Each accepted pair owns at most one `friend`-scoped direct conversation. This
+conversation is separate from every Ride direct/group conversation, has no Ride
+or seven-day expiry, and reuses the existing text, media, location, voice
+message, translation, and one-to-one call paths. Removing a friend immediately
+blocks server-side message/media/call writes, ends an active call, and leaves the
+conversation in Messages as read-only without automatically archiving or
+deleting it. A later accepted request restores writes to the same conversation
+and preserves its history and each member's delete boundary.
+
+Friend requests notify only the recipient and open `/message/friends`;
+acceptance notifies only the requester and opens the permanent chat. Decline,
+cancel, and removal are silent. Request counts belong to the Friends entry and
+shared notification centre, not the Message unread count. `079_m3` implements
+the pair locks, RLS, RPCs, Realtime publication, safe profile relevance, and
+friend-chat write gate while preserving all Ride-chat IDs and lifecycle rules.
+
+A co-ride invitation is implemented as a structured friend-chat message storing
+only `ride_id` and resolving live Ride state when displayed. It opens the
+existing Ride Detail and `Request to join` flow; it does not auto-request,
+reserve a seat, or bypass Driver approval. A sender may share a Ride they Host
+or one on which their own request is Pending or Accepted, while the recipient
+must still be currently eligible to request it.
+
+## D032 — Module 4 Search Requires Confirmed Google Suggestions
+**Status:** Accepted and deployed 2026-09-03
+
+An entered Pickup or ordinary Destination on public Search must be selected
+from the existing Malaysia-only Google Places combobox after its one-second
+debounce. Blank route fields remain valid. Search URLs preserve the selected
+input references as `pickupPlaceId` and `destinationSearchPlaceId`;
+`destinationPlaceId` remains the separate Module 6 catalogue hint and is the
+only input that enables the existing 5/10/25 km recommendation radius.
+
+Migration `082` privately compares passenger-supplied IDs with confirmed Ride
+endpoint IDs for direct and multi-leg matching. A legacy Ride whose endpoint ID
+is null may fall back to the confirmed Google display text, but a Ride with a
+different stored ID cannot. Public results never return Ride endpoint IDs,
+coordinates, instructions, waypoints, or route geometry. An environment that
+has not deployed `082` reports the dependency rather than silently reverting
+to loose text matching. The client retains the complete Google label for display
+and URL state but caps only the RPC's legacy fallback prefix at 120 characters,
+matching the existing server guard while leaving Place IDs authoritative.
 
 ## D032 — Home merges with Destination Discovery; "Home" nav slot renamed Explore
 **Status:** Accepted; implemented
@@ -563,8 +607,208 @@ gained a visible "Voice input" caption, since it was previously
 indistinguishable from a reply-language control despite governing only
 transcription.
 
+## D034 — Reputation starts at the 100 ceiling; identity gates hardened without documents
+**Status:** Accepted in application; migrations 087_m1 and 088_m1 authored and not deployed
+
+Reputation now starts at 100/100 instead of 70 and is clamped to that ceiling
+per event, so it is standing a member keeps rather than points they collect.
+Positive Ride outcomes are unchanged (+1 completion, +1 on-time Check-in, +1/+2
+for 4/5-star reviews, capped at +3 per user per Ride) but at 100 they are spent
+rather than banked: credit earned while already at the ceiling cannot cushion a
+later penalty. Negative events, the three-Ride provisional window and the
+safety hold are unchanged.
+
+Because nobody now starts below a threshold, the thresholds move to where
+losses matter: publishing requires 90 (was 65) and requesting requires 75 (was
+50). Tier boundaries are aligned to those capability boundaries rather than
+chosen separately - Trusted 95+, Standard 90+ (may publish), Limited 75+ (may
+request), Restricted 50+, and below 50 reads as a safety problem. Live scores
+are rebased by +30 clamped at 100, which reproduces each member's existing
+event history against the new origin.
+
+Reputation still ignores login, profile completion, identity documents and CO2
+impact. The reference model that prompted this change (a lost-and-found system
+awarding points for posting and for helping, with no upper bound) was
+deliberately not adopted: unbounded points reward volume rather than
+reliability, and posting is not evidence that somebody carried another person
+safely.
+
+Module 5's Host Impact composite drops its reputation term as a direct
+consequence. While reputation was additive at weight 0.8, a 100 base scored
+every brand-new account at 80 - exactly the Silver threshold - so an account
+with zero completed trips was shown a Silver badge and a reduced-fee perk.
+Host Impact is now contribution only (`trips x 2.0 + co2 x 0.5`), with tiers
+recalibrated to 0/50/120/200 to preserve the previous real spread, and
+reputation acting as a ceiling: a confirmed safety hold, or a score below the
+Driver publishing threshold, withholds every tier above Bronze. Reputation can
+withhold a badge but never grant one. Search ranking uses the same contribution
+formula; a member below the publish threshold cannot list a new Ride anyway, so
+ranking does not penalise reputation a second time. The badge perks are also now non-monetary. The original
+scaffold gave each tier a "platform fee (15%/12%/8%/5%)" ladder borrowed from
+commercial ride-hailing, which contradicted the platform's own definition:
+Let's Tumpang is non-monetary (PROJECT.md), a Ride's contribution is free text
+such as "snacks & drinks", and no fee, fare, amount, currency or payment
+provider exists anywhere in the codebase. Those four labels were the only
+place the app claimed a commission, and they are replaced with listing
+visibility, priority support, discovery placement and verified-badge perks.
+A test asserts no perk can reintroduce monetary language.
+
+Identity checks are strengthened without collecting document photos. The MyKad
+sign-up gate now requires a real calendar birth date and an assigned birthplace
+code instead of only a 12-digit shape; MyKad carries no check digit, so this
+remains structural validation. The IC number is still never persisted or
+transmitted - `088_m1` records only `profile_private.ic_checked_at`, written by
+the account-creation trigger and not writable by any client. A vehicle's
+driver's license gains a required expiry date, and a license that is present
+and unexpired becomes a server-enforced condition of publishing a Ride, beside
+the existing reputation gate. None of this is identity verification: it grants
+no badge, no public signal and no reputation. Document photos, and the
+reviewer surface they would require, remain out of scope and depend on the open
+Trust & Safety console decision.
+
+## D035 - Identity is verified where it is used, not at sign-up
+**Status:** Accepted and live; migrations 093_m1-097_m1 are live without tracked
+migration entries, and tracked 099_m1 repaired the identity INSERT grants
+
+Sign-up no longer asks for a MyKad number. That gate (D034, `088_m1`) only
+covered email sign-up: `signInWithGoogle()` created a full account without it,
+so the check was skippable by choosing the easier button. It also asked every
+member for an identity number when only a Host needs one.
+
+A Host now uploads a photo of their MyKad before publishing a Ride. Submitting
+unlocks publishing; approval is what earns the verified label. Holding
+publishing until a human approves would dead-end every Host, because the shared
+Trust & Safety reviewer surface is still an open decision - so review runs
+through a service-role-only `private.review_identity_verification`, following
+`078_m1`, and no client role can approve any submission including its own.
+
+These images are sensitive personal data under the PDPA. `093_m1` puts them in
+a PRIVATE `identity-documents` bucket under owner-scoped Storage policies with
+no anon policy, so the only way to view one is a short-lived signed URL created
+by the owner or the service role. They never appear on a public profile, a Ride
+card, or in the public profile projection. Retention and deletion are not yet
+specified and remain open.
+
+`093_m1` also retires `profile_private.ic_checked_at`: it restores
+`handle_new_user()` to a body that does not write it before dropping the
+column, so account creation cannot break. Until the migration is deployed the
+client reports the dependency and the publish gate stays open, matching how
+Module 1 and Module 4 already treat undeployed columns.
+
+The MyKad is entered once. `019_m1`/`088_m1` put the driver's licence number
+and expiry on `vehicles`, so a Host retyped the same MyKad number for every car
+they registered; a licence belongs to a person, not to a vehicle. `094_m1`
+moves both onto `identity_verifications`, captured in the same step as the
+photo, and retires the per-vehicle licence trigger - leaving the old columns in
+place, unused, because other modules may still read them. The vehicle form no
+longer asks for a licence at all. The number is held beside a photo that
+already shows it, under the same owner-only RLS, and never enters the public
+profile projection or a Ride card.
+
+Publishing therefore now depends on: a non-rejected identity submission, a
+licence that has not lapsed, a registered vehicle, and the D034 reputation
+gate. A submission made before `094_m1` has no expiry stored; that unknown is
+treated as valid rather than lapsed, so nobody who already verified is locked
+out by a column that did not exist when they submitted. `malaysianIdentity.js`
+holds the one MyKad validator and the licence-currency rule so the fields
+cannot drift apart.
+
+Status in Profile > Info & Security and the blocking gate in front of Publish
+render from one component, so the two can never describe the same state
+differently.
+
+Review itself is still manual: a reviewer runs
+`private.review_identity_verification` from the Supabase SQL Editor, following
+the `078_m1` service-role pattern, because a client-facing reviewer surface
+depends on the open Trust & Safety console decision. Submitting writes through
+a direct `.upsert()`, which PostgREST turns into
+`INSERT ... ON CONFLICT DO UPDATE`; `094_m1` only granted a column-restricted
+UPDATE, so Postgres refused that statement shape with a
+`42501 permission denied` error - the same trap `071_project` already hit on
+`profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
+needs; RLS still does the real gatekeeping underneath it.
+
+Live verification on 2026-09-06 found a second grant drift: INSERT still covered
+only `093_m1`'s original `user_id`, `status`, and `document_path`, not the
+`ic_number` and `license_expiry` added by `094_m1`. Tracked `099_m1` restores
+only those two column INSERT privileges. It leaves broad table INSERT disabled,
+keeps RLS enabled, and preserves the owner INSERT/UPDATE policies.
+
+Nothing stopped the same MyKad number appearing on two accounts either: a
+member whose reputation dropped, or whose document was rejected, could sign up
+again under a fresh email and resubmit the same number to start clean.
+`096_m1` closes that with a partial unique index on `ic_number` (`where
+ic_number is not null`, so legacy rows captured before `094_m1` never collide
+on a shared null). A member's own resubmission still lands on their existing
+row through `093_m1`'s `onConflict: 'user_id'` upsert, so only a *second
+account* reusing the number is ever refused.
+
+## D036 - Driver documents are captured before adding a vehicle
+
+Accepted 2026-09-06. Publish routes members without vehicles to My Vehicles.
+Add Vehicle first collects account-level MyKad number/photo and licence
+expiry/photo; subsequent vehicles reuse the documents. Existing owners must
+supplement missing licence photos before publishing, without creating another
+vehicle. Info & Security retains a separate passenger IC-only flow.
+Pending complete submissions can publish; approval remains the verified label.
+Admin reviews the combined application and can preview both private photos.
+Replacing documents resets review state. Photos stay in the existing private
+bucket, one licence image, JPEG/PNG/WebP at most 5 MB each. No OCR or external
+identity provider is introduced. 100/101 expand the backend; 102 activates
+server enforcement only after frontend release. This supersedes D035's former
+Publish-page upload form and licence-expiry requirement for passenger capture.
+
+## D037 — Three Layers Use Shared Plus M1-M6 Module Directories
+
+**Status:** Accepted
+
+Accepted 2026-09-06. The source tree keeps the three directional layers but
+each layer is divided into `shared/` plus `m1-profile/`, `m2-rides/`,
+`m3-messaging/`, `m4-search/`, `m5-trips/`, and `m6-discovery/`.
+
+The allowed dependency direction is:
+
+```text
+Presentation -> Business Logic -> Data Access / backend adapters
+```
+
+Presentation cannot import Data Access. Business Logic reaches Supabase through
+module-owned adapters rather than importing the shared client. Data Access
+cannot import Business Logic or Presentation. Direct HTTP transport also belongs
+in Data Access, including external weather and Edge Function calls. `npm run
+check:layers` enforces these rules for production source imports.
+
+`src/main.jsx` remains the composition root. Auth and notification contexts
+are presentation-shared; messaging and call-session contexts belong to M3.
+Therefore the former `src/context/` pseudo-layer is removed.
+
+Data Access `shared/` is limited to the Supabase client/configuration, the
+cross-module notification repository, and the atomic legacy offline-fixture
+foundation. Module-specific Supabase, repository, mock, persistence, and
+fixture adapters live in their M1-M6 directories. The legacy fixture stays
+physically shared because its profile, ride, favourite, history, and reputation
+updates are one localStorage transaction; module-owned facades limit what each
+service consumes. No repository base class or speculative abstraction is added.
+
+Cross-module behaviour continues through explicit Business Logic services and
+accepted contracts. Moving a file does not transfer product ownership.
+
+## D038 - Passenger identity accepts IC or Passport with a photo
+
+Accepted 2026-09-06. Supersedes D036's passenger IC-only capture. Passengers
+choose IC/MyKad or Passport, enter its number and upload one matching photo;
+no driving licence is required. Use basic format checks only: IC 12 digits
+(spaces/dashes accepted), Passport 5–20 ASCII letters/digits (uppercase storage),
+and nonempty JPEG/PNG/WebP up to 5 MB. No OCR or new passenger age checks.
+Reuse the private identity record/bucket and reviewer flow. Changing type or
+number requires a replacement photo. Existing driver licence requirements stay;
+Passport does not qualify a member to host. Retain existing licence fields on
+passenger updates. 103 was deployed with separate user approval on 2026-09-06.
+Preflight found the live publish guard checks status only, so 103 adds a narrow
+Passport-only publish restriction without activating pending 102.
+
 ## Open Decisions
-- database schemas/RLS for Module 5 (Module 4's `034`/`035` are deployed and `039` awaits review; Module 6's `024` schema is deployed);
+- database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);
 - whether the four inherited admin surfaces become one shared Trust & Safety console or four separate ones;

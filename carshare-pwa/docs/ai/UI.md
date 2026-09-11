@@ -24,16 +24,16 @@ Use this order when UI sources disagree:
 3. Verified current source code for implementation reality.
 4. `docs/figma/` prompts as design references, not frozen specifications.
 
-For exact implemented design-token values, `src/presentation/styles/theme.css`
+For exact implemented design-token values, `src/presentation/shared/styles/theme.css`
 is the runtime source of truth. Do not silently copy an older Figma value over a
 current shared token. Surface meaningful conflicts before changing a shared
 contract.
 
 Shared implementation locations:
 
-- `src/presentation/styles/theme.css` - global tokens, app shell, navigation,
+- `src/presentation/shared/styles/theme.css` - global tokens, app shell, navigation,
   and shared presentation primitives.
-- `src/presentation/components/ui/` - shared `Button`, `IconButton`, page,
+- `src/presentation/shared/components/ui/` - shared `Button`, `IconButton`, page,
   card, field, status, async-state, adaptive-dialog, route-loading, route
   error/focus, `Skeleton`, and `Chip` primitives. These components are
   presentation-only and never read Supabase or business data directly.
@@ -42,11 +42,11 @@ Shared implementation locations:
   discover.css's `.dsc-filter`) - reach for these before adding a new one.
   Trip's `.m5-chip` is intentionally not yet migrated; out of scope for the
   change that introduced the shared primitive.
-- `src/presentation/components/nav/TopNav.jsx` - the shared responsive
+- `src/presentation/shared/components/nav/TopNav.jsx` - the shared responsive
   navigation component.
-- `src/presentation/components/notifications/NotificationCenter.jsx` - shared
+- `src/presentation/shared/components/notifications/NotificationCenter.jsx` - shared
   notification bell popover and protected full inbox.
-- `src/presentation/components/icons.jsx` - shared icon set.
+- `src/presentation/shared/components/icons.jsx` - shared icon set.
 - Module style files - module-specific layouts and states only.
 
 ## Core Experience
@@ -230,8 +230,11 @@ alternative.
   existing Message destination. Message notification records remain available
   to the shared Web Push pipeline so opted-in devices can alert while the page
   is closed.
-- A one-to-one voice call uses one global modal overlay for incoming/outgoing
-  ringing. Connecting, connected, and reconnecting phases add Minimize; the
+- Direct and group voice calls use one global modal overlay for incoming/outgoing
+  ringing. Starting a group call first opens a member picker and only selected
+  members ring; every invitee can answer or reject independently. The UI reports
+  joined, ringing, and declined counts. Connecting, connected, and reconnecting
+  phases expose one icon-only Minimize action; there is no separate browse menu. The
   minimized non-modal floating bar leaves navigation and page focus available
   and exposes participant, state/duration, mute, expand, and end. Blocked audio
   keeps an explicit recovery action. When the free relay allowance is
@@ -244,6 +247,16 @@ alternative.
   accessible label `Conversation details and management`; the same adaptive
   dialog is used on every viewport and remains viewable for active, terminal,
   and archived conversations.
+- Message keeps the seven primary destinations unchanged and adds Friends as a
+  local header entry. `/message/friends` reflows three request/friend sections
+  at phone, tablet, and desktop widths. Friend-chat rows carry a Friend marker;
+  removed friendships remain in the normal conversation list with
+  `Not friends · Read-only`, no composer/call action, and a profile link to add
+  the person again. Friend chats omit Ride summaries.
+- Accepted Friend chats expose a Ride picker in the composer. It lists current
+  eligible Rides the sender Hosts or has Pending/Accepted participation in,
+  supports an optional text note, and renders a live-state card linking to Ride
+  Detail. The recipient still uses the existing `Request to join` action.
 - Notification and message Realtime inserts may use the account-local `Alert
   sounds` toggle. General events use one short Web Audio bell; incoming calls
   use a distinct repeating two-pulse ringtone. Do not promise a custom sound

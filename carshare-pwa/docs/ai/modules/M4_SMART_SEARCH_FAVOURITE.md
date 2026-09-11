@@ -10,7 +10,7 @@ Advanced search, filters, favourites, alternative/multi-leg suggestions, and rou
 Advanced search, event/cultural/culinary proximity, filters, journey-scale filtering, favourites, alternative routes, Host Impact sorting, unavailable notifications, multi-leg suggestions.
 
 ## Existing Repository Areas
-Presentation: `src/presentation/components/search/` including `SearchModule.jsx`, `SearchForm.jsx`, `RideCards.jsx`.
+Presentation: `src/presentation/m4-search/` including `SearchModule.jsx`, `SearchForm.jsx`, `RideCards.jsx`.
 The public `/search` route is the application's sole ride-listing surface.
 
 ## Depends On
@@ -30,6 +30,19 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   Host language, and Host Impact sorting. Vehicle and language criteria are
   optional exact compatibility filters and remain URL-backed as `vehicleType`
   and `language`.
+- Pickup and ordinary destination text now use the shared Google Places
+  combobox. Suggestions begin after a one-second pause, remain Malaysia-only,
+  and an entered value must be chosen from the list before Search runs. The
+  selected input IDs round-trip as `pickupPlaceId` and
+  `destinationSearchPlaceId`; Module 6's existing `destinationPlaceId` remains
+  a separate catalogue hint that alone enables the 5/10/25 km radius mode.
+  Deployed migration `082` compares those inputs privately against confirmed
+  Ride endpoints. A Ride with
+  a different stored endpoint cannot match by text; only legacy rows with no
+  stored endpoint ID may use the confirmed display text as fallback. Complete
+  Google labels remain visible and URL-persisted; only the RPC fallback prefix
+  is capped at the server's existing 120-character limit. Place IDs are not
+  truncated.
 - `/favourite` is authenticated and uses `FavouriteService`. The mock adapter
   persists per-user favourites. Migration `034` defines Supabase persistence,
   owner RLS, safe RPCs, and unavailable-ride cards. Its hardened private-helper
@@ -82,8 +95,10 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   safe route/Host/schedule data and open each real ride independently. Migration
   `068` is deployed; no paid Routes request is made for matching.
 
-Business logic: `src/business-logic/SmartSearchService.js` and
-`src/business-logic/FavouriteService.js`.
+Business logic: `src/business-logic/m4-search/`.
+
+Data access: `src/data-access/m4-search/` owns favourite Supabase and mock
+adapters.
 
 Search and Favourite hydrate destination Place IDs with Module 2's bounded
 batch RPC, then share `DestinationRidePhoto` with the `/ride` workspace. Photos
@@ -92,27 +107,26 @@ fixed contrast scrim, include Google/photographer attribution, and fall back to
 the original white-green card when unavailable. Pickup meeting photos never
 appear on cards.
 
-Presentation: `src/presentation/components/search/` and
-`src/presentation/styles/search.css`.
+Presentation: `src/presentation/m4-search/components/` and
+`src/presentation/m4-search/styles/search.css`.
 
 Database: `database/sql/034_m4_smart_search_favourites.sql` and
 `database/sql/035_m4_destination_proximity_search.sql` (both deployed and
 verified), plus deployed `039_m4_vehicle_language_filters.sql`,
 `040_m4_favourites_advisor_followup.sql`,
 `067_m4_favourite_unavailable_notifications.sql`, and
-`068_m4_multi_leg_journey_search.sql`. Post-deployment advisors reported no new
+`068_m4_multi_leg_journey_search.sql`, and deployed
+`082_m4_confirmed_location_search.sql`, which adds the exact endpoint RPCs.
+Post-deployment advisors for the deployed migrations reported no new
 Module 4 security finding. The new favourite/transfer indexes are initially
 reported as unused, which is expected before normal production traffic.
-
-Authored Module 3 migration `075` wraps the live proximity, compatibility,
-Favourite, and multi-leg projections with authenticated account-block filters.
-Anonymous results remain unchanged because an anonymous viewer has no account
-identity against which a personal block can be evaluated.
 
 ## Open Questions
 Remaining acceptance work is operational rather than another feature slice:
 two-account notification/push verification, owner-edit verification, and a
-live dataset containing a valid two-leg chain. Route-corridor matching remains
+live dataset containing a valid two-leg chain and confirmed-location exact/
+legacy-fallback cases. Migration `082` is deployed, anonymously smoke-tested,
+and followed by security/performance advisors. Route-corridor matching remains
 outside Module 4, and multi-leg matching deliberately uses stored schedules
 rather than paid Routes/Distance Matrix calls.
 

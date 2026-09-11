@@ -1,15 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import App from './App.jsx';
-import { AuthProvider } from './context/AuthContext.jsx';
-import { MessagingSessionProvider } from './context/MessagingSessionContext.jsx';
-import { NotificationProvider } from './context/NotificationContext.jsx';
-import { CallSessionProvider } from './context/CallSessionContext.jsx';
-import CallOverlay from './presentation/components/messaging/CallOverlay.jsx';
-import GlobalSOSLauncher, { SOSLauncherProvider } from './presentation/components/ride/GlobalSOSLauncher.jsx';
-import SOSAlertOverlay from './presentation/components/ride/SOSAlertOverlay.jsx';
-import './presentation/styles/theme.css';
+import App from './presentation/shared/app/App.jsx';
+import { AuthProvider } from './presentation/shared/context/AuthContext.jsx';
+import { MessagingSessionProvider } from './presentation/m3-messaging/context/MessagingSessionContext.jsx';
+import { NotificationProvider } from './presentation/shared/context/NotificationContext.jsx';
+import { CallSessionProvider } from './presentation/m3-messaging/context/CallSessionContext.jsx';
+import CallOverlay from './presentation/m3-messaging/components/CallOverlay.jsx';
+import GlobalSOSLauncher, { SOSLauncherProvider } from './presentation/m2-rides/components/ride/GlobalSOSLauncher.jsx';
+import SOSAlertOverlay from './presentation/m2-rides/components/ride/SOSAlertOverlay.jsx';
+import './presentation/shared/styles/theme.css';
 
 // Registers the offline-resilience Service Worker described in 3.1(a).
 // vite-plugin-pwa injects this virtual module at build time.

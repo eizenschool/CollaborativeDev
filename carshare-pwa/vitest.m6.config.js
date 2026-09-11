@@ -6,9 +6,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
-      'src/business-logic/guide/__tests__/**/*.test.js',
-      'src/business-logic/__tests__/TumpangGuideSql.test.js',
-      'src/data-access/__tests__/tumpangGuideEdgeRepository.test.js',
+      'src/business-logic/m6-discovery/guide/__tests__/**/*.test.js',
+      'tests/contracts/m6/TumpangGuideSql.test.js',
+      'src/data-access/m6-discovery/__tests__/guideEdgeAdapter.test.js',
       'supabase/functions/m6-tumpang-guide/__tests__/**/*.test.js',
       'supabase/functions/m6-ingest/__tests__/travelAttributes.test.js'
     ]

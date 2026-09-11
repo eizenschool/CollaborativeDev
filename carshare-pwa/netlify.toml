@@ -2,6 +2,14 @@
   command = "npm run build"
   publish = "dist"
 
+# These values are browser-visible feature configuration, not provider secrets.
+# Netlify production builds do not inherit .env.local, so the Guide would
+# otherwise be enabled by Vite's DEV flag locally and compiled out in production.
+[build.environment]
+  VITE_TUMPANG_GUIDE_ENABLED = "true"
+  VITE_TUMPANG_GUIDE_MODE = "gemini"
+  VITE_DISCOVERY_DATA_SOURCE = "supabase"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

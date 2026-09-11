@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Let's Tumpang - Module 1 (User Profile & Reputation) PWA prototype",
   "scripts": {
+    "check:layers": "node scripts/check-layer-boundaries.mjs",
     "dev": "vite",
     "dev:fixture": "vite --mode fixture",
     "build": "vite build",

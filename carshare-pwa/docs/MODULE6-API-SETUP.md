@@ -16,9 +16,9 @@ real photos and up to five stored, attributed reviews (`027_m6_place_reviews.sql
 signed-out visitor sees real recommendations too.
 
 None of this is required for the offline build, tests, or demo - the fixture
-catalogue (`src/data-access/discoveryStore.js`) is still the default, selected
+catalogue (`src/data-access/m6-discovery/discoveryStore.js`) is still the default, selected
 by leaving `VITE_DISCOVERY_DATA_SOURCE` unset. The live adapter
-(`src/data-access/discoverySupabaseRepository.js`) is opt-in, and the test
+(`src/data-access/m6-discovery/discoverySupabaseRepository.js`) is opt-in, and the test
 suite always uses the fixture regardless of `.env.local` - see the guard in
 `discoveryStore.js`.
 
@@ -206,7 +206,7 @@ a reader control. `StreetViewFrame.jsx` defers the coverage check itself
   app's own origin: `200`, a real embed bootstrap payload carrying the
   requested coordinate, no error markers.
 
-`src/business-logic/discovery/StreetView.js` holds `checkStreetViewCoverage`
+`src/business-logic/m6-discovery/discovery/StreetView.js` holds `checkStreetViewCoverage`
 (calls the Edge Function) and `buildStreetViewEmbedUrl` (pure). Coverage is
 checked *before* the iframe is ever created, not left to be discovered after:
 an iframe has no `onError` the way `<img>` does, so an uncovered coordinate
@@ -329,7 +329,7 @@ GET https://api.open-meteo.com/v1/forecast
 ```
 
 **Already implemented and needs nothing from anyone** — see
-`src/business-logic/discovery/WeatherGate.js`. Open-Meteo is free, requires no
+`src/business-logic/m6-discovery/discovery/WeatherGate.js`. Open-Meteo is free, requires no
 key, and is therefore outside the Google cost boundary entirely. FR-6.38's
 requirement that the credential never reach the client holds trivially because
 there is no credential.

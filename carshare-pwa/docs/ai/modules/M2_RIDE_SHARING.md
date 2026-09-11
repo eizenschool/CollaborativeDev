@@ -10,8 +10,11 @@ Core ride publishing, ride requests, host request management, and lifecycle beha
 Publish ride, pickup/destination/date/time/seats/vehicle, non-monetary contribution/restrictions, request to join, details/status, accept/reject, edit/cancel, lifecycle, review, route/waypoints.
 
 ## Existing Repository Areas
-Presentation: `src/presentation/components/ride/` including `RideHub.jsx`, `PublishRide.jsx`, `RideCard.jsx`, `RideDetail.jsx`, `ManageRequests.jsx`, `MyRequests.jsx`, `EditRide.jsx`, `RateReview.jsx`.
-Business logic: `src/business-logic/RideService.js`.
+Presentation: `src/presentation/m2-rides/` including Ride, SOS, and inherited
+trip-verification surfaces.
+Business logic: `src/business-logic/m2-rides/`, including `verification/`.
+Data access: `src/data-access/m2-rides/` contains Ride Supabase/mock adapters,
+the Family Live Share HTTP adapter, and the inherited verification fixture store.
 
 ## Owns
 Ride entity behaviour, publishing/request flows, host decisions, ride lifecycle contract.
@@ -21,6 +24,18 @@ Module 1 eligibility/profile/vehicle; Google Maps; Module 3 group membership aft
 
 ## Provides
 Ride data, accepted participation context, lifecycle state, searchable rides.
+
+## Driver onboarding update (2026-09-06)
+
+PublishRide no longer embeds an identity upload form. Missing vehicles route
+to Profile > My Vehicles with an Add Vehicle message; existing owners missing
+driver documents receive Complete driver documents. The return query preserves
+the original publish/draft route. The frontend requires both photos, IC number,
+current expiry, age and existing reputation eligibility. Pending submissions
+remain eligible; rejected submissions are blocked. Location permission is not
+requested before eligibility passes. Passenger requests still require only IC.
+The server activation migration 102 is pending frontend release; 100/101's
+compatible submission contract is already deployed.
 
 ## Current Status
 Module 2 is connected to the shared Supabase project through `RideService.js`,
@@ -38,6 +53,10 @@ authored undeployed migration `065` adds the authoritative database triggers,
 65 Driver minimum, 50 Traveller minimum, three-Ride provisional access, and
 safety-hold override. Driver and requester identity rows link to the safe
 `/users/:userId` public profile. Module 2's contribution remains non-monetary.
+`RideRequestService.submitRequest` also requires a submitted MyKad, the same
+`IdentityVerificationService.requireVerifiedIdentity` check `PublishRide.jsx`
+already gates on - client-side only, alongside the reputation check above, not
+an authoritative database trigger.
 
 The Ride UI now foregrounds the existing `rideJourneyState` next action with
 role, timing, and responsible party. Publish keeps its five-step unlock,
@@ -194,6 +213,13 @@ the legacy direct `start_ride` RPC.
 Visible Trip mode refreshes
 Ride, Request, and lifecycle context every 15 seconds and immediately after
 focus or a local mutation without adding a new Realtime publication.
+These refreshes are silent: RideDetail and RideHub initial-load callbacks
+depend on the account ID, not the replaceable AuthContext user object. A
+same-account profile/token refresh must not display the page loader, unmount
+Trip Mode, or stop its consented live-location watcher. Explicit stop, leaving
+Trip Mode, and genuine loss of trip eligibility still use normal cleanup.
+Regression: `tests/e2e/trip-refresh.spec.js` uses an isolated watcher/service
+fixture to cover profile refresh plus focus/visibility events and manual stop.
 
 Module 4 Search and Published Ride Detail are public browsing surfaces. The
 bare `/ride` route is the authenticated workspace for hosted and joining rides;
@@ -433,10 +459,3 @@ notifications and evidence holds without rewriting deployed history. The
 original browser-local `/safety` verification demo remains; `/safety/admin` and
 the two production Admin Edge Functions are removed. `m2-live-share` version 4
 is active and returns only the privacy-safe family snapshot.
-
-Authored migration `075` treats account blocking as a future Ride-interaction
-boundary: blocked pairs cannot discover each other's authenticated listings or
-create/accept new requests, and Pending requests are cancelled. Existing
-Accepted, In Transit, and terminal participation remains visible and keeps its
-ride-group, safety, and history access. Terminal Ride status no longer makes
-Module 3 conversations read-only or starts a seven-day messaging expiry.

@@ -116,7 +116,7 @@ site in Penang and scores 0 on visitation headroom.
 
 ## 3. File inventory
 
-### Business logic — `src/business-logic/discovery/`
+### Business logic — `src/business-logic/m6-discovery/discovery/`
 
 | File | Purpose |
 |---|---|
@@ -139,7 +139,7 @@ site in Penang and scores 0 on visitation headroom.
 | `PlaceDescription.js` | FR-6.8/6.9/6.10. Describes a place from phrases two or more of its reviewers used independently. Quotes nobody. |
 | `geo.js` | Haversine distance. |
 
-### Presentation — `src/presentation/components/discover/`
+### Presentation — `src/presentation/m6-discovery/components/discover/`
 
 `DiscoverRoutes` (sub-router) · `DiscoverHub` (UC6.1) · `DestinationDetail` (UC6.2)
 · `DestinationCard` · `UnmetDemandView` (UC6.7) · `DiscoverRail` (home screen)
@@ -147,15 +147,15 @@ site in Penang and scores 0 on visitation headroom.
 · `PlacePoster` (FR-6.17 illustration tier, fallback) · `PlaceImage` (live photo,
 falling back to `PlacePoster` when nothing is fetchable)
 
-Styles: `src/presentation/styles/discover.css`, every rule namespaced `.dsc-*`.
+Styles: `src/presentation/m6-discovery/styles/discover.css`, every rule namespaced `.dsc-*`.
 
 ### Data and schema
 
-- `src/data-access/discoveryStore.js` — fixture catalogue, own localStorage key
+- `src/data-access/m6-discovery/discoveryStore.js` — fixture catalogue, own localStorage key
   `letstumpang_discovery_v1`. 22 real Malaysian places, built so every rule fires
   visibly (see §7). Still the default, and the only source the test suite ever
   reads regardless of `.env.local`.
-- `src/data-access/discoverySupabaseRepository.js` — the live adapter. Opt-in via
+- `src/data-access/m6-discovery/discoverySupabaseRepository.js` — the live adapter. Opt-in via
   `VITE_DISCOVERY_DATA_SOURCE=supabase`.
 - `database/sql/024_m6_destination_discovery.sql` — **deployed** as the Supabase
   migration `m6_destination_discovery`.
@@ -181,10 +181,10 @@ Styles: `src/presentation/styles/discover.css`, every rule namespaced `.dsc-*`.
 **Never touch.** These belong to Module 2 now (see §6):
 
 ```text
-src/business-logic/verification/**
-src/presentation/components/safety/**
-src/data-access/module6Store.js
-the /safety route in App.jsx
+src/business-logic/m2-rides/verification/**
+src/presentation/m2-rides/components/verification/**
+src/data-access/m2-rides/verificationFixtureStore.js
+the /safety route in src/presentation/shared/app/App.jsx
 ```
 
 **Never edit another module's context file** — `docs/ai/modules/M1..M5_*.md` are
@@ -194,10 +194,10 @@ maintained by their owners.
 
 | File | Change | Owner |
 |---|---|---|
-| `src/App.jsx` | one import, one `/discover/*` route | shared |
-| `src/presentation/components/HomeScreen.jsx` | one import, one `<DiscoverRail />` | shared |
-| `src/presentation/components/ride/RideHub.jsx` | optional search prefill params; a link to the demand view | **Yee (M2)** |
-| `src/presentation/components/ride/PublishRide.jsx` | optional destination prefill param | **Yee (M2)** |
+| `src/presentation/shared/app/App.jsx` | one import, one `/discover/*` route | shared |
+| `src/presentation/m6-discovery/HomeScreen.jsx` | one import, one `<DiscoverRail />` | **Brayden (M6)** |
+| `src/presentation/m2-rides/components/ride/RideHub.jsx` | optional search prefill params; a link to the demand view | **Yee (M2)** |
+| `src/presentation/m2-rides/components/ride/PublishRide.jsx` | optional destination prefill param | **Yee (M2)** |
 | `docs/ai/*` | TODO, DECISIONS (D018), FILEMAP, SQL, PROJECT, AGENTS module name | shared |
 
 ⚠️ **Yee has not been told about the last two.** Both are purely additive and
@@ -655,8 +655,9 @@ flex item that must never grow past its container on content's say-so.
 > carshare PWA. Read `carshare-pwa/docs/MODULE6-HANDOVER.md` first, then
 > `carshare-pwa/AGENTS.md`. My branch is `Module6_Trust_And_Safety`.
 >
-> Rules that matter: never touch `src/business-logic/verification/`,
-> `src/presentation/components/safety/`, or `src/data-access/module6Store.js` —
+> Rules that matter: never touch `src/business-logic/m2-rides/verification/`,
+> `src/presentation/m2-rides/components/verification/`, or
+> `src/data-access/m2-rides/verificationFixtureStore.js` —
 > they belong to Module 2 now. Never commit directly to `Development`. Commit
 > messages use `[Module6] …` and must not credit any AI as author or co-author.
 > Tests must make zero real API calls, regardless of what `.env.local` contains.
