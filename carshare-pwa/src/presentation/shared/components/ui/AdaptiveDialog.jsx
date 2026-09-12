@@ -20,6 +20,7 @@ export default function AdaptiveDialog({
   open,
   title,
   triggerRef,
+  className = '',
 }) {
   const [rendered, setRendered] = useState(open);
   const [closing, setClosing] = useState(false);
@@ -120,7 +121,7 @@ export default function AdaptiveDialog({
     >
       <section
         ref={dialogRef}
-        className="ui-dialog"
+        className={`ui-dialog ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

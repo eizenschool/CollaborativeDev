@@ -38,6 +38,21 @@ describe('Tumpang Guide intentPatch scoping (regression: Travel Brief fields mus
   });
 });
 
+describe('Tumpang Guide destination-detail identity handoff', () => {
+  it('resolves an explicitly referenced verified context place by Place ID before fuzzy catalogue matching', () => {
+    const branch = source.slice(
+      source.indexOf('if (intent.requestedMode === "place_info")'),
+      source.indexOf('if (intent.toolName === "get_weather_forecast")')
+    );
+    const verifiedLookup = branch.indexOf('referencedVerifiedPlace(');
+    const fuzzyLookup = branch.indexOf('matchCataloguePlaces(');
+    expect(source).toContain('function referencedVerifiedPlace');
+    expect(branch).toContain('String(place.id) === verifiedReference.placeId');
+    expect(verifiedLookup).toBeGreaterThan(-1);
+    expect(fuzzyLookup).toBeGreaterThan(verifiedLookup);
+  });
+});
+
 describe('Tumpang Guide pendingClarification wiring (regression: a bare one-word reply to a weather/route clarify question got reinterpreted as an unrelated fresh request, since nothing told the routing call a specific question was still pending)', () => {
   it('validates the client-echoed shape narrowly before it ever reaches the routing prompt', () => {
     expect(source).toContain('function safePendingClarification');

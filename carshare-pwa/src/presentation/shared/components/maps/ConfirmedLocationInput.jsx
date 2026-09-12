@@ -18,7 +18,8 @@ export default function ConfirmedLocationInput({
   searchOnFocusOnly = false,
   allowCurrentLocation = false,
   currentLocationPreview = null,
-  loadNearbySuggestions = null
+  loadNearbySuggestions = null,
+  purpose = 'pickup'
 }) {
   const generatedId = useId();
   const inputId = id || generatedId;
@@ -37,6 +38,15 @@ export default function ConfirmedLocationInput({
   const [selectionPending, setSelectionPending] = useState(false);
 
   const confirmed = GooglePlacesService.isConfirmedLocation(location);
+  const startingPointMode = purpose === 'starting-point';
+  const contextMessage = (value) => startingPointMode
+    ? String(value || '')
+      .replace(/pickup alternatives/giu, 'nearby alternatives')
+      .replace(/pickup point/giu, 'starting point')
+      .replace(/pickup address/giu, 'address')
+      .replace(/this pickup/giu, 'this starting point')
+      .replace(/your pickup/giu, 'your starting point')
+    : String(value || '');
 
   useEffect(() => {
     setQuery(value || '');
@@ -230,12 +240,14 @@ export default function ConfirmedLocationInput({
       setQuery(candidate.label);
       onChange(candidate.label, null);
       setStatus('confirming');
-      setMessage('Check this pickup before sharing it with passengers.');
+      setMessage(startingPointMode
+        ? 'Check this starting point before using it for destination ranking.'
+        : 'Check this pickup before sharing it with passengers.');
     } catch (error) {
       if (sequence !== requestSequence.current) return;
       setCurrentLocationSession(loadNearbySuggestions ? { state: 'error' } : null);
       setStatus('error');
-      setMessage(error.message);
+      setMessage(contextMessage(error.message));
     }
   }
 
@@ -344,7 +356,7 @@ export default function ConfirmedLocationInput({
           <span>GPS accuracy: ±{currentCandidate.accuracy} m</span>
           <div>
             <button type="button" className="btn-secondary" onClick={rejectCurrentLocation}>Choose another place</button>
-            <button type="button" className="btn-primary" onClick={confirmCurrentLocation}>Use this pickup</button>
+            <button type="button" className="btn-primary" onClick={confirmCurrentLocation}>{startingPointMode ? 'Use this starting point' : 'Use this pickup'}</button>
           </div>
         </div>
       )}

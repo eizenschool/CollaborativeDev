@@ -126,7 +126,7 @@ function groqSearchSources(message: Row) {
 }
 
 function validateContent(value: Row) {
-  const summary = plainSearchText(value.summary).slice(0, 1400);
+  const summary = conciseSummary(value.summary);
   const list = (key: string, max: number) => Array.isArray(value[key])
     ? (value[key] as unknown[]).map((item) => plainSearchText(item).slice(0, 320)).filter(Boolean).slice(0, max) : [];
   if (!summary) throw new Error("Place information had no summary.");
@@ -145,6 +145,7 @@ export function plainSearchText(value: unknown) {
     .replace(/\[([^\]]+)\]\((?:https?:\/\/)[^)]+\)/giu, "$1")
     .replace(/【[^】]{1,120}】/gu, "")
     .replace(/\[[^\]]*†[^\]]*\]/gu, "")
+    .replace(/(^|\s)#{1,6}\s*/gu, "$1")
     .replace(/[＊*_]{1,3}|`/gu, "")
     .replace(/\|?\s*:?-{3,}:?\s*\|?/gu, " ")
     .replace(/\|/g, " ")
@@ -152,6 +153,14 @@ export function plainSearchText(value: unknown) {
     .replace(/\s*•\s*/gu, " • ")
     .replace(/\s+/g, " ").trim()
     .replace(/^[|•\s]+|[|•\s]+$/gu, "");
+}
+
+export function conciseSummary(value: unknown) {
+  const text = plainSearchText(value);
+  if (text.length <= 560) return text;
+  const sentences = text.match(/[^.!?…]+[.!?…]+(?:["'”’)]*)/gu) || [];
+  const complete = sentences.slice(0, 3).join(" ").trim();
+  return (complete || text.slice(0, 560).replace(/\s+\S*$/u, "").trim()).slice(0, 620);
 }
 
 function searchItems(value: unknown) {
@@ -170,9 +179,11 @@ function reconcilePlaceInfoContent(primary: ReturnType<typeof validateContent>, 
   };
   const summary = PRACTICAL_LEAD_PATTERN.test(primary.summary.slice(0, 100))
     ? fallback.summary : primary.summary;
+  const summaryKey = normalise(summary);
   return validateContent({
     summary,
-    highlights: unique([...primary.highlights, ...fallback.highlights], 4),
+    highlights: unique([...primary.highlights, ...fallback.highlights], 4)
+      .filter((item) => !summaryKey.includes(normalise(item))),
     audience: unique([...primary.audience, ...fallback.audience], 3),
     practicalNotes: unique([...primary.practicalNotes, ...fallback.practicalNotes]
       .filter((item) => normalise(item) !== normalise(summary)), 4)

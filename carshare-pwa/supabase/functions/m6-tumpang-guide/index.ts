@@ -299,6 +299,21 @@ function safePlaceContext(value: unknown) {
   }).filter((row) => row.placeId && row.name);
 }
 
+function referencedVerifiedPlace(
+  context: Array<{ placeId: string; name: string; role: string }>,
+  requestedName: string,
+  userMessage: string
+) {
+  const canonical = (value: unknown) => String(value || "").normalize("NFKC")
+    .toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+  const requested = canonical(requestedName);
+  const message = canonical(userMessage);
+  return context.find((item) => {
+    const official = canonical(item.name);
+    return official && (requested === official || message.includes(official));
+  }) || null;
+}
+
 // The client echoes back exactly what a weather/route clarify response set
 // on `response.pendingClarification` (see the weather/route branches below).
 // This is never trusted as an instruction to change routing by itself - it
@@ -907,7 +922,19 @@ async function handleTurnAttempt(
         stage: "place_info_match", code: String(catalogueError.code || "database_error").slice(0, 80) }));
       return json(unavailableTurn({ traceId: trace }, plan, quota.remaining, "catalogue_unavailable", namedPlaceResponseLanguage(message, plan.language)), 503, origin);
     }
-    const matches = matchCataloguePlaces((catalogue || []) as Record<string, unknown>[], requestedName);
+    // The client can hand over a catalogue-verified Place ID from Destination
+    // Detail. Keep that identity authoritative when the official name appears
+    // in the traveller's message or the tool copied it exactly. The model may
+    // decide that this is a place-information question, but it must not reduce
+    // a known ID back to a fuzzy name and accidentally create a clarification
+    // loop between similarly named venues.
+    const verifiedReference = referencedVerifiedPlace(placeContext, requestedName, message);
+    const verifiedRow = verifiedReference
+      ? (catalogue || []).find((place) => String(place.id) === verifiedReference.placeId) || null
+      : null;
+    const matches = verifiedRow
+      ? [{ ...(verifiedRow as Record<string, unknown>), matchScore: 1 }]
+      : matchCataloguePlaces((catalogue || []) as Record<string, unknown>[], requestedName);
     const top = matches[0]; const second = matches[1];
     const ambiguous = Boolean(top && second && (Number(top.matchScore) < .9 || Number(top.matchScore) - Number(second.matchScore) < .12));
     const responseLanguage = String(intent.responseLanguage || namedPlaceResponseLanguage(message, plan.language));

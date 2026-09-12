@@ -148,6 +148,23 @@ test('guest discovery keeps the selected tab origin in the page context', async 
   await expect(page.getByRole('button', { name: /Starting point.*George Town, Penang/ })).toBeVisible();
 });
 
+test('Home starting-point dialog uses the designed location controls', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.getByRole('button', { name: /Starting point/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Where are you starting from?' });
+  await expect(dialog).toBeVisible();
+  const currentLocation = dialog.getByRole('button', { name: 'Use current location' });
+  await expect(currentLocation).toBeVisible();
+  const style = await currentLocation.evaluate((element) => ({
+    display: getComputedStyle(element).display,
+    minHeight: parseFloat(getComputedStyle(element).minHeight),
+    borderRadius: parseFloat(getComputedStyle(element).borderRadius)
+  }));
+  expect(style.display).toBe('inline-flex');
+  expect(style.minHeight).toBeGreaterThanOrEqual(44);
+  expect(style.borderRadius).toBeGreaterThan(0);
+});
+
 test('destination detail separates browsing interest from ride state', async ({ page }) => {
   await openPage(page, '/discover/p_georgetown?date=2026-09-14', 'George Town Heritage Core');
   await page.evaluate(() => {
@@ -159,8 +176,12 @@ test('destination detail separates browsing interest from ride state', async ({ 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
   await expect(page.getByText('No listed ride for this date')).toBeVisible();
+  await expect(page.getByText('Browsing interest recorded', { exact: true })).toBeVisible();
   await expect(page.getByText('1 traveller has viewed this as an option for this date.')).toBeVisible();
   await expect(page.getByText('Search may include listed rides ending within 10 km of this destination.')).toBeVisible();
+  await page.getByRole('button', { name: 'Tell me when there is a ride' }).click();
+  await expect(page.getByText('Ride alert active', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel ride notification' })).toBeVisible();
 });
 
 test('destination scoring explains evidence without claiming reachability or live crowding', async ({ page }) => {
@@ -696,13 +717,23 @@ test('shared motion uses staged feedback and honours reduced motion', async ({ p
     routeName: getComputedStyle(route).animationName,
     routeDuration: parseFloat(getComputedStyle(route).animationDuration),
   }));
+  // The default Explore view is deliberately local and the compact fixture has
+  // only one destination inside 80 km of Kuala Lumpur. Expand through the real
+  // user controls so this test still exercises a three-card stagger without
+  // weakening the new nearby-first product behaviour.
+  await page.getByRole('button', { name: /Explore \d+ farther places/ }).click();
+  await expect(page).toHaveURL(/(?:\?|&)range=all(?:&|$)/);
+  await expect(page.getByText('Showing destinations across Malaysia.')).toBeVisible();
+  await page.getByRole('button', { name: /further destinations? .*see them/ }).click();
   // Scoped to one list: each section's card list restarts its own index at
   // 0, so checking the whole page could land on two different sections'
   // first cards and see 0s twice instead of a real stagger. Whichever
   // section fixture data populates first is fine - the point under test is
   // the stagger pattern, not a specific section's card count.
   await expect(page.locator('.dsc-list-skeleton')).toHaveCount(0);
-  const cardMotion = await page.locator('.dsc-list:not(.dsc-list-skeleton)').first().locator('.dsc-card').evaluateAll((cards) => ({
+  const staggeredList = page.locator('.dsc-list:not(.dsc-list-skeleton):has(.dsc-card:nth-child(3))').first();
+  await expect(staggeredList).toBeVisible();
+  const cardMotion = await staggeredList.locator('.dsc-card').evaluateAll((cards) => ({
     cardName: cards.length ? getComputedStyle(cards[0]).animationName : null,
     cardDelays: cards.slice(0, 3).map((card) => getComputedStyle(card).animationDelay),
   }));

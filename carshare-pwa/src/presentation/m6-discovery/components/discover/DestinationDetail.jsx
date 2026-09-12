@@ -11,12 +11,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../shared/context/AuthContext.jsx';
 import { getAuthNavigation } from '../../../../business-logic/m1-profile/authAccess.js';
-import { DestinationDiscoveryService } from '../../../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
+import { DEFAULT_EXPLORATION_RADIUS_KM, DestinationDiscoveryService } from '../../../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../../business-logic/m6-discovery/discovery/constants.js';
 import { discoveryFilters, readExploreReturn, readOrigin } from '../../../../business-logic/m6-discovery/discovery/DiscoveryJourney.js';
 import {
   IconArrowLeft, IconArrowRight, IconStar, IconMapPin, IconCar,
-  IconAlertTriangle, IconBell, IconRoute, IconClock, IconMessage, IconUsers
+  IconAlertTriangle, IconBell, IconRoute, IconClock, IconMessage, IconUsers, IconCheck
 } from '../../../shared/components/icons.jsx';
 import PlaceImage from './PlaceImage.jsx';
 import { freshnessLabel } from './DestinationCard.jsx';
@@ -173,6 +173,7 @@ export default function DestinationDetail() {
   const { user } = useAuth();
 
   const requestedTravelDate = searchParams.get('date');
+  const includeDistant = searchParams.get('range') === 'all';
   const travelDate = discoveryFilters(searchParams).date;
   const origin = useMemo(() => readOrigin(), []);
   const exploreContext = useMemo(() => {
@@ -206,6 +207,7 @@ export default function DestinationDetail() {
         origin,
         travelDate,
         preferredCategories: exploreContext.category === 'all' ? undefined : [exploreContext.category],
+        maxDistanceKm: includeDistant ? null : DEFAULT_EXPLORATION_RADIUS_KM,
         rideDate: requestedTravelDate ? travelDate : null
       });
       setData(detail);
@@ -216,7 +218,7 @@ export default function DestinationDetail() {
     } finally {
       setLoading(false);
     }
-  }, [exploreContext.category, origin, placeId, requestedTravelDate, travelDate, user?.id]);
+  }, [exploreContext.category, includeDistant, origin, placeId, requestedTravelDate, travelDate, user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -415,6 +417,18 @@ export default function DestinationDetail() {
               <IconClock size={14} />
               {requestedTravelDate ? `For ${formatTravelDate(travelDate)}` : 'Upcoming ride options'}
             </p>
+            {actionState?.interest && (
+              <div className="dsc-saved-state">
+                <IconCheck size={16} aria-hidden="true" />
+                <span><strong>Browsing interest recorded</strong><small>You viewed this destination as an option for {formatTravelDate(travelDate)}. This is not a booking.</small></span>
+              </div>
+            )}
+            {actionState?.alert && (
+              <div className="dsc-saved-state dsc-saved-state--alert" role="status">
+                <IconBell size={16} aria-hidden="true" />
+                <span><strong>Ride alert active</strong><small>We will check for newly listed rides to this destination for {formatTravelDate(travelDate)}.</small></span>
+              </div>
+            )}
             {rideStatus !== 'available' ? (
               <>
                 <div className="dsc-availability dsc-traffic-unknown">

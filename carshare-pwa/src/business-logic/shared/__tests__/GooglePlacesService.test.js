@@ -52,6 +52,21 @@ describe('Google Places location boundary', () => {
     expect(fetchAutocompleteSuggestions).toHaveBeenCalledWith(expect.objectContaining({ input: 'K' }));
   });
 
+  it('does not invent a zero-metre distance when Google returns no distance without an origin', async () => {
+    const fetchAutocompleteSuggestions = vi.fn(async () => ({
+      suggestions: [{ placePrediction: {
+        placeId: 'place-jb', text: { toString: () => 'Johor Bahru, Johor' }, distanceMeters: null
+      } }]
+    }));
+    const maps = { importLibrary: vi.fn(async () => ({
+      AutocompleteSuggestion: { fetchAutocompleteSuggestions }
+    })) };
+
+    await expect(searchLocations('Johor', { maps })).resolves.toEqual([
+      { placeId: 'place-jb', label: 'Johor Bahru, Johor' }
+    ]);
+  });
+
   it('waits for the Google ready callback and shares the first script load', async () => {
     const originalWindow = globalThis.window;
     const originalDocument = globalThis.document;

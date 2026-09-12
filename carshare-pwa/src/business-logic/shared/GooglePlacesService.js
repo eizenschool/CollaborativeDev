@@ -189,7 +189,8 @@ export async function searchLocations(input, { maps, navigatorObject = globalThi
     const { suggestions = [] } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(buildAutocompleteRequest(query, { origin }));
     const candidates = suggestions
       .map(({ placePrediction }) => {
-        const distanceMeters = Number(placePrediction?.distanceMeters);
+        const rawDistanceMeters = placePrediction?.distanceMeters;
+        const distanceMeters = rawDistanceMeters == null ? null : Number(rawDistanceMeters);
         const candidate = {
           placeId: placePrediction?.placeId?.trim() || '',
           label: placePrediction?.text?.toString().trim() || '',
@@ -219,7 +220,7 @@ export async function resolveLocationSuggestion(suggestion) {
   const candidate = {
     placeId: String(suggestion?.placeId || '').trim(),
     label: String(suggestion?.label || '').trim(),
-    ...(Number.isFinite(Number(suggestion?.distanceMeters))
+    ...(suggestion?.distanceMeters != null && Number.isFinite(Number(suggestion.distanceMeters))
       ? { distanceMeters: Number(suggestion.distanceMeters) } : {}),
     ...(Number.isFinite(Number(suggestion?.latitude))
       ? { latitude: Number(suggestion.latitude) } : {}),

@@ -99,6 +99,18 @@ describe('getRecommendations - the catalogue reaches the screen', () => {
     });
     expect(result.departureDates.length).toBeGreaterThan(0);
   });
+
+  it('limits an explicitly bounded exploration to nearby candidates before applying the unchanged ranking', async () => {
+    const result = await DestinationDiscoveryService.getRecommendations({
+      userId: 'u_demo_1', origin: KL, travelDate: RIDE_DATE, maxDistanceKm: 80
+    });
+
+    expect(result.searchRadiusKm).toBe(80);
+    expect(result.outsideRadiusCount).toBeGreaterThan(0);
+    expect(allOf(result).length).toBeGreaterThan(0);
+    expect(allOf(result).every((candidate) => candidate.distanceKm <= 80)).toBe(true);
+    expect(find(result, 'p_georgetown')).toBeUndefined();
+  });
 });
 
 describe('FR-6.4 - Retired places are withheld everywhere', () => {
@@ -144,6 +156,7 @@ describe('ride availability failure stays distinct from no listed ride', () => {
       searchRides.mockRestore();
     }
   });
+
 });
 
 describe('FR-6.26 - chain detection reaches the score', () => {
@@ -187,6 +200,21 @@ describe('getDestination - dated and undated ride availability', () => {
 
     expect(undated.rides.map((ride) => ride.id)).toContain('r_1');
     expect(undated.rides[0].date).toBe(RIDE_DATE);
+  });
+
+  it('keeps score and date-specific interest when a deep-linked place is outside the nearby Home boundary', async () => {
+    await DestinationDiscoveryService.recordInterest(
+      'u_far_detail_viewer',
+      'p_georgetown',
+      RIDE_DATE
+    );
+    const detail = await DestinationDiscoveryService.getDestination('p_georgetown', {
+      userId: 'u_demo_1', origin: KL, travelDate: RIDE_DATE, maxDistanceKm: 80
+    });
+
+    expect(detail.candidate?.placeId).toBe('p_georgetown');
+    expect(detail.interestedUsers).toBeGreaterThan(0);
+    expect(detail.distanceKm).toBeGreaterThan(80);
   });
 });
 

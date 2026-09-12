@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../shared/context/AuthContext.jsx';
-import { DestinationDiscoveryService } from '../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
+import { DEFAULT_EXPLORATION_RADIUS_KM, DestinationDiscoveryService } from '../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../business-logic/m6-discovery/discovery/constants.js';
 import { GUIDE_FEATURE_ENABLED } from '../../business-logic/m6-discovery/guide/constants.js';
 import { RideRequestService } from '../../business-logic/m2-rides/RideRequestService.js';
@@ -220,6 +220,7 @@ function OriginSummary({ origin, onChange }) {
 
       <AdaptiveDialog
         open={open}
+        className="dsc-origin-dialog"
         title="Where are you starting from?"
         description="This helps us rank nearby destinations. Distances are straight-line estimates, not driving times."
         onClose={() => setOpen(false)}
@@ -239,6 +240,7 @@ function OriginSummary({ origin, onChange }) {
           value={draft?.label || ''}
           location={draftLocation}
           allowCurrentLocation
+          purpose="starting-point"
           onChange={(label, location) => setDraft(location
             ? { label, lat: Number(location.latitude), lng: Number(location.longitude), placeId: location.placeId }
             : { label, lat: null, lng: null })}
@@ -278,6 +280,7 @@ export default function HomeScreen() {
   const searchKey = searchParams.toString();
   const filters = useMemo(() => discoveryFilters(searchParams), [searchKey]);
   const { date: travelDate, category: categoryFilter, query: searchQuery } = filters;
+  const includeDistant = searchParams.get('range') === 'all';
   const [origin, setOrigin] = useState(readOrigin);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -307,7 +310,8 @@ export default function HomeScreen() {
         userId: user?.id,
         origin: nextOrigin,
         travelDate: date,
-        preferredCategories: nextCategory === 'all' ? undefined : [nextCategory]
+        preferredCategories: nextCategory === 'all' ? undefined : [nextCategory],
+        maxDistanceKm: includeDistant ? null : DEFAULT_EXPLORATION_RADIUS_KM
       });
       setResult(data);
       return data;
@@ -325,7 +329,7 @@ export default function HomeScreen() {
       // used to sit on "Finding destinations…" forever whenever the read threw.
       setLoading(false);
     }
-  }, [categoryFilter, origin, travelDate, user?.id]);
+  }, [categoryFilter, includeDistant, origin, travelDate, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -370,12 +374,13 @@ export default function HomeScreen() {
       // from opening the destination they chose to inspect.
       console.error('Could not record destination interest', cause);
     }
-    navigate(`/discover/${placeId}?date=${travelDate}${demo ? '&demo=1' : ''}`);
+    navigate(`/discover/${placeId}?date=${travelDate}${includeDistant ? '&range=all' : ''}${demo ? '&demo=1' : ''}`);
   };
 
   const changeOrigin = (nextOrigin) => {
     setOrigin(nextOrigin);
     saveOrigin(nextOrigin);
+    if (includeDistant) updateFilter('range', '');
   };
 
   const filter = useCallback((list) => {
@@ -452,6 +457,16 @@ export default function HomeScreen() {
 
       <AudienceSwitch active="explore" travelDate={travelDate} demo={demo} />
       <OriginSummary origin={origin} onChange={changeOrigin} />
+      {!loading && !failed && result && (includeDistant || result.outsideRadiusCount > 0) && (
+        <div className="dsc-range-note" role="status">
+          <span>{includeDistant
+            ? 'Showing destinations across Malaysia.'
+            : `Showing destinations within ${DEFAULT_EXPLORATION_RADIUS_KM} km of your starting point.`}</span>
+          <button type="button" onClick={() => updateFilter('range', includeDistant ? '' : 'all')}>
+            {includeDistant ? 'Show nearby only' : `Explore ${result.outsideRadiusCount} farther places`}
+          </button>
+        </div>
+      )}
       <DemoActiveBanner />
 
       {demo && (

@@ -23,6 +23,13 @@ import { resolveSeason } from './SeasonalCalendar.js';
 import { buildReasons } from './RecommendationReasons.js';
 import { DiscoveryContractAdapter } from './DiscoveryContractAdapter.js';
 
+// The Guide already treats 80 km as the default area around a confirmed
+// coordinate. Explore uses the same boundary before applying the unchanged
+// two-axis formula, so a ride hundreds of kilometres away cannot make a
+// destination look locally relevant. Callers can explicitly pass null to
+// widen the catalogue again.
+export const DEFAULT_EXPLORATION_RADIUS_KM = 80;
+
 // FR-6.24 now resolves against the declared calendar in SeasonalCalendar.js
 // rather than treating everything without an event as undeclared.
 
@@ -47,7 +54,7 @@ export const DestinationDiscoveryService = {
    * location permission is granted (UC6.1 A1 asks for a location, it does not
    * make one mandatory).
    */
-  async getRecommendations({ userId, origin, travelDate, preferredCategories: sessionCategories } = {}) {
+  async getRecommendations({ userId, origin, travelDate, preferredCategories: sessionCategories, maxDistanceKm: candidateRadiusKm = null } = {}) {
     const [allPlaces, traffic, demand, preferences] = await Promise.all([
       discoveryDb.listPlaces(),
       readTraffic(),
@@ -62,8 +69,22 @@ export const DestinationDiscoveryService = {
 
     // UC6.11 runs before scoring, not within it.
     const forecasts = await fetchForecasts(recommendable, travelDate);
-    const { candidates: afterWeather, withheld: weatherWithheld } =
+    const { candidates: allWeatherCandidates, withheld: weatherWithheld } =
       applyWeatherGate(recommendable, forecasts);
+
+    const allDistanceByPlace = new Map(allWeatherCandidates.map((place) =>
+      [place.id, distanceKm(origin, { lat: place.lat, lng: place.lng })]
+    ));
+    const hasDistanceBoundary = Number.isFinite(Number(candidateRadiusKm))
+      && Number(candidateRadiusKm) > 0
+      && Number.isFinite(Number(origin?.lat)) && Number.isFinite(Number(origin?.lng));
+    const afterWeather = hasDistanceBoundary
+      ? allWeatherCandidates.filter((place) => {
+        const distance = allDistanceByPlace.get(place.id);
+        return Number.isFinite(distance) && distance <= Number(candidateRadiusKm);
+      })
+      : allWeatherCandidates;
+    const outsideRadiusCount = allWeatherCandidates.length - afterWeather.length;
 
     const completedTrips = await DiscoveryContractAdapter.getCompletedTripCategories(userId, allPlaces);
     const ridesByPlace = DiscoveryContractAdapter.getRidesByPlace(afterWeather, rides, travelDate);
@@ -74,7 +95,7 @@ export const DestinationDiscoveryService = {
     const chainIndex = buildNameRecurrenceIndex(allPlaces);
 
     const distanceByPlace = new Map(afterWeather.map((place) =>
-      [place.id, distanceKm(origin, { lat: place.lat, lng: place.lng })]
+      [place.id, allDistanceByPlace.get(place.id)]
     ));
     const furthest = maxDistanceKm([...distanceByPlace.values()]);
 
@@ -148,6 +169,8 @@ export const DestinationDiscoveryService = {
 
     return {
       rideStatus,
+      searchRadiusKm: hasDistanceBoundary ? Number(candidateRadiusKm) : null,
+      outsideRadiusCount,
       alternativeDates: Object.fromEntries(afterWeather.map((place) => [
         place.id,
         [...new Set(rides
@@ -190,16 +213,34 @@ export const DestinationDiscoveryService = {
    * from the card the user just tapped. Reusing the ranking guarantees the detail
    * screen and the list can never disagree.
    */
-  async getDestination(placeId, { userId, origin, travelDate, preferredCategories, rideDate = travelDate } = {}) {
+  async getDestination(placeId, { userId, origin, travelDate, preferredCategories, maxDistanceKm: candidateRadiusKm = null, rideDate = travelDate } = {}) {
     const place = await discoveryDb.getPlace(placeId);
     if (!place) return null;
 
-    const [ranked, traffic] = await Promise.all([
-      this.getRecommendations({ userId, origin, travelDate, preferredCategories }),
-      readTraffic()
+    const [scopedRanked, traffic, demand] = await Promise.all([
+      this.getRecommendations({ userId, origin, travelDate, preferredCategories, maxDistanceKm: candidateRadiusKm }),
+      readTraffic(),
+      discoveryDb.latentDemand(travelDate)
     ]);
-    const candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
+    let ranked = scopedRanked;
+    let candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
       .find((entry) => entry.placeId === placeId);
+
+    // A directly opened or bookmarked detail URL may point outside the Home
+    // screen's current nearby boundary. Keep the place usable and preserve its
+    // established score explanation in that case. Places opened from Home are
+    // already inside the scoped set, so their list/detail scores stay identical.
+    if (!candidate && Number.isFinite(Number(candidateRadiusKm))) {
+      ranked = await this.getRecommendations({
+        userId,
+        origin,
+        travelDate,
+        preferredCategories,
+        maxDistanceKm: null
+      });
+      candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
+        .find((entry) => entry.placeId === placeId);
+    }
 
     // Recommendation scores remain specific to the selected travel date. Ride
     // availability is exact when Detail carries a date, while an undated Detail
@@ -219,7 +260,9 @@ export const DestinationDiscoveryService = {
       alternativeDates: ranked.alternativeDates[place.id] || [],
       candidate: candidate || null,
       rides,
-      interestedUsers: candidate?.interestedUsers || 0,
+      // Browsing interest belongs to the place/date, not to membership in the
+      // current recommendation slice. A far-away deep link must not erase it.
+      interestedUsers: demand.get(place.id) || 0,
       distanceKm: candidate?.distanceKm ?? null,
       weatherWithheld: Boolean(weatherWithheld),
       weatherReason: weatherWithheld?.weatherReason || null

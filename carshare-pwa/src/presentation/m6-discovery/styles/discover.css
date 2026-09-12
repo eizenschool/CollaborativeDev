@@ -270,6 +270,152 @@
 .dsc-origin-summary__hint, .dsc-origin-summary__dialog-note { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .dsc-origin-summary__dialog-note { margin-top: 14px; }
 
+/* The location picker is shared JSX, while its layout is intentionally owned
+   by each consuming screen. Without these Home-scoped rules the browser drew
+   native list bullets and a native button inside an otherwise designed
+   AdaptiveDialog. */
+.dsc-origin-dialog .confirmed-location-field,
+.dsc-origin-dialog .route-field { min-width: 0; }
+.dsc-origin-dialog .route-field > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.dsc-origin-dialog .input-wrap { position: relative; }
+.dsc-origin-dialog .input-wrap input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 44px 10px 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+.dsc-origin-dialog .input-wrap .prefix-icon {
+  position: absolute;
+  z-index: 2;
+  left: 14px;
+  top: 15px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.dsc-origin-dialog .location-confirmed-icon {
+  position: absolute;
+  z-index: 2;
+  right: 12px;
+  top: 13px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  pointer-events: none;
+}
+.dsc-origin-dialog .current-location-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dsc-origin-dialog .current-location-button:disabled { opacity: .6; cursor: wait; }
+.dsc-origin-dialog .location-suggestions-panel {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+.dsc-origin-dialog .location-suggestions-heading {
+  margin: 0;
+  padding: 11px 14px 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.dsc-origin-dialog .location-suggestions-panel ul {
+  max-height: min(300px, 42vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+.dsc-origin-dialog .location-suggestions-panel li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 48px;
+  padding: 10px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.dsc-origin-dialog .location-suggestions-panel li svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal); }
+.dsc-origin-dialog .location-suggestions-panel li:hover,
+.dsc-origin-dialog .location-suggestions-panel li.active { background: var(--teal-tint); }
+.dsc-origin-dialog .location-distance { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.dsc-origin-dialog .google-attribution {
+  display: flex;
+  justify-content: flex-end;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+}
+.dsc-origin-dialog .google-attribution img { display: block; width: 120px; max-width: 100%; height: auto; }
+.dsc-origin-dialog .location-field-message { margin: 7px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.dsc-origin-dialog .location-field-message.error { color: var(--danger); }
+.dsc-range-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dsc-range-note button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .dsc-range-note { align-items: flex-start; flex-direction: column; }
+}
+
 /* Loading skeleton: replaces the plain "Finding destinations…" text so the
    page does not visibly jump in height once results arrive. */
 .dsc-list-skeleton { pointer-events: none; }
@@ -750,6 +896,24 @@
 .dsc-availability-note svg { vertical-align: -2px; margin-right: 2px; }
 .dsc-interest-note { display: flex; align-items: flex-start; gap: 5px; margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .dsc-interest-note svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal); }
+.dsc-saved-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.dsc-saved-state > svg { flex: 0 0 auto; margin-top: 2px; }
+.dsc-saved-state span { min-width: 0; }
+.dsc-saved-state strong, .dsc-saved-state small { display: block; }
+.dsc-saved-state small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.dsc-saved-state--alert { background: #fff; }
 
 /* The unserved section is visually distinct because it asks for a different
    action - offer to drive, rather than take a seat. */
