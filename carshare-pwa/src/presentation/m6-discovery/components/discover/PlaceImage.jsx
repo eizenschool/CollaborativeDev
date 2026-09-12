@@ -90,7 +90,7 @@ export default function PlaceImage({
               setRevealed(true);
             }}
           >
-            Show photo
+            View real photo
           </span>
         )}
       </>

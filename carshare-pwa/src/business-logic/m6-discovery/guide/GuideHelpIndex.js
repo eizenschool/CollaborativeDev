@@ -16,7 +16,7 @@ export const GUIDE_HELP_SECTIONS = Object.freeze([
   {
     id: 'ride-alert', version: 1,
     keywords: ['alert', 'notification', 'no ride', '通知', '提醒', 'amaran', 'pemberitahuan', 'அறிவிப்பு'],
-    text: 'If nobody is driving there, a signed-in user can confirm a Ride availability alert for that destination and date.'
+    text: 'If no ride is listed for the selected destination and date, a signed-in user can confirm a Ride availability alert.'
   },
   {
     id: 'preferences', version: 1,

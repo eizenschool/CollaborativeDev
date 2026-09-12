@@ -81,6 +81,19 @@ test('Tumpang Guide produces local database-only choices and preserves Search an
   await expect(page.locator('.guide-rec-card').first()).toBeVisible();
 });
 
+test('destination questions enter Guide as an editable handoff without sending automatically', async ({ page }) => {
+  await page.goto('/discover/p_georgetown?date=2026-09-14');
+  await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ask Tumpang Guide' }).click();
+  await dismissOnboarding(page);
+
+  await expect(page.getByRole('status')).toContainText('Question about George Town Heritage Core');
+  await expect(page.getByRole('status')).toContainText('What should I know before visiting George Town Heritage Core?');
+  await expect(page.locator('.guide-message--user')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Use this question' }).click();
+  await expect(page.getByLabel('Message Tumpang Guide')).toHaveValue('What should I know before visiting George Town Heritage Core?');
+});
+
 test('Tumpang Guide stays keyboard-accessible and stops recommendations for emergencies', async ({ page }) => {
   await page.goto('/assistant');
   await dismissOnboarding(page);

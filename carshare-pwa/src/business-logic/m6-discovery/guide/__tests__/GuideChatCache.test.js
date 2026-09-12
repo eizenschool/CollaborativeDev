@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  clearGuideChatSnapshots, guideChatStorageKey, readGuideChatSnapshot, saveGuideChatSnapshot
+  clearGuideChatSnapshots, guideChatStorageKey, readGuideChatSnapshot, readGuideDraft, saveGuideChatSnapshot, saveGuideDraft
 } from '../GuideChatCache.js';
 
 describe('Tumpang Guide active chat cache', () => {
@@ -33,5 +33,11 @@ describe('Tumpang Guide active chat cache', () => {
 
     expect(clearGuideChatSnapshots('user-1', null, storage)).toBeGreaterThan(0);
     expect(readGuideChatSnapshot('visitor', 'user-1', null, storage)).toBeNull();
+  });
+
+  it('keeps an unsent draft across a detail-page round trip', () => {
+    saveGuideDraft('visitor', 'user-1', 'What should I know before visiting?', storage);
+    expect(readGuideDraft('visitor', 'user-1', storage)).toBe('What should I know before visiting?');
+    expect(readGuideDraft('visitor', 'user-2', storage)).toBe('');
   });
 });

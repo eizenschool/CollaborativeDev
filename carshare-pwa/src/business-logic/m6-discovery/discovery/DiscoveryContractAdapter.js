@@ -65,7 +65,7 @@ export function rideReferencesPlace(ride, place) {
  * have no departures. The travel-window comparison belongs to this module and is
  * applied by `getRidesByPlace` instead.
  */
-export async function getPublishedRides() {
+export async function getPublishedRides({ throwOnError = false } = {}) {
   try {
     const rides = await RideService.searchRides({}) || [];
     return rides.map((ride) => ({
@@ -82,10 +82,12 @@ export async function getPublishedRides() {
       departureAt: ride.departureAt ?? null,
       hostName: ride.host?.fullName ?? ride.host?.full_name ?? null
     }));
-  } catch {
+  } catch (error) {
+    if (throwOnError) throw error;
     // A ride-search failure must not take the discovery view down with it. No
-    // rides means every candidate scores 0 on seat headroom, which is exactly
-    // what "nobody is driving there" is supposed to look like.
+    // rides means every candidate scores 0 on seat headroom, while the UI still
+    // reports that ride information is unavailable rather than claiming there
+    // are no listed rides.
     return [];
   }
 }

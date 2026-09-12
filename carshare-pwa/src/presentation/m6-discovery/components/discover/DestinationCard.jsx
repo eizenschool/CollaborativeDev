@@ -57,7 +57,7 @@ export default function DestinationCard({ candidate, onOpen, index }) {
   return (
     <button
       type="button"
-      className={'dsc-card' + (candidate.servedByRide ? '' : ' dsc-card-unserved')}
+      className={'dsc-card' + (candidate.rideStatus === 'available' && !candidate.servedByRide ? ' dsc-card-unserved' : '')}
       onClick={() => onOpen(place.id)}
       style={Number.isInteger(index) ? { '--motion-delay': `${Math.min(index, 5) * 40}ms` } : undefined}
     >
@@ -81,7 +81,7 @@ export default function DestinationCard({ candidate, onOpen, index }) {
           <Rating rating={place.rating} reviewCount={place.reviewCount} />
           <span className="dsc-meta-item"><IconMapPin size={14} /> {place.state}</span>
           {Number.isFinite(candidate.distanceKm) && (
-            <span className="dsc-meta-item">{Math.round(candidate.distanceKm)} km</span>
+            <span className="dsc-meta-item">{Math.round(candidate.distanceKm)} km straight line</span>
           )}
           {freshness && (
             <span className="dsc-meta-item"><IconClock size={14} /> {freshness}</span>
@@ -94,22 +94,33 @@ export default function DestinationCard({ candidate, onOpen, index }) {
           </span>
         )}
 
-        {candidate.servedByRide ? (
+        {candidate.rideStatus !== 'available' ? (
+          <span className="dsc-availability dsc-traffic-unknown">
+            <IconAlertTriangle size={16} />
+            <span>Ride information unavailable</span>
+          </span>
+        ) : candidate.rides.length > 0 ? (
           <span className="dsc-availability dsc-served">
             <IconCar size={16} />
             <span>
-              <strong>{candidate.rides.length}</strong> ride{candidate.rides.length > 1 ? 's' : ''} going
-              {' · '}<strong>{seatsLeft}</strong> seat{seatsLeft === 1 ? '' : 's'} left
+              <strong>{candidate.rides.length}</strong> listed ride{candidate.rides.length > 1 ? 's' : ''}
+              {' · '}{seatsLeft > 0
+                ? <>up to <strong>{seatsLeft}</strong> seat{seatsLeft === 1 ? '' : 's'} in one listed ride</>
+                : <strong>No seats remaining</strong>}
+              <small className="dsc-availability-note">Pickup point, time and seat fit still need checking.</small>
             </span>
           </span>
         ) : (
           <span className="dsc-availability dsc-unserved">
-            <IconUsers size={16} />
+            <IconCar size={16} />
             <span>
-              {candidate.interestedUsers > 0
-                ? <><strong>{candidate.interestedUsers}</strong> {candidate.interestedUsers === 1 ? 'person wants' : 'people want'} to go</>
-                : 'Nobody is driving here yet'}
+              <strong>No listed ride for this date</strong>
             </span>
+          </span>
+        )}
+        {candidate.interestedUsers > 0 && (
+          <span className="dsc-interest-note">
+            <IconUsers size={13} /> {candidate.interestedUsers} {candidate.interestedUsers === 1 ? 'traveller has' : 'travellers have'} viewed this as an option for this date.
           </span>
         )}
       </span>

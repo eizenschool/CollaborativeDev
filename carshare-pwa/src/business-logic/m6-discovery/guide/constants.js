@@ -102,7 +102,7 @@ export const GUIDE_MODEL = Object.freeze({
   GENERATION: 'gemini-3.7-flash',
   EMBEDDING: 'gemini-embedding-2-preview',
   EMBEDDING_DIMENSIONS: 768,
-  PROMPT_VERSION: 'm6-guide-agent-v3',
+  PROMPT_VERSION: 'm6-guide-agent-v4',
   THINKING_LEVEL: 'low'
 });
 

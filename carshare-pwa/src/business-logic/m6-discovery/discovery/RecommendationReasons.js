@@ -22,10 +22,6 @@ import { AFFINITY_SOURCE } from './AffinityResolver.js';
 const MIN_CONTRIBUTION = 0.06;
 const MAX_REASONS = 3;
 
-// A distance anyone would call short without qualification - roughly an hour's
-// drive in Malaysian conditions.
-const NEARBY_KM = 60;
-
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 function formatDate(iso) {
@@ -71,7 +67,7 @@ const DESIRABILITY_PHRASES = {
   // is worth going to partly *because* it is not the one everybody goes to.
   headroom: (value, ctx) => {
     if (value < 0.5) return null;
-    return `Quieter than the busiest ${ctx.place.category} spots in ${ctx.place.state}`;
+    return `Fewer reviews than the most-reviewed ${ctx.place.category} places in ${ctx.place.state}`;
   },
 
   local: (value) => (value >= 1 ? 'Independently run, not a chain' : null)
@@ -83,26 +79,22 @@ const ACCESSIBILITY_PHRASES = {
     const seats = ctx.rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
     if (seats <= 0) return null;
     const when = formatDate(ctx.travelDate);
-    return `${plural(seats, 'seat', 'seats')} going${when ? ` on ${when}` : ''}`;
+    return `Up to ${seats === 1 ? '1 seat remains' : `${seats} seats remain`} in one listed ride${when ? ` on ${when}` : ''}`;
   },
 
   // Journey cost is measured against the furthest candidate, not against any
-  // absolute idea of "near". With Sarawak in the set at ~1,500km, a 296km trip
-  // scores well - but calling that "only 296 km" would be a claim the signal
-  // never made. The absolute phrasing is reserved for distances that are short
-  // by any reading; everything else says what the signal actually means.
+  // absolute idea of "near". State the measured straight-line distance without
+  // implying a driving time or a guaranteed route.
   journeyCost: (value, ctx) => {
     if (value < 0.6 || !Number.isFinite(ctx.distanceKm)) return null;
     const km = Math.round(ctx.distanceKm);
-    return km <= NEARBY_KM
-      ? `Only ${km} km from you`
-      : `Closer than most of today's options, at ${km} km`;
+    return `${km} km in a straight line from your starting point (relative to other results)`;
   },
 
   demandConvergence: (value, ctx) => {
     const others = ctx.interestedUsers || 0;
     if (others < 1) return null;
-    return `${plural(others, 'other traveller wants', 'other travellers want')} to go`;
+    return `${plural(others, 'traveller has', 'travellers have')} shown browsing interest in this destination for this date`;
   }
 };
 
@@ -150,7 +142,7 @@ export function buildCaveats(candidate, context = {}) {
   if (candidate?.servedByRide === false) {
     caveats.push({
       key: 'unserved',
-      text: 'No one is driving here yet, so it cannot appear in the main list however well it suits you.'
+      text: 'No listed ride matches this destination for the selected date, so it appears under More places to explore.'
     });
   }
 

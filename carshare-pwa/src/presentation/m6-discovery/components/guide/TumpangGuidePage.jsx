@@ -8,7 +8,9 @@ import {
   normalizeGuideLanguage, detectGuideLanguage
 } from '../../../../business-logic/m6-discovery/guide/GuideLanguage.js';
 import { normalizePlanState } from '../../../../business-logic/m6-discovery/guide/GuideIntentParser.js';
-import { guideChatStorageKey, readGuideChatSnapshot, saveGuideChatSnapshot } from '../../../../business-logic/m6-discovery/guide/GuideChatCache.js';
+import {
+  guideChatStorageKey, readGuideChatSnapshot, readGuideDraft, saveGuideChatSnapshot, saveGuideDraft
+} from '../../../../business-logic/m6-discovery/guide/GuideChatCache.js';
 import { pickGuideGreeting } from '../../../../business-logic/m6-discovery/guide/GuideGreetings.js';
 import { subscribeGuideSessionEvents } from '../../../../business-logic/m6-discovery/guide/GuideChatEvents.js';
 import { guideResponseContextText } from '../../../../business-logic/m6-discovery/guide/GuidePolicy.js';
@@ -233,7 +235,7 @@ export default function TumpangGuidePage() {
   const [languageBusy, setLanguageBusy] = useState(false);
   const [planState, setPlanState] = useState(() => normalizePlanState({ language: getInitialGuideLanguage(), tripHistoryConsent: false }));
   const [messages, setMessages] = useState(() => [createWelcome(getInitialGuideLanguage(), user)]);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(() => readGuideDraft(visitorSessionId, user?.id));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [onboardingOpen, setOnboardingOpen] = useState(() => !onboardingSeen());
@@ -250,7 +252,10 @@ export default function TumpangGuidePage() {
   const voiceBaseDraftRef = useRef('');
   const voiceInterimRef = useRef('');
   const [voicePreview, setVoicePreview] = useState('');
+  const [guideHandoff, setGuideHandoff] = useState(null);
+  const [handoffPlaceContext, setHandoffPlaceContext] = useState(null);
   const sendInFlightRef = useRef(false);
+  const appliedGuideHandoffRef = useRef('');
   const currentCopy = useMemo(() => guideCopy(language, languagePack), [language, languagePack]);
   const transcript = useCallback((text) => setDraft(() => {
     const finalText = String(text || '').trim();
@@ -291,6 +296,11 @@ export default function TumpangGuidePage() {
     }
     return rows.slice(0, 4);
   }, [messages]);
+  const effectivePlaceContext = useMemo(() => {
+    if (!handoffPlaceContext?.placeId) return placeContext;
+    const seeded = { placeId: handoffPlaceContext.placeId, name: handoffPlaceContext.name, role: 'place_info' };
+    return [seeded, ...placeContext.filter((item) => item.placeId !== seeded.placeId)].slice(0, 4);
+  }, [handoffPlaceContext, placeContext]);
   const conversationFocus = latestResponse?.placeInfo ? 'place'
     : latestResponse?.recommendations?.length ? 'recommendation_batch'
       : latestResponse?.mode === 'help' ? 'capabilities'
@@ -319,6 +329,22 @@ export default function TumpangGuidePage() {
     setSpeechLanguage(next);
     try { localStorage.setItem(GUIDE_SPEECH_LANGUAGE_KEY, next); } catch { /* Preference persistence is best effort. */ }
   }, []);
+
+  useEffect(() => {
+    const request = location.state?.guidePlaceQuestion;
+    const hydrationKey = activeChatKey(visitorSessionId, user?.id, requestedSessionId);
+    const handoffKey = request?.placeId && `${location.key}:${request.placeId}`;
+    if (!request?.placeId || !request.name || !request.draft || !handoffKey
+      || chatHydrationKey !== hydrationKey || appliedGuideHandoffRef.current === handoffKey) return;
+
+    appliedGuideHandoffRef.current = handoffKey;
+    setGuideHandoff(request);
+    setPlanState((current) => normalizePlanState({
+      ...current,
+      ...(request.origin ? { origin: request.origin } : {}),
+      ...(request.travelDate ? { startDate: request.travelDate, endDate: request.travelDate } : {})
+    }));
+  }, [chatHydrationKey, location.key, location.state, requestedSessionId, user?.id, visitorSessionId]);
 
   useEffect(() => {
     const key = activeChatKey(visitorSessionId, user?.id, requestedSessionId);
@@ -420,17 +446,18 @@ export default function TumpangGuidePage() {
         }
         setChatHydrationKey(key);
       }).finally(() => { if (stillCurrent()) setBusy(false); });
-    } else {
-      sessionRef.current = null;
-      const stored = readGuideChatSnapshot(visitorSessionId, user?.id);
+      } else {
+        sessionRef.current = null;
+        const stored = readGuideChatSnapshot(visitorSessionId, user?.id);
       if (stored?.messages?.length) {
         if (stored.sessionId && user?.id) sessionRef.current = { id: stored.sessionId, userId: user.id };
         setMessages(localizeStoredMessages(stored.messages, language, languagePack));
         setPlanState(normalizePlanState(stored.planState));
         setFeedbackStates(stored.feedbackStates || {});
-      } else {
-        setFeedbackStates({});
-      }
+        } else {
+          setFeedbackStates({});
+        }
+        setDraft(readGuideDraft(visitorSessionId, user?.id));
       setChatHydrationKey(key);
     }
     return undefined;
@@ -467,6 +494,12 @@ export default function TumpangGuidePage() {
     const currentSessionId = requestedSessionId || sessionRef.current?.id || null;
     saveCurrentChat(visitorSessionId, user?.id, planState, messages, feedbackStates, currentSessionId);
   }, [requestedSessionId, visitorSessionId, user?.id, chatHydrationKey, planState, messages, feedbackStates]);
+
+  useEffect(() => {
+    const key = activeChatKey(visitorSessionId, user?.id, requestedSessionId);
+    if (chatHydrationKey !== key || requestedSessionId) return;
+    saveGuideDraft(visitorSessionId, user?.id, draft);
+  }, [chatHydrationKey, draft, requestedSessionId, user?.id, visitorSessionId]);
 
   useEffect(() => {
     const requested = normalizeGuideLanguage(latestResponse?.uiLanguageChange);
@@ -545,7 +578,7 @@ export default function TumpangGuidePage() {
         uiLanguage: language, responseLanguage: detectGuideLanguage(clean, language),
         messages: nextMessages.map((message) => message.response
           ? { role: 'assistant', text: guideResponseContextText(message.response) } : message),
-        placeContext, conversationFocus,
+        placeContext: effectivePlaceContext, conversationFocus,
         // A retry replays an older historical turn, not necessarily the
         // conversation's actual last reply, so it must never carry forward
         // a pending clarification that belongs to a different, later turn.
@@ -607,8 +640,32 @@ export default function TumpangGuidePage() {
     setFeedbackStates({});
     saveCurrentChat(visitorSessionId, user?.id, nextPlan, nextMessages, {}, null);
     setMessages(nextMessages); setPlanState(nextPlan); setDraft(''); setNotice('');
+    setGuideHandoff(null); setHandoffPlaceContext(null);
     setChatHydrationKey(activeChatKey(visitorSessionId, user?.id, null));
     navigate('/assistant', { replace: true });
+  };
+
+  const consumeGuideHandoff = (usePreparedQuestion) => {
+    if (usePreparedQuestion && guideHandoff?.draft) {
+      setDraft(guideHandoff.draft);
+      setHandoffPlaceContext({ placeId: guideHandoff.placeId, name: guideHandoff.name });
+    } else {
+      setHandoffPlaceContext(null);
+    }
+    setGuideHandoff(null);
+    // Clear the one-time router payload after the traveller chooses what to do
+    // with it, so a refresh cannot present the same handoff again.
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+  };
+
+  const returnToHandoffPlace = () => {
+    const returnTo = guideHandoff?.returnTo;
+    if (!returnTo?.startsWith('/discover/')) return;
+    setGuideHandoff(null);
+    navigate(returnTo, {
+      replace: true,
+      state: { fromGuide: true, returnTo: `${location.pathname}${location.search}` }
+    });
   };
 
   useEffect(() => {
@@ -699,6 +756,28 @@ export default function TumpangGuidePage() {
       <GuideToolbar hasConversation={hasConversation} languageBusy={languageBusy} copy={currentCopy} onNewChat={startNewChat} />
 
       <section className={`guide-chat${hasConversation ? '' : ' guide-chat--welcome'}`} aria-label={`Tumpang Guide · ${currentCopy.smart}`}>
+        {guideHandoff && (
+          <div className="guide-handoff" role="status">
+            <div>
+              <strong>{currentCopy.handoffTitle(guideHandoff.name)}</strong>
+              <p>{currentCopy.handoffDescription}</p>
+              <q>{guideHandoff.draft}</q>
+            </div>
+            <div className="guide-handoff__actions">
+              <Button onClick={() => consumeGuideHandoff(true)}>
+                {currentCopy.handoffUseQuestion}
+              </Button>
+              <Button variant="secondary" onClick={() => consumeGuideHandoff(false)}>
+                {currentCopy.handoffKeepDraft}
+              </Button>
+              {guideHandoff.returnTo?.startsWith('/discover/') && (
+                <Button variant="secondary" onClick={returnToHandoffPlace}>
+                  {currentCopy.handoffBackToDestination}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
         <GuideTranscript
           messages={messages} copy={currentCopy} language={language} languagePack={languagePack}
           unlimitedTurns={Boolean(user)} actionStates={actionStates} feedbackStates={feedbackStates}

@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { DestinationDiscoveryService } from '../DestinationDiscoveryService.js';
 import { discoveryDb } from '../../../../data-access/m6-discovery/discoveryStore.js';
 import { PLACE_STATE, CATEGORY, LOCAL_VALUES } from '../constants.js';
+import { RideService } from '../../../m2-rides/RideService.js';
 
 // Module 2's mock store reads localStorage unguarded, so node needs the same
 // shim RideWorkflow.test.js installs. Without it the ride lookup throws, the
@@ -119,6 +120,29 @@ describe('FR-6.4 - Retired places are withheld everywhere', () => {
     const stale = find(result, 'p_stale_gallery');
     expect(stale).toBeDefined();
     expect(stale.place.lifecycleState).toBe(PLACE_STATE.STALE);
+  });
+});
+
+describe('ride availability failure stays distinct from no listed ride', () => {
+  beforeEach(() => discoveryDb.__reset());
+
+  it('does not attach the no-ride claim when the shared ride read fails', async () => {
+    const searchRides = vi.spyOn(RideService, 'searchRides')
+      .mockRejectedValue(new Error('ride service unavailable'));
+
+    try {
+      const result = await DestinationDiscoveryService.getRecommendations({
+        userId: 'u_demo_1', origin: KL, travelDate: RIDE_DATE
+      });
+      const candidates = allOf(result);
+
+      expect(result.rideStatus).toBe('unavailable');
+      expect(candidates.length).toBeGreaterThan(0);
+      expect(candidates.every((candidate) => candidate.servedByRide === null)).toBe(true);
+      expect(candidates.every((candidate) => !candidate.caveats.some(({ key }) => key === 'unserved'))).toBe(true);
+    } finally {
+      searchRides.mockRestore();
+    }
   });
 });
 
@@ -288,6 +312,22 @@ describe('UC6.4 - stated preferences', () => {
       .toBeGreaterThan(culinary.signals.desirability.affinity);
   });
 
+  it('lets an explicit session category override saved preference without changing it', async () => {
+    const userId = 'u_session_category_test';
+    await DestinationDiscoveryService.savePreferences(userId, {
+      preferredCategories: [CATEGORY.CULINARY]
+    });
+
+    const result = await DestinationDiscoveryService.getRecommendations({
+      userId, origin: KL, travelDate: RIDE_DATE, preferredCategories: [CATEGORY.NATURE]
+    });
+    const nature = find(result, 'p_cameron');
+    const culinary = find(result, 'p_jonker');
+    expect(nature.signals.desirability.affinity).toBeGreaterThan(culinary.signals.desirability.affinity);
+    expect((await DestinationDiscoveryService.getPreferences(userId)).preferredCategories)
+      .toEqual([CATEGORY.CULINARY]);
+  });
+
   it('stops prompting once the prompt has been dismissed', async () => {
     await DestinationDiscoveryService.savePreferences('u_dismiss_test', { promptDismissed: true });
     expect(await DestinationDiscoveryService.shouldPromptForPreferences('u_dismiss_test')).toBe(false);
@@ -440,7 +480,8 @@ describe('buildPrefillUrl - the link that actually carries the destination acros
     expect(url.startsWith('/search?')).toBe(true);
     const params = new URLSearchParams(url.split('?')[1]);
     expect(params.get('destination')).toBe('Cameron Highlands Tea Terraces');
-    expect(params.get('pickup')).toBe('Kuala Lumpur');
+    // The discovery origin is not a confirmed Module 4 pickup point.
+    expect(params.get('pickup')).toBeNull();
     expect(params.get('date')).toBe('2026-08-15');
     expect(params.get('destinationPlaceId')).toBe('fixture_cameron');
     expect(params.get('proximityKm')).toBe('10');

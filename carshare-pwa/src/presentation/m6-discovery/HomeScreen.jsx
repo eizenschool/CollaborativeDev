@@ -9,18 +9,19 @@
 // Ranking, filtering and pagination logic below is carried over unchanged from
 // the former DiscoverHub.jsx (see git history for that file) - this is a
 // presentation-layer merge, not a rewrite of the recommendation rules.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../shared/context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
 import { CATEGORY } from '../../business-logic/m6-discovery/discovery/constants.js';
-import { todayIso } from '../../business-logic/m6-discovery/discovery/localDate.js';
 import { GUIDE_FEATURE_ENABLED } from '../../business-logic/m6-discovery/guide/constants.js';
 import { RideRequestService } from '../../business-logic/m2-rides/RideRequestService.js';
 import { RideService } from '../../business-logic/m2-rides/RideService.js';
 import {
-  IconAlertTriangle, IconArrowRight, IconEye, IconEyeOff, IconMessage, IconSearch, IconStar
+  IconAlertTriangle, IconArrowRight, IconEdit, IconEye, IconEyeOff, IconMapPin, IconMessage, IconSearch, IconStar
 } from '../shared/components/icons.jsx';
+import AdaptiveDialog from '../shared/components/ui/AdaptiveDialog.jsx';
+import ConfirmedLocationInput from '../shared/components/maps/ConfirmedLocationInput.jsx';
 import DestinationCard from './components/discover/DestinationCard.jsx';
 import PreferencePrompt from './components/discover/PreferencePrompt.jsx';
 import { PHOTO_WIDTH_LARGE } from '../../business-logic/m6-discovery/discovery/placePhotos.js';
@@ -31,14 +32,9 @@ import AudienceSwitch from './components/discover/AudienceSwitch.jsx';
 import DemoControls, { DemoActiveBanner } from './components/discover/DemoControls.jsx';
 import './styles/discover.css';
 import { Chip, Skeleton } from '../shared/components/ui/Primitives.jsx';
-
-// Kuala Lumpur city centre, standing in for the device location until the
-// geolocation permission flow lands. UC6.1 A1 asks for a location rather than
-// requiring one, so a default keeps the journey-cost signal meaningful instead
-// of dropping it entirely.
-const DEFAULT_ORIGIN = { lat: 3.1390, lng: 101.6869, label: 'Kuala Lumpur' };
-
-const today = todayIso;
+import {
+  discoveryFilters, readOrigin, saveExploreReturn, saveOrigin
+} from '../../business-logic/m6-discovery/discovery/DiscoveryJourney.js';
 const RESULT_PAGE_SIZE = 6;
 
 function ShowMore({ onClick, remaining }) {
@@ -63,8 +59,19 @@ export function selectWithheldForCategory(withheld, categoryFilter) {
   return (withheld || []).filter((candidate) => candidate.place?.category === categoryFilter);
 }
 
+export function homeEyebrow(user, origin) {
+  if (user) return `Hi, ${(user.fullName || '').split(' ')[0] || 'there'}`;
+  return `Starting from ${origin?.label || 'your starting point'}`;
+}
+
 function Hero({ candidate, onOpen }) {
   const place = candidate.place;
+  const seatsLeft = candidate.rides.reduce((best, ride) => Math.max(best, Number(ride.seatsAvailable) || 0), 0);
+  const trafficLabel = candidate.rideStatus !== 'available'
+    ? 'Ride information unavailable'
+    : candidate.rides.length > 0
+      ? `${candidate.rides.length} listed ride${candidate.rides.length > 1 ? 's' : ''} · ${seatsLeft > 0 ? `up to ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} in one listed ride` : 'no seats remaining'}`
+      : 'No listed ride for this date';
   return (
     <button type="button" className="dsc-hero" onClick={() => onOpen(place.id)}>
       <span className="dsc-hero-media">
@@ -75,8 +82,8 @@ function Hero({ candidate, onOpen }) {
           <span className="dsc-hero-title">{place.name}</span>
           <span className="dsc-hero-sub">
             {place.state}
-            {Number.isFinite(candidate.distanceKm) && ` · ${Math.round(candidate.distanceKm)} km away`}
-            {candidate.rides.length > 0 && ` · ${candidate.rides.length} ride${candidate.rides.length > 1 ? 's' : ''} going`}
+            {Number.isFinite(candidate.distanceKm) && ` · ${Math.round(candidate.distanceKm)} km straight line`}
+            {` · ${trafficLabel}`}
           </span>
         </span>
       </span>
@@ -170,37 +177,137 @@ function AccountStatusStrip({ status }) {
   );
 }
 
+function OriginSummary({ origin, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(origin);
+
+  useEffect(() => {
+    if (open) setDraft(origin);
+  }, [open, origin]);
+
+  const draftLocation = draft && {
+    placeId: draft.placeId,
+    latitude: draft.lat,
+    longitude: draft.lng
+  };
+
+  function save() {
+    const next = saveOrigin({ ...draft, isDefault: false });
+    if (!next) return;
+    onChange(next);
+    setOpen(false);
+  }
+
+  return (
+    <div className="dsc-origin-summary">
+      <button
+        type="button"
+        className="dsc-origin-summary__button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+      >
+        <IconMapPin size={15} aria-hidden="true" />
+        <span>
+          <span className="dsc-origin-summary__label">Starting point</span>
+          <strong>{origin.label}</strong>
+          {origin.isDefault && <span className="dsc-origin-summary__default"> · default</span>}
+        </span>
+        <span className="dsc-origin-summary__change"><IconEdit size={14} /> Change</span>
+      </button>
+      {origin.isDefault && (
+        <p className="dsc-origin-summary__hint">Add your starting point for a more useful distance ranking.</p>
+      )}
+
+      <AdaptiveDialog
+        open={open}
+        title="Where are you starting from?"
+        description="This helps us rank nearby destinations. Distances are straight-line estimates, not driving times."
+        onClose={() => setOpen(false)}
+        footer={(
+          <>
+            <button type="button" className="dsc-btn" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="dsc-btn dsc-btn-primary" onClick={save} disabled={!draft?.label || !Number.isFinite(draft?.lat) || !Number.isFinite(draft?.lng)}>
+              Use this starting point
+            </button>
+          </>
+        )}
+      >
+        <ConfirmedLocationInput
+          id="discovery-origin"
+          label="Starting point"
+          placeholder="Search for a place in Malaysia"
+          value={draft?.label || ''}
+          location={draftLocation}
+          allowCurrentLocation
+          onChange={(label, location) => setDraft(location
+            ? { label, lat: Number(location.latitude), lng: Number(location.longitude), placeId: location.placeId }
+            : { label, lat: null, lng: null })}
+        />
+        <p className="dsc-origin-summary__dialog-note">
+          Your starting point is kept in this browser tab and is not put in the public URL.
+        </p>
+      </AdaptiveDialog>
+    </div>
+  );
+}
+
+function AlternativeDateNotice({ dates, selectedDate, onSelect }) {
+  if (!dates.length) return null;
+  const format = (value) => new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric'
+  });
+  return (
+    <div className="dsc-date-notice" role="status">
+      <span>No listed rides match {format(selectedDate)}.</span>
+      <span>Related destinations have rides on:</span>
+      <span className="dsc-date-notice__options">
+        {dates.slice(0, 3).map((date) => (
+          <button type="button" key={date} onClick={() => onSelect(date)}>{format(date)}</button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 export default function HomeScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const demo = searchParams.get('demo') === '1';
-
-  const [travelDate, setTravelDate] = useState(() => searchParams.get('date') || today());
+  const searchKey = searchParams.toString();
+  const filters = useMemo(() => discoveryFilters(searchParams), [searchKey]);
+  const { date: travelDate, category: categoryFilter, query: searchQuery } = filters;
+  const [origin, setOrigin] = useState(readOrigin);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dateAdjusted, setDateAdjusted] = useState(false);
   const [showAllWithheld, setShowAllWithheld] = useState(false);
   const [primaryLimit, setPrimaryLimit] = useState(RESULT_PAGE_SIZE);
   const [unservedLimit, setUnservedLimit] = useState(RESULT_PAGE_SIZE);
   const [categoryLimit, setCategoryLimit] = useState(RESULT_PAGE_SIZE);
   const [withheldLimit, setWithheldLimit] = useState(RESULT_PAGE_SIZE);
+  const restoredExploreKey = useRef('');
   const mediaEnabled = useMediaEnabled();
   const accountStatus = useAccountStatus(user?.id);
 
-  const load = useCallback(async (date) => {
+  const updateFilter = useCallback((key, value, defaultValue = '') => {
+    const next = new URLSearchParams(searchParams);
+    if (value && value !== defaultValue) next.set(key, value);
+    else next.delete(key);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const load = useCallback(async (date = travelDate, nextOrigin = origin, nextCategory = categoryFilter) => {
     setLoading(true);
     setFailed(false);
     try {
       const data = await DestinationDiscoveryService.getRecommendations({
         userId: user?.id,
-        origin: DEFAULT_ORIGIN,
-        travelDate: date
+        origin: nextOrigin,
+        travelDate: date,
+        preferredCategories: nextCategory === 'all' ? undefined : [nextCategory]
       });
       setResult(data);
       return data;
@@ -218,28 +325,14 @@ export default function HomeScreen() {
       // used to sit on "Finding destinations…" forever whenever the read threw.
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [categoryFilter, origin, travelDate, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       const data = await load(travelDate);
-      // `load` reports its own failure; there is nothing further to decide
-      // without a result, and the date-adjustment below would read undefined.
       if (cancelled || !data) return;
-
-      // Open on a date that actually has departures. Landing on a day with none
-      // shows an empty served list and misrepresents the platform as having no
-      // rides at all, when it simply has none that day.
-      if (!dateAdjusted && data.primary.length === 0 && data.departureDates?.length) {
-        const upcoming = data.departureDates.find((d) => d >= travelDate) || data.departureDates[0];
-        if (upcoming && upcoming !== travelDate) {
-          setDateAdjusted(true);
-          setTravelDate(upcoming);
-          return;
-        }
-      }
 
       // The prompt is an enhancement, not part of the result. If asking whether
       // to show it fails, the destinations are still on screen and stay there.
@@ -253,12 +346,12 @@ export default function HomeScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, [load, travelDate, dateAdjusted, user?.id]);
+  }, [load, travelDate, user?.id]);
 
   const savePreferences = async (categories) => {
     await DestinationDiscoveryService.savePreferences(user?.id, { preferredCategories: categories });
     setShowPrompt(false);
-    load(travelDate);
+    load();
   };
 
   const dismissPrompt = async () => {
@@ -269,8 +362,20 @@ export default function HomeScreen() {
   // FR-6.30: interest is recorded on selection, before any onward commitment,
   // because choosing to look at a destination is itself the weak signal.
   const openDestination = async (placeId) => {
-    await DestinationDiscoveryService.recordInterest(user?.id, placeId, travelDate);
+    saveExploreReturn(`${location.pathname}${location.search}`, window.scrollY);
+    try {
+      await DestinationDiscoveryService.recordInterest(user?.id, placeId, travelDate);
+    } catch (cause) {
+      // Interest is a weak signal. A failed write must not block the traveller
+      // from opening the destination they chose to inspect.
+      console.error('Could not record destination interest', cause);
+    }
     navigate(`/discover/${placeId}?date=${travelDate}${demo ? '&demo=1' : ''}`);
+  };
+
+  const changeOrigin = (nextOrigin) => {
+    setOrigin(nextOrigin);
+    saveOrigin(nextOrigin);
   };
 
   const filter = useCallback((list) => {
@@ -284,13 +389,25 @@ export default function HomeScreen() {
   const primary = useMemo(() => filter(result?.primary || []), [result, filter]);
   const unserved = useMemo(() => filter(result?.unserved || []), [result, filter]);
   const moreInCategory = useMemo(
-    () => selectWithheldForCategory(result?.withheld, categoryFilter),
-    [result, categoryFilter]
+    () => filter(selectWithheldForCategory(result?.withheld, categoryFilter)),
+    [result, categoryFilter, filter]
   );
   // Unlike moreInCategory, this is every withheld candidate regardless of
   // category - the disclosure a reader on "All" opens explicitly, rather than
   // the per-category list the filter buttons produce.
-  const allWithheld = useMemo(() => result?.withheld || [], [result]);
+  const allWithheld = useMemo(() => filter(result?.withheld || []), [result, filter]);
+
+  const alternativeDates = useMemo(() => {
+    // Alternative dates belong to the currently visible destination set. A
+    // category or text filter must never surface a date discovered only for a
+    // place the traveller has filtered out.
+    const visiblePlaceIds = new Set([
+      ...primary, ...unserved, ...moreInCategory, ...allWithheld
+    ].map((candidate) => candidate.placeId));
+    return [...new Set([...visiblePlaceIds].flatMap((placeId) => result?.alternativeDates?.[placeId] || []))].sort();
+  }, [allWithheld, moreInCategory, primary, result, unserved]);
+  const hasActiveFilter = Boolean(searchQuery.trim()) || categoryFilter !== 'all';
+  const hasVisibleResults = primary.length + unserved.length + moreInCategory.length + allWithheld.length > 0;
 
   // Leaving "All" and coming back should not carry over an expanded state from
   // a previous visit - the reader chose to look, once, at a specific moment.
@@ -302,6 +419,14 @@ export default function HomeScreen() {
     setWithheldLimit(RESULT_PAGE_SIZE);
   }, [categoryFilter, searchQuery, result]);
 
+  useEffect(() => {
+    const scrollY = Number(location.state?.restoreExploreScrollY);
+    if (!Number.isFinite(scrollY) || loading || restoredExploreKey.current === location.key) return;
+    restoredExploreKey.current = location.key;
+    window.requestAnimationFrame(() => window.scrollTo({ top: Math.max(0, scrollY), behavior: 'auto' }));
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+  }, [loading, location.key, location.pathname, location.search, location.state, navigate]);
+
   // The hero is the strongest served candidate; the grid below then starts from
   // the second, so the same place is never shown twice on one screen.
   const hero = categoryFilter === 'all' ? primary[0] : null;
@@ -310,9 +435,9 @@ export default function HomeScreen() {
   return (
     <div className="dsc-page">
       <header className="dsc-header">
-        <p className="dsc-eyebrow">{user ? `Hi, ${(user.fullName || '').split(' ')[0] || 'there'}` : 'Kuala Lumpur'}</p>
+        <p className="dsc-eyebrow">{homeEyebrow(user, origin)}</p>
         <h1>Where should you go?</h1>
-        <p className="dsc-lede">Ranked by how well each place suits you and how easily you can get there.</p>
+        <p className="dsc-lede">Ranked by how well each place suits you and the shared-ride options listed for your date.</p>
 
         {GUIDE_FEATURE_ENABLED && (
           <button type="button" className="dsc-ask" onClick={() => navigate('/assistant')}>
@@ -326,13 +451,14 @@ export default function HomeScreen() {
       <AccountStatusStrip status={accountStatus} />
 
       <AudienceSwitch active="explore" travelDate={travelDate} demo={demo} />
+      <OriginSummary origin={origin} onChange={changeOrigin} />
       <DemoActiveBanner />
 
       {demo && (
         <DemoControls
           travelDate={travelDate}
-          onTravelDateChange={(date) => { setDateAdjusted(true); setTravelDate(date); }}
-          onChanged={() => load(travelDate)}
+          onTravelDateChange={(date) => updateFilter('date', date)}
+          onChanged={() => load()}
           userId={user?.id}
         />
       )}
@@ -346,17 +472,17 @@ export default function HomeScreen() {
             type="text"
             placeholder="Search by name, state, or category"
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={(event) => updateFilter('q', event.target.value)}
             aria-label="Search destinations"
           />
         </label>
 
         <label className="dsc-field">
-          <span>Travel date</span>
-          <input
-            type="date"
-            value={travelDate}
-            onChange={(event) => { setDateAdjusted(true); setTravelDate(event.target.value); }}
+            <span>Travel date</span>
+            <input
+              type="date"
+              value={travelDate}
+              onChange={(event) => updateFilter('date', event.target.value)}
           />
         </label>
 
@@ -365,7 +491,7 @@ export default function HomeScreen() {
             <Chip
               key={value}
               selected={categoryFilter === value}
-              onClick={() => setCategoryFilter(value)}
+              onClick={() => updateFilter('category', value, 'all')}
             >
               {value === 'all' ? 'All' : value}
             </Chip>
@@ -391,6 +517,20 @@ export default function HomeScreen() {
         </Chip>
       </div>
 
+      {!loading && !failed && result?.rideStatus === 'unavailable' && (
+        <p className="dsc-traffic-notice" role="status">
+          Ride information is temporarily unavailable. Destinations are still shown; try again later to see current ride options.
+        </p>
+      )}
+
+      {!loading && !failed && result && primary.length === 0 && result.rideStatus === 'available' && (
+        <AlternativeDateNotice
+          dates={alternativeDates}
+          selectedDate={travelDate}
+          onSelect={(date) => updateFilter('date', date)}
+        />
+      )}
+
       {loading && <ResultsSkeleton />}
 
       {/* A failed read is not an empty catalogue. Saying "no destinations"
@@ -398,53 +538,48 @@ export default function HomeScreen() {
           problem, and leave the reader with nothing to act on. */}
       {!loading && failed && (
         <div className="dsc-empty dsc-failed" role="alert">
-          {user ? (
-            <>
-              <p className="dsc-failed-title">We could not load destinations.</p>
-              <p>The place catalogue did not respond. It may be a connection problem.</p>
-              <button type="button" className="dsc-failed-action" onClick={() => load(travelDate)}>
-                Try again
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="dsc-failed-title">Sign in to see destinations.</p>
-              <p>The place catalogue is available to signed-in members.</p>
-              <button
-                type="button"
-                className="dsc-failed-action"
-                onClick={() => navigate('/auth', {
-                  state: {
-                    from: `${location.pathname}${location.search}`,
-                    reason: 'Sign in to discover destinations.'
-                  }
-                })}
-              >
-                Sign in
-              </button>
-            </>
-          )}
+          <p className="dsc-failed-title">We could not load destinations.</p>
+          <p>The place catalogue did not respond. It may be a connection problem.</p>
+          <button type="button" className="dsc-failed-action" onClick={() => load()}>
+            Try again
+          </button>
         </div>
       )}
 
       {!loading && !failed && (
-        <>
+        hasActiveFilter && !hasVisibleResults ? (
+          <div className="dsc-empty dsc-filtered-empty" role="status">
+            <p>No destinations match these filters.</p>
+            <button
+              type="button"
+              className="dsc-failed-action"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete('q');
+                next.delete('category');
+                setSearchParams(next, { replace: true });
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : <>
           {hero && <Hero candidate={hero} onOpen={openDestination} />}
 
           <section className="dsc-section">
             <div className="dsc-section-head">
-              <h2>Rides are already going here</h2>
+              <h2>Best matches for your day</h2>
               {gridPrimary.length > 0 && (
                 <span className="dsc-count">{gridPrimary.length} more</span>
               )}
             </div>
-            <p className="dsc-section-note">Take a seat that is already on the road.</p>
+            <p className="dsc-section-note">Ranked by fit, distance and the signals available for your selected date.</p>
 
             {gridPrimary.length === 0 ? (
               <p className="dsc-empty">
                 {hero
-                  ? 'That is the only destination with a ride on this date.'
-                  : 'No ride serves a recommended destination on this date. The places below still need a driver.'}
+                  ? 'That is the only destination in the top matches for these conditions.'
+                  : 'No recommended destinations match this date and your current conditions.'}
               </p>
             ) : (
               <div className="dsc-list">
@@ -461,7 +596,7 @@ export default function HomeScreen() {
 
           <section className="dsc-section">
             <div className="dsc-section-head">
-              <h2>Nobody is driving here yet</h2>
+              <h2>More places to explore</h2>
               {/* UC6.7 is a different question for a different person, so it gets
                   its own screen rather than another filter on this one. */}
               <button
@@ -473,11 +608,11 @@ export default function HomeScreen() {
               </button>
             </div>
             <p className="dsc-section-note">
-              Places people want to reach. Offer to drive and the seats fill themselves.
+              Further matches for this date. Check each card for its current travel option.
             </p>
 
             {unserved.length === 0 ? (
-              <p className="dsc-empty">Every destination people want is already covered.</p>
+              <p className="dsc-empty">No more destinations match these conditions.</p>
             ) : (
               <div className="dsc-list">
                 {unserved.slice(0, unservedLimit).map((candidate, index) => (
@@ -501,8 +636,7 @@ export default function HomeScreen() {
                 <span className="dsc-count">{moreInCategory.length}</span>
               </div>
               <p className="dsc-section-note">
-                Below the recommendation threshold for this date - no ride serves them and
-                nobody has asked to go yet. Open one to register interest.
+                Other places in this category are available to explore below the main recommendations.
               </p>
               <div className="dsc-list">
                 {moreInCategory.slice(0, categoryLimit).map((candidate, index) => (

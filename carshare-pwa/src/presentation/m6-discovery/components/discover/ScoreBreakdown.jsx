@@ -21,14 +21,14 @@ const DESIRABILITY_LABELS = {
   affinity: 'Matches your travel history',
   season: 'Right time of year',
   quality: 'Rated well, by enough people',
-  headroom: 'Not already overrun',
+  headroom: 'Lower review coverage than comparable places',
   local: 'Independently run'
 };
 
 const ACCESSIBILITY_LABELS = {
-  seatHeadroom: 'Empty seats on the way',
-  journeyCost: 'Close enough to reach',
-  demandConvergence: 'Others want to go too'
+  seatHeadroom: 'Available seats in one listed ride',
+  journeyCost: 'Relative straight-line proximity',
+  demandConvergence: 'Browsing interest for this date'
 };
 
 function SignalRows({ signals, weights, labels, reasons = {} }) {
@@ -105,7 +105,7 @@ export default function ScoreBreakdown({ candidate }) {
               How well it suits you
               <span className="dsc-axis-score">{candidate.desirability.toFixed(2)}</span>
             </h3>
-            <p className="dsc-axis-note">Independent of whether anyone is driving there.</p>
+            <p className="dsc-axis-note">Independent of listed ride availability.</p>
 
             {candidate.season?.note && (
               <p className={'dsc-season-note' + (candidate.season.state === 'off-season' ? ' dsc-season-off' : '')}>
@@ -123,10 +123,10 @@ export default function ScoreBreakdown({ candidate }) {
 
           <div className="dsc-breakdown-axis">
             <h3>
-              How easily you can get there
+              Shared-ride accessibility
               <span className="dsc-axis-score">{candidate.accessibility.toFixed(2)}</span>
             </h3>
-            <p className="dsc-axis-note">Independent of how appealing the place is.</p>
+            <p className="dsc-axis-note">Based on listed rides, relative straight-line proximity and browsing interest. Pickup suitability still needs checking.</p>
             <SignalRows
               signals={candidate.signals.accessibility}
               weights={ACCESSIBILITY_WEIGHTS}
@@ -135,11 +135,11 @@ export default function ScoreBreakdown({ candidate }) {
 
             {candidate.servedByRide === false && (
               <p className="dsc-axis-cap">
-                No ride serves this destination, so empty seats score 0 and this
+                No listed ride matches this destination for the selected date, so available-seat contribution is 0 and this
                 total cannot pass {maxUnservedAccessibility().toFixed(2)} — below the{' '}
                 {PRESENTATION_THRESHOLDS.accessible.toFixed(2)} needed for the main
-                list. Filling a seat that is already on the road always outranks
-                creating a new journey.
+                list. A destination with available seats in one listed ride receives
+                the stronger accessibility score.
               </p>
             )}
           </div>

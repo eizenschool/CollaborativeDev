@@ -4,6 +4,10 @@ export function guideChatStorageKey(visitorSessionId, userId, sessionId = null) 
   return `${GUIDE_STORAGE.SESSION_KEY}:${userId || visitorSessionId}:${sessionId || 'current'}`;
 }
 
+export function guideDraftStorageKey(visitorSessionId, userId) {
+  return `${GUIDE_STORAGE.SESSION_KEY}:draft:${userId || visitorSessionId}`;
+}
+
 function legacyGuideChatStorageKey(visitorSessionId, userId) {
   return `${GUIDE_STORAGE.SESSION_KEY}:${userId || visitorSessionId}`;
 }
@@ -30,6 +34,19 @@ export function saveGuideChatSnapshot(visitorSessionId, userId, planState, messa
     const value = JSON.stringify({ planState, messages, feedbackStates, sessionId });
     storage?.setItem(guideChatStorageKey(visitorSessionId, userId, sessionId), value);
     if (sessionId) storage?.setItem(guideChatStorageKey(visitorSessionId, userId), value);
+  } catch { /* Browser-private recovery is best effort. */ }
+}
+
+export function readGuideDraft(visitorSessionId, userId, storage = globalThis.sessionStorage) {
+  try {
+    const value = JSON.parse(storage?.getItem(guideDraftStorageKey(visitorSessionId, userId)) || 'null');
+    return typeof value?.text === 'string' ? value.text : '';
+  } catch { return ''; }
+}
+
+export function saveGuideDraft(visitorSessionId, userId, text, storage = globalThis.sessionStorage) {
+  try {
+    storage?.setItem(guideDraftStorageKey(visitorSessionId, userId), JSON.stringify({ text: String(text || '') }));
   } catch { /* Browser-private recovery is best effort. */ }
 }
 

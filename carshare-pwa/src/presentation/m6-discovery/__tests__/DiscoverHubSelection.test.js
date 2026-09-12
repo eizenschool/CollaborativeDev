@@ -7,7 +7,7 @@
 // is the part worth pinning. Same reasoning as PlacePoster.test.js.
 
 import { describe, expect, it } from 'vitest';
-import { selectWithheldForCategory } from '../HomeScreen.jsx';
+import { homeEyebrow, selectWithheldForCategory } from '../HomeScreen.jsx';
 import { CATEGORY } from '../../../business-logic/m6-discovery/discovery/constants.js';
 
 const candidate = (placeId, category) => ({ placeId, place: { id: placeId, category } });
@@ -46,5 +46,15 @@ describe('selectWithheldForCategory', () => {
 
   it('ignores a candidate carrying no place', () => {
     expect(selectWithheldForCategory([{ placeId: 'p_broken' }], CATEGORY.HERITAGE)).toEqual([]);
+  });
+});
+
+describe('homeEyebrow', () => {
+  it('uses the member name when a user is signed in', () => {
+    expect(homeEyebrow({ fullName: 'Jamie Tan' }, { label: 'George Town' })).toBe('Hi, Jamie');
+  });
+
+  it('uses the current tab origin for a guest instead of assuming Kuala Lumpur', () => {
+    expect(homeEyebrow(null, { label: 'George Town, Penang' })).toBe('Starting from George Town, Penang');
   });
 });

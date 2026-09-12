@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GUIDE_REASON } from '../constants.js';
-import { GUIDE_LANGUAGE_OPTIONS, GUIDE_LOCALE, detectGuideLanguage, getInitialGuideLanguage, guideCopy, guideReasonText } from '../GuideLanguage.js';
+import { GUIDE_LANGUAGE_OPTIONS, GUIDE_LANGUAGE_PACK_REQUIRED_KEYS, GUIDE_LOCALE, detectGuideLanguage, getInitialGuideLanguage, guideCopy, guideReasonText } from '../GuideLanguage.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -33,6 +33,37 @@ describe('Tumpang Guide four-language verified templates', () => {
       expect(copy.startVoice).toBeTruthy();
       expect(copy.feedbackBadTradeoff).toBeTruthy();
     }
+  });
+
+  it('keeps destination handoff copy localized without expanding the generated pack contract', () => {
+    for (const language of ['en', 'zh-CN', 'ms', 'ta']) {
+      const copy = guideCopy(language);
+      expect(copy.handoffTitle('Test place')).toContain('Test place');
+      expect(copy.handoffDescription).toBeTruthy();
+      expect(copy.handoffUseQuestion).toBeTruthy();
+      expect(copy.handoffKeepDraft).toBeTruthy();
+      expect(copy.handoffBackToDestination).toBeTruthy();
+    }
+    expect(GUIDE_LANGUAGE_PACK_REQUIRED_KEYS).not.toContain('handoffTitle');
+    expect(GUIDE_LANGUAGE_PACK_REQUIRED_KEYS).not.toContain('handoffDescription');
+  });
+
+  it('describes catalogue evidence without turning it into crowding, route, or seat guarantees', () => {
+    const copyByLanguage = ['en', 'zh-CN', 'ms', 'ta'].map((language) => guideCopy(language));
+    expect(copyByLanguage[0].tradeoffs.busier_choice).toBe('More review coverage than comparable options');
+    expect(copyByLanguage[0].reasons.headroom).not.toMatch(/quiet|busy|crowded|popular/i);
+    expect(copyByLanguage[0].reasons.seat_headroom).toMatch(/listed ride/i);
+    expect(copyByLanguage[0].reasons.seat_headroom).not.toMatch(/may have room|guarantee/i);
+    expect(copyByLanguage[0].reasons.journey_cost).toMatch(/straight-line/i);
+    expect(copyByLanguage[0].reasons.demand_convergence).toMatch(/browsing interest/);
+    expect(copyByLanguage[0].tradeoffs.no_ride_yet).toBe('No listed ride matches the selected date');
+
+    expect(copyByLanguage[1].reasons.headroom).toContain('评论数');
+    expect(copyByLanguage[1].reasons.seat_headroom).toContain('列出的');
+    expect(copyByLanguage[2].reasons.headroom).toContain('ulasan');
+    expect(copyByLanguage[2].reasons.seat_headroom).toContain('disenaraikan');
+    expect(copyByLanguage[3].reasons.headroom).toContain('மதிப்புரைகள்');
+    expect(copyByLanguage[3].reasons.seat_headroom).toContain('பட்டியலிடப்பட்ட');
   });
 
   it('keeps metadata for all 19 AI-selectable language and region packs', () => {
