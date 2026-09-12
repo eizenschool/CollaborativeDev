@@ -73,8 +73,8 @@ export default function ScoreBreakdown({ candidate }) {
 
       {reasons.length === 0 && (
         <p className="dsc-axis-note">
-          Nothing stands out about this destination for your travel date — it is
-          here because it is nearby, not because it suits you particularly.
+          No single ranking signal stands out for this travel date. This place
+          remains in the catalogue results without a stronger stated match.
         </p>
       )}
 

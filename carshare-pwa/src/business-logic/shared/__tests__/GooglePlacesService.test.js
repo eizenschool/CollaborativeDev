@@ -275,6 +275,28 @@ describe('Google Places location boundary', () => {
     expect(maps.importLibrary).not.toHaveBeenCalled();
   });
 
+  it('allows the explicitly approximate starting-point purpose without weakening pickup accuracy', async () => {
+    const geocode = vi.fn(async () => ({
+      results: [{ place_id: 'starting-place', formatted_address: 'Johor Bahru, Johor, Malaysia' }]
+    }));
+    const maps = {
+      importLibrary: vi.fn(async () => ({
+        Geocoder: class { geocode = geocode; }
+      }))
+    };
+
+    await expect(resolveCurrentLocation({
+      maps,
+      position: geolocationResult({ accuracy: 135 }),
+      maxAccuracyMetres: 500
+    })).resolves.toMatchObject({
+      label: 'Johor Bahru, Johor, Malaysia',
+      accuracy: 135,
+      location: { latitude: 3.139, longitude: 101.6869 }
+    });
+    expect(geocode).toHaveBeenCalledTimes(1);
+  });
+
   it('accepts the 100 metre boundary and reverse geocodes exactly once', async () => {
     const geocode = vi.fn(async () => ({
       results: [{ place_id: 'current-place', formatted_address: 'KL Sentral, Kuala Lumpur, Malaysia' }]

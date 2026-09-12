@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTH_BOOTSTRAP_TIMEOUT_MS,
+  AUTH_RETURN_MAX_AGE_MS,
+  AUTH_RETURN_STORAGE_KEY,
   DEFAULT_AUTH_RETURN_PATH,
+  clearAuthReturnPath,
   getAuthProfileRefreshOptions,
   getAuthNavigation,
   normaliseAuthReturnPath,
   normaliseInternalReturnPath,
   parseOAuthHashError,
   promiseWithTimeout,
-  resolveAuthReturnPath
+  readAuthReturnPath,
+  resolveAuthReturnPath,
+  saveAuthReturnPath
 } from '../authAccess.js';
 
 describe('public-first authentication navigation', () => {
@@ -85,5 +90,42 @@ describe('bounded auth recovery', () => {
   it('rejects a stuck auth request so the UI can offer retry', async () => {
     await expect(promiseWithTimeout(new Promise(() => {}), 5))
       .rejects.toThrow('Authentication is taking longer than expected.');
+  });
+});
+
+describe('OAuth return-path recovery', () => {
+  function storage() {
+    const values = new Map();
+    return {
+      getItem: (key) => values.get(key) || null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+      raw: values
+    };
+  }
+
+  it('stores a validated internal destination for an OAuth round trip', () => {
+    const target = storage();
+    expect(saveAuthReturnPath('/assistant?pending=ride#reply', target)).toBe(true);
+    expect(readAuthReturnPath(target)).toBe('/assistant?pending=ride#reply');
+    expect(target.raw.has(AUTH_RETURN_STORAGE_KEY)).toBe(true);
+  });
+
+  it('rejects external, auth-loop and default destinations', () => {
+    const target = storage();
+    expect(saveAuthReturnPath('//example.com', target)).toBe(false);
+    expect(saveAuthReturnPath('/auth', target)).toBe(false);
+    expect(saveAuthReturnPath(DEFAULT_AUTH_RETURN_PATH, target)).toBe(false);
+    expect(readAuthReturnPath(target)).toBeNull();
+  });
+
+  it('expires a saved destination and can clear it after consuming it', () => {
+    const target = storage();
+    expect(saveAuthReturnPath('/assistant', target)).toBe(true);
+    const saved = JSON.parse(target.raw.get(AUTH_RETURN_STORAGE_KEY));
+    expect(readAuthReturnPath(target, saved.savedAt + AUTH_RETURN_MAX_AGE_MS + 1)).toBeNull();
+    expect(saveAuthReturnPath('/assistant', target)).toBe(true);
+    clearAuthReturnPath(target);
+    expect(readAuthReturnPath(target)).toBeNull();
   });
 });

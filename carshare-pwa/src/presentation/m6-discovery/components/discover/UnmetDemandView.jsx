@@ -11,11 +11,24 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../shared/context/AuthContext.jsx';
 import { DestinationDiscoveryService } from '../../../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
 import { discoveryFilters, readExploreReturn, readOrigin } from '../../../../business-logic/m6-discovery/discovery/DiscoveryJourney.js';
+import { todayIso } from '../../../../business-logic/m6-discovery/discovery/localDate.js';
 import { IconArrowLeft, IconUsers, IconRoute, IconMapPin } from '../../../shared/components/icons.jsx';
 import { PHOTO_WIDTH_CARD } from '../../../../business-logic/m6-discovery/discovery/placePhotos.js';
 import PlaceImage from './PlaceImage.jsx';
 import AudienceSwitch from './AudienceSwitch.jsx';
 import DemoControls, { DemoActiveBanner } from './DemoControls.jsx';
+
+export const DEMAND_LOAD_TIMEOUT_MS = 12000;
+
+function withTimeout(task, timeoutMs = DEMAND_LOAD_TIMEOUT_MS) {
+  let timer;
+  return Promise.race([
+    task,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Demand lookup timed out.')), timeoutMs);
+    })
+  ]).finally(() => clearTimeout(timer));
+}
 
 export default function UnmetDemandView() {
   const { user } = useAuth();
@@ -23,7 +36,10 @@ export default function UnmetDemandView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const demo = searchParams.get('demo') === '1';
   const travelDate = discoveryFilters(searchParams).date;
-  const origin = readOrigin();
+  // readOrigin returns a fresh object. Keeping the page's starting point in
+  // state prevents the load effect from treating every result render as a new
+  // request and leaving the demand view stuck on its loading message.
+  const [origin] = useState(() => readOrigin());
 
   // Carried from whichever screen linked here, so the Host sees demand for the
   // date they were already looking at rather than being silently reset to today.
@@ -35,9 +51,9 @@ export default function UnmetDemandView() {
     setLoading(true);
     setFailed(false);
     try {
-      const data = await DestinationDiscoveryService.getUnmetDemand({
+      const data = await withTimeout(DestinationDiscoveryService.getUnmetDemand({
         userId: user?.id, travelDate: date, origin
-      });
+      }));
       setRows(data);
     } catch (cause) {
       // Same reasoning as DiscoverHub: this screen is one link away from it and
@@ -60,11 +76,11 @@ export default function UnmetDemandView() {
       </button>
 
       <header className="dsc-header">
-        <h1>Where people want to go</h1>
+        <h1>Where travellers need a ride</h1>
         <p>
-          Destinations with browsing interest and no listed ride with an
-          available seat for this date. Publish one of these and the seats are
-          more likely to fill.
+          See destinations travellers are considering for this date that still
+          have no listed ride with an available seat. Drivers can publish a
+          ride here.
         </p>
       </header>
 
@@ -85,6 +101,7 @@ export default function UnmetDemandView() {
           <input
             type="date"
             value={travelDate}
+            min={todayIso()}
             onChange={(event) => setSearchParams((current) => { const next = new URLSearchParams(current); next.set('date', event.target.value); return next; })}
           />
         </label>
@@ -106,8 +123,8 @@ export default function UnmetDemandView() {
 
       {!loading && !failed && rows.length === 0 && (
         <p className="dsc-empty">
-          No destination with recorded interest has a listed ride with an available
-          seat for this date.
+          No open travel demand for this date. A destination appears here after
+          travellers mark interest and no listed ride has an available seat.
         </p>
       )}
 

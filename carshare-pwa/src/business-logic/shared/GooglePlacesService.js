@@ -14,6 +14,11 @@ export const LOCATION_SEARCH_DEBOUNCE_MS = 1000;
 export const MAX_GPS_ACCURACY_METRES = 100;
 export const MAX_CHECK_IN_ACCURACY_METRES = 150;
 export const MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES = 500;
+// Destination ranking can use an approximate starting point; it does not
+// promise that the point is a safe passenger pickup. Keep the stricter default
+// below for pickup confirmation and opt into this existing bias limit only for
+// the discovery/Guide starting-point purpose.
+export const MAX_STARTING_POINT_ACCURACY_METRES = MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES;
 export const NEARBY_PICKUP_RADIUS_METRES = 5000;
 export const NEARBY_PICKUP_RESULT_LIMIT = 5;
 export const NEARBY_PICKUP_TYPES = Object.freeze([
@@ -364,12 +369,14 @@ export async function getCurrentLocationPreview({ geolocation } = {}) {
   return normaliseCurrentPosition(await getCurrentPosition({ geolocation }));
 }
 
-export async function resolveCurrentLocation({ maps, geolocation, position } = {}) {
+export async function resolveCurrentLocation({
+  maps, geolocation, position, maxAccuracyMetres = MAX_GPS_ACCURACY_METRES
+} = {}) {
   const { latitude, longitude, accuracy } = normaliseCurrentPosition(
     position || await getCurrentPosition({ geolocation })
   );
 
-  if (accuracy > MAX_GPS_ACCURACY_METRES) {
+  if (accuracy > maxAccuracyMetres) {
     throw new LocationServiceError('INACCURATE', `Your location is only accurate to about ${Math.round(accuracy)} m. Move to an open area and retry, or search for a pickup point.`);
   }
 

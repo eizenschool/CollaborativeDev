@@ -306,11 +306,11 @@ function coordinate(value: unknown) {
 // the boundary where a paid Google lookup would be required, and is why the
 // routing prompt asks the model to normalise a landmark down to its city
 // before it ever reaches here.
-export async function geocodeMalaysianPlace(name: string, args: {
+export async function geocodeMalaysianPlaces(name: string, args: {
   fetchImpl?: typeof fetch; timeoutMs?: number;
-} = {}): Promise<GeocodedPlace | null> {
+} = {}): Promise<GeocodedPlace[]> {
   const query = String(name || "").trim();
-  if (!query) return null;
+  if (!query) return [];
   const { fetchImpl = fetch, timeoutMs = 2500 } = args;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -319,22 +319,33 @@ export async function geocodeMalaysianPlace(name: string, args: {
       name: query, count: "10", language: "en", format: "json", countryCode: "MY"
     });
     const response = await fetchImpl(`https://geocoding-api.open-meteo.com/v1/search?${search}`, { signal: controller.signal });
-    if (!response.ok) return null;
+    if (!response.ok) return [];
     const body = await response.json();
     const results = Array.isArray((body as Row)?.results) ? (body as Row).results as Row[] : [];
     // countryCode is also sent as a query filter, but the response is what
     // decides: a place outside Malaysia must never become a Malaysian
     // traveller's forecast just because the name matched somewhere abroad.
-    const match = results.find((row) => String(row?.country_code || "").toUpperCase() === "MY"
-      && !Number.isNaN(coordinate(row?.latitude)) && !Number.isNaN(coordinate(row?.longitude)));
-    if (!match) return null;
-    return {
-      name: String(match.name || query), state: String(match.admin1 || ""),
-      lat: coordinate(match.latitude), lng: coordinate(match.longitude)
-    };
+    const seen = new Set<string>();
+    return results.filter((row) => String(row?.country_code || "").toUpperCase() === "MY"
+      && !Number.isNaN(coordinate(row?.latitude)) && !Number.isNaN(coordinate(row?.longitude)))
+      .map((row) => ({
+        name: String(row.name || query), state: String(row.admin1 || ""),
+        lat: coordinate(row.latitude), lng: coordinate(row.longitude)
+      }))
+      .filter((row) => {
+        const key = `${row.name.toLocaleLowerCase()}|${row.state.toLocaleLowerCase()}|${row.lat.toFixed(4)}|${row.lng.toFixed(4)}`;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      }).slice(0, 4);
   } catch {
     // A resolution tier, not the answer - a lookup failure must fall through
     // to the next tier, never abort the turn the way a forecast failure does.
-    return null;
+    return [];
   } finally { clearTimeout(timeout); }
+}
+
+export async function geocodeMalaysianPlace(name: string, args: {
+  fetchImpl?: typeof fetch; timeoutMs?: number;
+} = {}): Promise<GeocodedPlace | null> {
+  return (await geocodeMalaysianPlaces(name, args))[0] || null;
 }

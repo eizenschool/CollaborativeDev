@@ -15,6 +15,7 @@ import {
 } from './GuideLanguage.js';
 import { mergeGuideIntent, mostImportantMissingField, normalizePlanState, sanitizedPlanSummary } from './GuideIntentParser.js';
 import { createTraceId, isEmergencyIntent, isGuideHelpIntent, safeRecentMessages, shouldUseLocalGuideRules, validateGuideResponse } from './GuidePolicy.js';
+import { classifyGuideContent } from './GuideContentSafety.js';
 import { runFixtureGuideTurn } from './GuideFixtureEngine.js';
 import { afterSuccessfulGuideTurn, guideQuotaState } from './GuideQuota.js';
 
@@ -259,12 +260,25 @@ export const TumpangGuideService = {
         language, planState: normalizePlanState(planState) };
   },
 
-  async sendTurn({ user, sessionId, visitorSessionId, clientTurnId = null, text, planState, messages, placeContext = [], conversationFocus = 'none', pendingClarification = null, shownPlaceIds = [], language = null, uiLanguage = null, responseLanguage = null, languageLocked = false, qa = {}, online = true, retryBatchId = null, retryPlaceIds = [], retryRecommendations = [] }) {
+  async sendTurn({ user, sessionId, visitorSessionId, clientTurnId = null, inputSource = 'text', text, planState, messages, placeContext = [], selectedPlaceId = null, conversationFocus = 'none', pendingClarification = null, shownPlaceIds = [], language = null, uiLanguage = null, responseLanguage = null, languageLocked = false, qa = {}, online = true, retryBatchId = null, retryPlaceIds = [], retryRecommendations = [], basicRecommendations = false }) {
     // Keep one id for the whole browser request, including a locally-created
     // outage response. If the Edge call timed out after it reached Supabase,
     // Retry must reclaim/replay the same reliability lease instead of starting
     // a second provider turn with a new id.
     const stableClientTurnId = clientTurnId || globalThis.crypto?.randomUUID?.() || createBatchId();
+    // Keep the business-logic boundary safe for direct fixture/service callers
+    // as well as the page's preflight. Blocked text must never reach quota,
+    // local rules, persistence, or the Edge adapter. Masked text is the only
+    // version that may continue downstream.
+    const contentSafety = classifyGuideContent(text);
+    if (contentSafety.decision === 'block') {
+      const error = new Error('Guide message blocked by content safety policy.');
+      error.fallbackReason = 'content_safety_blocked';
+      error.contentSafetyCategory = contentSafety.category;
+      error.policyVersion = contentSafety.policyVersion;
+      throw error;
+    }
+    text = contentSafety.sanitizedText || '';
     const limit = GUIDE_FIXTURE_MODE
       ? fixtureQuota(user, visitorSessionId)
       : { allowed: true, remaining: user?.id ? GUIDE_LIMITS.AUTHENTICATED_DAILY_TURNS : GUIDE_LIMITS.GUEST_SESSION_TURNS };
@@ -292,9 +306,7 @@ export const TumpangGuideService = {
     let raw;
     let allowedCandidates = [];
     if (localRules) {
-      const completePlan = Boolean(requestPlan.startDate && requestPlan.origin?.label
-        && requestPlan.partySize && requestPlan.preferredCategories?.length);
-      if (!GUIDE_FIXTURE_MODE && !GUIDE_LIVE_CATALOGUE_MODE && completePlan) {
+      if (!GUIDE_FIXTURE_MODE && !GUIDE_LIVE_CATALOGUE_MODE) {
         // Normal builds must never recommend from the local fixture. A real
         // catalogue is required for a real recommendation; clarification and
         // controlled Help/emergency responses can still work without it.
@@ -315,15 +327,20 @@ export const TumpangGuideService = {
         if (retryBatchId && retryRecommendations.length && raw.recommendations?.length === retryRecommendations.length) {
           raw = { ...raw, batchId: retryBatchId };
         }
+        if (basicRecommendations && raw.recommendations?.length) {
+          raw = { ...raw, mode: GUIDE_MODE.RECOMMEND, source: 'rules', fallbackReason: 'provider_unavailable',
+            fallbackUsed: true, basicRecommendationBatch: true };
+        }
       }
     } else {
       try {
         raw = await requestGuideTurn({
-          clientTurnId: stableClientTurnId,
+          clientTurnId: stableClientTurnId, inputSource,
           sessionId, visitorSessionId, message: String(text || '').slice(0, GUIDE_LIMITS.MAX_MESSAGE_CHARS),
           uiLanguage: uiLanguage || language || requestPlan.language,
           responseLanguage: responseLanguage || detectGuideLanguage(String(text || ''), language || requestPlan.language),
           planState: sanitizedPlanSummary(requestPlan), recentMessages: safeRecentMessages(messages),
+          selectedPlaceId: selectedPlaceId || null,
           placeContext: (placeContext || []).slice(0, 4).map((item) => ({
             placeId: String(item?.placeId || ''), name: String(item?.name || '').slice(0, 120),
             role: String(item?.role || '')
@@ -344,7 +361,8 @@ export const TumpangGuideService = {
           shownPlaceIds, languageLocked, tripHistoryConsent: Boolean(requestPlan.tripHistoryConsent),
           originCoordinates: Number.isFinite(requestPlan.origin?.lat) && Number.isFinite(requestPlan.origin?.lng)
             ? { lat: requestPlan.origin.lat, lng: requestPlan.origin.lng } : null,
-          qa: GUIDE_QA_MODE ? qa : {}, retryBatchId, retryPlaceIds, retryRecommendations
+          qa: GUIDE_QA_MODE ? qa : {}, retryBatchId, retryPlaceIds, retryRecommendations,
+          ...(basicRecommendations ? { basicRecommendations: true } : {})
         });
         const responsePlaceIds = [...new Set([
           ...(raw?.recommendations || []).map((item) => item.placeId),

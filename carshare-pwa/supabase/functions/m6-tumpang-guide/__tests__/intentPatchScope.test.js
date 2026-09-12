@@ -53,6 +53,18 @@ describe('Tumpang Guide destination-detail identity handoff', () => {
   });
 });
 
+describe('Tumpang Guide place-information fallback contract', () => {
+  it('marks a live information fallback as retryable while keeping the verified place identity', () => {
+    const branch = source.slice(
+      source.indexOf('if (intent.requestedMode === "place_info")'),
+      source.indexOf('if (intent.toolName === "get_weather_forecast")')
+    );
+    expect(branch).toContain('fallbackReason = "live_place_info_unavailable"');
+    expect(branch).toContain('retryable: Boolean(fallbackReason)');
+    expect(branch).toContain('placeId: top.id');
+  });
+});
+
 describe('Tumpang Guide pendingClarification wiring (regression: a bare one-word reply to a weather/route clarify question got reinterpreted as an unrelated fresh request, since nothing told the routing call a specific question was still pending)', () => {
   it('validates the client-echoed shape narrowly before it ever reaches the routing prompt', () => {
     expect(source).toContain('function safePendingClarification');

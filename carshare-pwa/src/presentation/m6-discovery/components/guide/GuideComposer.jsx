@@ -23,7 +23,7 @@ export { GUIDE_SPEECH_LANGUAGE_OPTIONS };
 
 export default function GuideComposer({
   copy, draft, onDraftChange, onSubmit, speechLanguage, spokenLanguageLabel, onChangeSpeechLanguage,
-  speech, onStartSpeech, busy, voicePreview
+  speech, onStartSpeech, busy, voicePreview, contentSafetyError, contentSafetyNotice, contentSafetyCooldownSeconds
 }) {
   return (
     <form className="guide-composer" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
@@ -39,18 +39,21 @@ export default function GuideComposer({
           onChange={(event) => onDraftChange(event.target.value)}
           placeholder={copy.composerPlaceholder || 'Tell me what you have in mind…'}
         />
-        <label className="guide-voice-language">
-          <span className="guide-voice-language__label">{copy.voiceInputLabel || 'Voice input'}</span>
-          <select
-            aria-label={spokenLanguageLabel(speechLanguage)}
-            title={spokenLanguageLabel(speechLanguage)}
-            value={speechLanguage}
-            onChange={onChangeSpeechLanguage}
-            disabled={speech.listening || speech.processing}
-          >
-            {GUIDE_SPEECH_LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
+        <details className="guide-voice-settings">
+          <summary>{copy.voiceSettings || 'Voice settings'}</summary>
+          <label className="guide-voice-language">
+            <span className="guide-voice-language__label">{copy.voiceInputLabel || 'Voice input'}</span>
+            <select
+              aria-label={spokenLanguageLabel(speechLanguage)}
+              title={spokenLanguageLabel(speechLanguage)}
+              value={speechLanguage}
+              onChange={onChangeSpeechLanguage}
+              disabled={speech.listening || speech.processing}
+            >
+              {GUIDE_SPEECH_LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        </details>
         <IconButton
           label={speech.listening ? copy.stopVoice : copy.startVoice}
           onClick={speech.listening ? speech.stop : onStartSpeech}
@@ -58,12 +61,21 @@ export default function GuideComposer({
         >
           {speech.listening ? <IconStop size={19} /> : <IconMicrophone size={19} />}
         </IconButton>
-        <Button variant="primary" type="submit" disabled={busy || !draft.trim()}>
+        <Button variant="primary" type="submit" disabled={busy || !draft.trim() || contentSafetyCooldownSeconds > 0}>
           <IconSend size={19} /> {copy.sendMessage}
         </Button>
       </div>
+      {contentSafetyNotice && <p className="guide-composer__safety-note" role="status">{contentSafetyNotice}</p>}
+      {contentSafetyError && <p className="guide-field-error guide-composer__safety-error" role="alert">{contentSafetyError}</p>}
+      {contentSafetyCooldownSeconds > 0 && (
+        <p className="guide-composer__safety-note" role="status">
+          {(copy.contentSafetyCooldown || ((seconds) => `Please wait ${seconds} seconds before trying again.`))(contentSafetyCooldownSeconds)}
+        </p>
+      )}
       {voicePreview && <small className="guide-voice-preview" aria-live="polite">{voicePreview}</small>}
-      <small>{copy.voiceNote}</small>
+      {(speech.listening || speech.processing || speech.error || speech.cloudFallbackAvailable) && (
+        <small>{copy.voiceNote}</small>
+      )}
       {speech.error && <p className="guide-field-error" role="alert">{speech.error}</p>}
       {speech.cloudFallbackAvailable && !speech.listening && (
         <button type="button" className="guide-text-action" onClick={speech.startCloudFallback} disabled={speech.processing}>

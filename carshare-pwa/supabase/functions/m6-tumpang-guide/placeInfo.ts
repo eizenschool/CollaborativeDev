@@ -307,7 +307,6 @@ function promptFor(place: Row, language: string, userMessage: string, plan: Row 
       startDate: plan.startDate || null,
       endDate: plan.endDate || null,
       preferredCategories: Array.isArray(plan.preferredCategories) ? plan.preferredCategories : [],
-      budget: plan.budget || null,
       indoorPreference: plan.indoorPreference || null,
       accessibilityRequired: Boolean(plan.accessibilityRequired),
       children: Boolean(plan.children)
@@ -328,7 +327,6 @@ function groqResearchPrompt(place: Row, language: string, userMessage: string, p
       startDate: plan.startDate || null,
       endDate: plan.endDate || null,
       preferredCategories: Array.isArray(plan.preferredCategories) ? plan.preferredCategories : [],
-      budget: plan.budget || null,
       indoorPreference: plan.indoorPreference || null,
       accessibilityRequired: Boolean(plan.accessibilityRequired),
       children: Boolean(plan.children)
@@ -345,7 +343,19 @@ function groqFormatPrompt(place: Row, language: string, userMessage: string, res
     verifiedPlace: { name: place.name, state: place.state, category: place.category, country: "Malaysia" },
     responseLanguage: language,
     travellerQuestion: userMessage,
-    verifiedTravelPlan: plan,
+    // The formatter may receive the server's internal plan, which retains
+    // coordinates for ranking. Keep the provider prompt limited to the same
+    // coarse planning facts as the research prompts.
+    verifiedTravelPlan: {
+      originLabel: (plan.origin as Row | undefined)?.label || null,
+      partySize: plan.partySize || null,
+      startDate: plan.startDate || null,
+      endDate: plan.endDate || null,
+      preferredCategories: Array.isArray(plan.preferredCategories) ? plan.preferredCategories : [],
+      indoorPreference: plan.indoorPreference || null,
+      accessibilityRequired: Boolean(plan.accessibilityRequired),
+      children: Boolean(plan.children)
+    },
     previousPublicVenueFacts: previousPublicFacts || null,
     untrustedResearch: research.slice(0, 12_000),
     verifiedSourceList: sources

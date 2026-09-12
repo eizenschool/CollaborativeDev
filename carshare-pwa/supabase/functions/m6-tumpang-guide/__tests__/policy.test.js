@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertNoCardsOrActionsFromSearch, detectSelfContradictedInfoRecommendation, extractCatalogueRequestName,
-  isEmergencyText, isOrdinaryDiscomfortText, sanitizePlanState, validateModelResponse
+  isEmergencyText, isOrdinaryDiscomfortText, restoreConfirmedOriginCoordinates, sanitizePlanState, validateModelResponse
 } from '../policy.ts';
 
 const candidates = [
@@ -43,6 +43,24 @@ describe('Tumpang Guide Edge output policy', () => {
       origin: { label: 'KL', lat: 3.1, lng: 101.7 }, startDate: '2026-09-01', endDate: '2026-09-30',
       partySize: 2, preferredCategories: ['nature', 'unknown']
     })).toMatchObject({ origin: { label: 'KL' }, startDate: '2026-09-01', endDate: '2026-09-07', preferredCategories: ['nature'] });
+  });
+
+  it('restores confirmed coordinates only for the internal retrieval plan', () => {
+    const safe = sanitizePlanState({ origin: { label: 'Johor Bahru', lat: 1.4927, lng: 103.7414 } });
+    const internal = restoreConfirmedOriginCoordinates(safe, { label: 'Johor Bahru', lat: 1.4927, lng: 103.7414 });
+    expect(internal.origin).toMatchObject({ label: 'Johor Bahru', lat: 1.4927, lng: 103.7414 });
+    expect(sanitizePlanState(internal).origin).toEqual({ label: 'Johor Bahru' });
+  });
+
+  it('keeps saved categories as affinity and only preserves an explicit current filter', () => {
+    expect(sanitizePlanState({ preferredCategories: ['culinary'] })).toMatchObject({
+      preferredCategories: ['culinary'], explicitCategories: [], categoryMode: 'any'
+    });
+    expect(sanitizePlanState({
+      preferredCategories: ['nature'], explicitCategories: ['nature'], categoryMode: 'explicit'
+    })).toMatchObject({
+      preferredCategories: ['nature'], explicitCategories: ['nature'], categoryMode: 'explicit'
+    });
   });
 
   it('recognises an explicit catalogue request without treating it as a recommendation', () => {

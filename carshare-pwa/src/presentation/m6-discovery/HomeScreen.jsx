@@ -35,6 +35,8 @@ import { Chip, Skeleton } from '../shared/components/ui/Primitives.jsx';
 import {
   discoveryFilters, readOrigin, saveExploreReturn, saveOrigin
 } from '../../business-logic/m6-discovery/discovery/DiscoveryJourney.js';
+import { resolveKnownGuideOrigin } from '../../business-logic/m6-discovery/guide/GuideOriginResolver.js';
+import { todayIso } from '../../business-logic/m6-discovery/discovery/localDate.js';
 const RESULT_PAGE_SIZE = 6;
 
 function ShowMore({ onClick, remaining }) {
@@ -62,6 +64,25 @@ export function selectWithheldForCategory(withheld, categoryFilter) {
 export function homeEyebrow(user, origin) {
   if (user) return `Hi, ${(user.fullName || '').split(' ')[0] || 'there'}`;
   return `Starting from ${origin?.label || 'your starting point'}`;
+}
+
+export function buildGuidePlanningHandoff({ origin, travelDate, categoryFilter, returnTo }) {
+  const explicitCategories = categoryFilter && categoryFilter !== 'all' ? [categoryFilter] : [];
+  const preciseOrigin = origin && Number.isFinite(Number(origin.lat)) && Number.isFinite(Number(origin.lng))
+    ? {
+      label: String(origin.label || '').slice(0, 80),
+      ...(origin.placeId ? { placeId: String(origin.placeId).slice(0, 180) } : {}),
+      ...(origin.state ? { state: String(origin.state).slice(0, 80) } : {}),
+      lat: Number(origin.lat),
+      lng: Number(origin.lng)
+    }
+    : null;
+  return {
+    origin: preciseOrigin,
+    travelDate: /^20\d{2}-\d{2}-\d{2}$/.test(String(travelDate || '')) ? travelDate : null,
+    explicitCategories,
+    returnTo: typeof returnTo === 'string' && /^\/home(?:\?|$)/.test(returnTo) ? returnTo : '/home'
+  };
 }
 
 function Hero({ candidate, onOpen }) {
@@ -241,9 +262,18 @@ function OriginSummary({ origin, onChange }) {
           location={draftLocation}
           allowCurrentLocation
           purpose="starting-point"
+          deferCurrentLocationConfirmation
           onChange={(label, location) => setDraft(location
             ? { label, lat: Number(location.latitude), lng: Number(location.longitude), placeId: location.placeId }
             : { label, lat: null, lng: null })}
+          resolvePreferredLocation={(query) => {
+            const resolved = resolveKnownGuideOrigin(query);
+            return resolved ? {
+              label: `${resolved.label}, ${resolved.state}, Malaysia`,
+              latitude: resolved.lat,
+              longitude: resolved.lng
+            } : null;
+          }}
         />
         <p className="dsc-origin-summary__dialog-note">
           Your starting point is kept in this browser tab and is not put in the public URL.
@@ -363,17 +393,11 @@ export default function HomeScreen() {
     setShowPrompt(false);
   };
 
-  // FR-6.30: interest is recorded on selection, before any onward commitment,
-  // because choosing to look at a destination is itself the weak signal.
+  // Opening a card is only a view. Browsing interest is an explicit action on
+  // the detail screen; recording it here made every authenticated visitor look
+  // interested before they had made that choice.
   const openDestination = async (placeId) => {
     saveExploreReturn(`${location.pathname}${location.search}`, window.scrollY);
-    try {
-      await DestinationDiscoveryService.recordInterest(user?.id, placeId, travelDate);
-    } catch (cause) {
-      // Interest is a weak signal. A failed write must not block the traveller
-      // from opening the destination they chose to inspect.
-      console.error('Could not record destination interest', cause);
-    }
     navigate(`/discover/${placeId}?date=${travelDate}${includeDistant ? '&range=all' : ''}${demo ? '&demo=1' : ''}`);
   };
 
@@ -381,6 +405,18 @@ export default function HomeScreen() {
     setOrigin(nextOrigin);
     saveOrigin(nextOrigin);
     if (includeDistant) updateFilter('range', '');
+  };
+
+  const startGuidePlanning = () => {
+    const returnTo = `${location.pathname}${location.search}`;
+    saveExploreReturn(returnTo, window.scrollY);
+    navigate('/assistant', {
+      state: {
+        guidePlanningHandoff: buildGuidePlanningHandoff({
+          origin, travelDate, categoryFilter, returnTo
+        })
+      }
+    });
   };
 
   const filter = useCallback((list) => {
@@ -445,7 +481,7 @@ export default function HomeScreen() {
         <p className="dsc-lede">Ranked by how well each place suits you and the shared-ride options listed for your date.</p>
 
         {GUIDE_FEATURE_ENABLED && (
-          <button type="button" className="dsc-ask" onClick={() => navigate('/assistant')}>
+          <button type="button" className="dsc-ask" onClick={startGuidePlanning}>
             <span className="dsc-ask-icon" aria-hidden="true"><IconMessage size={20} /></span>
             <span className="dsc-ask-ph">Describe the day you want, and Tumpang Guide only suggests places already here</span>
             <span className="dsc-ask-go">Plan my day <IconArrowRight size={16} /></span>
@@ -497,6 +533,7 @@ export default function HomeScreen() {
             <input
               type="date"
               value={travelDate}
+              min={todayIso()}
               onChange={(event) => updateFilter('date', event.target.value)}
           />
         </label>
@@ -619,7 +656,7 @@ export default function HomeScreen() {
                 className="dsc-rail-link"
                 onClick={() => navigate(`/discover/demand?date=${travelDate}`)}
               >
-                Where is demand? <IconArrowRight size={14} />
+                For drivers: see travel demand <IconArrowRight size={14} />
               </button>
             </div>
             <p className="dsc-section-note">

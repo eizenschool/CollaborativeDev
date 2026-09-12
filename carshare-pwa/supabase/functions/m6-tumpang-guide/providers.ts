@@ -1,11 +1,11 @@
 import { callGemini } from "./gemini.ts";
-import { sanitizePlanState } from "./policy.ts";
+import { restoreConfirmedOriginCoordinates, sanitizePlanState } from "./policy.ts";
 import { providerInCooldown, recordProviderAttempt } from "./reliability.ts";
 
 type AdminClient = Parameters<typeof providerInCooldown>[0];
 
 export const INTENT_FIELDS = [
-  "origin", "party", "date", "preference", "budget", "indoorPreference",
+  "origin", "party", "date", "preference", "indoorPreference",
   "accessibilityRequired", "children", "recommendationMode", "requestedMode", "language"
 ] as const;
 
@@ -37,8 +37,8 @@ export const VERIFIED_GUIDE_CAPABILITIES = Object.freeze({
 
 export function unresolvedPlanFields(plan: Record<string, unknown>) {
   const fields: string[] = [];
-  if (!plan.origin) fields.push("origin");
-  if (!Array.isArray(plan.preferredCategories) || !plan.preferredCategories.length) fields.push("preference");
+  const origin = plan.origin && typeof plan.origin === "object" ? plan.origin as Record<string, unknown> : null;
+  if (!origin || !Number.isFinite(Number(origin.lat)) || !Number.isFinite(Number(origin.lng))) fields.push("origin");
   return fields;
 }
 
@@ -64,8 +64,8 @@ export const INTENT_SCHEMA = {
     intentPatch: {
       type: "object", additionalProperties: false,
       required: [
-        "originLabel", "partySize", "startDate", "endDate", "preferredCategories",
-        "budget", "indoorPreference", "accessibilityRequired", "children",
+        "originLabel", "partySize", "startDate", "endDate", "preferredCategories", "categoryMode",
+        "indoorPreference", "accessibilityRequired", "children",
         "recommendationMode", "requestedMode", "requestedPlaceName", "requestedAction"
       ],
       properties: {
@@ -74,7 +74,7 @@ export const INTENT_SCHEMA = {
         startDate: { type: "string", maxLength: 10 },
         endDate: { type: "string", maxLength: 10 },
         preferredCategories: { type: "array", maxItems: 4, items: { type: "string", enum: ["culinary", "heritage", "nature", "event"] } },
-        budget: { type: "string", enum: ["unspecified", "free", "low", "medium", "premium"] },
+        categoryMode: { type: "string", enum: ["unspecified", "any", "explicit"] },
         indoorPreference: { type: "string", enum: ["unspecified", "indoor", "outdoor", "either"] },
         accessibilityRequired: { type: "boolean" },
         children: { type: "boolean" },
@@ -89,7 +89,7 @@ export const INTENT_SCHEMA = {
       required: [...INTENT_FIELDS], properties: CONFIDENCE_PROPERTIES
     },
     needsConfirmation: { type: "array", maxItems: 4, items: { type: "string", enum: [...INTENT_FIELDS] } },
-    nextQuestionField: { type: "string", enum: ["unspecified", "date", "origin", "party", "preference"] },
+      nextQuestionField: { type: "string", enum: ["unspecified", "origin"] },
     language: { type: "string", maxLength: 24 },
     languageConfidence: { type: "number", minimum: 0, maximum: 1 },
     switchLanguage: { type: "boolean" },
@@ -355,8 +355,17 @@ export function mergeProviderIntent(currentPlan: Record<string, unknown>, extrac
   }
   const categories = Array.isArray(patch.preferredCategories)
     ? patch.preferredCategories.map(String).filter((item) => ["culinary", "heritage", "nature", "event"].includes(item)) : [];
-  if (categories.length && accepted("preference")) next.preferredCategories = [...new Set(categories)];
-  if (["free", "low", "medium", "premium"].includes(String(patch.budget)) && accepted("budget")) next.budget = patch.budget;
+  if (accepted("preference")) {
+    if (String(patch.categoryMode) === "any") {
+      next.preferredCategories = [];
+      next.explicitCategories = [];
+      next.categoryMode = "any";
+    } else if (String(patch.categoryMode) === "explicit" && categories.length) {
+      next.preferredCategories = [...new Set(categories)];
+      next.explicitCategories = [...new Set(categories)];
+      next.categoryMode = "explicit";
+    }
+  }
   if (["indoor", "outdoor", "either"].includes(String(patch.indoorPreference)) && accepted("indoorPreference")) next.indoorPreference = patch.indoorPreference;
   if (accepted("accessibilityRequired")) next.accessibilityRequired = Boolean(patch.accessibilityRequired);
   if (accepted("children")) next.children = Boolean(patch.children);
@@ -385,12 +394,15 @@ export function mergeProviderIntent(currentPlan: Record<string, unknown>, extrac
     ? String(patch.requestedAction) : "";
 
   return {
-    plan: sanitizePlanState(next) as Record<string, unknown>,
+    // Coordinates are retained only in the server's internal plan. Prompts
+    // call sanitizePlanState again at their boundary, so providers receive
+    // the origin label without the precise point.
+    plan: restoreConfirmedOriginCoordinates(next, next.origin) as Record<string, unknown>,
     requestedMode,
     requestedPlaceName: String(patch.requestedPlaceName || "").trim().slice(0, 120),
     requestedAction,
     assistantMessage: String(extraction.assistantMessage || "").trim().slice(0, 1200),
-    nextQuestionField: ["date", "origin", "party", "preference"].includes(String(extraction.nextQuestionField || ""))
+    nextQuestionField: ["origin"].includes(String(extraction.nextQuestionField || ""))
       ? String(extraction.nextQuestionField) : "",
     confidence: extraction.confidence || {}, needsConfirmation: [...blocked],
     detectedLanguage: validLanguage ? detectedLanguage : String(currentPlan.language || "en"),
@@ -402,7 +414,7 @@ export function preserveSmallTalkPlan(currentPlan: Record<string, unknown>, inte
   // responseLanguage belongs to this turn. Casual conversation must not
   // rewrite the persistent Travel Brief or its interface language.
   void intentPlan;
-  return sanitizePlanState(currentPlan) as Record<string, unknown>;
+  return restoreConfirmedOriginCoordinates(currentPlan, currentPlan.origin) as Record<string, unknown>;
 }
 
 export function buildIntentPrompt({
@@ -413,7 +425,7 @@ export function buildIntentPrompt({
   placeContext?: Array<{ placeId: string; name: string; role?: string }>;
 }) {
   return JSON.stringify({
-    instruction: `Understand the traveller's latest free-form message in conversational context and return the strict intent schema. You are the intent-understanding layer; rules have not interpreted the message. Handle typos, shorthand, slang, mixed-language input, romanisation and context-dependent short replies. Extract only information explicitly stated or safely resolved from the dialogue. A short answer such as "Melaka" should fill the currently missing origin. "We are in Melaka, about 2 people" must fill both origin and party size. Use confidence 0 when a field was not supplied or changed. Use needsConfirmation only for genuinely ambiguous values. Never invent precise coordinates, routes, opening hours or catalogue IDs. Convert relative dates using today. preferredCategories may only contain culinary, heritage, nature or event. recommendationMode is different when the user asks for other/new places and quieter when they ask for less busy places. requestedMode is place_info whenever the user asks what to do, see, eat, expect or know about a named place, or asks why that named place was recommended or suits the current plan. Resolve references such as "the first one", "that place" or "why there" only from verifiedPlaceContext and copy its official name into requestedPlaceName. A named-place question is not app Help. It identifies recommend only when they want destination choices, help only for using the app, catalogue_missing only when they explicitly request a place outside the catalogue, or emergency only when the user describes immediate physical danger requiring urgent assistance. Phrases such as "help me save this", "help me find a ride", or ordinary app help are never emergencies. Put the named venue in requestedPlaceName for place_info. For an external named place, use catalogue_missing; never answer it with web facts. Detect the language the user is naturally communicating in as a BCP-47 tag. Set switchLanguage only when the latest meaningful message clearly establishes a different language or explicitly requests one; names, emoji, numbers and very short ambiguous fragments must retain the current language. languageConfidence and confidence.language must reflect that decision. For enum fields with no supplied value, return exactly \"unspecified\"; for an unknown party size, return 0; never return null. Determine the most important still-missing required field after applying intentPatch and put only that field in nextQuestionField; use \"unspecified\" when none is missing. Write assistantMessage in the detected language when switching, otherwise responseLanguage. Acknowledge understood details naturally, then ask only nextQuestionField and never ask about optional budget before date, origin, party size and preference are complete.`,
+    instruction: `Understand the traveller's latest free-form message in conversational context and return the strict intent schema. You are the intent-understanding layer; rules have not interpreted the message. Handle typos, shorthand, slang, mixed-language input, romanisation and context-dependent short replies. Extract only information explicitly stated or safely resolved from the dialogue. A short answer such as "Melaka" should fill the currently missing origin. "We are in Melaka, about 2 people" must fill both origin and party size. Use confidence 0 when a field was not supplied or changed. Use needsConfirmation only for genuinely ambiguous values. Never invent precise coordinates, routes, opening hours or catalogue IDs. Convert relative dates using today. preferredCategories may only contain culinary, heritage, nature or event. recommendationMode is different when the user asks for other/new places; do not treat review counts as crowd or quietness data. requestedMode is place_info whenever the user asks what to do, see, eat, expect or know about a named place, or asks why that named place was recommended or suits the current plan. Resolve references such as "the first one", "that place" or "why there" only from verifiedPlaceContext and copy its official name into requestedPlaceName. A named-place question is not app Help. It identifies recommend only when they want destination choices, help only for using the app, catalogue_missing only when they explicitly request a place outside the catalogue, or emergency only when the user describes immediate physical danger requiring urgent assistance. Phrases such as "help me save this", "help me find a ride", or ordinary app help are never emergencies. Put the named venue in requestedPlaceName for place_info. For an external named place, use catalogue_missing; never answer it with web facts. Detect the language the user is naturally communicating in as a BCP-47 tag. Set switchLanguage only when the latest meaningful message clearly establishes a different language or explicitly requests one; names, emoji, numbers and very short ambiguous fragments must retain the current language. languageConfidence and confidence.language must reflect that decision. For enum fields with no supplied value, return exactly \"unspecified\"; for an unknown party size, return 0; never return null. Determine the most important still-missing required field after applying intentPatch and put only that field in nextQuestionField; use \"unspecified\" when none is missing. Write assistantMessage in the detected language when switching, otherwise responseLanguage. Acknowledge understood details naturally, then ask only nextQuestionField.`,
     smallTalkRouting: `This rule overrides the missing-field instruction for casual conversation. Set requestedMode to small_talk for greetings, thanks, affection such as "I love you" or "我爱你", jokes, casual feelings, social reactions, questions about the assistant, and conversational remarks that do not request app instructions, verified place facts, or travel recommendations. For small_talk, leave every Travel Brief patch field unspecified or empty with confidence 0, set nextQuestionField to unspecified, and write a short, warm, natural response in the response language. Do not recommend places. You may gently invite the user to discuss travel without asking a required planning question.`,
     actionRouting: `Set requestedMode to action when the user asks the app to perform an available operation. Map "save this place", "add this to my interests" and equivalent wording to requestedAction record_interest; map requests to notify the user about future rides to register_ride_alert; map requests to save Travel Brief categories as preferences to save_preferences. For a place action, resolve the target only from verifiedPlaceContext and copy its exact official name into requestedPlaceName. If no verified target is available, explain what is missing and never claim the action succeeded. Asking for an action is not Help and is never an emergency. The server will verify the Place ID and require confirmation before execution.`,
     today,

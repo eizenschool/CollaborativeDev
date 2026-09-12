@@ -33,6 +33,14 @@ export async function parseGuideEdgeResponse(response) {
   let body = null;
   try { body = await response.json(); } catch { /* Preserve the HTTP failure below. */ }
   if (response.ok) return body;
+  if (body?.reason === 'content_safety_blocked' || body?.reason === 'content_safety_unavailable') {
+    const error = new Error(body.error || 'Guide message safety check failed.');
+    error.status = response.status;
+    error.fallbackReason = body.reason;
+    error.contentSafetyCategory = body.category || null;
+    error.traceId = body.traceId || null;
+    throw error;
+  }
   // Quota and controlled provider failures are still complete Guide responses.
   // Returning them preserves the exact server reason and Retry action instead
   // of relabelling every HTTP 429 as a provider quota failure in the browser.

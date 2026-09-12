@@ -7,6 +7,7 @@ import {
   trafficText,
   validTravelDate
 } from '../DiscoveryJourney.js';
+import { todayIso } from '../localDate.js';
 
 const storage = new Map();
 globalThis.sessionStorage = {
@@ -27,6 +28,13 @@ describe('DiscoveryJourney', () => {
   it('rejects malformed calendar dates and falls back to the local date', () => {
     expect(validTravelDate('2030-02-30')).toBe(false);
     expect(discoveryFilters(new URLSearchParams('date=not-a-date')).date).not.toBe('not-a-date');
+  });
+
+  it('rejects a valid calendar date before today while accepting today', () => {
+    const now = new Date(2026, 8, 13, 12);
+    expect(validTravelDate('2026-09-12', now)).toBe(false);
+    expect(validTravelDate('2026-09-13', now)).toBe(true);
+    expect(discoveryFilters(new URLSearchParams('date=2026-09-12')).date).toBe(todayIso());
   });
 
   it('normalises the location shape returned by the shared location component', () => {

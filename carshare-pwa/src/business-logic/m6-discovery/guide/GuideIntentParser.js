@@ -80,11 +80,18 @@ export function normalizePlanState(value = {}) {
   const range = startDate ? dateRangeDays(startDate, requestedEnd) : [];
   const partySize = Number(value.partySize);
   const preferredCategories = [...new Set((value.preferredCategories || []).filter((item) => Object.values(CATEGORY).includes(item)))];
+  // `preferredCategories` also carries saved/history affinity. It is not a
+  // strict filter unless the current turn or an explicit Brief control marks
+  // the categories as explicit. Falling back here would turn a long-term food
+  // preference into a hard food-only search after every refresh.
+  const explicitCategories = [...new Set((value.explicitCategories || [])
+    .filter((item) => Object.values(CATEGORY).includes(item)))];
   const originPlaceId = String(value.origin?.placeId || '').trim();
   return {
     origin: value.origin?.label ? {
       label: String(value.origin.label).slice(0, 80),
       ...(originPlaceId ? { placeId: originPlaceId.slice(0, 180) } : {}),
+      ...(value.origin.state ? { state: String(value.origin.state).slice(0, 80) } : {}),
       lat: Number.isFinite(value.origin.lat) ? value.origin.lat : undefined,
       lng: Number.isFinite(value.origin.lng) ? value.origin.lng : undefined
     } : null,
@@ -92,7 +99,8 @@ export function normalizePlanState(value = {}) {
     startDate,
     endDate: range.at(-1) || startDate,
     preferredCategories,
-    budget: ['free', 'low', 'medium', 'premium'].includes(value.budget) ? value.budget : null,
+    explicitCategories,
+    categoryMode: value.categoryMode === 'explicit' && explicitCategories.length ? 'explicit' : 'any',
     indoorPreference: ['indoor', 'outdoor', 'either'].includes(value.indoorPreference) ? value.indoorPreference : 'either',
     accessibilityRequired: Boolean(value.accessibilityRequired),
     children: Boolean(value.children),
@@ -155,19 +163,24 @@ export function mergeGuideIntent(planState, text, { today = localIso(new Date())
   }
   if (/\b(?:kuala lumpur|kl)\b/i.test(value) || /吉隆坡/u.test(value)) next.origin = { ...GUIDE_ORIGIN };
 
-  const requested = new Set(next.preferredCategories);
+  const requested = new Set();
   for (const [category, words] of Object.entries(CATEGORY_WORDS)) {
     if (words.some((word) => value.toLocaleLowerCase().includes(word.toLocaleLowerCase()))) requested.add(category);
   }
-  next.preferredCategories = [...requested];
+  if (requested.size) {
+    next.preferredCategories = [...requested];
+    next.explicitCategories = [...requested];
+    next.categoryMode = 'explicit';
+  } else if (/\b(?:any|anything|surprise me|no preference)\b|不限|任何|随便|隨便|apa-apa|எதுவும்/iu.test(value)) {
+    next.preferredCategories = [];
+    next.explicitCategories = [];
+    next.categoryMode = 'any';
+  }
 
   if (/\b(?:wheelchair|accessible|mobility)\b|无障碍|無障礙|சக்கர நாற்காலி/iu.test(value)) next.accessibilityRequired = true;
   if (/\b(?:children|kids|family)\b|亲子|孩子|குழந்தை/iu.test(value)) next.children = true;
   if (/\b(?:indoor|indoors|dalam bangunan)\b|室内|室內|உட்புற/iu.test(value)) next.indoorPreference = 'indoor';
   if (/\b(?:outdoor|outdoors|luar)\b|户外|戶外|வெளிப்புற/iu.test(value)) next.indoorPreference = 'outdoor';
-  if (/\b(?:free|no cost|percuma)\b|免费|免費|இலவச/iu.test(value)) next.budget = 'free';
-  else if (/\b(?:cheap|budget|murah)\b|便宜|预算|பட்ஜெட்/iu.test(value)) next.budget = 'low';
-
   if (/\b(?:different|other|another|new places|elsewhere|change places|change the places)\b|其他|別的|不同|换个|换一个|換個|換一個|lain|berbeza|வேறு/iu.test(value)) {
     next.recommendationMode = 'different';
   } else if (/\b(?:quieter|quiet|less busy|calmer)\b|安静|安靜|清静|tenang|அமைதியான/iu.test(value)) {
@@ -181,8 +194,7 @@ export function mergeGuideIntent(planState, text, { today = localIso(new Date())
 
 export function mostImportantMissingField(planState) {
   const plan = normalizePlanState(planState);
-  if (!plan.origin) return 'origin';
-  if (!plan.preferredCategories.length) return 'preference';
+  if (!plan.origin || !Number.isFinite(plan.origin.lat) || !Number.isFinite(plan.origin.lng)) return 'origin';
   return null;
 }
 

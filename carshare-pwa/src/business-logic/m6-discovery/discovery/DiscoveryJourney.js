@@ -5,13 +5,15 @@ export const DEFAULT_ORIGIN = { lat: 3.139, lng: 101.6869, label: 'Kuala Lumpur'
 const KEY = 'm6-exploration';
 function read(key) { try { return JSON.parse(sessionStorage.getItem(key) || 'null'); } catch { return null; } }
 function write(key, value) { try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* Optional tab persistence. */ } }
-export function validTravelDate(value) {
+export function validTravelDate(value, now = new Date()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
   const date = new Date(`${value}T12:00:00`);
   // A date can be valid for the journey even when it currently has no ride.
   // The caller decides what to show for that date; silently replacing it with
   // a date that happens to have a ride would break the traveller's choice.
-  return Number.isFinite(date.getTime()) && todayIso(date) === value;
+  return Number.isFinite(date.getTime())
+    && todayIso(date) === value
+    && value >= todayIso(now);
 }
 export function discoveryFilters(params) {
   return {

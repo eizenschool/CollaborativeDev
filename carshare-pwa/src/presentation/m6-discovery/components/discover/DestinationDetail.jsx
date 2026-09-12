@@ -273,6 +273,43 @@ export default function DestinationDetail() {
     'search', place, { origin, travelDate }
   ));
 
+  const viewAlternativeDate = (date) => {
+    const params = new URLSearchParams();
+    params.set('date', date);
+    if (includeDistant) params.set('range', 'all');
+    if (exploreContext.category !== 'all') params.set('category', exploreContext.category);
+    if (exploreContext.query) params.set('q', exploreContext.query);
+    navigate(`/home?${params}`);
+  };
+
+  const toggleInterest = async () => {
+    if (!user) {
+      const target = getAuthNavigation(
+        null,
+        `${location.pathname}${location.search}`,
+        'Sign in to let drivers know you’re interested in this destination.'
+      );
+      navigate(target.to, { state: target.state });
+      return;
+    }
+    setActionBusy(true);
+    setNotice('');
+    try {
+      if (actionState?.interest) {
+        await DestinationDiscoveryService.removeInterest(user.id, place.id, travelDate);
+        setNotice('Your interest was removed for this destination and date.');
+      } else {
+        await DestinationDiscoveryService.recordInterest(user.id, place.id, travelDate);
+        setNotice('Drivers can now see your interest in this destination and date.');
+      }
+      setActionState(await DestinationDiscoveryService.getActionState(user.id, place.id, travelDate));
+    } catch {
+      setNotice('Could not update your interest right now. Please try again.');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   const notifyMe = async () => {
     if (!user) {
       const target = getAuthNavigation(
@@ -420,7 +457,19 @@ export default function DestinationDetail() {
             {actionState?.interest && (
               <div className="dsc-saved-state">
                 <IconCheck size={16} aria-hidden="true" />
-                <span><strong>Browsing interest recorded</strong><small>You viewed this destination as an option for {formatTravelDate(travelDate)}. This is not a booking.</small></span>
+                <span>
+                  <strong>Interest shared with drivers</strong>
+                  <small>Drivers can see that you are considering this destination for {formatTravelDate(travelDate)}. This is not a booking or notification.</small>
+                  <button type="button" className="dsc-inline-action" onClick={toggleInterest} disabled={actionBusy}>Remove my interest</button>
+                </span>
+              </div>
+            )}
+            {!actionState?.interest && (
+              <div className="dsc-interest-choice">
+                <button type="button" className="dsc-btn" onClick={toggleInterest} disabled={actionBusy}>
+                  <IconUsers size={16} /> Let drivers know I’m interested
+                </button>
+                <small>This helps drivers see demand for this destination and date. It is not a booking or notification.</small>
               </div>
             )}
             {actionState?.alert && (
@@ -507,7 +556,20 @@ export default function DestinationDetail() {
             )}
 
             {alternativeDates?.length > 0 && rides.length === 0 && rideStatus === 'available' && (
-              <p className="dsc-panel-note">Related rides are listed on {alternativeDates.slice(0, 2).join(' and ')}. Choose another date from Explore to view them.</p>
+              <div className="dsc-date-notice dsc-detail-date-notice" role="status">
+                <IconClock size={16} aria-hidden="true" />
+                <span className="dsc-date-notice__copy">
+                  <strong>Rides found on another date</strong>
+                  <small>No listed ride matches {formatTravelDate(travelDate)}. Choose a date below to view it in Explore.</small>
+                </span>
+                <span className="dsc-date-notice__options">
+                  {alternativeDates.slice(0, 2).map((date) => (
+                    <button type="button" key={date} onClick={() => viewAlternativeDate(date)}>
+                      View {formatTravelDate(date)} in Explore
+                    </button>
+                  ))}
+                </span>
+              </div>
             )}
             {notice && <p className="dsc-notice" role="status">{notice}</p>}
           </section>

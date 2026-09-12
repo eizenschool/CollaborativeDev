@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GUIDE_SPEECH_UNSUPPORTED,
+  GUIDE_SPEECH_SILENCE_COMPLETION_MS,
   bestGuideSpeechAlternative,
   dedupeGuideTranscriptParts,
   guideSpeechErrorMessage,
@@ -11,6 +12,10 @@ import {
 } from '../components/guide/useGuideSpeechInput.js';
 
 describe('Tumpang Guide Web Speech failure policy', () => {
+  it('uses the agreed silence grace period before completing browser dictation', () => {
+    expect(GUIDE_SPEECH_SILENCE_COMPLETION_MS).toBe(1500);
+  });
+
   it('explains unsupported browsers without blocking typed input', () => {
     expect(GUIDE_SPEECH_UNSUPPORTED).toMatch(/not supported/i);
   });

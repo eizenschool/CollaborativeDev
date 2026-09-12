@@ -8,8 +8,11 @@ import {
   normalizeGuideLanguage, detectGuideLanguage
 } from '../../../../business-logic/m6-discovery/guide/GuideLanguage.js';
 import { normalizePlanState } from '../../../../business-logic/m6-discovery/guide/GuideIntentParser.js';
+import { classifyGuideContent } from '../../../../business-logic/m6-discovery/guide/GuideContentSafety.js';
+import { DestinationDiscoveryService } from '../../../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
 import {
-  guideChatStorageKey, readGuideChatSnapshot, readGuideDraft, saveGuideChatSnapshot, saveGuideDraft
+  clearPendingGuideAction, guideChatStorageKey, readGuideChatSnapshot, readGuideDraft, readPendingGuideAction,
+  saveGuideChatSnapshot, saveGuideDraft, savePendingGuideAction
 } from '../../../../business-logic/m6-discovery/guide/GuideChatCache.js';
 import { pickGuideGreeting } from '../../../../business-logic/m6-discovery/guide/GuideGreetings.js';
 import { subscribeGuideSessionEvents } from '../../../../business-logic/m6-discovery/guide/GuideChatEvents.js';
@@ -19,7 +22,6 @@ import { CATEGORY } from '../../../../business-logic/m6-discovery/discovery/cons
 import AdaptiveDialog from '../../../shared/components/ui/AdaptiveDialog.jsx';
 import { Button } from '../../../shared/components/ui/Button.jsx';
 import { IconCheck, IconClock, IconRoute, IconShield } from '../../../shared/components/icons.jsx';
-import GuideOnboarding from './GuideOnboarding.jsx';
 import PlacePoster from '../discover/PlacePoster.jsx';
 import { useGuideSpeechInput } from './useGuideSpeechInput.js';
 import GuideToolbar from './GuideToolbar.jsx';
@@ -31,10 +33,11 @@ const GUIDE_SPEECH_LANGUAGE_KEY = 'letstumpang_m6_guide_speech_language_v1';
 const GUIDE_SPEECH_LANGUAGE_VALUES = new Set(GUIDE_SPEECH_LANGUAGE_OPTIONS.map((option) => option.value));
 
 function initialSpeechLanguage() {
+  const followsConversation = { en: 'en', 'zh-CN': 'zh', ms: 'ms', ta: 'ta' }[getInitialGuideLanguage()] || 'auto';
   try {
     const stored = localStorage.getItem(GUIDE_SPEECH_LANGUAGE_KEY);
-    return GUIDE_SPEECH_LANGUAGE_VALUES.has(stored) ? stored : 'auto';
-  } catch { return 'auto'; }
+    return GUIDE_SPEECH_LANGUAGE_VALUES.has(stored) ? stored : followsConversation;
+  } catch { return followsConversation; }
 }
 
 function spokenLanguageLabel(language) {
@@ -57,18 +60,14 @@ const createVisitorId = () => {
     return globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}`;
   }
 };
-const createWelcome = (language, user) => {
+const createWelcome = (language, user, planState = {}) => {
   const greeting = pickGuideGreeting(language);
   return { id: 'welcome', role: 'assistant', response: {
-    mode: 'clarify', assistantMessage: greeting.text, greetingIndex: greeting.index, language, planState: normalizePlanState({ language }),
+    mode: 'clarify', assistantMessage: greeting.text, greetingIndex: greeting.index, language, planState: normalizePlanState({ ...planState, language }),
     quickReplies: [], recommendations: [], actions: [],
     remainingTurns: user ? Number.MAX_SAFE_INTEGER : GUIDE_LIMITS.GUEST_SESSION_TURNS, fallbackReason: null, source: 'rules', batchId: null, traceId: 'welcome'
   } };
 };
-
-function onboardingSeen() {
-  try { return localStorage.getItem(GUIDE_STORAGE.ONBOARDING_KEY) === 'seen'; } catch { return false; }
-}
 
 function saveCurrentChat(visitorSessionId, userId, planState, messages, feedbackStates = {}, sessionId = null) {
   saveGuideChatSnapshot(visitorSessionId, userId, planState, messages, feedbackStates, sessionId);
@@ -238,12 +237,18 @@ export default function TumpangGuidePage() {
   const [draft, setDraft] = useState(() => readGuideDraft(visitorSessionId, user?.id));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [onboardingOpen, setOnboardingOpen] = useState(() => !onboardingSeen());
   const [pendingAction, setPendingAction] = useState(null);
+  const [deferredAction, setDeferredAction] = useState(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [actionStates, setActionStates] = useState({});
   const [feedbackStates, setFeedbackStates] = useState({});
   const [chatHydrationKey, setChatHydrationKey] = useState(null);
   const [speechLanguage, setSpeechLanguage] = useState(() => initialSpeechLanguage());
+  const [contentSafetyError, setContentSafetyError] = useState('');
+  const [contentSafetyNotice, setContentSafetyNotice] = useState('');
+  const [contentSafetyCooldownSeconds, setContentSafetyCooldownSeconds] = useState(0);
+  const [draftInputSource, setDraftInputSource] = useState('text');
   const sessionRef = useRef(null);
   const chatScrollRef = useRef(null);
   const restoredChatScrollRef = useRef(null);
@@ -254,14 +259,55 @@ export default function TumpangGuidePage() {
   const [voicePreview, setVoicePreview] = useState('');
   const [guideHandoff, setGuideHandoff] = useState(null);
   const [handoffPlaceContext, setHandoffPlaceContext] = useState(null);
+  const [originPickerRequest, setOriginPickerRequest] = useState(0);
+  const [briefOpenRequest, setBriefOpenRequest] = useState(0);
   const sendInFlightRef = useRef(false);
+  const stillWorkingTimerRef = useRef(null);
   const appliedGuideHandoffRef = useRef('');
+  const contentSafetyBlocksRef = useRef([]);
   const currentCopy = useMemo(() => guideCopy(language, languagePack), [language, languagePack]);
+  useEffect(() => {
+    if (contentSafetyCooldownSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setContentSafetyCooldownSeconds((current) => Math.max(0, current - 1));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [contentSafetyCooldownSeconds]);
+  const registerContentSafetyBlock = useCallback(() => {
+    const now = Date.now();
+    const recent = contentSafetyBlocksRef.current.filter((timestamp) => now - timestamp < 60_000);
+    recent.push(now);
+    if (recent.length >= 3) {
+      contentSafetyBlocksRef.current = [];
+      setContentSafetyCooldownSeconds(15);
+    } else contentSafetyBlocksRef.current = recent;
+  }, []);
+  const contentSafetyBlockedMessage = useCallback((category) => (
+    category === 'targeted_abuse'
+      ? (currentCopy.contentSafetyTargeted || 'Please remove personal insults and send your travel question again.')
+      : (currentCopy.contentSafetyHarmful || 'I can help with travel, but I cannot process hateful or threatening language.')
+  ), [currentCopy]);
+  const requireSignInForAction = useCallback((action, reason = 'Sign in to confirm this Tumpang Guide action.') => {
+    savePendingGuideAction(visitorSessionId, action);
+    navigate('/auth', { state: { from: '/assistant', reason } });
+  }, [navigate, visitorSessionId]);
+  const starterPrompts = useMemo(() => {
+    const origin = planState.origin?.label || '';
+    return [
+      { id: 'nature', label: currentCopy.starterNearby?.(origin) || (origin ? `Nature places near ${origin}` : 'Show me nature places to explore') },
+      { id: 'food', label: currentCopy.starterFood?.(origin) || (origin ? `Local food near ${origin}` : 'Show me local food places') },
+      { id: 'surprise', label: currentCopy.starterSurprise || 'Surprise me with a place' }
+    ];
+  }, [currentCopy, planState.origin?.label]);
   const transcript = useCallback((text) => setDraft(() => {
     const finalText = String(text || '').trim();
     const next = [voiceBaseDraftRef.current, finalText].filter(Boolean).join(' ');
     voiceInterimRef.current = '';
     setVoicePreview('');
+    setDraftInputSource('voice');
+    setContentSafetyError('');
+    setContentSafetyNotice('');
+    window.requestAnimationFrame?.(() => document.getElementById('guide-message')?.focus());
     return next;
   }), []);
   const interimTranscript = useCallback((text) => {
@@ -272,6 +318,9 @@ export default function TumpangGuidePage() {
     voiceBaseDraftRef.current = value;
     voiceInterimRef.current = '';
     setVoicePreview('');
+    setDraftInputSource('text');
+    setContentSafetyError('');
+    setContentSafetyNotice('');
     setDraft(value);
   }, []);
   const latestResponse = useMemo(() => [...messages].reverse().find((message) => message.response)?.response, [messages]);
@@ -502,6 +551,17 @@ export default function TumpangGuidePage() {
   }, [chatHydrationKey, draft, requestedSessionId, user?.id, visitorSessionId]);
 
   useEffect(() => {
+    const key = activeChatKey(visitorSessionId, user?.id, requestedSessionId);
+    if (!user?.id || requestedSessionId || chatHydrationKey !== key) return;
+    const action = readPendingGuideAction(visitorSessionId);
+    if (!action) return;
+    clearPendingGuideAction(visitorSessionId);
+    setActionError('');
+    if (action.planState) setPlanState(normalizePlanState(action.planState));
+    setPendingAction(action);
+  }, [chatHydrationKey, requestedSessionId, user?.id, visitorSessionId]);
+
+  useEffect(() => {
     const requested = normalizeGuideLanguage(latestResponse?.uiLanguageChange);
     const requestKey = latestResponse?.traceId && requested
       ? `${latestResponse.traceId}:${requested}` : '';
@@ -548,13 +608,54 @@ export default function TumpangGuidePage() {
     ]))).catch(() => { /* Actions can still be confirmed on demand. */ });
   }, [messages, user?.id]);
 
-  const closeOnboarding = () => { try { localStorage.setItem(GUIDE_STORAGE.ONBOARDING_KEY, 'seen'); } catch { /* no-op */ } setOnboardingOpen(false); };
   const ensureSession = () => { if (!user || sessionRef.current) return sessionRef.current; sessionRef.current = TumpangGuideService.createSession(user, language, planState); return sessionRef.current; };
 
-  const send = async (text = draft, { replaceTraceId = null, retry = false, clientTurnId = null } = {}) => {
-    const clean = String(text || '').trim();
-    if (!clean || busy || sendInFlightRef.current) return;
+  const handlePlanChange = useCallback((nextPlan) => {
+    setPlanState(nextPlan);
+    setNotice(currentCopy.changesApply || 'Changes apply to your next answer.');
+  }, [currentCopy.changesApply]);
+
+  useEffect(() => {
+    if (!deferredAction) return;
+    const hasSingleDate = Boolean(planState.startDate && (!planState.endDate || planState.endDate === planState.startDate));
+    if (!hasSingleDate) return;
+    const action = { ...deferredAction, planState,
+      actionState: deferredAction.recommendation ? actionStates[`${deferredAction.recommendation.placeId}:${planState.startDate}`] : deferredAction.actionState };
+    if (!user) {
+      setDeferredAction(null);
+      requireSignInForAction(action, 'Sign in to confirm this Tumpang Guide action.');
+      return;
+    }
+    setPendingAction(action);
+    setDeferredAction(null);
+  }, [actionStates, deferredAction, planState, requireSignInForAction, user]);
+
+  const send = async (text = draft, { replaceTraceId = null, retry = false, clientTurnId = null, selectedPlaceId = null, planOverride = null, basicRecommendations = false } = {}) => {
+    const originalText = String(text || '').trim();
+    const originalInputSource = draftInputSource;
+    if (!originalText || busy || sendInFlightRef.current) return;
+    if (contentSafetyCooldownSeconds > 0) {
+      const copy = currentCopy.contentSafetyCooldown || ((seconds) => `Please wait ${seconds} seconds before trying again.`);
+      setContentSafetyError(copy(contentSafetyCooldownSeconds));
+      return;
+    }
+    let safety;
+    try { safety = classifyGuideContent(originalText); }
+    catch {
+      setContentSafetyError(currentCopy.contentSafetyUnavailable || 'This message could not be checked safely. Please try again.');
+      return;
+    }
+    if (safety.decision === 'block') {
+      setContentSafetyNotice('');
+      setContentSafetyError(contentSafetyBlockedMessage(safety.category));
+      registerContentSafetyBlock();
+      return;
+    }
+    const clean = safety.sanitizedText || originalText;
+    setContentSafetyError('');
+    setContentSafetyNotice(safety.decision === 'mask' ? (currentCopy.contentSafetyMasked || 'Some language was masked before sending.') : '');
     sendInFlightRef.current = true;
+    const outgoingPlan = normalizePlanState(planOverride || planState);
     // Adopt the language of a fresh conversation's first message in one
     // shot, instead of staying stuck on whatever UI language a previous
     // chat left in localStorage. Never re-detect mid-conversation - that
@@ -570,15 +671,24 @@ export default function TumpangGuidePage() {
     const session = ensureSession();
     const userMessage = { id: `user-${Date.now()}`, role: 'user', text: clean };
     const nextMessages = replaceTraceId ? messages : [...messages, userMessage];
-    setMessages(nextMessages); setDraft(''); setBusy(true); setNotice('');
+    const selectedPlace = selectedPlaceId
+      ? { placeId: String(selectedPlaceId), name: clean, role: 'place_info' }
+      : null;
+    const requestPlaceContext = selectedPlace
+      ? [selectedPlace, ...effectivePlaceContext.filter((item) => item.placeId !== selectedPlace.placeId)].slice(0, 4)
+      : effectivePlaceContext;
+    setMessages(nextMessages); setDraft(''); setDraftInputSource('text'); setBusy(true); setNotice('');
+    stillWorkingTimerRef.current = window.setTimeout(() => {
+      setNotice(currentCopy.stillWorking || 'Still working…');
+    }, 8_000);
     try {
       const response = await TumpangGuideService.sendTurn({
-        clientTurnId: stableClientTurnId,
-        user, sessionId: session?.id, visitorSessionId, text: clean, language, planState: retry ? (messages.find((item) => item.response?.traceId === replaceTraceId)?.response?.planState || planState) : planState,
+        clientTurnId: stableClientTurnId, inputSource: originalInputSource,
+        user, sessionId: session?.id, visitorSessionId, text: clean, language, planState: retry ? (messages.find((item) => item.response?.traceId === replaceTraceId)?.response?.planState || outgoingPlan) : outgoingPlan,
         uiLanguage: language, responseLanguage: detectGuideLanguage(clean, language),
         messages: nextMessages.map((message) => message.response
           ? { role: 'assistant', text: guideResponseContextText(message.response) } : message),
-        placeContext: effectivePlaceContext, conversationFocus,
+        placeContext: requestPlaceContext, selectedPlaceId, conversationFocus,
         // A retry replays an older historical turn, not necessarily the
         // conversation's actual last reply, so it must never carry forward
         // a pending clarification that belongs to a different, later turn.
@@ -587,16 +697,31 @@ export default function TumpangGuidePage() {
         languageLocked: false, online: navigator.onLine,
         retryBatchId: retry ? messages.find((item) => item.response?.traceId === replaceTraceId)?.response?.batchId : null,
         retryPlaceIds: retry ? (messages.find((item) => item.response?.traceId === replaceTraceId)?.response?.recommendations || []).map((item) => item.placeId) : [],
-        retryRecommendations: retry ? (messages.find((item) => item.response?.traceId === replaceTraceId)?.response?.recommendations || []).map(({ placeId, role, verifiedReasonCodes, tradeoffCode }) => ({ placeId, role, verifiedReasonCodes, tradeoffCode })) : []
+        retryRecommendations: retry ? (messages.find((item) => item.response?.traceId === replaceTraceId)?.response?.recommendations || []).map(({ placeId, role, verifiedReasonCodes, tradeoffCode }) => ({ placeId, role, verifiedReasonCodes, tradeoffCode })) : [],
+        basicRecommendations
       });
       if (response.sessionId) {
         sessionRef.current = { id: response.sessionId, userId: user?.id || null };
       }
       const responseLanguage = normalizeGuideLanguage(response.responseLanguage || response.language || language);
+      const resolvedOrigin = response.originResolution?.status === 'confirmed'
+        && Number.isFinite(Number(response.originResolution.lat))
+        && Number.isFinite(Number(response.originResolution.lng))
+        ? { ...(response.planState?.origin || planState.origin || {}),
+          label: response.originResolution.label || response.planState?.origin?.label,
+          ...(response.originResolution.state ? { state: response.originResolution.state } : {}),
+          lat: Number(response.originResolution.lat), lng: Number(response.originResolution.lng) }
+        : null;
+      const retainedOrigin = response.originResolution?.status === 'failed'
+        && response.originResolution.retainedPrevious && outgoingPlan.origin?.lat !== undefined && outgoingPlan.origin?.lng !== undefined
+        ? outgoingPlan.origin : null;
+      const responsePlan = response.planState
+        ? { ...response.planState, ...((resolvedOrigin || retainedOrigin) ? { origin: resolvedOrigin || retainedOrigin } : {}) }
+        : outgoingPlan;
       const rawDecorated = {
         ...response, language: responseLanguage, responseLanguage,
         originalLanguage: response.originalLanguage || responseLanguage,
-        planState: response.planState ? { ...response.planState, language } : { ...planState, language },
+        planState: { ...responsePlan, language },
         localizedMessage: response.assistantMessage,
         promptText: clean, retrying: false,
         recommendations: (response.recommendations || []).map((item) => ({ ...item, batchId: response.batchId }))
@@ -604,16 +729,61 @@ export default function TumpangGuidePage() {
       // Response language is per turn. Never translate the existing chat or
       // rewrite the interface language just because the user spoke another
       // language in this message.
-      setPlanState(normalizePlanState({ ...(response.planState || planState), language }));
+      setPlanState(normalizePlanState({ ...responsePlan, language }));
+      if (response.originResolution?.status === 'failed') {
+        setNotice(currentCopy.originResolutionFailed || 'Please choose a Malaysian starting point.');
+        setOriginPickerRequest((value) => value + 1);
+      }
       setMessages(replaceTraceId
         ? nextMessages.map((message) => message.response?.traceId === replaceTraceId ? { ...message, response: rawDecorated, id: response.traceId } : message)
         : [...nextMessages, { id: response.traceId, role: 'assistant', response: rawDecorated }]);
       if (response.persistenceWarning) setNotice(currentCopy.persistenceWarning);
-    } catch { setNotice(currentCopy.retryNotice); }
-    finally { sendInFlightRef.current = false; setBusy(false); }
+      else if (response.originResolution?.status !== 'failed') setNotice('');
+    } catch (error) {
+      if (error?.fallbackReason === 'content_safety_blocked') {
+        setDraft(originalText);
+        setDraftInputSource(originalInputSource);
+        setContentSafetyNotice('');
+        setContentSafetyError(contentSafetyBlockedMessage(error.contentSafetyCategory));
+        registerContentSafetyBlock();
+        setMessages((current) => replaceTraceId
+          ? current.map((message) => message.response?.traceId === replaceTraceId
+            ? { ...message, response: { ...message.response, retrying: false } } : message)
+          : current.filter((message) => message.id !== userMessage.id));
+        return;
+      }
+      if (error?.fallbackReason === 'content_safety_unavailable') {
+        setDraft(originalText);
+        setDraftInputSource(originalInputSource);
+        setContentSafetyNotice('');
+        setContentSafetyError(currentCopy.contentSafetyUnavailable || 'This message could not be checked safely. Please try again.');
+        setMessages((current) => replaceTraceId
+          ? current.map((message) => message.response?.traceId === replaceTraceId
+            ? { ...message, response: { ...message.response, retrying: false } } : message)
+          : current.filter((message) => message.id !== userMessage.id));
+        return;
+      }
+      const fallbackResponse = {
+        mode: 'fallback', assistantMessage: currentCopy.aiUnavailable || currentCopy.retryNotice,
+        language, responseLanguage: language, planState: outgoingPlan, quickReplies: [], recommendations: [], actions: [],
+        remainingTurns: user ? Number.MAX_SAFE_INTEGER : GUIDE_LIMITS.GUEST_SESSION_TURNS,
+        fallbackReason: error?.fallbackReason || (error?.name === 'AbortError' ? 'timeout' : 'provider_unavailable'),
+        source: 'unavailable', retryable: true, retrying: false, promptText: clean,
+        clientTurnId: stableClientTurnId, batchId: null, traceId: `provider-${Date.now()}`
+      };
+      setMessages(replaceTraceId
+        ? nextMessages.map((message) => message.response?.traceId === replaceTraceId ? { ...message, response: fallbackResponse, id: fallbackResponse.traceId } : message)
+        : [...nextMessages, { id: fallbackResponse.traceId, role: 'assistant', response: fallbackResponse }]);
+      setNotice(currentCopy.aiUnavailable || currentCopy.retryNotice);
+    }
+    finally {
+      if (stillWorkingTimerRef.current) window.clearTimeout(stillWorkingTimerRef.current);
+      stillWorkingTimerRef.current = null;
+      sendInFlightRef.current = false; setBusy(false);
+    }
   };
 
-  const retry = (response) => {
+  const retry = (response, { basicRecommendations = false } = {}) => {
     // promptText is a browser-only convenience and is intentionally not part
     // of the persisted response payload. Recover it from the preceding user
     // message when a saved conversation is reopened, so Retry Gemini also
@@ -628,12 +798,47 @@ export default function TumpangGuidePage() {
       ? { ...message, response: { ...response, retrying: true } } : message));
     // Reuse the original id. A network timeout does not prove that the Edge
     // request stopped; retrying with a new id could execute Gemini/Groq twice.
-    send(promptText, { replaceTraceId: response.traceId, retry: true, clientTurnId: response.clientTurnId || null });
+    send(promptText, { replaceTraceId: response.traceId, retry: true, clientTurnId: response.clientTurnId || null, basicRecommendations });
+  };
+  const useBriefRecommendations = (response) => retry(response, { basicRecommendations: true });
+  const handleQuickReply = (suggestion) => {
+    if (suggestion?.kind === 'origin_candidate'
+      && Number.isFinite(Number(suggestion.lat)) && Number.isFinite(Number(suggestion.lng))) {
+      const label = String(suggestion.text || '').split('·')[0].trim();
+      setPlanState((current) => normalizePlanState({ ...current,
+        origin: { label, ...(suggestion.state ? { state: suggestion.state } : {}), lat: Number(suggestion.lat), lng: Number(suggestion.lng) } }));
+      setNotice(currentCopy.originResolved || 'Starting point confirmed.');
+      return;
+    }
+    if (suggestion?.placeId && ['place_candidate', 'weather_place_candidate', 'route_place_candidate'].includes(suggestion.kind)) {
+      setHandoffPlaceContext({ placeId: suggestion.placeId, name: suggestion.text || suggestion.label });
+      send(suggestion.text || suggestion.label, { selectedPlaceId: suggestion.placeId });
+      return;
+    }
+    if (suggestion?.kind === 'brief_adjustment') {
+      if (suggestion.action === 'change_date' || suggestion.action === 'change_origin') {
+        setBriefOpenRequest((value) => value + 1);
+        setNotice(suggestion.action === 'change_date'
+          ? (currentCopy.chooseSingleDate || currentCopy.dateNotDecided)
+          : (currentCopy.originResolutionFailed || currentCopy.askOrigin));
+        return;
+      }
+      const nextPlan = suggestion.action === 'clear_category'
+        ? normalizePlanState({ ...planState, preferredCategories: [], explicitCategories: [], categoryMode: 'any' })
+        : normalizePlanState({ ...planState, searchRadiusKm: 160, recommendationMode: 'default' });
+      setPlanState(nextPlan);
+      setNotice(currentCopy.changesApply || 'Changes apply to your next answer.');
+      send(suggestion.action === 'clear_category'
+        ? 'Show places with any category.'
+        : 'Show places in the expanded search area.', { planOverride: nextPlan });
+      return;
+    }
+    send(suggestion?.text || suggestion);
   };
   const loadMore = () => send(localizedDifferentPlacesCommand(language, languagePack), {});
-  const startNewChat = () => {
-    const nextPlan = normalizePlanState({ language });
-    const welcome = createWelcome(language, user);
+  const startNewChat = (incomingPlan = null) => {
+    const nextPlan = normalizePlanState({ ...(incomingPlan || planState), language });
+    const welcome = createWelcome(language, user, nextPlan);
     const nextMessages = [{ ...welcome, response: localizeGuideResponse(welcome.response, language, languagePack) }];
     sessionRef.current = null;
     loadedSessionRef.current = null;
@@ -644,6 +849,35 @@ export default function TumpangGuidePage() {
     setChatHydrationKey(activeChatKey(visitorSessionId, user?.id, null));
     navigate('/assistant', { replace: true });
   };
+
+  useEffect(() => {
+    const handoff = location.state?.guidePlanningHandoff;
+    const hydrationKey = activeChatKey(visitorSessionId, user?.id, requestedSessionId);
+    const handoffKey = handoff && `${location.key}:planning`;
+    if (!handoff || chatHydrationKey !== hydrationKey || appliedGuideHandoffRef.current === handoffKey) return;
+
+    appliedGuideHandoffRef.current = handoffKey;
+    const explicitCategories = Array.isArray(handoff.explicitCategories)
+      ? [...new Set(handoff.explicitCategories.map(String).filter((category) => Object.values(CATEGORY).includes(category)))]
+      : [];
+    const origin = handoff.origin
+      && Number.isFinite(Number(handoff.origin.lat))
+      && Number.isFinite(Number(handoff.origin.lng))
+      ? handoff.origin : null;
+    const nextPlan = normalizePlanState({
+      ...planState,
+      origin,
+      startDate: handoff.travelDate || null,
+      endDate: handoff.travelDate || null,
+      preferredCategories: explicitCategories,
+      explicitCategories,
+      categoryMode: explicitCategories.length ? 'explicit' : 'any'
+    });
+    // This is the same intentional boundary as the New chat control: the
+    // existing session remains available through Past plans for signed-in
+    // users, while this Explore handoff gets a fresh, unsent planning chat.
+    startNewChat(nextPlan);
+  }, [chatHydrationKey, location.key, location.state, planState, requestedSessionId, startNewChat, user?.id, visitorSessionId]);
 
   const consumeGuideHandoff = (usePreparedQuestion) => {
     if (usePreparedQuestion && guideHandoff?.draft) {
@@ -683,12 +917,41 @@ export default function TumpangGuidePage() {
 
 
   const requestAction = (type, recommendation, cardPlan) => {
-    if (!user) { navigate('/auth', { state: { from: '/assistant', reason: 'Sign in before saving a Tumpang Guide action.' } }); return; }
-    setPendingAction({ type, recommendation, planState: cardPlan, actionState: actionStates[`${recommendation.placeId}:${cardPlan.startDate || ''}`] });
+    const hasSingleDate = Boolean(cardPlan?.startDate && (!cardPlan.endDate || cardPlan.endDate === cardPlan.startDate));
+    if (type === GUIDE_ACTION.FIND_RIDE) {
+      if (!hasSingleDate) {
+        setDeferredAction({ type, recommendation, planState: cardPlan });
+        setBriefOpenRequest((value) => value + 1);
+        setNotice(currentCopy.chooseSingleDate || currentCopy.dateNotDecided);
+        return;
+      }
+      navigate(DestinationDiscoveryService.buildPrefillUrl('search', recommendation.place, {
+        origin: cardPlan.origin, travelDate: cardPlan.startDate
+      }));
+      return;
+    }
+    if (!hasSingleDate && [GUIDE_ACTION.RECORD_INTEREST, GUIDE_ACTION.REGISTER_RIDE_ALERT].includes(type)) {
+      setDeferredAction({ type, recommendation, planState: cardPlan });
+      setBriefOpenRequest((value) => value + 1);
+      setNotice(currentCopy.chooseSingleDate || currentCopy.dateNotDecided);
+      return;
+    }
+    const action = { type, recommendation, planState: cardPlan, actionState: actionStates[`${recommendation.placeId}:${cardPlan.startDate || ''}`] };
+    if (!user) { requireSignInForAction(action, 'Sign in before saving a Tumpang Guide action.'); return; }
+    setActionError('');
+    setPendingAction(action);
   };
-  const requestPreferenceSave = () => { if (!user) { navigate('/auth', { state: { from: '/assistant', reason: 'Sign in before saving travel preferences.' } }); return; } setPendingAction({ type: GUIDE_ACTION.SAVE_PREFERENCES, planState }); };
+  const requestPreferenceSave = () => {
+    const action = { type: GUIDE_ACTION.SAVE_PREFERENCES, planState };
+    if (!user) { requireSignInForAction(action, 'Sign in before saving travel preferences.'); return; }
+    setActionError(''); setPendingAction(action);
+  };
   const requestResponseAction = (action) => {
-    if (!user) { navigate('/auth', { state: { from: '/assistant', reason: 'Sign in before completing a Tumpang Guide action.' } }); return; }
+    const dateFreeAction = [GUIDE_ACTION.RECORD_INTEREST, GUIDE_ACTION.REGISTER_RIDE_ALERT].includes(action.type);
+    if (!user && !dateFreeAction) {
+      requireSignInForAction({ type: action.type, requestedName: action.requestedName, planState }, 'Sign in before completing a Tumpang Guide action.');
+      return;
+    }
     if (action.type === GUIDE_ACTION.REQUEST_CATALOGUE) {
       setPendingAction({ type: action.type, requestedName: action.requestedName, planState }); return;
     }
@@ -698,13 +961,15 @@ export default function TumpangGuidePage() {
     if ([GUIDE_ACTION.RECORD_INTEREST, GUIDE_ACTION.REGISTER_RIDE_ALERT].includes(action.type) && action.placeId) {
       const actionPlan = normalizePlanState({ ...planState, startDate: action.travelDate || planState.startDate,
         endDate: action.travelDate || planState.endDate || planState.startDate });
-      setPendingAction({ type: action.type,
-        recommendation: { placeId: action.placeId, place: action.place || { id: action.placeId, name: action.placeName } },
-        planState: actionPlan, actionState: actionStates[`${action.placeId}:${actionPlan.startDate || ''}`] });
+      requestAction(action.type,
+        { placeId: action.placeId, place: action.place || { id: action.placeId, name: action.placeName } },
+        actionPlan);
     }
   };
   const confirmAction = async () => {
-    const action = pendingAction; setPendingAction(null);
+    const action = pendingAction;
+    if (!action || actionBusy) return;
+    setActionBusy(true); setActionError('');
     const cardPlan = action.planState || planState; const key = action.recommendation ? `${action.recommendation.placeId}:${cardPlan.startDate || ''}` : null;
     try {
       if (action.type === 'cancel_interest' || action.type === 'cancel_ride_alert') {
@@ -716,7 +981,10 @@ export default function TumpangGuidePage() {
         if (key && action.type === GUIDE_ACTION.REGISTER_RIDE_ALERT) setActionStates((current) => ({ ...current, [key]: { ...current[key], alert: result.registration || { status: 'active' } } }));
       }
       setNotice(action.type.includes('alert') ? (action.type.startsWith('cancel') ? currentCopy.cancelAlert : currentCopy.alertSaved) : action.type.includes('interest') ? (action.type.startsWith('cancel') ? currentCopy.cancelInterest : currentCopy.interestSaved) : action.type === GUIDE_ACTION.SAVE_PREFERENCES ? currentCopy.preferencesSaved : currentCopy.catalogueRequestSaved);
-    } catch { setNotice(currentCopy.actionFailed); }
+      setPendingAction(null);
+    } catch {
+      setActionError(currentCopy.actionFailed);
+    } finally { setActionBusy(false); }
   };
   const feedback = async (response, sentiment, reason) => {
     if (!user?.id || !sessionRef.current?.id || !response) {
@@ -732,7 +1000,6 @@ export default function TumpangGuidePage() {
 
   return (
     <main className="guide-page">
-      <GuideOnboarding open={onboardingOpen} onClose={closeOnboarding} language={language} languagePack={languagePack} />
       {hasConversation && <h1 className="sr-only">Tumpang Guide</h1>}
       {!hasConversation && (
         <section className="guide-hero" aria-labelledby="guide-hero-title">
@@ -745,6 +1012,10 @@ export default function TumpangGuidePage() {
               <span><IconClock size={14} /> {currentCopy.timeoutFallback}</span>
               <span><IconShield size={14} /> {currentCopy.privacy}</span>
             </div>
+            <details className="guide-how">
+              <summary>{currentCopy.howGuideWorks || 'How Guide works'}</summary>
+              <p>{currentCopy.howGuideWorksDescription || currentCopy.heroDescription}</p>
+            </details>
           </div>
           <div className="guide-hero__media" aria-hidden="true">
             <PlacePoster seed="tumpang-guide-hero" category={CATEGORY.NATURE} />
@@ -778,36 +1049,60 @@ export default function TumpangGuidePage() {
             </div>
           </div>
         )}
+        {!hasConversation && !guideHandoff && (
+          <div className="guide-starters" role="group" aria-label={currentCopy.startPlanning || 'Start planning'}>
+            <p>{currentCopy.startPlanning || 'Start planning'}</p>
+            <div>
+              {starterPrompts.map((starter) => (
+                <button
+                  key={starter.id}
+                  type="button"
+                  className="guide-starter"
+                  onClick={() => {
+                    handleDraftChange(starter.label);
+                    window.requestAnimationFrame(() => document.getElementById('guide-message')?.focus());
+                  }}
+                >
+                  {starter.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <GuideTranscript
           messages={messages} copy={currentCopy} language={language} languagePack={languagePack}
           unlimitedTurns={Boolean(user)} actionStates={actionStates} feedbackStates={feedbackStates}
           busy={busy} latestAssistantTrace={latestAssistantTrace} latestRecommendationTrace={latestRecommendationTrace}
           chatScrollRef={chatScrollRef}
-          onQuickReply={(text) => send(text)} onAction={requestAction} onResponseAction={requestResponseAction}
-          onFeedback={feedback} onRetry={retry} onLoadMore={loadMore}
+          onQuickReply={handleQuickReply} onAction={requestAction} onResponseAction={requestResponseAction}
+          onFeedback={feedback} onRetry={retry} onLoadMore={loadMore} onBasicRecommendations={useBriefRecommendations}
         />
         {notice && <p className="guide-notice" role="status">{notice}</p>}
 
         <div className="guide-dock">
           <GuideContextBar
             plan={planState} copy={currentCopy} language={language} languagePack={languagePack}
-            onChange={setPlanState} onSavePreferences={requestPreferenceSave} canSave={Boolean(user)}
+            onChange={handlePlanChange} onSavePreferences={requestPreferenceSave} canSave={Boolean(user)}
+            openOriginRequest={originPickerRequest} openRequest={briefOpenRequest}
           />
           <GuideComposer
             copy={currentCopy} draft={draft} onDraftChange={handleDraftChange} onSubmit={() => send()}
             speechLanguage={speechLanguage} spokenLanguageLabel={spokenLanguageLabel} onChangeSpeechLanguage={changeSpeechLanguage}
             speech={speech} onStartSpeech={startSpeech} busy={busy} voicePreview={voicePreview}
+            contentSafetyError={contentSafetyError} contentSafetyNotice={contentSafetyNotice}
+            contentSafetyCooldownSeconds={contentSafetyCooldownSeconds}
           />
         </div>
       </section>
 
       <AdaptiveDialog
         open={Boolean(pendingAction)}
-        onClose={() => setPendingAction(null)}
+        onClose={() => { if (!actionBusy) { setPendingAction(null); setActionError(''); } }}
         title={pendingAction?.type === GUIDE_ACTION.REGISTER_RIDE_ALERT || pendingAction?.type === 'cancel_ride_alert' ? currentCopy.rideAlert : pendingAction?.type === GUIDE_ACTION.SAVE_PREFERENCES ? currentCopy.savePreferences : pendingAction?.type === GUIDE_ACTION.REQUEST_CATALOGUE ? currentCopy.requestCatalogue : currentCopy.saveInterest}
         description={currentCopy.actionConfirm}
-        footer={<><Button variant="secondary" onClick={() => setPendingAction(null)}>{currentCopy.cancel}</Button><Button onClick={confirmAction}>{currentCopy.confirm}</Button></>}
+        footer={<><Button variant="secondary" onClick={() => { if (!actionBusy) { setPendingAction(null); setActionError(''); } }} disabled={actionBusy}>{currentCopy.cancel}</Button><Button onClick={confirmAction} disabled={actionBusy}>{actionBusy ? (currentCopy.thinking || 'Working…') : currentCopy.confirm}</Button></>}
       >
+        {actionError && <p className="guide-field-error" role="alert">{actionError}</p>}
         <p>{pendingAction?.type === GUIDE_ACTION.REGISTER_RIDE_ALERT || pendingAction?.type === 'cancel_ride_alert' ? formatCopy(currentCopy.rideAlertConfirm, { name: pendingAction?.recommendation?.place?.name, date: pendingAction?.planState?.startDate }, '') : pendingAction?.type === GUIDE_ACTION.SAVE_PREFERENCES ? formatCopy(currentCopy.preferenceConfirm, { categories: (pendingAction?.planState?.preferredCategories || []).map((category) => guideCategoryLabel(category, language, languagePack)).join(', ') }, '') : pendingAction?.type === GUIDE_ACTION.REQUEST_CATALOGUE ? currentCopy.catalogueQueued : formatCopy(currentCopy.saveInterestConfirm, { name: pendingAction?.recommendation?.place?.name, date: pendingAction?.planState?.startDate }, '')}</p>
       </AdaptiveDialog>
     </main>

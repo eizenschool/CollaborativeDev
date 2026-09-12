@@ -14,7 +14,7 @@ export default function GuideToolbar({ hasConversation, languageBusy, copy, onNe
         <strong>Tumpang Guide</strong>
       </div>
       {languageBusy && <span className="guide-language-loading">{copy.loadingLanguage}</span>}
-      <Button type="button" size="small" variant="secondary" onClick={onNewChat}>{copy.newChat}</Button>
+      <Button type="button" size="small" variant="secondary" onClick={() => onNewChat()}>{copy.newChat}</Button>
       <Link to="/assistant/history">{copy.pastPlans} <IconArrowRight size={14} /></Link>
     </div>
   );

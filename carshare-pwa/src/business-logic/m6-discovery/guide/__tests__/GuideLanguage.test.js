@@ -32,6 +32,20 @@ describe('Tumpang Guide four-language verified templates', () => {
       expect(copy.startingPointPlaceholder).toBeTruthy();
       expect(copy.startVoice).toBeTruthy();
       expect(copy.feedbackBadTradeoff).toBeTruthy();
+      expect(copy.practicalFilters).toBeTruthy();
+      expect(copy.indoorFilter).toBeTruthy();
+      expect(copy.outdoorFilter).toBeTruthy();
+      expect(copy.accessibleFilter).toBeTruthy();
+      expect(copy.childrenFilter).toBeTruthy();
+      expect(copy.clearFilter).toBeTruthy();
+      expect(copy.contentSafetyMasked).toBeTruthy();
+      expect(copy.contentSafetyTargeted).toBeTruthy();
+      expect(copy.contentSafetyHarmful).toBeTruthy();
+      expect(copy.contentSafetyUnavailable).toBeTruthy();
+      expect(copy.contentSafetyCooldown(3)).toContain('3');
+      expect(copy.retryPlaceInfo).toBeTruthy();
+      expect(copy.basicRecommendations).not.toMatch(/Travel Brief|Ringkasan|பயணச் சுருக்கம்|旅行概要/i);
+      expect(copy.aiUnavailable).not.toMatch(/Travel Brief|Ringkasan|பயணச் சுருக்கம்|旅行概要/i);
     }
   });
 

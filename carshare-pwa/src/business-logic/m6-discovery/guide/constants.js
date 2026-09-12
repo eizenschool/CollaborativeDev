@@ -111,7 +111,8 @@ export const GUIDE_STORAGE = Object.freeze({
   ONBOARDING_KEY: 'letstumpang_m6_guide_onboarding_v1',
   LANGUAGE_KEY: 'letstumpang_m6_guide_language_v1',
   SESSION_KEY: 'letstumpang_m6_guide_session_v2',
-  SESSION_INDEX_KEY: 'letstumpang_m6_guide_session_index_v1'
+  SESSION_INDEX_KEY: 'letstumpang_m6_guide_session_index_v1',
+  PENDING_ACTION_KEY: 'letstumpang_m6_guide_pending_action_v1'
 });
 
 export const GUIDE_ORIGIN = Object.freeze({

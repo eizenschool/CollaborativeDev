@@ -1,5 +1,7 @@
 export const DEFAULT_AUTH_RETURN_PATH = '/home';
 export const AUTH_BOOTSTRAP_TIMEOUT_MS = 8000;
+export const AUTH_RETURN_STORAGE_KEY = 'letstumpang_auth_return_v1';
+export const AUTH_RETURN_MAX_AGE_MS = 30 * 60 * 1000;
 
 export function promiseWithTimeout(promise, timeoutMs = AUTH_BOOTSTRAP_TIMEOUT_MS) {
   let timeoutId;
@@ -37,6 +39,60 @@ export function normaliseAuthReturnPath(value) {
 
 export function resolveAuthReturnPath(state) {
   return normaliseAuthReturnPath(state?.from);
+}
+
+function usableStorage(storage) {
+  if (storage && typeof storage.getItem === 'function'
+    && typeof storage.setItem === 'function' && typeof storage.removeItem === 'function') {
+    return storage;
+  }
+  return null;
+}
+
+// OAuth leaves the application and therefore cannot preserve React Router's
+// location.state. Keep only a short-lived, validated internal path so the
+// callback can return to the exact Guide action that required sign-in.
+export function saveAuthReturnPath(path, storage = globalThis?.sessionStorage) {
+  const safePath = normaliseAuthReturnPath(path);
+  const targetStorage = usableStorage(storage);
+  if (!targetStorage || safePath === DEFAULT_AUTH_RETURN_PATH) return false;
+  try {
+    targetStorage.setItem(AUTH_RETURN_STORAGE_KEY, JSON.stringify({
+      path: safePath,
+      savedAt: Date.now()
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readAuthReturnPath(storage = globalThis?.sessionStorage, now = Date.now()) {
+  const targetStorage = usableStorage(storage);
+  if (!targetStorage) return null;
+  try {
+    const saved = JSON.parse(targetStorage.getItem(AUTH_RETURN_STORAGE_KEY) || 'null');
+    if (!saved || typeof saved.savedAt !== 'number'
+      || now - saved.savedAt < 0 || now - saved.savedAt > AUTH_RETURN_MAX_AGE_MS) {
+      targetStorage.removeItem(AUTH_RETURN_STORAGE_KEY);
+      return null;
+    }
+    const safePath = normaliseAuthReturnPath(saved.path);
+    if (safePath === DEFAULT_AUTH_RETURN_PATH && saved.path !== DEFAULT_AUTH_RETURN_PATH) {
+      targetStorage.removeItem(AUTH_RETURN_STORAGE_KEY);
+      return null;
+    }
+    return safePath;
+  } catch {
+    try { targetStorage.removeItem(AUTH_RETURN_STORAGE_KEY); } catch { /* best effort */ }
+    return null;
+  }
+}
+
+export function clearAuthReturnPath(storage = globalThis?.sessionStorage) {
+  const targetStorage = usableStorage(storage);
+  if (!targetStorage) return;
+  try { targetStorage.removeItem(AUTH_RETURN_STORAGE_KEY); } catch { /* best effort */ }
 }
 
 export function getAuthNavigation(user, destination, reason = 'Sign in to continue.') {

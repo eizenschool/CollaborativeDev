@@ -148,6 +148,34 @@ test('guest discovery keeps the selected tab origin in the page context', async 
   await expect(page.getByRole('button', { name: /Starting point.*George Town, Penang/ })).toBeVisible();
 });
 
+test('homepage explains and opens the driver travel-demand view', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  const demandTab = page.getByRole('tab', { name: 'For drivers: see travel demand', exact: true });
+  await expect(demandTab).toBeVisible();
+  await demandTab.click();
+  await expect(page).toHaveURL(/\/discover\/demand\?date=2026-09-14/);
+  await expect(page.getByRole('heading', { name: 'Where travellers need a ride', exact: true })).toBeVisible();
+  await expect(page.getByText('Drivers can publish a ride here.', { exact: false })).toBeVisible();
+});
+
+test('an explicit traveller interest appears as open demand for the same date', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = 'u_demo_1';
+    localStorage.setItem(storageKey, JSON.stringify(database));
+    localStorage.setItem('letstumpang_discovery_v1', JSON.stringify({ interest: [], registrations: [], preferences: {} }));
+  }, MOCK_STORAGE_KEY);
+  await page.reload();
+  await page.goto('/discover/p_georgetown?date=2026-09-14');
+  await page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true }).click();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toBeVisible();
+  await page.goto('/discover/demand?date=2026-09-14');
+  await expect(page.getByRole('heading', { name: 'Where travellers need a ride', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
+  await expect(page.getByText('1 person has shown interest for 2026-09-14', { exact: true })).toBeVisible();
+});
+
 test('Home starting-point dialog uses the designed location controls', async ({ page }) => {
   await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
   await page.getByRole('button', { name: /Starting point/ }).click();
@@ -176,12 +204,48 @@ test('destination detail separates browsing interest from ride state', async ({ 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
   await expect(page.getByText('No listed ride for this date')).toBeVisible();
-  await expect(page.getByText('Browsing interest recorded', { exact: true })).toBeVisible();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toBeVisible();
   await expect(page.getByText('1 traveller has viewed this as an option for this date.')).toBeVisible();
   await expect(page.getByText('Search may include listed rides ending within 10 km of this destination.')).toBeVisible();
   await page.getByRole('button', { name: 'Tell me when there is a ride' }).click();
   await expect(page.getByText('Ride alert active', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel ride notification' })).toBeVisible();
+});
+
+test('opening a destination does not record interest until the traveller chooses it', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = 'u_demo_1';
+    localStorage.setItem(storageKey, JSON.stringify(database));
+    localStorage.setItem('letstumpang_discovery_v1', JSON.stringify({ interest: [], registrations: [], preferences: {} }));
+  }, MOCK_STORAGE_KEY);
+  await page.reload();
+  await page.goto('/discover/p_georgetown?date=2026-09-14');
+  await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true })).toBeVisible();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true }).click();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove my interest', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true })).toBeVisible();
+});
+
+test('guests can see the interest action and are sent to sign in when they choose it', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = null;
+    localStorage.setItem(storageKey, JSON.stringify(database));
+    localStorage.setItem('letstumpang_discovery_v1', JSON.stringify({ interest: [], registrations: [], preferences: {} }));
+  }, MOCK_STORAGE_KEY);
+  await page.reload();
+  await page.goto('/discover/p_georgetown?date=2026-09-14');
+  await expect(page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true }).click();
+  await expect(page).toHaveURL(/\/auth$/);
+  await expect(page.getByText('Sign in to let drivers know you’re interested in this destination.')).toBeVisible();
 });
 
 test('destination scoring explains evidence without claiming reachability or live crowding', async ({ page }) => {
