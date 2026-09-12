@@ -38,7 +38,7 @@ export default function AudienceSwitch({ active, travelDate, demo }) {
         className={'dsc-audience-tab' + (active === 'demand' ? ' active' : '')}
         onClick={() => go('/discover/demand')}
       >
-        <IconUsers size={16} /> Where do people want to go?
+        <IconUsers size={16} /> For drivers: see travel demand
       </button>
     </div>
   );

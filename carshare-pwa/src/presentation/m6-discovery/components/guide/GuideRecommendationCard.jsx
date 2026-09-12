@@ -27,9 +27,25 @@ export default function GuideRecommendationCard({ recommendation, featured = fal
     || guideTradeoffLabel(recommendation.tradeoffCode, language, languagePack)).trim();
   const interestActive = Boolean(actionState?.interest);
   const alertActive = Boolean(actionState?.alert);
-  const findRide = () => navigate(DestinationDiscoveryService.buildPrefillUrl('search', place, {
-    origin: planState.origin, travelDate: planState.startDate
-  }));
+  const rideSummary = recommendation.rideSummary || { status: planState.startDate ? 'none' : 'date_required', listedRideCount: 0, maxSeatsInSingleRide: null };
+  const rideStatusLabel = rideSummary.status === 'available'
+    ? copy.rideAvailable(rideSummary.listedRideCount)
+    : rideSummary.status === 'full' ? copy.rideFull
+      : rideSummary.status === 'insufficient_for_party' ? copy.rideInsufficient
+        : rideSummary.status === 'unavailable' ? copy.rideUnavailable
+          : rideSummary.status === 'date_required' ? copy.noDateRides
+            : rideSummary.status === 'none' ? copy.rideNone : copy.rideUpcomingNone;
+  const findRide = () => {
+    if (!planState.startDate || (planState.endDate && planState.endDate !== planState.startDate)) {
+      onAction(GUIDE_ACTION.FIND_RIDE, recommendation, planState);
+      return;
+    }
+    navigate(DestinationDiscoveryService.buildPrefillUrl('search', place, {
+      origin: planState.origin, travelDate: planState.startDate
+    }));
+  };
+  const rideActionType = ['available', 'date_required'].includes(rideSummary.status) ? GUIDE_ACTION.FIND_RIDE : GUIDE_ACTION.REGISTER_RIDE_ALERT;
+  const showFindRideSecondary = rideActionType !== GUIDE_ACTION.FIND_RIDE;
   const openDetails = () => {
     const returnTo = `${location.pathname}${location.search}`;
     const guideRestoreScrollTop = Number(chatScrollRef?.current?.scrollTop) || 0;
@@ -61,12 +77,21 @@ export default function GuideRecommendationCard({ recommendation, featured = fal
           <small>{copy.verifiedRules}</small>
         </section>}
         <p className="guide-rec-card__tradeoff"><strong>{copy.tradeoff}:</strong> {tradeoff}</p>
+        <div className="guide-rec-card__ride" aria-label={rideStatusLabel}>
+          <div><IconCar size={15} /><strong>{rideStatusLabel}</strong></div>
+          {rideSummary.maxSeatsInSingleRide > 0 && <small>{copy.seatsInOneRide(rideSummary.maxSeatsInSingleRide)}</small>}
+          {Number(recommendation.browsingInterestCount) > 0 && <small>{copy.interestViewed(recommendation.browsingInterestCount)}</small>}
+          {Number.isFinite(Number(recommendation.distanceKm)) && <small>{Number(recommendation.distanceKm).toFixed(1)} km · {copy.distanceNote}</small>}
+          <button type="button" className="guide-text-action" onClick={() => rideActionType === GUIDE_ACTION.FIND_RIDE ? findRide() : onAction(rideActionType, recommendation, planState)}>
+            {rideActionType === GUIDE_ACTION.FIND_RIDE ? copy.findRide : copy.rideAlert}
+          </button>
+        </div>
         <div className="guide-rec-card__actions">
           <Button size="small" variant={whyOpen ? 'secondary' : undefined} onClick={toggleWhy}>{copy.whyThis} {whyOpen ? '↑' : <IconArrowRight size={15} />}</Button>
           <Button size="small" variant="secondary" onClick={openDetails}>{copy.details}</Button>
         </div>
         <div className="guide-rec-card__secondary-actions">
-          <button type="button" className="guide-text-action" onClick={findRide}><IconCar size={14} /> {copy.findRide}</button>
+          {showFindRideSecondary && <button type="button" className="guide-text-action" onClick={findRide}>{copy.findRide}</button>}
           <button type="button" className="guide-text-action" aria-pressed={interestActive} onClick={() => onAction(interestActive ? 'cancel_interest' : GUIDE_ACTION.RECORD_INTEREST, recommendation, planState)}>
             {interestActive ? `✓ ${copy.interestSaved} · ${copy.cancel}` : copy.saveInterest}
           </button>

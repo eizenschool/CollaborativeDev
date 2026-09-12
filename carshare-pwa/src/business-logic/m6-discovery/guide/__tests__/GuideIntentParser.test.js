@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dateRangeDays, mergeGuideIntent, normalizePlanState, sanitizedPlanSummary } from '../GuideIntentParser.js';
+import { dateRangeDays, mergeGuideIntent, mostImportantMissingField, normalizePlanState, sanitizedPlanSummary } from '../GuideIntentParser.js';
 
 describe('Tumpang Guide intent parser', () => {
   const today = '2026-08-30';
@@ -44,6 +44,22 @@ describe('Tumpang Guide intent parser', () => {
     expect(plan.origin).toMatchObject({ label: 'Melaka, Malaysia', placeId: 'ChIJ-confirmed-melaka' });
     expect(sanitizedPlanSummary(plan).origin).toEqual({
       label: 'Melaka, Malaysia', placeId: 'ChIJ-confirmed-melaka'
+    });
+  });
+
+  it('does not treat a label-only origin as confirmed for recommendations', () => {
+    expect(mostImportantMissingField({ origin: { label: 'Johor Bahru' } })).toBe('origin');
+    expect(mostImportantMissingField({ origin: { label: 'Johor Bahru', lat: 1.4927, lng: 103.7414 } })).toBeNull();
+  });
+
+  it('keeps saved or historical categories as affinity until the current Brief marks them explicit', () => {
+    expect(normalizePlanState({ preferredCategories: ['culinary'] })).toMatchObject({
+      preferredCategories: ['culinary'], explicitCategories: [], categoryMode: 'any'
+    });
+    expect(normalizePlanState({
+      preferredCategories: ['nature'], explicitCategories: ['nature'], categoryMode: 'explicit'
+    })).toMatchObject({
+      preferredCategories: ['nature'], explicitCategories: ['nature'], categoryMode: 'explicit'
     });
   });
 });

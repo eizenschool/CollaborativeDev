@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GUIDE_LOCALE } from '../../../../business-logic/m6-discovery/guide/GuideLanguage.js';
 
 export const GUIDE_SPEECH_UNSUPPORTED = 'Voice input is not supported by this browser.';
+export const GUIDE_SPEECH_SILENCE_COMPLETION_MS = 1_500;
 
 export function normalizeGuideSpeechTranscript(value) {
   return String(value || '')
@@ -112,6 +113,7 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
   const finalizedSessionRef = useRef(0);
   const browserSessionActiveRef = useRef(false);
   const stoppedByUserRef = useRef(false);
+  const silenceTimerRef = useRef(null);
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -131,22 +133,28 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
     onInterim?.('');
   }, [onInterim]);
 
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
   const finishBrowserSession = useCallback((token) => {
     if (token !== sessionRef.current || finalizedSessionRef.current === token) return;
     finalizedSessionRef.current = token;
     browserSessionActiveRef.current = false;
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
+    clearSilenceTimer();
+    if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
     const finalText = dedupeGuideTranscriptParts(finalPartsRef.current);
     if (finalText) onTranscript?.(finalText);
     onInterim?.('');
     setListening(false); setProcessing(false); recognitionRef.current = null;
-  }, [onInterim, onTranscript]);
+  }, [clearSilenceTimer, onInterim, onTranscript]);
 
   const stop = useCallback(() => {
     stoppedByUserRef.current = true;
+    clearSilenceTimer();
     browserSessionActiveRef.current = false;
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
@@ -155,13 +163,14 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
     if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch { finishBrowserSession(sessionRef.current); } return; }
     if (browserSupported) finishBrowserSession(sessionRef.current);
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
-  }, [browserSupported, finishBrowserSession]);
+  }, [browserSupported, clearSilenceTimer, finishBrowserSession]);
 
   const startBrowser = useCallback(() => {
     disposedRef.current = false;
     const token = sessionRef.current + 1;
     sessionRef.current = token; stoppedByUserRef.current = false; resetSession();
     finalizedSessionRef.current = 0;
+    clearSilenceTimer();
     browserSessionActiveRef.current = true;
     setError(''); setFallbackRequired(false);
     const scheduleRestart = () => {
@@ -197,10 +206,27 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
       // primary transcript, especially for short words such as "test".
       recognition.maxAlternatives = 1;
       const seenFinalIndexes = new Set();
-      recognition.onstart = () => { setListening(true); setProcessing(false); };
+      const scheduleSilenceCompletion = () => {
+        if (token !== sessionRef.current || stoppedByUserRef.current || disposedRef.current
+            || !browserSessionActiveRef.current || !finalPartsRef.current.length) return;
+        clearSilenceTimer();
+        silenceTimerRef.current = setTimeout(() => {
+          silenceTimerRef.current = null;
+          if (token !== sessionRef.current || stoppedByUserRef.current || disposedRef.current
+              || !browserSessionActiveRef.current || !finalPartsRef.current.length) return;
+          stoppedByUserRef.current = true;
+          browserSessionActiveRef.current = false;
+          if (recognitionRef.current === recognition) {
+            try { recognition.stop(); } catch { finishBrowserSession(token); }
+          } else finishBrowserSession(token);
+        }, GUIDE_SPEECH_SILENCE_COMPLETION_MS);
+      };
+      recognition.onstart = () => { clearSilenceTimer(); setListening(true); setProcessing(false); };
+      recognition.onspeechstart = () => { clearSilenceTimer(); };
       recognition.onresult = (event) => {
         if (token !== sessionRef.current) return;
         const interim = [];
+        let receivedFinal = false;
         for (let index = event.resultIndex || 0; index < event.results.length; index += 1) {
           const result = event.results[index];
           const text = bestGuideSpeechAlternative(result, []);
@@ -210,12 +236,19 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
             // result event. A physical recognition object owns its indexes;
             // the logical session owns the accumulated text.
             if (seenFinalIndexes.has(index)) continue;
+            clearSilenceTimer();
             seenFinalIndexes.add(index);
             finalPartsRef.current.push(text);
-          } else interim.push(text);
+            receivedFinal = true;
+          } else {
+            clearSilenceTimer();
+            interim.push(text);
+          }
         }
         onInterim?.(dedupeGuideTranscriptParts(interim));
+        if (receivedFinal) scheduleSilenceCompletion();
       };
+      recognition.onspeechend = () => { scheduleSilenceCompletion(); };
       recognition.onerror = (event) => {
         if (token !== sessionRef.current) return;
         const code = String(event.error || 'unknown');
@@ -241,6 +274,14 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
           finishBrowserSession(token);
           return;
         }
+        // A number of browsers end a continuous recognition object after a
+        // completed utterance. Give the logical session its normal silence
+        // grace period instead of immediately starting another object and
+        // waiting for the user to press Stop.
+        if (finalPartsRef.current.length) {
+          scheduleSilenceCompletion();
+          return;
+        }
         scheduleRestart();
       };
       recognitionRef.current = recognition;
@@ -258,7 +299,7 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
       }
     }
     createRecognition();
-  }, [Recognition, cloudFallbackAvailable, copy, finishBrowserSession, language, onInterim, resetSession]);
+  }, [Recognition, clearSilenceTimer, cloudFallbackAvailable, copy, finishBrowserSession, language, onInterim, resetSession]);
 
   const startCloudFallback = useCallback(async () => {
     disposedRef.current = false;
@@ -313,6 +354,7 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
     disposedRef.current = true;
     sessionRef.current += 1;
     browserSessionActiveRef.current = false;
+    clearSilenceTimer();
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
@@ -328,7 +370,7 @@ export function useGuideSpeechInput({ copy = {}, language = 'en', onTranscript, 
       chunksRef.current = [];
     }
     releaseStream();
-  }, [releaseStream]);
+  }, [clearSilenceTimer, releaseStream]);
 
   // A single derived state name for the UI, instead of four separate
   // booleans it would otherwise have to combine itself. 'reviewing' (holding

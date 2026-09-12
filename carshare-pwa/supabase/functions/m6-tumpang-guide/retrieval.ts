@@ -106,9 +106,6 @@ function hardAttributeMatch(attr: Row, plan: Row) {
       && attr.indoor_outdoor !== "unknown"
       && attr.indoor_outdoor !== plan.indoorPreference
       && attr.indoor_outdoor !== "mixed") return false;
-  const price = attr.price_level === null || attr.price_level === undefined ? null : Number(attr.price_level);
-  if (plan.budget === "free" && price !== 0) return false;
-  if (plan.budget === "low" && (price === null || price > 2)) return false;
   return true;
 }
 
@@ -148,7 +145,9 @@ export function retrieveControlledCandidates(
     demandByPlace.get(placeId)?.add(String(row.user_id || row.id || "anonymous"));
   }
   const preferred = new Set(Array.isArray(plan.preferredCategories) ? plan.preferredCategories.map(String) : []);
-  const partySize = Math.max(1, Math.min(20, Number(plan.partySize) || 1));
+  const explicitCategories = new Set(Array.isArray(plan.explicitCategories) ? plan.explicitCategories.map(String) : []);
+  const partySize = Number.isInteger(Number(plan.partySize)) && Number(plan.partySize) >= 1
+    ? Math.min(20, Number(plan.partySize)) : null;
   const completed = historyCategories.filter((category) => ["culinary", "heritage", "nature", "event"].includes(category));
   const requestedRadiusKm = Number(plan.searchRadiusKm);
   const radiusKm = [80, 160, 320].includes(requestedRadiusKm) ? requestedRadiusKm : 80;
@@ -156,6 +155,8 @@ export function retrieveControlledCandidates(
   const hasOriginCoordinates = Number.isFinite(Number(origin?.lat)) && Number.isFinite(Number(origin?.lng));
   const recommendable = places.filter((place) => {
     if (!["Active", "Provisional", "Stale"].includes(String(place.lifecycle_state))) return false;
+    if (String(plan.categoryMode) === "explicit" && explicitCategories.size
+      && !explicitCategories.has(String(place.category))) return false;
     if (hasOriginCoordinates) {
       const distance = haversineKm(origin, { lat: Number(place.lat), lng: Number(place.lng) });
       return Number.isFinite(distance) && Number(distance) <= radiusKm;
@@ -176,11 +177,13 @@ export function retrieveControlledCandidates(
     if (!hardAttributeMatch(attr, plan)) return null;
     const weather = weatherByPlace.get(String(place.id));
     if (OUTDOOR.has(String(place.category)) && weather?.severeEveryDay) return null;
-    const serving = rides.filter((ride) => ride.destination_place_id === place.source_place_id
+    const serving = dates.length ? rides.filter((ride) => ride.destination_place_id === place.source_place_id
       && ["Published", "Matched"].includes(String(ride.status))
       && String(ride.departure_at).slice(0, 10) >= start
-      && String(ride.departure_at).slice(0, 10) <= end
-      && Number(ride.seats_available) >= partySize);
+      && String(ride.departure_at).slice(0, 10) <= end) : [];
+    const compatibleServing = serving.filter((ride) => partySize === null
+      ? Number(ride.seats_available) > 0
+      : Number(ride.seats_available) >= partySize);
     const distance = haversineKm(origin, { lat: Number(place.lat), lng: Number(place.lng) });
     const category = String(place.category);
     const affinity = completed.length
@@ -191,7 +194,7 @@ export function retrieveControlledCandidates(
     const peak = peerMax.get(`${place.state}::${place.category}`) || 0;
     const headroom = peak <= 0 ? 1 : clamp(1 - (Number(place.review_count) || 0) / peak);
     const local = (nameCounts.get(`${normaliseName(place.state)}::${normaliseName(place.name)}`)?.size || 0) >= 3 ? 0 : 1;
-    const seatHeadroom = serving.reduce((best, ride) => {
+    const seatHeadroom = compatibleServing.reduce((best, ride) => {
       const total = Number(ride.seats_total);
       return total > 0 ? Math.max(best, clamp(Number(ride.seats_available) / total)) : best;
     }, 0);
@@ -208,12 +211,15 @@ export function retrieveControlledCandidates(
     ].filter(Boolean) as string[];
     if (!reasonCodes.length) reasonCodes.push("local");
     return {
-      ...place, attributes: attr, hasRide: serving.length > 0,
+      ...place, attributes: attr, hasRide: compatibleServing.length > 0,
+      listedRideCount: serving.length,
       availableSeats: Math.max(0, ...serving.map((ride) => Number(ride.seats_available) || 0)),
+      browsingInterestCount: demandByPlace.get(String(place.id))?.size || 0,
       reasonCodes: reasonCodes.slice(0, 4), retrievalScore: round2(desirability * .6 + accessibility * .4),
       desirability, accessibility, distanceKm: distance, weatherAdvisory: Boolean(weather?.advisory),
       // Keep the server-side selector on the same named signal contract as
-      // DestinationScoringEngine, especially for the quieter-place mode.
+      // DestinationScoringEngine. Review headroom remains a score signal, but
+      // is never presented as evidence of quietness or crowd levels.
       signals: {
         desirability: { affinity, season, quality, headroom, local },
         accessibility: { seatHeadroom, journeyCost, demandConvergence }
@@ -239,14 +245,7 @@ export function selectRuleRecommendations(
 ) {
   const unique = [...new Map(candidates.map((item) => [String(item.id), item])).values()];
   const shown = new Set((shownPlaceIds || []).map(String));
-  const sorted = [...unique].sort((a, b) => {
-    if (recommendationMode === "quieter") {
-      const aHeadroom = Number(a.signals?.desirability?.headroom) || 0;
-      const bHeadroom = Number(b.signals?.desirability?.headroom) || 0;
-      return bHeadroom - aHeadroom || Number(b.retrievalScore) - Number(a.retrievalScore);
-    }
-    return Number(b.retrievalScore) - Number(a.retrievalScore);
-  });
+  const sorted = [...unique].sort((a, b) => Number(b.retrievalScore) - Number(a.retrievalScore));
   const unseen = sorted.filter((candidate) => !shown.has(String(candidate.id)));
   // A direct request for different places must never silently repeat a card.
   // Returning the remaining unseen candidates lets the response honestly say

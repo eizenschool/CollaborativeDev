@@ -316,9 +316,9 @@ describe('Module 4 smart search contracts', () => {
       pickupLocation: { placeId: 'google-kl' },
       destination: 'George Town Heritage Core',
       destinationLocation: { placeId: 'fixture_georgetown' },
-      departureAt: '2026-09-10T00:00:00.000Z',
-      date: '2026-09-10', time: '08:00', journeyScale: 'Urban',
-      estimatedArrivalAt: '2026-09-10T02:00:00.000Z'
+      departureAt: '2099-09-10T00:00:00.000Z',
+      date: '2099-09-10', time: '08:00', journeyScale: 'Urban',
+      estimatedArrivalAt: '2099-09-10T02:00:00.000Z'
     });
     const second = ride({
       id: 'leg-two',
@@ -326,15 +326,15 @@ describe('Module 4 smart search contracts', () => {
       pickupLocation: { placeId: 'fixture_georgetown' },
       destination: 'Ipoh Station',
       destinationLocation: { placeId: 'google-ipoh' },
-      departureAt: '2026-09-10T02:30:00.000Z',
-      date: '2026-09-10', time: '10:30', journeyScale: 'Urban',
-      estimatedArrivalAt: '2026-09-10T04:00:00.000Z'
+      departureAt: '2099-09-10T02:30:00.000Z',
+      date: '2099-09-10', time: '10:30', journeyScale: 'Urban',
+      estimatedArrivalAt: '2099-09-10T04:00:00.000Z'
     });
     RideService.searchRides.mockResolvedValueOnce([]).mockResolvedValueOnce([first, second]);
 
     const result = await SmartSearchService.search({
       pickup: 'KL', pickupPlaceId: 'google-kl',
-      destination: 'Ipoh', destinationSearchPlaceId: 'google-ipoh', date: '2026-09-10',
+      destination: 'Ipoh', destinationSearchPlaceId: 'google-ipoh', date: '2099-09-10',
       minSeats: 2, tags: ['No smoking']
     });
 

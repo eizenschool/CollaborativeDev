@@ -3,6 +3,7 @@ import {
   GooglePlacesService,
   LOCATION_SEARCH_DEBOUNCE_MS,
   MAX_AUTOCOMPLETE_BIAS_ACCURACY_METRES,
+  MAX_STARTING_POINT_ACCURACY_METRES,
   MIN_LOCATION_QUERY_LENGTH
 } from '../../../../business-logic/shared/GooglePlacesService.js';
 import { IconCheck, IconMapPin } from '../icons.jsx';
@@ -18,7 +19,10 @@ export default function ConfirmedLocationInput({
   searchOnFocusOnly = false,
   allowCurrentLocation = false,
   currentLocationPreview = null,
-  loadNearbySuggestions = null
+  loadNearbySuggestions = null,
+  purpose = 'pickup',
+  resolvePreferredLocation = null,
+  deferCurrentLocationConfirmation = false
 }) {
   const generatedId = useId();
   const inputId = id || generatedId;
@@ -37,6 +41,15 @@ export default function ConfirmedLocationInput({
   const [selectionPending, setSelectionPending] = useState(false);
 
   const confirmed = GooglePlacesService.isConfirmedLocation(location);
+  const startingPointMode = purpose === 'starting-point';
+  const contextMessage = (value) => startingPointMode
+    ? String(value || '')
+      .replace(/pickup alternatives/giu, 'nearby alternatives')
+      .replace(/pickup point/giu, 'starting point')
+      .replace(/pickup address/giu, 'address')
+      .replace(/this pickup/giu, 'this starting point')
+      .replace(/your pickup/giu, 'your starting point')
+    : String(value || '');
 
   useEffect(() => {
     setQuery(value || '');
@@ -80,6 +93,28 @@ export default function ConfirmedLocationInput({
       return undefined;
     }
 
+    // Module 6 can resolve an exact city query before Google predictions. This
+    // prevents a venue in another state from winning simply because its name
+    // contains the same words as the requested city.
+    const preferred = typeof resolvePreferredLocation === 'function'
+      ? resolvePreferredLocation(trimmed)
+      : null;
+    const preferredLatitude = Number(preferred?.latitude);
+    const preferredLongitude = Number(preferred?.longitude);
+    if (preferred?.label && Number.isFinite(preferredLatitude) && Number.isFinite(preferredLongitude)) {
+      requestSequence.current += 1;
+      setSuggestions([{
+        label: String(preferred.label),
+        ...(preferred.placeId ? { placeId: String(preferred.placeId) } : {}),
+        latitude: preferredLatitude,
+        longitude: preferredLongitude
+      }]);
+      setActiveIndex(0);
+      setStatus('ready');
+      setMessage('');
+      return undefined;
+    }
+
     const sequence = ++requestSequence.current;
     setStatus('loading');
     setMessage('Searching locations…');
@@ -101,7 +136,7 @@ export default function ConfirmedLocationInput({
     }, LOCATION_SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [confirmed, currentCandidate, currentLocationPreview, currentLocationSession, disabled, focused, query, searchOnFocusOnly, selectionPending, value]);
+  }, [confirmed, currentCandidate, currentLocationPreview, currentLocationSession, disabled, focused, query, resolvePreferredLocation, searchOnFocusOnly, selectionPending, value]);
 
   function changeText(nextValue) {
     requestSequence.current += 1;
@@ -186,7 +221,10 @@ export default function ConfirmedLocationInput({
         }
 
         const [currentResult, nearbyResult] = await Promise.allSettled([
-          GooglePlacesService.resolveCurrentLocation({ position }),
+          GooglePlacesService.resolveCurrentLocation({
+            position,
+            ...(startingPointMode ? { maxAccuracyMetres: MAX_STARTING_POINT_ACCURACY_METRES } : {})
+          }),
           loadNearbySuggestions(position)
         ]);
         if (sequence !== requestSequence.current) return;
@@ -223,19 +261,25 @@ export default function ConfirmedLocationInput({
         return;
       }
       const candidate = await GooglePlacesService.resolveCurrentLocation({
-        position: currentLocationPreview || undefined
+        position: currentLocationPreview || undefined,
+        ...(startingPointMode ? { maxAccuracyMetres: MAX_STARTING_POINT_ACCURACY_METRES } : {})
       });
       if (sequence !== requestSequence.current) return;
       setCurrentCandidate(candidate);
       setQuery(candidate.label);
-      onChange(candidate.label, null);
+      // A parent with its own dialog footer can keep this as a draft while the
+      // candidate is still visible for review. Ride and Guide retain the
+      // original explicit confirmation flow by leaving this disabled.
+      onChange(candidate.label, deferCurrentLocationConfirmation ? candidate.location : null);
       setStatus('confirming');
-      setMessage('Check this pickup before sharing it with passengers.');
+      setMessage(startingPointMode
+        ? 'Check this starting point before using it for destination ranking.'
+        : 'Check this pickup before sharing it with passengers.');
     } catch (error) {
       if (sequence !== requestSequence.current) return;
       setCurrentLocationSession(loadNearbySuggestions ? { state: 'error' } : null);
       setStatus('error');
-      setMessage(error.message);
+      setMessage(contextMessage(error.message));
     }
   }
 
@@ -308,7 +352,7 @@ export default function ConfirmedLocationInput({
                 {suggestions.map((suggestion, index) => (
                   <li
                     id={`${inputId}-option-${index}`}
-                    key={suggestion.placeId}
+                    key={suggestion.placeId || suggestion.label}
                     role="option"
                     aria-selected={activeIndex === index}
                     className={activeIndex === index ? 'active' : ''}
@@ -327,7 +371,7 @@ export default function ConfirmedLocationInput({
         </div>
       </div>
 
-      {allowCurrentLocation && !disabled && (
+      {allowCurrentLocation && !disabled && !currentCandidate && (
         <button
           type="button"
           className="current-location-button"
@@ -339,12 +383,20 @@ export default function ConfirmedLocationInput({
       )}
 
       {currentCandidate && (
-        <div className="current-location-confirmation">
-          <strong>{currentCandidate.label}</strong>
-          <span>GPS accuracy: ±{currentCandidate.accuracy} m</span>
-          <div>
+        <div className="current-location-confirmation" role="status" aria-live="polite">
+          <div className="current-location-confirmation__header">
+            <span className="current-location-confirmation__icon" aria-hidden="true"><IconCheck size={14} /></span>
+            <span className="current-location-confirmation__details">
+              <span className="current-location-confirmation__eyebrow">Current location found</span>
+              <strong>{currentCandidate.label}</strong>
+            </span>
+          </div>
+          <span className="current-location-confirmation__accuracy">GPS accuracy: ±{currentCandidate.accuracy} m</span>
+          <div className="current-location-confirmation__actions">
             <button type="button" className="btn-secondary" onClick={rejectCurrentLocation}>Choose another place</button>
-            <button type="button" className="btn-primary" onClick={confirmCurrentLocation}>Use this pickup</button>
+            {!deferCurrentLocationConfirmation && (
+              <button type="button" className="btn-primary" onClick={confirmCurrentLocation}>{startingPointMode ? 'Use this starting point' : 'Use this pickup'}</button>
+            )}
           </div>
         </div>
       )}

@@ -87,13 +87,13 @@ describe('buildReasons - phrasing', () => {
     expect(reasons.some((r) => r.key === 'quality')).toBe(false);
   });
 
-  // The sustainability argument, stated as a sentence a traveller can act on.
-  it('says a quiet place is quieter than its busiest peers', () => {
+  // Review count is evidence coverage, not a live crowd measurement.
+  it('describes lower review coverage without claiming the place is quieter', () => {
     const { reasons } = buildReasons(
       candidate({ signals: { desirability: { headroom: 1 }, accessibility: {} } }),
       { place: place() }
     );
-    expect(reasons[0].text).toBe('Quieter than the busiest heritage spots in Penang');
+    expect(reasons[0].text).toBe('Fewer reviews than the most-reviewed heritage places in Penang');
   });
 
   it('mentions independence only when the place is independent', () => {
@@ -114,10 +114,10 @@ describe('buildReasons - phrasing', () => {
       candidate({ signals: { desirability: {}, accessibility: { seatHeadroom: 1 } } }),
       { place: place(), rides: [{ seatsAvailable: 3, seatsTotal: 4 }], travelDate: '2026-08-15' }
     );
-    expect(reasons[0].text).toMatch(/^3 seats going on /);
+    expect(reasons[0].text).toMatch(/^Up to 3 seats remain in one listed ride on /);
   });
 
-  it('uses the singular for one seat and one other traveller', () => {
+  it('uses the singular for one seat and one interested traveller', () => {
     const seat = buildReasons(
       candidate({ signals: { desirability: {}, accessibility: { seatHeadroom: 1 } } }),
       { place: place(), rides: [{ seatsAvailable: 1, seatsTotal: 4 }] }
@@ -126,8 +126,8 @@ describe('buildReasons - phrasing', () => {
       candidate({ signals: { desirability: {}, accessibility: { demandConvergence: 1 } } }),
       { place: place(), interestedUsers: 1 }
     );
-    expect(seat.reasons[0].text).toMatch(/^1 seat going/);
-    expect(other.reasons[0].text).toBe('1 other traveller wants to go');
+    expect(seat.reasons[0].text).toMatch(/^Up to 1 seat remains in one listed ride/);
+    expect(other.reasons[0].text).toBe('1 traveller has shown browsing interest in this destination for this date');
   });
 
   it('reports the distance when the destination is genuinely close', () => {
@@ -135,7 +135,7 @@ describe('buildReasons - phrasing', () => {
       candidate({ signals: { desirability: {}, accessibility: { journeyCost: 0.9 } } }),
       { place: place(), distanceKm: 20.4 }
     );
-    expect(reasons[0].text).toBe('Only 20 km from you');
+    expect(reasons[0].text).toBe('20 km in a straight line from your starting point (relative to other results)');
   });
 
   // Journey cost is relative to the furthest candidate. With Sarawak in the set
@@ -147,7 +147,7 @@ describe('buildReasons - phrasing', () => {
       { place: place(), distanceKm: 296 }
     );
     expect(reasons[0].text).not.toMatch(/^Only /);
-    expect(reasons[0].text).toBe("Closer than most of today's options, at 296 km");
+    expect(reasons[0].text).toBe('296 km in a straight line from your starting point (relative to other results)');
   });
 });
 
@@ -215,6 +215,9 @@ describe('buildCaveats', () => {
   it('explains that an unserved destination cannot reach the main list', () => {
     const caveats = buildCaveats({ servedByRide: false }, { place: place() });
     expect(caveats.some((c) => c.key === 'unserved')).toBe(true);
+    expect(caveats.find((c) => c.key === 'unserved').text)
+      .toBe('No listed ride matches this destination for the selected date, so it appears under More places to explore.');
+    expect(caveats.find((c) => c.key === 'unserved').text).not.toMatch(/driving|on the road/i);
   });
 
   it('says nothing about serving when a ride exists', () => {

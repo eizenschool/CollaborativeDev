@@ -102,7 +102,7 @@ describe('Tumpang Guide display localization', () => {
       assistantMessage: 'Confirm to save KL Bird Park.',
       actions: [{ type: 'record_interest', placeId: 'place-1', requiresConfirmation: true }]
     }, 'zh-CN');
-    expect(localized.actions[0]).toMatchObject({ type: 'record_interest', placeId: 'place-1', label: '保存兴趣' });
+    expect(localized.actions[0]).toMatchObject({ type: 'record_interest', placeId: 'place-1', label: '让司机知道我有兴趣' });
   });
 });
 

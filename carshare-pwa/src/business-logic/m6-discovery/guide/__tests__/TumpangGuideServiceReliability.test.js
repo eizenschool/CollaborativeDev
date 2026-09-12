@@ -41,4 +41,13 @@ describe('Tumpang Guide client reliability', () => {
     expect(hydrated.recommendations[0].place).toBe(place);
     expect(getPlace).not.toHaveBeenCalled();
   });
+
+  it('blocks targeted abuse in the service boundary before quota or provider work', async () => {
+    await expect(TumpangGuideService.sendTurn({
+      visitorSessionId: 'visitor-safety-test', text: 'You are stupid, show me a place', planState: {}, messages: []
+    })).rejects.toMatchObject({
+      fallbackReason: 'content_safety_blocked',
+      contentSafetyCategory: 'targeted_abuse'
+    });
+  });
 });

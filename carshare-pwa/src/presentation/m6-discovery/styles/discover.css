@@ -200,6 +200,10 @@
   .dsc-ask { flex-wrap: wrap; padding: 18px; }
   .dsc-ask-ph { font-size: 16px; }
   .dsc-ask-go { width: 100%; justify-content: center; }
+  .dsc-origin-summary__button { display: flex; width: 100%; }
+  .dsc-origin-summary__change { margin-left: auto; }
+  .dsc-guide-question { align-items: stretch; flex-direction: column; }
+  .dsc-guide-question .dsc-btn { width: 100%; }
 }
 
 /* The account-status strip: only rendered when there is genuinely something
@@ -238,6 +242,245 @@
   gap: 4px;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.dsc-origin-summary {
+  margin: 18px 0 0;
+}
+.dsc-origin-summary__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 9px 12px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dsc-origin-summary__button:hover { border-color: var(--teal); }
+.dsc-origin-summary__button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.dsc-origin-summary__button > span:nth-child(2) { min-width: 0; }
+.dsc-origin-summary__label { display: block; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.dsc-origin-summary__default { color: var(--muted); font-size: 12px; font-weight: 400; }
+.dsc-origin-summary__change { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; color: var(--teal-dark); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.dsc-origin-summary__hint, .dsc-origin-summary__dialog-note { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.dsc-origin-summary__dialog-note { margin-top: 14px; }
+
+/* The location picker is shared JSX, while its layout is intentionally owned
+   by each consuming screen. Without these Home-scoped rules the browser drew
+   native list bullets and a native button inside an otherwise designed
+   AdaptiveDialog. */
+.dsc-origin-dialog .confirmed-location-field,
+.dsc-origin-dialog .route-field { min-width: 0; }
+.dsc-origin-dialog .route-field > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.dsc-origin-dialog .input-wrap { position: relative; }
+.dsc-origin-dialog .input-wrap input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 44px 10px 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+.dsc-origin-dialog .input-wrap .prefix-icon {
+  position: absolute;
+  z-index: 2;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.dsc-origin-dialog .location-confirmed-icon {
+  position: absolute;
+  z-index: 2;
+  right: 12px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  pointer-events: none;
+}
+.dsc-origin-dialog .current-location-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dsc-origin-dialog .current-location-button:disabled { opacity: .6; cursor: wait; }
+.dsc-origin-dialog .current-location-confirmation {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--teal) 34%, var(--border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--teal-tint) 72%, white);
+}
+.dsc-origin-dialog .current-location-confirmation__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+.dsc-origin-dialog .current-location-confirmation__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: 50%;
+  color: var(--teal-dark);
+  background: #fff;
+}
+.dsc-origin-dialog .current-location-confirmation__details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.dsc-origin-dialog .current-location-confirmation__eyebrow {
+  color: var(--teal-dark);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.dsc-origin-dialog .current-location-confirmation strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.dsc-origin-dialog .current-location-confirmation__accuracy {
+  padding-left: 36px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dsc-origin-dialog .current-location-confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+.dsc-origin-dialog .current-location-confirmation__actions button {
+  min-height: 40px;
+  padding: 8px 13px;
+  font-size: 12px;
+}
+.dsc-origin-dialog .location-suggestions-panel {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+.dsc-origin-dialog .location-suggestions-heading {
+  margin: 0;
+  padding: 11px 14px 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.dsc-origin-dialog .location-suggestions-panel ul {
+  max-height: min(300px, 42vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+.dsc-origin-dialog .location-suggestions-panel li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 48px;
+  padding: 10px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.dsc-origin-dialog .location-suggestions-panel li svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal); }
+.dsc-origin-dialog .location-suggestions-panel li:hover,
+.dsc-origin-dialog .location-suggestions-panel li.active { background: var(--teal-tint); }
+.dsc-origin-dialog .location-distance { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.dsc-origin-dialog .google-attribution {
+  display: flex;
+  justify-content: flex-end;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+}
+.dsc-origin-dialog .google-attribution img { display: block; width: 120px; max-width: 100%; height: auto; }
+.dsc-origin-dialog .location-field-message { margin: 7px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.dsc-origin-dialog .location-field-message.error { color: var(--danger); }
+@media (max-width: 520px) {
+  .dsc-origin-dialog .current-location-confirmation__actions button { width: 100%; }
+}
+.dsc-range-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dsc-range-note button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .dsc-range-note { align-items: flex-start; flex-direction: column; }
 }
 
 /* Loading skeleton: replaces the plain "Finding destinations…" text so the
@@ -420,6 +663,30 @@
   border-radius: var(--radius);
   font-size: 14px;
 }
+
+.dsc-traffic-notice, .dsc-date-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  margin: -20px 0 24px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.dsc-date-notice { color: var(--teal-dark); background: var(--teal-tint); border-color: transparent; }
+.dsc-date-notice__options { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.dsc-date-notice__options button { border: 1px solid var(--teal); border-radius: var(--radius-pill); padding: 5px 9px; color: var(--teal-dark); background: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.dsc-date-notice__options button:hover { background: var(--teal); color: #fff; }
+.dsc-detail-date-notice { margin: 16px 0 0; padding: 12px 14px; border: 1px solid var(--teal); }
+.dsc-detail-date-notice > svg { flex: 0 0 auto; margin-top: 2px; }
+.dsc-date-notice__copy { display: grid; gap: 2px; min-width: 0; }
+.dsc-date-notice__copy strong, .dsc-date-notice__copy small { display: block; }
+.dsc-date-notice__copy small { color: var(--muted); font-size: 12px; }
 
 .dsc-withheld {
   display: flex;
@@ -696,6 +963,33 @@
 
 .dsc-served { background: var(--teal-tint); color: var(--teal-dark); }
 .dsc-unserved { background: var(--gold-tint); color: #854d0e; }
+.dsc-traffic-unknown { background: #f1f5f9; color: #475569; }
+.dsc-availability-note { display: block; margin-top: 3px; color: inherit; font-size: 11px; font-weight: 400; }
+.dsc-availability-note svg { vertical-align: -2px; margin-right: 2px; }
+.dsc-interest-note { display: flex; align-items: flex-start; gap: 5px; margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.dsc-interest-note svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal); }
+.dsc-saved-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.dsc-saved-state > svg { flex: 0 0 auto; margin-top: 2px; }
+.dsc-saved-state span { min-width: 0; }
+.dsc-saved-state strong, .dsc-saved-state small { display: block; }
+.dsc-saved-state small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.dsc-saved-state--alert { background: #fff; }
+.dsc-inline-action { display: block; margin-top: 6px; padding: 0; border: 0; color: var(--teal-dark); background: transparent; font: inherit; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.dsc-inline-action:disabled { cursor: wait; opacity: .65; }
+.dsc-interest-choice { display: grid; gap: 5px; margin: 12px 0; }
+.dsc-interest-choice small { color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 /* The unserved section is visually distinct because it asks for a different
    action - offer to drive, rather than take a seat. */
@@ -928,6 +1222,22 @@
 }
 
 .dsc-panel p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.dsc-panel-note { margin: 12px 0 0 !important; font-size: 12px !important; }
+.dsc-selected-date { display: flex; align-items: center; gap: 6px; }
+
+.dsc-guide-question {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--teal-tint);
+}
+.dsc-guide-question h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.dsc-guide-question p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
 /* --- reviews ------------------------------------------------------------ */
 

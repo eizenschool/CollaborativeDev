@@ -2,7 +2,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/context/AuthContext.jsx';
-import { resolveAuthReturnPath } from '../../../business-logic/m1-profile/authAccess.js';
+import {
+  clearAuthReturnPath,
+  resolveAuthReturnPath,
+  saveAuthReturnPath
+} from '../../../business-logic/m1-profile/authAccess.js';
 import { IconCar, IconMail, IconUser, IconLock, IconEye, IconEyeOff, IconArrowRight, IconStar, IconGoogle } from '../../shared/components/icons.jsx';
 import '../styles/auth.css';
 
@@ -64,6 +68,8 @@ export default function AuthPage() {
     setVerificationMessage('');
     setGoogleLoading(true);
     try {
+      clearAuthReturnPath();
+      saveAuthReturnPath(returnTo);
       await signInWithGoogle();
     } catch (err) {
       setError(err.message || 'Google sign-in failed.');
@@ -86,6 +92,7 @@ export default function AuthPage() {
       } else {
         await signIn({ email, password });
       }
+      clearAuthReturnPath();
       navigate(returnTo, { replace: true });
     } catch (err) {
       setError(err.message || 'Something went wrong.');
@@ -169,7 +176,7 @@ export default function AuthPage() {
               : 'Pick up right where you left off.'}
           </p>
 
-          <button type="button" className="auth-back-home" onClick={() => navigate('/home')}>
+          <button type="button" className="auth-back-home" onClick={() => { clearAuthReturnPath(); navigate('/home'); }}>
             Continue browsing without signing in
           </button>
 

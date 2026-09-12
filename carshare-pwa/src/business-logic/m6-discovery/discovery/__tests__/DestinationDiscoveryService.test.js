@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { DestinationDiscoveryService } from '../DestinationDiscoveryService.js';
 import { discoveryDb } from '../../../../data-access/m6-discovery/discoveryStore.js';
 import { PLACE_STATE, CATEGORY, LOCAL_VALUES } from '../constants.js';
+import { RideService } from '../../../m2-rides/RideService.js';
 
 // Module 2's mock store reads localStorage unguarded, so node needs the same
 // shim RideWorkflow.test.js installs. Without it the ride lookup throws, the
@@ -98,6 +99,18 @@ describe('getRecommendations - the catalogue reaches the screen', () => {
     });
     expect(result.departureDates.length).toBeGreaterThan(0);
   });
+
+  it('limits an explicitly bounded exploration to nearby candidates before applying the unchanged ranking', async () => {
+    const result = await DestinationDiscoveryService.getRecommendations({
+      userId: 'u_demo_1', origin: KL, travelDate: RIDE_DATE, maxDistanceKm: 80
+    });
+
+    expect(result.searchRadiusKm).toBe(80);
+    expect(result.outsideRadiusCount).toBeGreaterThan(0);
+    expect(allOf(result).length).toBeGreaterThan(0);
+    expect(allOf(result).every((candidate) => candidate.distanceKm <= 80)).toBe(true);
+    expect(find(result, 'p_georgetown')).toBeUndefined();
+  });
 });
 
 describe('FR-6.4 - Retired places are withheld everywhere', () => {
@@ -120,6 +133,30 @@ describe('FR-6.4 - Retired places are withheld everywhere', () => {
     expect(stale).toBeDefined();
     expect(stale.place.lifecycleState).toBe(PLACE_STATE.STALE);
   });
+});
+
+describe('ride availability failure stays distinct from no listed ride', () => {
+  beforeEach(() => discoveryDb.__reset());
+
+  it('does not attach the no-ride claim when the shared ride read fails', async () => {
+    const searchRides = vi.spyOn(RideService, 'searchRides')
+      .mockRejectedValue(new Error('ride service unavailable'));
+
+    try {
+      const result = await DestinationDiscoveryService.getRecommendations({
+        userId: 'u_demo_1', origin: KL, travelDate: RIDE_DATE
+      });
+      const candidates = allOf(result);
+
+      expect(result.rideStatus).toBe('unavailable');
+      expect(candidates.length).toBeGreaterThan(0);
+      expect(candidates.every((candidate) => candidate.servedByRide === null)).toBe(true);
+      expect(candidates.every((candidate) => !candidate.caveats.some(({ key }) => key === 'unserved'))).toBe(true);
+    } finally {
+      searchRides.mockRestore();
+    }
+  });
+
 });
 
 describe('FR-6.26 - chain detection reaches the score', () => {
@@ -163,6 +200,21 @@ describe('getDestination - dated and undated ride availability', () => {
 
     expect(undated.rides.map((ride) => ride.id)).toContain('r_1');
     expect(undated.rides[0].date).toBe(RIDE_DATE);
+  });
+
+  it('keeps score and date-specific interest when a deep-linked place is outside the nearby Home boundary', async () => {
+    await DestinationDiscoveryService.recordInterest(
+      'u_far_detail_viewer',
+      'p_georgetown',
+      RIDE_DATE
+    );
+    const detail = await DestinationDiscoveryService.getDestination('p_georgetown', {
+      userId: 'u_demo_1', origin: KL, travelDate: RIDE_DATE, maxDistanceKm: 80
+    });
+
+    expect(detail.candidate?.placeId).toBe('p_georgetown');
+    expect(detail.interestedUsers).toBeGreaterThan(0);
+    expect(detail.distanceKm).toBeGreaterThan(80);
   });
 });
 
@@ -286,6 +338,22 @@ describe('UC6.4 - stated preferences', () => {
     const culinary = find(result, 'p_jonker');
     expect(nature.signals.desirability.affinity)
       .toBeGreaterThan(culinary.signals.desirability.affinity);
+  });
+
+  it('lets an explicit session category override saved preference without changing it', async () => {
+    const userId = 'u_session_category_test';
+    await DestinationDiscoveryService.savePreferences(userId, {
+      preferredCategories: [CATEGORY.CULINARY]
+    });
+
+    const result = await DestinationDiscoveryService.getRecommendations({
+      userId, origin: KL, travelDate: RIDE_DATE, preferredCategories: [CATEGORY.NATURE]
+    });
+    const nature = find(result, 'p_cameron');
+    const culinary = find(result, 'p_jonker');
+    expect(nature.signals.desirability.affinity).toBeGreaterThan(culinary.signals.desirability.affinity);
+    expect((await DestinationDiscoveryService.getPreferences(userId)).preferredCategories)
+      .toEqual([CATEGORY.CULINARY]);
   });
 
   it('stops prompting once the prompt has been dismissed', async () => {
@@ -440,7 +508,8 @@ describe('buildPrefillUrl - the link that actually carries the destination acros
     expect(url.startsWith('/search?')).toBe(true);
     const params = new URLSearchParams(url.split('?')[1]);
     expect(params.get('destination')).toBe('Cameron Highlands Tea Terraces');
-    expect(params.get('pickup')).toBe('Kuala Lumpur');
+    // The discovery origin is not a confirmed Module 4 pickup point.
+    expect(params.get('pickup')).toBeNull();
     expect(params.get('date')).toBe('2026-08-15');
     expect(params.get('destinationPlaceId')).toBe('fixture_cameron');
     expect(params.get('proximityKm')).toBe('10');

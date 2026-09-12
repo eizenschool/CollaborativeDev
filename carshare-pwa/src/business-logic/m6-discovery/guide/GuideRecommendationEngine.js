@@ -70,19 +70,21 @@ export function selectGuideRecommendations(candidates = [], { dateCount = 1 } = 
  * been used, which makes “show me something else” deterministic.
  */
 export function selectGuideBatch(candidates = [], {
-  dateCount = 1, shownPlaceIds = [], recommendationMode = 'default'
+  dateCount = 1, shownPlaceIds = [], recommendationMode = 'default', categoryFilter = null
 } = {}) {
-  const unique = [...new Map(candidates
+  const allowedCategories = Array.isArray(categoryFilter) && categoryFilter.length
+    ? new Set(categoryFilter.map(String)) : null;
+  const scopedCandidates = allowedCategories
+    ? candidates.filter((item) => allowedCategories.has(String(item?.place?.category)))
+    : candidates;
+  const unique = [...new Map(scopedCandidates
     .filter((item) => item?.placeId && item?.place)
     .map((item) => [item.placeId, item])).values()];
   const shown = new Set((shownPlaceIds || []).map(String));
-  const ordered = [...unique].sort((a, b) => {
-    if (recommendationMode === 'quieter') {
-      return Number(b?.signals?.desirability?.headroom || 0) - Number(a?.signals?.desirability?.headroom || 0)
-        || combined(b) - combined(a);
-    }
-    return combined(b) - combined(a);
-  });
+  // Headroom remains part of the existing desirability formula. It is not a
+  // crowd signal, so a request for "quieter" must not replace the approved
+  // ranking with an unsupported crowd ordering.
+  const ordered = [...unique].sort((a, b) => combined(b) - combined(a));
   const unseen = ordered.filter((item) => !shown.has(String(item.placeId)));
   // An explicit request for different places must never silently return the
   // same cards. If the catalogue is exhausted, the caller gets an honest

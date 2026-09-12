@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   callGeminiGroundedPlaceInfo, fetchGroundedPlaceInfo, matchCataloguePlaces,
-  resetPlaceInfoReliabilityStateForTests, structureGroqSearchText
+  conciseSummary, resetPlaceInfoReliabilityStateForTests, structureGroqSearchText
 } from '../placeInfo.ts';
 
 const birdPark = {
@@ -27,6 +27,15 @@ describe('Tumpang Guide controlled place information', () => {
     ]);
     expect(JSON.stringify(content)).not.toContain('**');
     expect(JSON.stringify(content)).not.toContain('†L');
+  });
+
+  it('removes flattened Markdown headings and bounds an unstructured live summary', () => {
+    const raw = `Al-Ismaili Mosque, Kelantan ### What to expect Key facts. Visitors should check current access before travelling. ${'A long unstructured explanation. '.repeat(40)} ### Suggested visit sequence`;
+    const summary = conciseSummary(raw);
+
+    expect(summary).not.toContain('#');
+    expect(summary.length).toBeLessThanOrEqual(620);
+    expect(summary).toContain('Al-Ismaili Mosque');
   });
 
   it('drops a fact cut off mid-word by the provider token budget instead of showing a half sentence', () => {

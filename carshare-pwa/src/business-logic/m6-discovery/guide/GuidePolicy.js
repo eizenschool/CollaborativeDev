@@ -10,10 +10,10 @@ const TRADEOFFS = new Set(Object.values(GUIDE_TRADEOFF));
 const ACTIONS = new Set(Object.values(GUIDE_ACTION));
 
 const EMERGENCY_TERMS = [
-  /\b(?:call\s+999|medical emergency|immediate danger|being attacked|car (?:crash|accident)|someone (?:is )?(?:unconscious|bleeding|dying)|need (?:the )?(?:police|ambulance) now)\b/i,
-  /拨打\s*999|立即危险|有人(?:昏迷|流血|快死)|正在被攻击|严重车祸/u,
-  /\b(?:hubungi\s*999|bahaya segera|sedang diserang|kemalangan serius)\b/i,
-  /999\s*ஐ?\s*அழை|உடனடி ஆபத்து|தாக்கப்படுகிறேன்/u
+  /\b(?:call\s+999|medical emergency|immediate danger|i(?:'m| am|m)\s+in\s+(?:immediate\s+)?danger|being attacked|car (?:crash|accident)|someone (?:is )?(?:unconscious|bleeding|dying)|need (?:the )?(?:police|ambulance) now)\b/i,
+  /拨打\s*999|立即危险|我(?:现在|正)?在危险中|我有危险|有人(?:昏迷|流血|快死)|正在被攻击|严重车祸/u,
+  /\b(?:hubungi\s*999|bahaya segera|sedang diserang|kemalangan serius|(?:saya|aku)\s+dalam\s+bahaya)\b/i,
+  /999\s*ஐ?\s*அழை|உடனடி ஆபத்து|நான்\s+ஆபத்தில்|தாக்கப்படுகிறேன்/u
 ];
 
 const HELP_TERMS = [

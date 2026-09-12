@@ -7,7 +7,11 @@ import {
   useNavigate,
 } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { resolveAuthReturnPath } from '../../../business-logic/m1-profile/authAccess.js';
+import {
+  clearAuthReturnPath,
+  readAuthReturnPath,
+  resolveAuthReturnPath
+} from '../../../business-logic/m1-profile/authAccess.js';
 import { legacyRideSearchUrlFromParams } from '../../../business-logic/m4-search/SmartSearchService.js';
 import { GUIDE_FEATURE_ENABLED } from '../../../business-logic/m6-discovery/guide/constants.js';
 import TopNav from '../components/nav/TopNav.jsx';
@@ -64,6 +68,23 @@ function AuthEntry() {
   return user
     ? <Navigate to={resolveAuthReturnPath(location.state)} replace />
     : <AuthPage />;
+}
+
+function AuthReturnRecovery() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user || location.pathname === '/auth') return;
+    const savedPath = readAuthReturnPath();
+    if (!savedPath) return;
+    clearAuthReturnPath();
+    const currentPath = `${location.pathname}${location.search}${location.hash}`;
+    if (savedPath !== currentPath) navigate(savedPath, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate, user]);
+
+  return null;
 }
 
 function RideEntry() {
@@ -254,6 +275,7 @@ export default function App() {
   return (
     <>
       <a className="skip-link" href="#main-content">Skip to main content</a>
+      <AuthReturnRecovery />
       <OAuthErrorRedirect />
       <RouteFocusManager />
       <AuthRecoveryNotice />

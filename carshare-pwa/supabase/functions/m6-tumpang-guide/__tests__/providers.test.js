@@ -7,7 +7,7 @@ import {
 import { normalizeGeminiSchema } from '../gemini.ts';
 
 const emptyConfidence = Object.freeze({
-  origin: 0, party: 0, date: 0, preference: 0, budget: 0,
+  origin: 0, party: 0, date: 0, preference: 0,
   indoorPreference: 0, accessibilityRequired: 0, children: 0,
   recommendationMode: 0, requestedMode: 0, language: 0
 });
@@ -16,7 +16,7 @@ function extraction(patch, confidence = {}) {
   return {
     intentPatch: {
       originLabel: '', partySize: 0, startDate: '', endDate: '', preferredCategories: [],
-      budget: '', indoorPreference: '', accessibilityRequired: false, children: false,
+      indoorPreference: '', accessibilityRequired: false, children: false,
       recommendationMode: '', requestedMode: '', requestedPlaceName: '', requestedAction: '', ...patch
     },
     confidence: { ...emptyConfidence, ...confidence },
@@ -68,19 +68,19 @@ describe('Tumpang Guide AI intent contract', () => {
   it('assigns the complete primary turn to Gemini and the complete backup turn to Groq', () => {
     expect(providerOrder()).toEqual({ primary: 'gemini', secondary: 'groq' });
   });
-  it('accepts any still-missing field selected by the AI instead of rejecting a useful clarification', () => {
+  it('keeps origin as the only mandatory clarification field', () => {
     const emptyPlan = { language: 'zh-CN', preferredCategories: [] };
     expect(resolveClarificationField(emptyPlan, 'preference')).toMatchObject({
-      field: 'preference', providerFieldValid: true
+      field: 'origin', providerFieldValid: false
     });
     expect(resolveClarificationField(emptyPlan, 'unspecified')).toMatchObject({
       field: 'origin', providerFieldValid: false
     });
     expect(resolveClarificationField({
-      startDate: '2026-09-05', origin: { label: 'Kuala Lumpur' },
+      startDate: '2026-09-05', origin: { label: 'Kuala Lumpur', lat: 3.139, lng: 101.6869 },
       partySize: 2, preferredCategories: []
     }, 'date')).toMatchObject({
-      field: 'preference', providerFieldValid: false, missing: ['preference']
+      field: '', providerFieldValid: false, missing: []
     });
   });
 
@@ -108,6 +108,20 @@ describe('Tumpang Guide AI intent contract', () => {
     }, extraction({ originLabel: '马六甲', partySize: 2 }, { origin: .99, party: .96 }));
 
     expect(result.plan).toMatchObject({ origin: { label: '马六甲' }, partySize: 2 });
+  });
+
+  it('does not turn an affinity category echoed by the provider into a strict filter', () => {
+    const result = mergeProviderIntent({
+      language: 'en', preferredCategories: ['culinary'], explicitCategories: [], categoryMode: 'any'
+    }, extraction({ preferredCategories: ['culinary'] }, { preference: .9 }));
+    expect(result.plan).toMatchObject({ preferredCategories: ['culinary'], explicitCategories: [], categoryMode: 'any' });
+  });
+
+  it('makes a category strict only when the provider marks the current request explicit', () => {
+    const result = mergeProviderIntent({ language: 'en' }, extraction({
+      preferredCategories: ['nature'], categoryMode: 'explicit'
+    }, { preference: .9 }));
+    expect(result.plan).toMatchObject({ preferredCategories: ['nature'], explicitCategories: ['nature'], categoryMode: 'explicit' });
   });
 
   it('switches the plan language only for a high-confidence meaningful message', () => {

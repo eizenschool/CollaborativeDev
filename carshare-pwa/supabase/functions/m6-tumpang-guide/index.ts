@@ -20,12 +20,13 @@ import {
 } from "./guideCatalogueTemplates.ts";
 import {
   assertNoCardsOrActionsFromSearch, detectSelfContradictedInfoRecommendation, extractCatalogueRequestName,
-  guideRulesCopy, isEmergencyText, isOrdinaryDiscomfortText, sanitizePlanState, validateModelResponse
+  guideRulesCopy, isEmergencyText, isOrdinaryDiscomfortText, restoreConfirmedOriginCoordinates,
+  sanitizePlanState, validateModelResponse
 } from "./policy.ts";
 import { fetchControlledWeather, retrieveControlledCandidates, selectRuleRecommendations } from "./retrieval.ts";
 import { fetchTravelInfo } from "./travelInfo.ts";
 import {
-  DEFAULT_MALAYSIA_CITY, fetchGuideForecast, geocodeMalaysianPlace, malaysiaToday,
+  DEFAULT_MALAYSIA_CITY, fetchGuideForecast, geocodeMalaysianPlace, geocodeMalaysianPlaces, malaysiaToday,
   matchMalaysianCityInText, resolveForecastWindow, resolveMalaysianCity
 } from "./weather.ts";
 import { estimateGuideRoute } from "./routeInfo.ts";
@@ -37,12 +38,13 @@ import {
   actorKey, checkQuota, persistGuestTrace, persistSignedInTurn,
   recordProviderSuccess, upgradeSignedInBatch, validUuid
 } from "./runtime.ts";
+import { classifyGuideContent } from "../../../src/business-logic/m6-discovery/guide/GuideContentSafety.js";
 
 const ALLOWED_ORIGINS = (Deno.env.get("M6_GUIDE_ALLOWED_ORIGINS") || "http://localhost:5173")
   .split(",").map((value) => value.trim()).filter(Boolean);
 const MODEL = Deno.env.get("M6_GUIDE_GEMINI_MODEL")?.trim() || "gemini-3.7-flash";
 const EMBEDDING_MODEL = Deno.env.get("M6_GUIDE_EMBEDDING_MODEL")?.trim() || "gemini-embedding-2-preview";
-const PROMPT_VERSION = "m6-guide-agent-v3";
+const PROMPT_VERSION = "m6-guide-agent-v4";
 const LANGUAGE_PACK_VERSION = "m6-guide-pack-v5";
 const EDGE_VERSION = "m6-guide-agent-v3.1.1-2026-09-01.3";
 
@@ -217,19 +219,154 @@ function safeOrigin(value: unknown, label: unknown) {
   const lat = Number(source.lat);
   const lng = Number(source.lng);
   if (Number.isFinite(lat) && Math.abs(lat) <= 90 && Number.isFinite(lng) && Math.abs(lng) <= 180) return { lat, lng };
-  if (/\b(?:kuala lumpur|kl)\b|吉隆坡/iu.test(String(label || ""))) return { lat: 3.139, lng: 101.6869 };
+  const known = resolveMalaysianCity(String(label || "")) || matchMalaysianCityInText(String(label || ""));
+  if (known) return { lat: known.lat, lng: known.lng };
   return null;
 }
 
+function hasOriginCoordinates(origin: unknown) {
+  const row = origin && typeof origin === "object" ? origin as Record<string, unknown> : {};
+  return Number.isFinite(Number(row.lat)) && Math.abs(Number(row.lat)) <= 90
+    && Number.isFinite(Number(row.lng)) && Math.abs(Number(row.lng)) <= 180;
+}
+
+function restoreSubmittedOrigin(plan: Record<string, unknown>, body: Record<string, unknown>) {
+  const submittedPlan = body.planState && typeof body.planState === "object"
+    ? body.planState as Record<string, unknown> : {};
+  const submittedOrigin = submittedPlan.origin && typeof submittedPlan.origin === "object"
+    ? submittedPlan.origin as Record<string, unknown> : null;
+  const currentOrigin = plan.origin && typeof plan.origin === "object"
+    ? plan.origin as Record<string, unknown> : null;
+  if (!submittedOrigin || !currentOrigin
+      || String(submittedOrigin.label || "").trim().toLocaleLowerCase()
+        !== String(currentOrigin.label || "").trim().toLocaleLowerCase()) return plan;
+  const coordinates = safeOrigin(body.originCoordinates, currentOrigin.label);
+  return coordinates
+    ? restoreConfirmedOriginCoordinates(plan, { ...currentOrigin, ...coordinates }) as Record<string, unknown>
+    : plan;
+}
+
+async function resolveGuideOrigin(
+  plan: Record<string, unknown>, body: Record<string, unknown>, fallbackOrigin: unknown
+) {
+  const current = plan.origin && typeof plan.origin === "object"
+    ? plan.origin as Record<string, unknown> : null;
+  if (!current?.label) return { plan, resolution: null };
+  const submittedPlan = body.planState && typeof body.planState === "object"
+    ? body.planState as Record<string, unknown> : {};
+  const submittedOrigin = submittedPlan.origin && typeof submittedPlan.origin === "object"
+    ? submittedPlan.origin as Record<string, unknown> : null;
+  // Coordinates belong to the currently selected Travel Brief origin. Do not
+  // attach those old coordinates to a different label extracted from this
+  // message (for example, changing Kuala Lumpur to Johor Bahru in chat).
+  const sameSubmittedLabel = String(submittedOrigin?.label || "").trim().toLocaleLowerCase()
+    === String(current.label || "").trim().toLocaleLowerCase();
+  const clientCoordinates = sameSubmittedLabel ? safeOrigin(body.originCoordinates, current.label) : null;
+  if (clientCoordinates) {
+    return {
+      plan: restoreConfirmedOriginCoordinates(plan, { ...current, ...clientCoordinates }) as Record<string, unknown>,
+      resolution: { status: "confirmed", label: String(current.label), lat: clientCoordinates.lat, lng: clientCoordinates.lng }
+    };
+  }
+  const label = String(current.label);
+  const resolved = resolveMalaysianCity(label) || matchMalaysianCityInText(label);
+  if (resolved) {
+    return {
+      plan: restoreConfirmedOriginCoordinates({ ...plan, origin: { ...current, label: resolved.name, state: resolved.state } }, resolved) as Record<string, unknown>,
+      resolution: { status: "confirmed", label: resolved.name, state: resolved.state, lat: resolved.lat, lng: resolved.lng }
+    };
+  }
+  const geocoded = await geocodeMalaysianPlaces(label, { timeoutMs: TIMEOUTS.geocode });
+  if (geocoded.length > 1) {
+    return {
+      plan: sanitizePlanState({ ...plan, origin: null }) as Record<string, unknown>,
+      resolution: {
+        status: "ambiguous", requestedLabel: label,
+        candidates: geocoded.map((item) => ({ label: item.name, state: item.state, lat: item.lat, lng: item.lng }))
+      }
+    };
+  }
+  if (geocoded.length === 1) {
+    const item = geocoded[0];
+    return {
+      plan: restoreConfirmedOriginCoordinates({ ...plan, origin: { ...current, label: item.name, state: item.state } }, item) as Record<string, unknown>,
+      resolution: { status: "confirmed", label: item.name, state: item.state, lat: item.lat, lng: item.lng }
+    };
+  }
+  // Keep a previously confirmed starting point when a new free-text label
+  // cannot be resolved. The response tells the client to reopen its existing
+  // picker, so an unverified label can never become a recommendation origin.
+  if (hasOriginCoordinates(fallbackOrigin)) {
+    return {
+      plan: restoreConfirmedOriginCoordinates({ ...plan, origin: fallbackOrigin }, fallbackOrigin) as Record<string, unknown>,
+      resolution: { status: "failed", requestedLabel: label, retainedPrevious: true }
+    };
+  }
+  return {
+    plan: sanitizePlanState({ ...plan, origin: null }) as Record<string, unknown>,
+    resolution: { status: "failed", requestedLabel: label, retainedPrevious: false }
+  };
+}
+
+function publicOriginResolution(plan: Record<string, unknown>) {
+  const origin = plan.origin && typeof plan.origin === "object" ? plan.origin as Record<string, unknown> : null;
+  if (!origin || !hasOriginCoordinates(origin)) return null;
+  return {
+    label: String(origin.label || ""), state: String(origin.state || ""),
+    lat: Number(origin.lat), lng: Number(origin.lng)
+  };
+}
+
+function buildRideSummary(candidate: Record<string, unknown>, plan: Record<string, unknown>, available = true) {
+  const listedRideCount = Number(candidate.listedRideCount) || 0;
+  const maxSeatsInSingleRide = Number.isFinite(Number(candidate.availableSeats))
+    ? Math.max(0, Number(candidate.availableSeats)) : null;
+  if (!plan.startDate) return { status: "date_required", listedRideCount: 0, maxSeatsInSingleRide: null };
+  if (!available) return { status: "unavailable", listedRideCount: 0, maxSeatsInSingleRide: null };
+  if (!listedRideCount) return { status: "none", listedRideCount: 0, maxSeatsInSingleRide: 0 };
+  if (maxSeatsInSingleRide === 0) return { status: "full", listedRideCount, maxSeatsInSingleRide: 0 };
+  const partySize = Number.isInteger(Number(plan.partySize)) ? Number(plan.partySize) : null;
+  if (partySize && Number(maxSeatsInSingleRide) < partySize) {
+    return { status: "insufficient_for_party", listedRideCount, maxSeatsInSingleRide };
+  }
+  return { status: "available", listedRideCount, maxSeatsInSingleRide };
+}
+
+function cannotVerifyPlaceInfo(language: string, name: string) {
+  if (language === "zh-CN") return `我暂时无法核实 ${name} 的这项资料，因此不会用一般目录描述来代替答案。你可以稍后重试。`;
+  if (language === "ms") return `Saya tidak dapat mengesahkan maklumat ${name} ini buat sementara. Saya tidak akan menggantikan jawapan dengan penerangan katalog umum. Cuba lagi kemudian.`;
+  if (language === "ta") return `${name} பற்றிய இந்தத் தகவலை இப்போது சரிபார்க்க முடியவில்லை; பொதுவான பட்டியல் விளக்கத்தை பதிலாகப் பயன்படுத்த மாட்டேன். பின்னர் மீண்டும் முயற்சிக்கவும்.`;
+  return `I cannot verify that information for ${name} right now, so I will not replace the answer with a generic catalogue description. Please try again later.`;
+}
+
+function responseLanguageForOrigin(message: string, planLanguage: unknown) {
+  return namedPlaceResponseLanguage(message, String(planLanguage || "en"));
+}
+
 function missingField(plan: Record<string, unknown>) {
-  if (!plan.origin) return "origin";
-  if (!Array.isArray(plan.preferredCategories) || !plan.preferredCategories.length) return "preference";
+  if (!hasOriginCoordinates(plan.origin)) return "origin";
   return null;
 }
 
 function quickReplies(field: string, language: string) {
   void field; void language;
   return [];
+}
+
+function noCandidateSuggestions(language: string) {
+  const labels: Record<string, string[]> = {
+    en: ["Expand to 160 km", "Clear category", "Change date", "Change starting point"],
+    "zh-CN": ["扩大到 160 公里", "清除分类", "更改日期", "更改出发地"],
+    ms: ["Luaskan kepada 160 km", "Kosongkan kategori", "Tukar tarikh", "Tukar tempat mula"],
+    ta: ["160 கி.மீ. வரை விரிவாக்கு", "வகையை அழி", "தேதியை மாற்று", "தொடக்க இடத்தை மாற்று"]
+  };
+  const [expand, clearCategory, changeDate, changeOrigin] = labels[language] || labels.en;
+  return [
+    { kind: "brief_adjustment", action: "expand_search", label: expand },
+    { kind: "brief_adjustment", action: "clear_category", label: clearCategory },
+    { kind: "brief_adjustment", action: "change_date", label: changeDate },
+    { kind: "brief_adjustment", action: "change_origin", label: changeOrigin }
+  ];
 }
 
 async function serverGuideCopy(admin: ReturnType<typeof createClient>, language: string) {
@@ -299,6 +436,30 @@ function safePlaceContext(value: unknown) {
   }).filter((row) => row.placeId && row.name);
 }
 
+function structuredPlaceSuggestions(places: Array<Record<string, unknown>>, kind: string) {
+  return places.slice(0, 4).map((place) => ({
+    kind,
+    label: `${String(place.name || "")}${place.state ? ` · ${String(place.state)}` : ""}`,
+    placeId: validUuid(place.id) ? String(place.id) : "",
+    state: String(place.state || "")
+  })).filter((suggestion) => suggestion.placeId && suggestion.label.trim());
+}
+
+function referencedVerifiedPlace(
+  context: Array<{ placeId: string; name: string; role: string }>,
+  requestedName: string,
+  userMessage: string
+) {
+  const canonical = (value: unknown) => String(value || "").normalize("NFKC")
+    .toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+  const requested = canonical(requestedName);
+  const message = canonical(userMessage);
+  return context.find((item) => {
+    const official = canonical(item.name);
+    return official && (requested === official || message.includes(official));
+  }) || null;
+}
+
 // The client echoes back exactly what a weather/route clarify response set
 // on `response.pendingClarification` (see the weather/route branches below).
 // This is never trusted as an instruction to change routing by itself - it
@@ -323,10 +484,10 @@ function safePendingClarification(value: unknown) {
 
 function aiUnavailableMessage(language: unknown) {
   const messages: Record<string, string> = {
-    en: "I could not complete a reliable AI response. Your travel brief is unchanged—please retry.",
-    "zh-CN": "AI 暂时无法可靠地完成这次回答。你的旅行概要没有改变，请重试。",
-    ms: "AI tidak dapat melengkapkan jawapan yang boleh dipercayai buat masa ini. Ringkasan perjalanan anda tidak berubah—sila cuba lagi.",
-    ta: "AI இப்போது நம்பகமான பதிலை முடிக்க முடியவில்லை. உங்கள் பயணச் சுருக்கம் மாற்றப்படவில்லை—மீண்டும் முயலுங்கள்."
+    en: "The AI service is temporarily unavailable. Please try again.",
+    "zh-CN": "AI 服务暂时不可用，请重试。",
+    ms: "Perkhidmatan AI tidak tersedia buat sementara. Sila cuba lagi.",
+    ta: "AI சேவை தற்காலிகமாக கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்."
   };
   return messages[String(language)] || messages.en;
 }
@@ -383,7 +544,10 @@ async function renderProviderTextTurn({
     userMessage,
     scaffold: {
       mode: base.mode, language: outputLanguage,
-      planState: plan, quickReplies: base.quickReplies, recommendations: [], actions: []
+      // Rendering is still an AI prompt boundary. The retrieval plan may keep
+      // exact coordinates internally, but provider text generation never needs
+      // them and must receive the same prompt-safe projection as routing.
+      planState: sanitizePlanState(plan), quickReplies: base.quickReplies, recommendations: [], actions: []
     },
     verifiedContext
   });
@@ -570,7 +734,10 @@ async function extractProviderIntent({
   pendingClarification: Record<string, unknown> | null;
 }) {
   const choice = await chooseGuideTool(provider, {
-    message, responseLanguage, planState: plan, recentMessages, today, verifiedPlaceContext: placeContext, signedIn,
+    // Routing is a provider prompt boundary too. Keep exact coordinates in
+    // the server's internal plan for catalogue ranking, but send only the
+    // prompt-safe plan projection to Gemini/Groq.
+    message, responseLanguage, planState: sanitizePlanState(plan), recentMessages, today, verifiedPlaceContext: placeContext, signedIn,
     // Structured continuation context - not a routing override. chooseGuideTool
     // still makes the one, sole routing decision; this just gives it a
     // machine-readable signal (instead of having to infer purely from free-text
@@ -597,8 +764,8 @@ async function extractProviderIntent({
     origin: isCatalogueSearch && supplied(args.originLabel) ? .9 : 0,
     party: isCatalogueSearch && supplied(args.partySize) ? .9 : 0,
     date: isCatalogueSearch && supplied(args.startDate) ? .9 : 0,
-    preference: isCatalogueSearch && supplied(args.preferredCategories) ? .9 : 0,
-    budget: 0, indoorPreference: 0, accessibilityRequired: 0, children: 0,
+    preference: isCatalogueSearch && (supplied(args.preferredCategories) || args.categoryMode === "any") ? .9 : 0,
+    indoorPreference: 0, accessibilityRequired: 0, children: 0,
     recommendationMode: isCatalogueSearch && supplied(args.recommendationMode) ? .9 : 0,
     requestedMode: 1,
     language: languageConfidence
@@ -610,7 +777,7 @@ async function extractProviderIntent({
       startDate: isCatalogueSearch ? (args.startDate || "") : "",
       endDate: isCatalogueSearch ? (args.endDate || "") : "",
       preferredCategories: isCatalogueSearch ? (args.preferredCategories || []) : [],
-      budget: "unspecified",
+      categoryMode: isCatalogueSearch ? (args.categoryMode || "unspecified") : "unspecified",
       indoorPreference: "unspecified", accessibilityRequired: false, children: false,
       recommendationMode: isCatalogueSearch ? (args.recommendationMode || "unspecified") : "unspecified",
       requestedMode: toolMode(choice.toolName),
@@ -723,6 +890,24 @@ function providerBudgetMs(deadlineAt: number, requestedMs = 45_000) {
 type GuideTurnQuota = Awaited<ReturnType<typeof checkQuota>>;
 type GuideTurnContext = { key: string; quota: GuideTurnQuota };
 
+function safeSubmittedRecentMessages(value: unknown) {
+  if (!Array.isArray(value)) return [] as Array<{ role: "user" | "assistant"; text: string }>;
+  return value.slice(-12).map((item) => {
+    const row = item as Record<string, unknown>;
+    const role = row?.role === "assistant" ? "assistant" : "user";
+    const rawText = String(row?.text || "").slice(0, 1200);
+    if (role === "assistant") return { role, text: rawText };
+    const safety = classifyGuideContent(rawText);
+    return {
+      role,
+      // A previously submitted user message may have been created by an
+      // older client or a direct caller. Never forward its raw form to a
+      // provider; a blocked historical turn contributes no prompt text.
+      text: safety.decision === "block" ? "" : safety.sanitizedText
+    };
+  }).filter((item) => item.text);
+}
+
 async function handleTurnAttempt(
   admin: ReturnType<typeof createClient>, user: { id: string } | null,
   body: Record<string, unknown>, origin: string | null, turnContext: GuideTurnContext, qaAllowed = false
@@ -731,8 +916,8 @@ async function handleTurnAttempt(
     return json({ error: "A message up to 1200 characters is required." }, 400, origin);
   }
   const started = performance.now();
-  let plan = sanitizePlanState(body.planState) as Record<string, unknown>;
-  const planBeforeIntent = sanitizePlanState(plan) as Record<string, unknown>;
+  let plan = restoreSubmittedOrigin(sanitizePlanState(body.planState) as Record<string, unknown>, body);
+  const planBeforeIntent = restoreSubmittedOrigin(plan, body);
   const trace = traceId();
   const message = body.message.trim();
   const ownedProvider = body.__ownedProvider === "groq" ? "groq" : "gemini";
@@ -743,11 +928,19 @@ async function handleTurnAttempt(
 
   const { key, quota } = turnContext;
 
+  // High-confidence emergency requests are handled by the existing fixed SOS
+  // response before the provider route. This keeps distressed wording from
+  // being rejected by the ordinary abuse policy, while the content classifier
+  // still blocks threats directed at another person.
+  if (body.__contentSafetyDecision === "emergency") {
+    const answerLanguage = namedPlaceResponseLanguage(message, plan.language);
+    return await finalize(admin, user, body,
+      emergencyResponse(plan, quota.remaining, trace, "safety", null, null, answerLanguage),
+      [], started, true, key, quota.globalKey, origin);
+  }
+
   const enabled = guideAiEnabled();
-  const recentMessages = Array.isArray(body.recentMessages) ? body.recentMessages.slice(-12).map((item) => ({
-    role: (item as Record<string, unknown>)?.role === "assistant" ? "assistant" : "user",
-    text: String((item as Record<string, unknown>)?.text || "").slice(0, 1200)
-  })) : [];
+  const recentMessages = safeSubmittedRecentMessages(body.recentMessages);
   // Only previously generated public venue facts may be forwarded to the
   // grounded-search provider for de-duplication. Never forward earlier user
   // messages or the rest of the conversation through this path.
@@ -760,6 +953,7 @@ async function handleTurnAttempt(
     .includes(String(body.conversationFocus || "")) ? String(body.conversationFocus) : "none";
   type ExtractedGuideIntent = Awaited<ReturnType<typeof extractProviderIntent>> & { responseLanguage?: string };
   let intent: ExtractedGuideIntent | null = null;
+  let originResolution: Record<string, unknown> | null = null;
 
   if (!enabled) {
     const answerLanguage = namedPlaceResponseLanguage(message, plan.language);
@@ -767,19 +961,32 @@ async function handleTurnAttempt(
       mode: "fallback", assistantMessage: aiUnavailableMessage(answerLanguage),
       language: answerLanguage, responseLanguage: answerLanguage, planState: plan, quickReplies: [], recommendations: [], actions: [],
       remainingTurns: quota.remaining, fallbackReason: "ai_disabled", source: "unavailable",
-      retryable: true, batchId: null, traceId: trace
+      retryable: true, basicRecommendationAvailable: true, batchId: null, traceId: trace
     }, 200, origin);
   }
 
   try {
     intent = await extractProviderIntent({
-      message, plan, responseLanguage: namedPlaceResponseLanguage(message, plan.language),
+      message,
+      // Coordinates are restored on the server for catalogue ranking, but
+      // routing only needs the label and other traveller-facing fields.
+      plan: sanitizePlanState(plan) as Record<string, unknown>,
+      responseLanguage: namedPlaceResponseLanguage(message, plan.language),
       recentMessages,
       today: String(qa.today || malaysiaToday()),
       placeContext, provider: ownedProvider,
       timeoutMs: providerBudgetMs(providerDeadlineAt), signedIn: Boolean(user), pendingClarification
     });
-    plan = intent.plan;
+    plan = restoreSubmittedOrigin(intent.plan, body);
+    if (intent.toolName === "search_catalogue") {
+      const submittedOrigin = body.planState && typeof body.planState === "object"
+        && (body.planState as Record<string, unknown>).origin && typeof (body.planState as Record<string, unknown>).origin === "object"
+        ? (body.planState as Record<string, unknown>).origin : null;
+      const resolvedOrigin = await resolveGuideOrigin(plan, body, submittedOrigin);
+      plan = resolvedOrigin.plan;
+      intent = { ...intent, plan };
+      originResolution = resolvedOrigin.resolution;
+    }
     rulesCopy = await serverGuideCopy(admin, String(plan.language));
     // Unconditional, every turn - not just on failure. Nothing else records
     // what the routing decision actually was, so a live "why did this go to
@@ -790,6 +997,21 @@ async function handleTurnAttempt(
       routeDestinationName: intent.routeDestinationName || null, routeOriginLabel: intent.routeOriginLabel || null,
       pendingClarificationSent: pendingClarification, provider: intent.provider
     }));
+    if (originResolution?.status === "ambiguous") {
+      const choices = Array.isArray(originResolution.candidates) ? originResolution.candidates as Array<Record<string, unknown>> : [];
+      const suggestions = choices.map((choice) => ({
+        kind: "origin_candidate", label: `${String(choice.label || "")}${choice.state ? ` · ${String(choice.state)}` : ""}`,
+        lat: Number(choice.lat), lng: Number(choice.lng), state: String(choice.state || "")
+      }));
+      const clarification = responseLanguageForOrigin(message, plan.language);
+      return await finalize(admin, user, body, {
+        mode: "clarify", assistantMessage: clarification,
+        language: plan.language, responseLanguage: String(intent.responseLanguage || plan.language), planState: plan,
+        quickReplies: [], suggestions, recommendations: [], actions: [], remainingTurns: quota.remaining,
+        fallbackReason: null, source: "rules", nextQuestionField: "origin", batchId: null, traceId: trace,
+        originResolution
+      }, [], started, true, key, quota.globalKey, origin);
+    }
   } catch (error) {
     const reason = geminiFailureReason(error);
     console.warn(JSON.stringify({ event: "m6_guide_intent_failure", traceId: trace, reason,
@@ -907,7 +1129,23 @@ async function handleTurnAttempt(
         stage: "place_info_match", code: String(catalogueError.code || "database_error").slice(0, 80) }));
       return json(unavailableTurn({ traceId: trace }, plan, quota.remaining, "catalogue_unavailable", namedPlaceResponseLanguage(message, plan.language)), 503, origin);
     }
-    const matches = matchCataloguePlaces((catalogue || []) as Record<string, unknown>[], requestedName);
+    // The client can hand over a catalogue-verified Place ID from Destination
+    // Detail. Keep that identity authoritative when the official name appears
+    // in the traveller's message or the tool copied it exactly. The model may
+    // decide that this is a place-information question, but it must not reduce
+    // a known ID back to a fuzzy name and accidentally create a clarification
+    // loop between similarly named venues.
+    const selectedPlaceId = validUuid(body.selectedPlaceId) ? String(body.selectedPlaceId) : "";
+    const selectedReference = selectedPlaceId
+      ? placeContext.find((item) => String(item.placeId) === selectedPlaceId) || null
+      : null;
+    const verifiedReference = selectedReference || referencedVerifiedPlace(placeContext, requestedName, message);
+    const verifiedRow = verifiedReference
+      ? (catalogue || []).find((place) => String(place.id) === verifiedReference.placeId) || null
+      : null;
+    const matches = verifiedRow
+      ? [{ ...(verifiedRow as Record<string, unknown>), matchScore: 1 }]
+      : matchCataloguePlaces((catalogue || []) as Record<string, unknown>[], requestedName);
     const top = matches[0]; const second = matches[1];
     const ambiguous = Boolean(top && second && (Number(top.matchScore) < .9 || Number(top.matchScore) - Number(second.matchScore) < .12));
     const responseLanguage = String(intent.responseLanguage || namedPlaceResponseLanguage(message, plan.language));
@@ -921,7 +1159,8 @@ async function handleTurnAttempt(
       const choices = matches.slice(0, 4).map((place) => `${place.name} · ${place.state}`);
       const base = {
         mode: "clarify", assistantMessage: "More than one verified catalogue place matches this name.",
-        language: plan.language, planState: plan, quickReplies: choices, recommendations: [], actions: [],
+        language: plan.language, planState: plan, quickReplies: choices,
+        suggestions: structuredPlaceSuggestions(matches as Array<Record<string, unknown>>, "place_candidate"), recommendations: [], actions: [],
         remainingTurns: quota.remaining, fallbackReason: null, source: "unavailable",
         batchId: null, traceId: trace
       };
@@ -939,7 +1178,8 @@ async function handleTurnAttempt(
     try {
       const factKey = await liveFactCacheKey(top.name, responseLanguage, message);
       const grounded = await readLiveFactCache(admin, factKey) || await fetchGroundedPlaceInfo({
-        place: top, language: responseLanguage, userMessage: message, plan, previousPublicFacts,
+        place: top, language: responseLanguage, userMessage: message,
+        plan: sanitizePlanState(plan) as Record<string, unknown>, previousPublicFacts,
         provider: intent.provider,
         geminiTimeoutMs: providerBudgetMs(providerDeadlineAt), groqTimeoutMs: providerBudgetMs(providerDeadlineAt),
         admin, traceId: trace
@@ -954,7 +1194,7 @@ async function handleTurnAttempt(
       fallbackReason = "live_place_info_unavailable";
       placeInfo = {
         placeId: top.id, officialName: top.name, state: top.state, category: top.category,
-        summary: String(top.description || `${top.name} is a verified catalogue place in ${top.state}.`),
+        summary: cannotVerifyPlaceInfo(responseLanguage, String(top.name)),
         highlights: [], audience: [],
         practicalNotes: [], typicalVisitMinutes: Number(attribute?.typical_visit_minutes) || null,
         sources: [], checkedAt: new Date().toISOString(), sourceStatus: "database_only"
@@ -976,10 +1216,13 @@ async function handleTurnAttempt(
     // stays specific to this question regardless of this flag.
     placeInfo.followUp = placeContext.some((item) => String(item.placeId) === String(top.id));
     const response = {
-      mode: "place_info", assistantMessage: String(intent.assistantMessage || "I found current public information for this catalogue place."), language: responseLanguage, responseLanguage,
+      mode: "place_info", assistantMessage: fallbackReason
+        ? cannotVerifyPlaceInfo(responseLanguage, String(top.name))
+        : String(intent.assistantMessage || "I found current public information for this catalogue place."), language: responseLanguage, responseLanguage,
       planState: plan,
       quickReplies: [], recommendations: [], actions: [], placeInfo,
       remainingTurns: Math.max(0, quota.remaining - 1), fallbackReason, source, providerModel,
+      retryable: Boolean(fallbackReason),
       intentProvider: intent.provider, intentConfidence: intent.confidence,
       contractVersion: "m6-guide-place-info-v1", conversationFocus: "place", batchId: null, traceId: trace
     };
@@ -1008,6 +1251,7 @@ async function handleTurnAttempt(
     const alreadyAskedForLocation = pendingClarification?.tool === "get_weather_forecast";
     let resolvedLocation: { name: string; state: string; lat: number; lng: number } | null = null;
     let clarifyChoices: string[] = [];
+    let clarifySuggestions: Record<string, unknown>[] = [];
     if (wantedLocation) {
       const exact = placeContext.find((item) => item.name.trim().toLocaleLowerCase() === wantedLocation.toLocaleLowerCase());
       if (exact) {
@@ -1039,6 +1283,7 @@ async function handleTurnAttempt(
         // instead of treating "found nothing" the same as "found several".
         else if (matches.length >= 2 && Number(matches[0].matchScore) >= .55 && Number(matches[1].matchScore) >= .55) {
           clarifyChoices = matches.slice(0, 4).map((place) => `${place.name} · ${place.state}`);
+          clarifySuggestions = structuredPlaceSuggestions(matches as Array<Record<string, unknown>>, "weather_place_candidate");
         }
       }
       // A tie between venues that all sit inside one city the traveller
@@ -1047,7 +1292,7 @@ async function handleTurnAttempt(
       // rather than asking which landmark they meant.
       if (!resolvedLocation && clarifyChoices.length) {
         const looseCity = matchMalaysianCityInText(wantedLocation);
-        if (looseCity) { resolvedLocation = looseCity; clarifyChoices = []; }
+        if (looseCity) { resolvedLocation = looseCity; clarifyChoices = []; clarifySuggestions = []; }
       }
       // Last resolution tier before giving up on the name: a free, keyless
       // lookup covering every Malaysian town, not just the fifteen the table
@@ -1070,7 +1315,7 @@ async function handleTurnAttempt(
       const base = {
         mode: "clarify", assistantMessage: weatherLocationClarifyText(responseLanguage),
         language: responseLanguage, responseLanguage, planState: plan,
-        quickReplies: clarifyChoices, recommendations: [], actions: [],
+        quickReplies: clarifyChoices, suggestions: clarifySuggestions, recommendations: [], actions: [],
         remainingTurns: quota.remaining, fallbackReason: null, source: "rules", batchId: null, traceId: trace,
         pendingClarification: { tool: "get_weather_forecast", field: "locationName" }
       };
@@ -1157,6 +1402,7 @@ async function handleTurnAttempt(
       || (alreadyAskedForRoute ? pendingClarification?.destinationName : "") || "").trim();
     let destination: { name: string; state: string; lat: number; lng: number } | null = null;
     let clarifyChoices: string[] = [];
+    let clarifySuggestions: Record<string, unknown>[] = [];
     if (wantedDestination) {
       const exact = placeContext.find((item) => item.name.trim().toLocaleLowerCase() === wantedDestination.toLocaleLowerCase());
       if (exact) {
@@ -1189,13 +1435,16 @@ async function handleTurnAttempt(
         // asking again - the answer names the destination verbatim, so a
         // near-miss is visible to the traveller instead of silent.
         else if (top && alreadyAskedForRoute) destination = { name: String(top.name), state: String(top.state), lat: Number(top.lat), lng: Number(top.lng) };
-        else if (matches.length) clarifyChoices = matches.slice(0, 4).map((place) => `${place.name} · ${place.state}`);
+        else if (matches.length) {
+          clarifyChoices = matches.slice(0, 4).map((place) => `${place.name} · ${place.state}`);
+          clarifySuggestions = structuredPlaceSuggestions(matches as Array<Record<string, unknown>>, "route_place_candidate");
+        }
       }
       // Venue tie inside a city the traveller actually named: they asked for
       // the city, not for a choice between landmarks in it.
       if (!destination && clarifyChoices.length) {
         const looseCity = matchMalaysianCityInText(wantedDestination);
-        if (looseCity) { destination = looseCity; clarifyChoices = []; }
+        if (looseCity) { destination = looseCity; clarifyChoices = []; clarifySuggestions = []; }
       }
       // Same final tier as the weather branch - any Malaysian town can be a
       // destination, not only the fifteen in the offline table.
@@ -1222,7 +1471,7 @@ async function handleTurnAttempt(
       const base = {
         mode: "clarify", assistantMessage: routeDestinationClarifyText(responseLanguage),
         language: responseLanguage, responseLanguage, planState: plan,
-        quickReplies: clarifyChoices, recommendations: [], actions: [],
+        quickReplies: clarifyChoices, suggestions: clarifySuggestions, recommendations: [], actions: [],
         remainingTurns: quota.remaining, fallbackReason: null, source: "rules", batchId: null, traceId: trace,
         pendingClarification: { tool: "get_route_estimate", field: "destinationName" }
       };
@@ -1381,9 +1630,11 @@ async function handleTurnAttempt(
     });
   }
 
-  const missing = missingField(plan);
+  const clarificationPlan = originResolution?.status === "failed"
+    ? { ...plan, origin: null } : plan;
+  const missing = missingField(clarificationPlan);
   if (missing) {
-    const clarification = resolveClarificationField(plan, intent.nextQuestionField);
+    const clarification = resolveClarificationField(clarificationPlan, intent.nextQuestionField);
     const assistantMessage = String(intent.assistantMessage || "").trim();
     if (!clarification.providerFieldValid || !assistantMessage) {
       const base = {
@@ -1393,7 +1644,8 @@ async function handleTurnAttempt(
         quickReplies: quickReplies(clarification.field, responseLanguage),
         recommendations: [], actions: [], remainingTurns: quota.remaining,
         fallbackReason: null, source: "unavailable",
-        nextQuestionField: clarification.field, batchId: null, traceId: trace
+        nextQuestionField: clarification.field, batchId: null, traceId: trace,
+        ...(originResolution ? { originResolution } : {})
       };
       const rendered = await renderProviderTextTurn({
         admin, base, plan, userMessage: message,
@@ -1418,7 +1670,8 @@ async function handleTurnAttempt(
        planState: plan, quickReplies: quickReplies(clarification.field, responseLanguage), recommendations: [], actions: [],
       remainingTurns: Math.max(0, quota.remaining - 1), fallbackReason: null, source: intent.provider,
       providerModel: intent.providerModel, intentConfidence: intent.confidence,
-      needsConfirmation: intent.needsConfirmation, nextQuestionField: clarification.field, batchId: null, traceId: trace
+       needsConfirmation: intent.needsConfirmation, nextQuestionField: clarification.field, batchId: null, traceId: trace,
+       ...(originResolution ? { originResolution } : {})
     };
     return await finalize(admin, user, body, base, [], started, true, key, quota.globalKey, origin);
   }
@@ -1448,7 +1701,9 @@ async function handleTurnAttempt(
   ].filter(Boolean);
   if (retrievalWarnings.length) console.warn(JSON.stringify({ event: "m6_guide_optional_retrieval_failure",
     traceId: trace, warnings: retrievalWarnings }));
-  const originCoordinates = safeOrigin(body.originCoordinates, (plan.origin as Record<string, unknown> | null)?.label);
+  const originCoordinates = originResolution?.status === "confirmed"
+    ? { lat: Number(originResolution.lat), lng: Number(originResolution.lng) }
+    : safeOrigin(body.originCoordinates, (plan.origin as Record<string, unknown> | null)?.label);
   const weatherMode = String(qa.weather || "live");
   const weather = weatherMode !== "live"
     ? qaWeatherByPlace((places || []) as Record<string, unknown>[], weatherMode)
@@ -1466,15 +1721,35 @@ async function handleTurnAttempt(
     // a 500 or prevent the Guide from using the remaining non-history signals.
     historyCategories = [];
   }
-  const candidates = retrieveControlledCandidates(places || [], rides || [], attributes || [], interests || [], plan, {
+  let savedCategories: string[] = [];
+  if (user?.id) {
+    try {
+      const { data: preferences } = await admin.from("user_travel_preferences")
+        .select("preferred_categories").eq("user_id", user.id).maybeSingle();
+      savedCategories = Array.isArray(preferences?.preferred_categories)
+        ? preferences.preferred_categories.map(String).filter((category) => ["culinary", "heritage", "nature", "event"].includes(category))
+        : [];
+    } catch {
+      savedCategories = [];
+    }
+  }
+  const explicitCategories = Array.isArray(plan.explicitCategories) && plan.categoryMode === "explicit"
+    ? plan.explicitCategories.map(String) : [];
+  const affinityCategories = explicitCategories.length
+    ? explicitCategories : historyCategories.length ? historyCategories : savedCategories;
+  const retrievalPlan = explicitCategories.length
+    ? plan
+    : { ...plan, preferredCategories: affinityCategories, categoryMode: "any" };
+  const candidates = retrieveControlledCandidates(places || [], rides || [], attributes || [], interests || [], retrievalPlan, {
     weatherByPlace: weather, historyCategories, origin: originCoordinates
   });
   if (!candidates.length) {
     const base = {
       mode: "recommend", assistantMessage: rulesCopy.noCandidates, language: plan.language, responseLanguage,
-      planState: plan, quickReplies: rulesCopy.quickReplies, recommendations: [], actions: [],
+      planState: plan, quickReplies: rulesCopy.quickReplies, suggestions: noCandidateSuggestions(responseLanguage), recommendations: [], actions: [],
       remainingTurns: quota.remaining, fallbackReason: "no_verified_candidates", source: intent.provider,
-      providerModel: intent.providerModel, batchId: null, traceId: trace
+      providerModel: intent.providerModel, batchId: null, traceId: trace,
+      ...(originResolution ? { originResolution } : {})
     };
     const rendered = await renderProviderTextTurn({
       admin, base, plan, userMessage: message,
@@ -1512,11 +1787,23 @@ async function handleTurnAttempt(
     : selectRuleRecommendations(candidates, {
     shownPlaceIds, recommendationMode: String(plan.recommendationMode || "default")
   });
+  const rideDataAvailable = !retrievalWarnings.includes("rides_unavailable");
+  const ruleBatchWithEvidence = ruleBatch.map((item) => {
+    const candidate = candidates.find((row) => String(row.id) === String(item.placeId)) || {};
+    return {
+      ...item,
+      listedRideCount: Number(candidate.listedRideCount) || 0,
+      maxSeatsInSingleRide: Number.isFinite(Number(candidate.availableSeats))
+        ? Math.max(0, Number(candidate.availableSeats)) : null,
+      browsingInterestCount: Number(candidate.browsingInterestCount) || 0,
+      rideSummary: buildRideSummary(candidate, plan, rideDataAvailable)
+    };
+  });
 
   const qaLatencyMs = qaAllowed ? Math.max(0, Number(qa.latencyMs) || 0) : 0;
   if (qaLatencyMs >= 10_000) {
     const response = {
-      mode: "fallback", assistantMessage: "The AI response timed out. Your plan and selected catalogue batch are safe—please retry.",
+      mode: "fallback", assistantMessage: aiUnavailableMessage(plan.language),
       language: plan.language, planState: plan, quickReplies: [], recommendations: [], actions: [],
       remainingTurns: quota.remaining, fallbackReason: "timeout", source: "unavailable",
       retryable: true, batchId, traceId: trace
@@ -1530,7 +1817,7 @@ async function handleTurnAttempt(
     const reason = qa.rejectUnknownPlace === true ? "place_not_allowlisted"
       : forcedFallback === "invalid_json" ? "invalid_json_shape" : forcedFallback;
     const response = {
-      mode: "fallback", assistantMessage: "Both AI providers failed validation. Your travel brief is unchanged—please retry.",
+      mode: "fallback", assistantMessage: aiUnavailableMessage(plan.language),
       language: plan.language, planState: plan, quickReplies: [], recommendations: [], actions: [],
       remainingTurns: quota.remaining, fallbackReason: reason, source: "unavailable",
       retryable: true, batchId, traceId: trace
@@ -1544,20 +1831,20 @@ async function handleTurnAttempt(
     counts[category] = (counts[category] || 0) + 1; return counts;
   }, {});
   const prompt = JSON.stringify({
-    instruction: `You are Tumpang Guide's friendly Malaysian travel concierge. The server has already selected an immutable catalogue batch. You do not choose places or rankings. assistantMessage must be ONE short introductory sentence for the whole batch (for example naming the count and category/occasion) - it must NOT describe, summarize or list the individual places one by one; that per-place writing belongs only in recommendationCopy. For each supplied Place ID, write one vivid, traveller-centred reason, one fuller explanation of why it fits this specific plan, and one honest trade-off using only supplied verified facts, as separate recommendationCopy entries - never repeat that same material inside assistantMessage. Explain the experience and practical value; never mention algorithms, weights, scores, reason codes or internal rules. Do not invent activities, opening hours, prices, routes, safety guarantees or live conditions. Preserve official place names exactly. No web or map search is available in this recommendation-writing step; later place questions use a separately verified live-information flow. Return exactly one copy item for every supplied Place ID and no others. Write every human-facing sentence in responseLanguage without mixing English UI labels into another language, except official names, brands, dates and numbers.`,
+    instruction: `You are Tumpang Guide's friendly Malaysian travel concierge. The server has already selected an immutable catalogue batch. You do not choose places or rankings. assistantMessage must be ONE short introductory sentence for the whole batch (for example naming the count and category/occasion) - it must NOT describe, summarize or list the individual places one by one; that per-place writing belongs only in recommendationCopy. For each supplied Place ID, write one vivid, traveller-centred reason, one fuller explanation of why it fits this specific plan, and one honest trade-off using only supplied verified facts, as separate recommendationCopy entries - never repeat that same material inside assistantMessage. Explain the experience and practical value; never mention algorithms, weights, scores, reason codes or internal rules. Do not invent activities, opening hours, prices, routes, safety guarantees or live conditions. Review count is evidence coverage, never proof that a place is quiet, busy, crowded or overrun; never use those claims. A published ride only proves that the destination is listed on a ride; availableSeats only describes that listed ride and never confirms that this traveller can use it, that the pickup point is suitable, or that the route is convenient. distanceKm is a relative straight-line signal, never travel time, road distance or reachability. Never say that a ride is on the way, that a place is easy to reach, or that a traveller is guaranteed a seat. Preserve official place names exactly. No web or map search is available in this recommendation-writing step; later place questions use a separately verified live-information flow. Return exactly one copy item for every supplied Place ID and no others. Write every human-facing sentence in responseLanguage without mixing English UI labels into another language, except official names, brands, dates and numbers.`,
     responseLanguage,
     promptVersion: PROMPT_VERSION,
-    planState: { ...plan, tripHistoryConsent: Boolean(user && plan.tripHistoryConsent) },
+    planState: { ...(sanitizePlanState(plan) as Record<string, unknown>), tripHistoryConsent: Boolean(user && plan.tripHistoryConsent) },
     tripHistorySummary: plan.tripHistoryConsent && user ? { completedCategoryCounts: categoryCounts } : null,
     recentMessages, userMessage: message,
-    immutableRecommendations: ruleBatch.map((item) => ({ placeId: item.placeId, role: item.role })),
-    candidates: ruleBatch.map((item) => {
+    immutableRecommendations: ruleBatchWithEvidence.map((item) => ({ placeId: item.placeId, role: item.role })),
+    candidates: ruleBatchWithEvidence.map((item) => {
       const candidate = candidates.find((row) => String(row.id) === String(item.placeId)) || {};
       return {
         placeId: candidate.id, officialName: candidate.name,
         verifiedFacts: {
           category: candidate.category, state: candidate.state,
-          requestedCategories: plan.preferredCategories,
+          requestedCategories: explicitCategories.length ? explicitCategories : affinityCategories,
           rating: candidate.rating, reviewCount: candidate.review_count,
           hasPublishedRide: candidate.hasRide, availableSeats: candidate.availableSeats,
           distanceKm: candidate.distanceKm, weatherAdvisory: candidate.weatherAdvisory,
@@ -1577,11 +1864,11 @@ async function handleTurnAttempt(
       validate: (generated) => {
         const copyRows = Array.isArray(generated.recommendationCopy)
           ? generated.recommendationCopy as Array<Record<string, unknown>> : [];
-        const expectedIds = ruleBatch.map((item) => String(item.placeId));
+      const expectedIds = ruleBatchWithEvidence.map((item) => String(item.placeId));
         const actualIds = copyRows.map((item) => String(item.placeId));
         return String(generated.language || "") === responseLanguage
           && String(generated.assistantMessage || "").trim().length > 0
-          && copyRows.length === ruleBatch.length
+          && copyRows.length === ruleBatchWithEvidence.length
           && JSON.stringify(actualIds) === JSON.stringify(expectedIds)
           && new Set(actualIds).size === actualIds.length
           && copyRows.every((item) => ["personalizedReason", "personalizedWhy", "personalizedTradeoff"]
@@ -1591,7 +1878,7 @@ async function handleTurnAttempt(
     const generated = result.value;
     const copyRows = generated.recommendationCopy as Array<Record<string, unknown>>;
     const copyByPlaceId = new Map(copyRows.map((item) => [String(item.placeId), item]));
-    const recommendations = ruleBatch.map((item) => {
+    const recommendations = ruleBatchWithEvidence.map((item) => {
       const copy = copyByPlaceId.get(String(item.placeId)) || {};
       return {
         ...item,
@@ -1608,6 +1895,7 @@ async function handleTurnAttempt(
       recommendations, actions: [], source: result.provider,
       providerModel: result.model, intentProvider: intent.provider, intentConfidence: intent.confidence, batchId,
       remainingTurns: Math.max(0, quota.remaining - 1), fallbackReason: null, traceId: trace,
+      ...(originResolution ? { originResolution } : {}),
       ...(retrievalWarnings.length ? { operationalWarnings: retrievalWarnings } : {})
     };
     return await finalize(admin, user, body, response, candidates, started, true, key, quota.globalKey, origin);
@@ -1618,6 +1906,108 @@ async function handleTurnAttempt(
       providerFailures: safeProviderFailures(error) }));
     throw error;
   }
+}
+
+async function handleBasicBriefRecommendation(
+  admin: ReturnType<typeof createClient>, user: { id: string } | null,
+  body: Record<string, unknown>, origin: string | null, turnContext: GuideTurnContext,
+  started: number, key: string, trace: string
+) {
+  const planBeforeOrigin = sanitizePlanState(body.planState) as Record<string, unknown>;
+  const submittedOrigin = body.planState && typeof body.planState === "object"
+    ? (body.planState as Record<string, unknown>).origin : null;
+  const resolved = await resolveGuideOrigin(planBeforeOrigin, body, submittedOrigin);
+  const plan = resolved.plan;
+  const quota = turnContext.quota;
+  const originResolution = resolved.resolution;
+  const responseLanguage = String(plan.language || "en");
+  if (originResolution?.status === "failed" || !hasOriginCoordinates(plan.origin)) {
+    return finalize(admin, user, body, {
+      mode: "clarify", assistantMessage: responseLanguage === "zh-CN"
+        ? "请先选择一个已确认的马来西亚出发地点。"
+        : responseLanguage === "ms" ? "Sahkan tempat mula di Malaysia dahulu."
+          : responseLanguage === "ta" ? "முதலில் மலேசிய தொடக்க இடத்தை உறுதிப்படுத்தவும்."
+            : "Please choose a confirmed Malaysian starting point first.",
+      language: responseLanguage, responseLanguage, planState: plan, quickReplies: [], recommendations: [], actions: [],
+      remainingTurns: quota.remaining, fallbackReason: null, source: "rules", traceId: trace,
+      ...(originResolution ? { originResolution } : {})
+    }, [], started, true, key, quota.globalKey, origin);
+  }
+
+  const interestQuery = plan.startDate && plan.endDate
+    ? admin.from("place_interest").select("place_id,user_id,travel_date").gte("travel_date", plan.startDate).lte("travel_date", plan.endDate)
+    : Promise.resolve({ data: [], error: null });
+  const [placeResult, rideResult, attributeResult, interestResult] = await Promise.all([
+    admin.from("places").select("id,source_place_id,name,category,rating,review_count,state,lifecycle_state,lat,lng").in("lifecycle_state", ["Active", "Provisional", "Stale"]),
+    admin.from("rides").select("destination_place_id,departure_at,seats_total,seats_available,status").in("status", ["Published", "Matched"]),
+    admin.from("place_travel_attributes").select("place_id,price_level,indoor_outdoor,suitable_for_children,suitable_for_groups,has_restroom,has_parking,wheelchair_accessible,opening_hours,field_provenance,review_soft_signals,review_signals_observed_at"),
+    interestQuery
+  ]);
+  if (placeResult.error) {
+    return json(unavailableTurn({ traceId: trace }, plan, quota.remaining, "catalogue_unavailable", responseLanguage), 503, origin);
+  }
+  const places = placeResult.data || [];
+  const rides = rideResult.data || [];
+  const attributes = attributeResult.data || [];
+  const interests = interestResult.data || [];
+  const retrievalWarnings = [
+    rideResult.error ? "rides_unavailable" : "",
+    attributeResult.error ? "place_attributes_unavailable" : "",
+    interestResult.error ? "interests_unavailable" : ""
+  ].filter(Boolean);
+  const historyCategories = plan.tripHistoryConsent && user
+    ? await retrieveTripHistoryCategories(admin, user.id, places, true).catch(() => [])
+    : [];
+  let savedCategories: string[] = [];
+  if (user?.id) {
+    try {
+      const { data: preferences } = await admin.from("user_travel_preferences")
+        .select("preferred_categories").eq("user_id", user.id).maybeSingle();
+      savedCategories = Array.isArray(preferences?.preferred_categories)
+        ? preferences.preferred_categories.map(String).filter((category) => ["culinary", "heritage", "nature", "event"].includes(category)) : [];
+    } catch { savedCategories = []; }
+  }
+  const explicitCategories = Array.isArray(plan.explicitCategories) && plan.categoryMode === "explicit"
+    ? plan.explicitCategories.map(String) : [];
+  const affinityCategories = explicitCategories.length ? explicitCategories : historyCategories.length ? historyCategories : savedCategories;
+  const retrievalPlan = explicitCategories.length ? plan : { ...plan, preferredCategories: affinityCategories, categoryMode: "any" };
+  const originCoordinates = { lat: Number((plan.origin as Record<string, unknown>).lat), lng: Number((plan.origin as Record<string, unknown>).lng) };
+  const weather = plan.startDate && plan.endDate
+    ? await fetchControlledWeather(places as Record<string, unknown>[], String(plan.startDate), String(plan.endDate))
+    : new Map();
+  const candidates = retrieveControlledCandidates(places as Record<string, unknown>[], rides as Record<string, unknown>[], attributes as Record<string, unknown>[], interests as Record<string, unknown>[], retrievalPlan, {
+    weatherByPlace: weather, historyCategories, origin: originCoordinates
+  });
+  const ruleBatch = selectRuleRecommendations(candidates, {
+    shownPlaceIds: Array.isArray(body.shownPlaceIds) ? body.shownPlaceIds.slice(0, 100) : [],
+    recommendationMode: String(plan.recommendationMode || "default")
+  });
+  const rideDataAvailable = !retrievalWarnings.includes("rides_unavailable");
+  const recommendations = ruleBatch.map((item) => {
+    const candidate = candidates.find((row) => String(row.id) === String(item.placeId)) || {};
+    return {
+      ...item,
+      listedRideCount: Number(candidate.listedRideCount) || 0,
+      maxSeatsInSingleRide: Number.isFinite(Number(candidate.availableSeats)) ? Math.max(0, Number(candidate.availableSeats)) : null,
+      rideSummary: buildRideSummary(candidate, plan, rideDataAvailable)
+    };
+  });
+  const response = recommendations.length ? {
+    mode: "recommend", assistantMessage: guideRulesCopy(responseLanguage).fallback,
+    language: responseLanguage, responseLanguage, planState: plan, quickReplies: [], recommendations, actions: [],
+    remainingTurns: Math.max(0, quota.remaining - 1), fallbackReason: "provider_unavailable", fallbackUsed: true,
+    source: "rules", providerModel: "unavailable", basicRecommendationBatch: true,
+    batchId: crypto.randomUUID(), traceId: trace,
+    ...(originResolution ? { originResolution } : {}),
+    ...(retrievalWarnings.length ? { operationalWarnings: retrievalWarnings } : {})
+  } : {
+    mode: "fallback", assistantMessage: guideRulesCopy(responseLanguage).noCandidates,
+    language: responseLanguage, responseLanguage, planState: plan, quickReplies: [], suggestions: noCandidateSuggestions(responseLanguage), recommendations: [], actions: [],
+    remainingTurns: quota.remaining, fallbackReason: "no_verified_candidates", source: "rules", retryable: false,
+    basicRecommendationBatch: false, batchId: null, traceId: trace,
+    ...(originResolution ? { originResolution } : {})
+  };
+  return finalize(admin, user, body, response, candidates, started, true, key, quota.globalKey, origin);
 }
 
 async function handleTurn(
@@ -1664,6 +2054,14 @@ async function handleTurn(
     }, 429, origin);
   }
   const turnContext: GuideTurnContext = { key, quota };
+  // Gemini and Groq are two attempts for one logical turn. They share one
+  // deadline so a slow primary cannot silently turn into another full wait
+  // for the secondary provider.
+  const turnDeadlineAt = Date.now() + 45_000;
+  if (body.basicRecommendations === true) {
+    return handleBasicBriefRecommendation(admin, user, { ...body, __basicRecommendations: true }, origin,
+      turnContext, Date.now(), key, turnTrace);
+  }
   for (const provider of [PROVIDERS.primary, PROVIDERS.secondary]) {
     const model = provider === "gemini"
       ? Deno.env.get("M6_GUIDE_GEMINI_MODEL")?.trim() || "gemini-3.7-flash"
@@ -1676,15 +2074,11 @@ async function handleTurn(
     }
     const attemptStarted = performance.now();
     try {
-      // The client's own request timeout is 110s (GUIDE_LIMITS.REQUEST_TIMEOUT_MS)
-      // and this outer loop can spend this budget twice (primary provider,
-      // then secondary) - 45s each left very little slack for the heaviest
-      // path (place_info's live grounded search) and, at 2x45s, was already
-      // close to the client's own ceiling. 50s keeps the 2x worst case under
-      // that ceiling with margin while giving a genuinely slow (not quota-
-      // exhausted) attempt more room to actually finish instead of aborting.
+      // This deadline is shared by both providers. A provider attempt may
+      // consume the remaining time, but the fallback provider can never
+      // extend one user turn beyond the 45 second service budget.
       const response = await handleTurnAttempt(admin, user, {
-        ...body, __ownedProvider: provider, __providerDeadlineAt: Date.now() + 50_000
+        ...body, __ownedProvider: provider, __providerDeadlineAt: turnDeadlineAt
       }, origin, turnContext, qaAllowed);
       const responsePayload = await response.clone().json().catch(() => ({}));
       const routeGuardHandled = response.headers.get("x-tumpang-guide-route-guard") === "1";
@@ -1710,7 +2104,15 @@ async function handleTurn(
     responseLanguage: answerLanguage,
     planState: plan, quickReplies: [], recommendations: [], actions: [], remainingTurns: quota.remaining,
     fallbackReason: failures.at(-1)?.reason || "provider_unavailable", fallbackUsed: true,
-    source: "unavailable", retryable: true, batchId: null, traceId: traceId()
+    source: "unavailable", retryable: true, basicRecommendationAvailable: true, batchId: null, traceId: turnTrace,
+    diagnostic: {
+      traceId: turnTrace,
+      attempts: failures.slice(0, 2).map((failure) => ({
+        provider: failure.provider,
+        status: failure.status || null,
+        reason: failure.reason
+      }))
+    }
   }, 200, origin);
 }
 
@@ -1929,7 +2331,7 @@ async function handle(request: Request) {
       reason, traceId: voiceTrace }, status === 429 ? 429 : reason === "transcription_low_confidence" ? 422 : 503, origin);
     }
   }
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  let body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return json({ error: "A JSON request body is required." }, 400, origin);
   if (body.operation === "refresh_help_embeddings") {
     if (request.headers.get("apikey") !== key) return json({ error: "Server authorization required." }, 403, origin);
@@ -1941,6 +2343,42 @@ async function handle(request: Request) {
   }
   if (body.operation === "feedback") return handleFeedback(admin, user, body, origin);
   if (body.operation === "translate_messages") return handleTranslateMessages(admin, user, body, origin);
+  let contentSafety;
+  try {
+    contentSafety = classifyGuideContent(typeof body.message === "string" ? body.message : "");
+  } catch {
+    const safetyTrace = traceId();
+    console.error(JSON.stringify({ event: "m6_guide_content_safety_failure", traceId: safetyTrace,
+      inputSource: body.inputSource === "voice" ? "voice" : "text" }));
+    return json({ error: "This message could not be checked safely. Please try again.",
+      reason: "content_safety_unavailable", traceId: safetyTrace }, 503, origin);
+  }
+  if (contentSafety.decision === "block") {
+    const safetyTrace = traceId();
+    console.warn(JSON.stringify({ event: "m6_guide_content_safety_block", traceId: safetyTrace,
+      inputSource: body.inputSource === "voice" ? "voice" : "text",
+      languageHints: contentSafety.languageHints, category: contentSafety.category,
+      decision: contentSafety.decision, policyVersion: contentSafety.policyVersion }));
+    return json({ error: "This message cannot be processed. Please edit it and try again.",
+      reason: "content_safety_blocked", category: contentSafety.category,
+      traceId: safetyTrace }, 422, origin);
+  }
+  body = {
+    ...body,
+    message: contentSafety.sanitizedText || String(body.message || "").trim(),
+    ...(contentSafety.decision === "emergency" ? { __contentSafetyDecision: "emergency" } : {})
+  };
+  if (contentSafety.decision === "mask") {
+    console.info(JSON.stringify({ event: "m6_guide_content_safety_mask", traceId: traceId(),
+      inputSource: body.inputSource === "voice" ? "voice" : "text",
+      languageHints: contentSafety.languageHints, category: contentSafety.category,
+      decision: contentSafety.decision, policyVersion: contentSafety.policyVersion }));
+  } else if (contentSafety.decision === "emergency") {
+    console.info(JSON.stringify({ event: "m6_guide_content_safety_emergency", traceId: traceId(),
+      inputSource: body.inputSource === "voice" ? "voice" : "text",
+      languageHints: contentSafety.languageHints, category: contentSafety.category,
+      decision: contentSafety.decision, policyVersion: contentSafety.policyVersion }));
+  }
   const clientTurnId = validUuid(body.clientTurnId) ? String(body.clientTurnId) : crypto.randomUUID();
   const requestActor = await actorKey(user?.id || null, body.visitorSessionId,
     Deno.env.get("M6_GUIDE_VISITOR_PEPPER") || "m6-guide-local");

@@ -52,6 +52,21 @@ describe('Google Places location boundary', () => {
     expect(fetchAutocompleteSuggestions).toHaveBeenCalledWith(expect.objectContaining({ input: 'K' }));
   });
 
+  it('does not invent a zero-metre distance when Google returns no distance without an origin', async () => {
+    const fetchAutocompleteSuggestions = vi.fn(async () => ({
+      suggestions: [{ placePrediction: {
+        placeId: 'place-jb', text: { toString: () => 'Johor Bahru, Johor' }, distanceMeters: null
+      } }]
+    }));
+    const maps = { importLibrary: vi.fn(async () => ({
+      AutocompleteSuggestion: { fetchAutocompleteSuggestions }
+    })) };
+
+    await expect(searchLocations('Johor', { maps })).resolves.toEqual([
+      { placeId: 'place-jb', label: 'Johor Bahru, Johor' }
+    ]);
+  });
+
   it('waits for the Google ready callback and shares the first script load', async () => {
     const originalWindow = globalThis.window;
     const originalDocument = globalThis.document;
@@ -258,6 +273,28 @@ describe('Google Places location boundary', () => {
     };
     await expect(resolveCurrentLocation({ maps, geolocation })).rejects.toMatchObject({ code: 'INACCURATE' });
     expect(maps.importLibrary).not.toHaveBeenCalled();
+  });
+
+  it('allows the explicitly approximate starting-point purpose without weakening pickup accuracy', async () => {
+    const geocode = vi.fn(async () => ({
+      results: [{ place_id: 'starting-place', formatted_address: 'Johor Bahru, Johor, Malaysia' }]
+    }));
+    const maps = {
+      importLibrary: vi.fn(async () => ({
+        Geocoder: class { geocode = geocode; }
+      }))
+    };
+
+    await expect(resolveCurrentLocation({
+      maps,
+      position: geolocationResult({ accuracy: 135 }),
+      maxAccuracyMetres: 500
+    })).resolves.toMatchObject({
+      label: 'Johor Bahru, Johor, Malaysia',
+      accuracy: 135,
+      location: { latitude: 3.139, longitude: 101.6869 }
+    });
+    expect(geocode).toHaveBeenCalledTimes(1);
   });
 
   it('accepts the 100 metre boundary and reverse geocodes exactly once', async () => {

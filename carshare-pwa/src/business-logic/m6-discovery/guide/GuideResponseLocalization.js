@@ -7,8 +7,7 @@ import { guideCopy, normalizeGuideLanguage } from './GuideLanguage.js';
 import { greetingAt } from './GuideGreetings.js';
 
 function missingField(plan = {}) {
-  if (!plan.origin?.label) return 'origin';
-  if (!plan.preferredCategories?.length) return 'preference';
+  if (!plan.origin?.label || !Number.isFinite(Number(plan.origin?.lat)) || !Number.isFinite(Number(plan.origin?.lng))) return 'origin';
   return null;
 }
 

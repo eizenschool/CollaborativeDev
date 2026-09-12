@@ -121,6 +121,11 @@ export function sanitizePlanState(value: unknown) {
   const categories = Array.isArray(source.preferredCategories)
     ? [...new Set(source.preferredCategories.map(String).filter((item) => ["culinary", "heritage", "nature", "event"].includes(item)))].slice(0, 4)
     : [];
+  // Saved/history affinity lives in preferredCategories. Only a deliberate
+  // current-turn/Brief selection may become a strict category filter.
+  const explicitCategories = Array.isArray(source.explicitCategories)
+    ? [...new Set(source.explicitCategories.map(String).filter((item) => ["culinary", "heritage", "nature", "event"].includes(item)))].slice(0, 4)
+    : [];
   const party = Number(source.partySize);
   const date = (candidate: unknown) => /^20\d{2}-\d{2}-\d{2}$/.test(String(candidate || "")) ? String(candidate) : null;
   const startDate = date(source.startDate);
@@ -141,7 +146,8 @@ export function sanitizePlanState(value: unknown) {
     startDate,
     endDate: startDate && endDate && endDate >= startDate ? endDate : startDate,
     preferredCategories: categories,
-    budget: ["free", "low", "medium", "premium"].includes(String(source.budget)) ? source.budget : null,
+    explicitCategories,
+    categoryMode: source.categoryMode === "explicit" && explicitCategories.length ? "explicit" : "any",
     indoorPreference: ["indoor", "outdoor", "either"].includes(String(source.indoorPreference)) ? source.indoorPreference : "either",
     accessibilityRequired: Boolean(source.accessibilityRequired),
     children: Boolean(source.children),
@@ -149,6 +155,30 @@ export function sanitizePlanState(value: unknown) {
     language: /^[a-z]{2,3}(?:-[A-Za-z]{2,8})?$/.test(String(source.language || "")) ? source.language : "en",
     recommendationMode: ["default", "different", "quieter", "expanded"].includes(String(source.recommendationMode)) ? source.recommendationMode : "default",
     searchRadiusKm: [80, 160, 320].includes(Number(source.searchRadiusKm)) ? Number(source.searchRadiusKm) : 80
+  };
+}
+
+/**
+ * Keep a confirmed origin's coordinates in the server's internal plan while
+ * leaving sanitizePlanState's prompt-safe behaviour unchanged. Exact
+ * coordinates are needed for catalogue distance ranking and are returned to
+ * the browser session, but must never be forwarded to a provider prompt.
+ */
+export function restoreConfirmedOriginCoordinates(planValue: unknown, originValue: unknown) {
+  const plan = sanitizePlanState(planValue) as Row;
+  const origin = originValue && typeof originValue === "object" ? originValue as Row : null;
+  const lat = Number(origin?.lat);
+  const lng = Number(origin?.lng);
+  if (!plan.origin || !origin || !Number.isFinite(lat) || Math.abs(lat) > 90
+      || !Number.isFinite(lng) || Math.abs(lng) > 180) return plan;
+  return {
+    ...plan,
+    origin: {
+      ...(plan.origin as Row),
+      ...(origin.state ? { state: String(origin.state).slice(0, 80) } : {}),
+      lat,
+      lng
+    }
   };
 }
 

@@ -9,7 +9,7 @@ const place = (id, overrides = {}) => ({
 });
 const plan = {
   startDate: '2026-09-01', endDate: '2026-09-07', partySize: 2,
-  preferredCategories: ['nature'], indoorPreference: 'either', budget: null,
+  preferredCategories: ['nature'], indoorPreference: 'either',
   accessibilityRequired: false, children: false
 };
 

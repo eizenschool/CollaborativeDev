@@ -59,8 +59,8 @@ const CORE = {
     sourceLabel: 'Source', remaining: (n) => `${n} smart turn${n === 1 ? '' : 's'} remaining`,
     roles: { best_match: 'Best match', practical_alternative: 'Practical alternative', wildcard: 'Wildcard' },
     categories: { culinary: 'Culinary', heritage: 'Heritage', nature: 'Nature', event: 'Event' },
-     tradeoffs: { none: 'Strong all-round fit', no_ride_yet: 'No shared ride is serving it yet', farther_away: 'A little farther away', busier_choice: 'More popular than the quieter options', thin_reviews: 'Still building review confidence', lower_personal_match: 'More practical, but less tailored' },
-     reasons: { affinity: 'It matches your interest in {{category}}.', season: 'Your selected date falls in a stronger seasonal window.', quality: 'Visitors consistently rate {{name}} well.', headroom: 'It can be quieter than the busiest {{category}} choices nearby.', local: 'It supports an independently run local destination.', seat_headroom: 'An existing shared ride may have room for {{party}}.', journey_cost: 'It is one of the more practical options from {{origin}}.', demand_convergence: 'Other travellers are showing interest in going too.', weather_checked: 'The weather gate was checked for your selected date.', date_range_consistency: 'It stayed competitive across your selected date range.' }
+     tradeoffs: { none: 'Strong all-round fit', no_ride_yet: 'No listed ride matches the selected date', farther_away: 'A little farther away', busier_choice: 'More review coverage than comparable options', thin_reviews: 'Still building review confidence', lower_personal_match: 'More practical, but less tailored' },
+     reasons: { affinity: 'It matches your interest in {{category}}.', season: 'Your selected date falls in a stronger seasonal window.', quality: 'Visitors consistently rate {{name}} well.', headroom: 'It has fewer reviews than the most-reviewed comparable places.', local: 'It supports an independently run local destination.', seat_headroom: 'A listed ride has available seats; confirm the count and pickup details before requesting.', journey_cost: 'It has stronger relative straight-line proximity from {{origin}}.', demand_convergence: 'Other travellers have shown browsing interest in this destination for this date.', weather_checked: 'The weather gate was checked for your selected date.', date_range_consistency: 'It stayed competitive across your selected date range.' }
   },
   'zh-CN': {
     welcome: "告诉我你想要怎样的一天，我只会推荐 Let's Tumpang 资料库里已有的地点。", askDate: '你想哪一天出发？', askOrigin: '你会从哪里出发？', askParty: '一共有几位同行？', askPreference: '你最在意什么：美食、文化遗产、大自然，还是活动？', quickRepliesLabel: '建议回复', recommend: '我找到了三个已经通过资料库验证的选择。', noCandidates: '目前没有安全符合条件的资料库地点。你可以换一个日期或偏好。', helpMissing: 'Tumpang Guide 可以理解自然语言旅行需求，只推荐资料库中已有的地点，介绍已收录地点，准备需确认的应用操作，并让登入用户在历史计划中查看计划。你可以直接问我想去哪一天、某个地点或这些功能怎么用。', emergency: '这听起来可能是紧急情况。我会停止旅游推荐。如有人处于即时危险，请拨打 999，并在可用时使用 Trusted Family／SOS。', offline: 'AI 服务不可用，智能推荐正使用已验证的目录规则。', retryGemini: '重试 Gemini', newChat: '新聊天', pastPlans: '历史计划', guideLanguage: '助手语言', livePlan: '当前计划', travelBrief: '你的旅行概要', startingPoint: '出发地点', from: '出发日期', until: '结束日期', people: '人数', categoryQuestion: '你想要什么？', useLocation: '使用一次我的位置', locating: '正在定位…', savePreferences: '保存这些偏好', signInSave: '登入后保存偏好', historyConsent: '本次使用我的 Trip History', historyNote: '默认关闭。帐户 ID、联系人和精确坐标不会发送给 Gemini。', composerLabel: '发送给 Tumpang Guide', composerPlaceholder: '例如：我们两个人想这周末在吉隆坡附近亲近自然……', voiceInputLabel: '语音输入', voiceNote: '浏览器语音会直接填入文字框，不会由 Let’s Tumpang 保存。若浏览器语音失败，你可以手动选择 Groq 云端转录；录音同样不会由 Let’s Tumpang 保存。', thinking: '正在检查目录、天气和共乘实用性…', databaseOnly: '仅限资料库地点', timeoutFallback: '10 秒后自动降级', privacy: '不会发送精确位置', smart: '智能推荐', verifiedRules: '已验证规则', sourceGemini: 'Gemini 助手', sourceRules: '已验证规则', details: '查看完整目的地详情', whyThis: '为什么推荐', findRide: '寻找共乘', saveInterest: '保存兴趣', interestSaved: '已保存兴趣', cancelInterest: '取消兴趣', rideAlert: '共乘提醒', alertSaved: '共乘提醒已保存', cancelAlert: '取消共乘提醒', tradeoff: '取舍', showPhoto: '显示照片', previouslyShown: '本聊天之前已展示', helpful: '有帮助', notRelevant: '不相关', feedbackSaved: '反馈已保存', feedbackRemoved: '反馈已取消', rulesFallback: '规则降级', retryNotice: '暂时无法连接 Gemini。你的计划仍在这里，请重试。', actionConfirm: '确认前不会更改任何内容。', cancel: '取消', confirm: '确认', sourceLabel: '来源', saveInterestConfirm: (name, date) => `将 ${name} 记录为你在 ${date} 考虑过的地点。`, rideAlertConfirm: (name, date) => `如果 ${date} 有共乘前往 ${name}，我们会通知你。`, preferenceConfirm: (categories) => `保存 ${categories.join('、')} 作为可重复使用的旅行偏好。`, remaining: (n) => `本工作阶段还可使用 ${n} 次智能对话`, roles: { best_match: '最符合', practical_alternative: '实用替代', wildcard: '惊喜选择' }, categories: { culinary: '美食', heritage: '文化遗产', nature: '自然', event: '活动' }, tradeoffs: { none: '整体非常合适', no_ride_yet: '目前还没有共乘前往', farther_away: '距离稍远', busier_choice: '比安静选项更热门', thin_reviews: '评论可信度仍在累积', lower_personal_match: '更实用，但个人化程度较低' }, reasons: { affinity: '它符合你对 {{category}} 类地点的偏好。', season: '你选择的日期处于更合适的季节时段。', quality: '{{name}}持续获得较好的访客评价。', headroom: '它可能比附近最热门的 {{category}} 选择更安静。', local: '它能支持独立经营的本地目的地。', seat_headroom: '现有共乘可能有足够座位容纳 {{party}} 人。', journey_cost: '从 {{origin}} 出发，这是较实际的选择之一。', demand_convergence: '其他旅客也正表达前往这里的兴趣。', weather_checked: '系统已针对所选日期检查天气闸门。', date_range_consistency: '它在你选择的整个日期范围内都保持竞争力。' }
@@ -72,6 +72,62 @@ const CORE = {
     welcome: 'நீங்கள் விரும்பும் நாளைப் பற்றி சொல்லுங்கள். Let\'s Tumpang தரவுத்தளத்தில் உள்ள இடங்களை மட்டுமே பரிந்துரைப்பேன்.', askDate: 'நீங்கள் எப்போது செல்ல விரும்புகிறீர்கள்?', askOrigin: 'எங்கிருந்து புறப்படுவீர்கள்?', askParty: 'எத்தனை பேர் பயணம் செய்கிறீர்கள்?', askPreference: 'உணவு, பாரம்பரியம், இயற்கை அல்லது நிகழ்வு — எது முக்கியம்?', quickRepliesLabel: 'பரிந்துரைக்கப்பட்ட பதில்கள்', recommend: 'தரவுத்தளத்தில் சரிபார்க்கப்பட்ட மூன்று தேர்வுகள் கிடைத்தன.', noCandidates: 'இந்த நிபந்தனைகளுக்கு பொருந்தும் பட்டியல் இடம் இல்லை. வேறு தேதி அல்லது விருப்பத்தை முயற்சிக்கவும்.', helpMissing: 'சரிபார்க்கப்பட்ட உதவி பகுதி கிடைக்கவில்லை. Discover, Search, பகிர்ந்து பயண அறிவிப்புகள், favourites அல்லது profile பற்றி விளக்கலாம்.', emergency: 'இது அவசரநிலை போல உள்ளது. பயண பரிந்துரைகளை நிறுத்துகிறேன். உடனடி ஆபத்து இருந்தால் 999 அழைக்கவும்; கிடைத்தால் Trusted Family/SOS பயன்படுத்தவும்.', offline: 'AI சேவை கிடைக்கவில்லை. சரிபார்க்கப்பட்ட பட்டியல் விதிகள் பயன்படுத்தப்படுகின்றன.', retryGemini: 'Gemini-யை மீண்டும் முயற்சி', newChat: 'புதிய உரையாடல்', pastPlans: 'முந்தைய திட்டங்கள்', guideLanguage: 'Guide மொழி', livePlan: 'நடப்பு திட்டம்', travelBrief: 'உங்கள் பயண சுருக்கம்', startingPoint: 'தொடக்க இடம்', from: 'முதல்', until: 'வரை', people: 'பயணிகள்', categoryQuestion: 'எது பிடிக்கும்?', useLocation: 'என் இருப்பிடத்தை ஒருமுறை பயன்படுத்து', locating: 'இருப்பிடம் தேடுகிறது…', savePreferences: 'இந்த விருப்பங்களைச் சேமி', signInSave: 'விருப்பங்களைச் சேமிக்க உள்நுழைக', historyConsent: 'இந்த அமர்வில் Trip History பயன்படுத்தவும்', historyNote: 'இயல்பாக முடக்கப்பட்டுள்ளது. கணக்கு ID, தொடர்புகள் மற்றும் துல்லியமான இருப்பிடம் Gemini-க்கு அனுப்பப்படாது.', composerLabel: 'Tumpang Guide-க்கு செய்தி', composerPlaceholder: 'உதாரணம்: இந்த வார இறுதியில் KL அருகே இயற்கை இடம் இருவருக்கு வேண்டும்…', voiceInputLabel: 'குரல் உள்ளீடு', voiceNote: 'குரல் ஆடியோ எழுத்தாக்கத்திற்காக Groq-க்கு பாதுகாப்பாக அனுப்பப்படும்; Let’s Tumpang அதைச் சேமிக்காது.', thinking: 'பட்டியல், வானிலை மற்றும் பகிர்ந்து பயணிக்கும் வசதியைச் சரிபார்க்கிறது…', databaseOnly: 'பட்டியல் இடங்கள் மட்டும்', timeoutFallback: '10 விநாடி fallback', privacy: 'துல்லியமான இருப்பிடம் அனுப்பப்படாது', smart: 'Smart பரிந்துரைகள்', verifiedRules: 'சரிபார்க்கப்பட்ட விதிகள்', sourceGemini: 'Gemini Guide', sourceRules: 'சரிபார்க்கப்பட்ட விதிகள்', details: 'முழு இட விவரங்களைப் பார்க்க', whyThis: 'ஏன் இது', findRide: 'பகிர்ந்து பயணம் தேடு', saveInterest: 'ஆர்வத்தைச் சேமி', interestSaved: 'ஆர்வம் சேமிக்கப்பட்டது', cancelInterest: 'ஆர்வத்தை ரத்து செய்', rideAlert: 'பகிர்ந்து பயண அறிவிப்பு', alertSaved: 'பகிர்ந்து பயண அறிவிப்பு சேமிக்கப்பட்டது', cancelAlert: 'பகிர்ந்து பயண அறிவிப்பை ரத்து செய்', tradeoff: 'சமரசம்', showPhoto: 'படத்தைக் காட்டு', previouslyShown: 'இந்த உரையாடலில் முன்பே காட்டப்பட்டது', helpful: 'பயனுள்ளது', notRelevant: 'பொருந்தவில்லை', feedbackSaved: 'கருத்து சேமிக்கப்பட்டது', feedbackRemoved: 'கருத்து ரத்து செய்யப்பட்டது', rulesFallback: 'விதி fallback', retryGemini: 'Gemini-யை மீண்டும் முயற்சி', retryNotice: 'Gemini-யை அணுக முடியவில்லை. உங்கள் திட்டம் உள்ளது—மீண்டும் முயற்சிக்கவும்.', actionConfirm: 'உறுதிப்படுத்தும் வரை எதுவும் மாற்றப்படாது.', cancel: 'ரத்து', confirm: 'உறுதிப்படுத்து', sourceLabel: 'ஆதாரம்', saveInterestConfirm: (name, date) => `${date} அன்று நீங்கள் பரிசீலித்த இடமாக ${name} பதிவு செய்யப்படும்.`, rideAlertConfirm: (name, date) => `${date} அன்று ${name}-க்கு பகிர்ந்து பயணம் வெளியானால் உங்களுக்குத் தெரிவிப்போம்.`, preferenceConfirm: (categories) => `${categories.join(', ')} உங்கள் பயண விருப்பங்களாகச் சேமிக்கப்படும்.`, remaining: (n) => `${n} smart சுற்றுகள் மீதம்`, roles: { best_match: 'சிறந்த பொருத்தம்', practical_alternative: 'நடைமுறை மாற்று', wildcard: 'புதிய தேர்வு' }, categories: { culinary: 'உணவு', heritage: 'பாரம்பரியம்', nature: 'இயற்கை', event: 'நிகழ்வு' }, tradeoffs: { none: 'மொத்தத்தில் நல்ல பொருத்தம்', no_ride_yet: 'இன்னும் பகிர்ந்து பயணம் இல்லை', farther_away: 'சற்று தொலைவு', busier_choice: 'அமைதியான இடங்களை விட பிரபலமானது', thin_reviews: 'மதிப்புரைகள் இன்னும் குறைவு', lower_personal_match: 'நடைமுறை, ஆனால் தனிப்பயன் குறைவு' }, reasons: { affinity: '{{category}} இடங்களுக்கான உங்கள் விருப்பத்துடன் இது பொருந்துகிறது.', season: 'நீங்கள் தேர்ந்தெடுத்த தேதி சிறந்த பருவ காலத்தில் வருகிறது.', quality: '{{name}} தொடர்ந்து நல்ல மதிப்பீடுகளைப் பெறுகிறது.', headroom: 'அருகிலுள்ள பரபரப்பான {{category}} இடங்களை விட இது அமைதியாக இருக்கலாம்.', local: 'இது சுயமாக நடத்தப்படும் உள்ளூர் இடத்தை ஆதரிக்கிறது.', seat_headroom: 'தற்போதுள்ள பகிர்ந்து பயணத்தில் {{party}} பேருக்கு இடம் இருக்கலாம்.', journey_cost: '{{origin}} இலிருந்து இது நடைமுறைக்கு ஏற்ற தேர்வுகளில் ஒன்று.', demand_convergence: 'மற்ற பயணிகளும் இங்கு செல்ல ஆர்வம் காட்டுகின்றனர்.', weather_checked: 'தேர்ந்தெடுத்த தேதிக்கான Weather Gate சரிபார்க்கப்பட்டது.', date_range_consistency: 'தேர்ந்தெடுத்த முழுத் தேதி வரம்பிலும் இது நல்ல தேர்வாக இருந்தது.' }
   }
 };
+
+// These copy overrides keep the four built-in language paths aligned with the
+// facts the score actually measures. They deliberately sit outside
+// REQUIRED_PACK_PATHS: generated extended language packs keep their existing
+// server contract, while the built-in fallback remains precise when no pack is
+// available.
+const CORE_FACTUAL_COPY = Object.freeze({
+  en: {
+    tradeoffs: {
+      no_ride_yet: 'No listed ride matches the selected date',
+      busier_choice: 'More review coverage than comparable options'
+    },
+    reasons: {
+      headroom: 'It has fewer reviews than the most-reviewed comparable places.',
+      seat_headroom: 'A listed ride has available seats; confirm the count and pickup details before requesting.',
+      journey_cost: 'It has stronger relative straight-line proximity from {{origin}}.',
+      demand_convergence: 'Other travellers have shown browsing interest in this destination for this date.'
+    }
+  },
+  'zh-CN': {
+    tradeoffs: {
+      no_ride_yet: '所选日期没有匹配的已列共乘行程',
+      busier_choice: '评论资料比其他同类选项更充足'
+    },
+    reasons: {
+      headroom: '它的评论数少于同类地点中评论最多的选项。',
+      seat_headroom: '已有一段列出的共乘行程还有空余座位；请求前请确认座位数和上车详情。',
+      journey_cost: '从 {{origin}} 出发，它在相对直线距离上更有利。',
+      demand_convergence: '其他旅客也对这个日期的地点表达了浏览兴趣。'
+    }
+  },
+  ms: {
+    tradeoffs: {
+      no_ride_yet: 'Tiada tumpangan disenaraikan yang sepadan dengan tarikh pilihan',
+      busier_choice: 'Liputan ulasan lebih tinggi berbanding pilihan setara'
+    },
+    reasons: {
+      headroom: 'Ia mempunyai ulasan yang lebih sedikit berbanding pilihan setara yang paling banyak diulas.',
+      seat_headroom: 'Satu tumpangan yang disenaraikan mempunyai tempat duduk tersedia; sahkan jumlah dan butiran tempat naik sebelum memohon.',
+      journey_cost: 'Dari {{origin}}, jarak garis lurus relatifnya lebih baik.',
+      demand_convergence: 'Pelancong lain menunjukkan minat untuk melihat destinasi ini pada tarikh tersebut.'
+    }
+  },
+  ta: {
+    tradeoffs: {
+      no_ride_yet: 'தேர்ந்தெடுத்த தேதிக்கு பொருந்தும் பட்டியலிடப்பட்ட பயணம் இல்லை',
+      busier_choice: 'ஒத்த தேர்வுகளை விட மதிப்புரைகள் அதிகம்'
+    },
+    reasons: {
+      headroom: 'ஒத்த இடங்களுடன் ஒப்பிடும்போது இதில் மதிப்புரைகள் குறைவாக உள்ளன.',
+      seat_headroom: 'பட்டியலிடப்பட்ட ஒரு பகிர்வு பயணத்தில் காலி இருக்கைகள் உள்ளன; கோருவதற்கு முன் எண்ணிக்கையையும் ஏறும் விவரங்களையும் சரிபார்க்கவும்.',
+      journey_cost: '{{origin}} இலிருந்து ஒப்பீட்டளவில் நேர்கோட்டு தூரம் சாதகமாக உள்ளது.',
+      demand_convergence: 'மற்ற பயணிகள் இந்த தேதிக்கு இந்த இடத்தைப் பார்ப்பதில் ஆர்வம் காட்டியுள்ளனர்.'
+    }
+  }
+});
 
 const REQUIRED_PACK_PATHS = Object.freeze([
   'welcome', 'askDate', 'askOrigin', 'askParty', 'askPreference', 'recommend', 'noCandidates',
@@ -122,7 +178,8 @@ const EXTRA_CORE_COPY = Object.freeze({
     reviewsHeading: 'What travellers say', gettingThere: 'Getting there', whyGuide: 'Why we suggested this', previousPhoto: 'Previous photo', nextPhoto: 'Next photo',
     preferencesSaved: 'Travel preferences saved.', catalogueRequestSaved: 'Catalogue review requested.', actionFailed: 'This action could not be completed.', feedbackError: 'Feedback could not be saved.', feedbackUnavailable: 'Feedback is available after a saved Guide session is created.', persistenceWarning: 'Gemini replied, but this turn could not be saved. Please try again before leaving this chat.', languageUnavailable: 'That complete language update is temporarily unavailable. Your previous language has been kept.',
     voiceUnsupported: 'Voice recording is not supported by this browser.', voicePermissionDenied: 'Microphone permission was denied.', voiceNoSpeech: 'No speech was recognised. You can keep typing.', voiceLanguageUnsupported: 'This language is not supported for voice input. You can keep typing.', voiceStopped: 'Voice input stopped. You can keep typing.', voiceStartFailed: 'Voice recording could not start. You can keep typing.', voiceMicrophoneUnavailable: 'No working microphone was found. Check the selected input device and try again.', voiceNetworkUnavailable: 'The voice transcription service could not be reached. Check your connection and try again.', voiceInterrupted: 'Voice input was interrupted. Please try once more or keep typing.', voiceProviderBusy: 'Voice transcription is busy. Please retry shortly.', voiceTranscriptionFailed: 'Voice transcription could not be completed. Please try again or keep typing.', voiceLowConfidence: 'I could not hear that reliably, so nothing was inserted. Please try again closer to the microphone.',
-    guestQuota: "You've used your 3 free recommendation searches for this guest session — thanks for exploring with me! Sign in and plan as many trips as you like, completely free."
+    guestQuota: "You've used your 3 free recommendation searches for this guest session — thanks for exploring with me! Sign in and plan as many trips as you like, completely free.",
+    handoffTitle: (name) => `Question about ${name}`, handoffDescription: 'We prepared a question for this place. Review it before sending.', handoffUseQuestion: 'Use this question', handoffKeepDraft: 'Keep my draft', handoffBackToDestination: 'Back to destination'
   },
   'zh-CN': {
     heroTitle: '为下一次美好出行找到本地好伙伴。',
@@ -142,7 +199,8 @@ const EXTRA_CORE_COPY = Object.freeze({
     preferencesSaved: '旅行偏好已保存。', catalogueRequestSaved: '地点审核申请已提交。', actionFailed: '此操作无法完成。', feedbackError: '反馈无法保存。', feedbackUnavailable: '建立并保存 Guide 会话后才能提交反馈。', persistenceWarning: 'Gemini 已回复，但这次对话未能保存。离开前请再试一次。', languageUnavailable: '完整语言更新暂时无法取得，界面已保留原来的语言。',
     reviewsHeading: '旅客评价', gettingThere: '如何前往', whyGuide: '为什么推荐这个地点', previousPhoto: '上一张照片', nextPhoto: '下一张照片',
     voiceUnsupported: '此浏览器不支持语音录音。', voicePermissionDenied: '麦克风权限被拒绝。', voiceNoSpeech: '没有识别到语音，你可以继续输入。', voiceLanguageUnsupported: '此语言不支持语音输入，你可以继续输入。', voiceStopped: '语音输入已停止，你可以继续输入。', voiceStartFailed: '语音录音无法启动，你可以继续输入。', voiceMicrophoneUnavailable: '没有找到可用的麦克风，请检查所选输入设备后重试。', voiceNetworkUnavailable: '无法连接语音转录服务，请检查网络后重试。', voiceInterrupted: '语音输入受到中断，请再试一次或继续打字。', voiceProviderBusy: '语音转录服务繁忙，请稍后重试。', voiceTranscriptionFailed: '无法完成语音转录，请重试或继续打字。', voiceLowConfidence: '我无法可靠地听清这段语音，因此没有填入任何文字。请靠近麦克风后重试。',
-    guestQuota: '你已经用完这次访客对话的 3 次免费推荐名额啦——谢谢你陪我探索！登入之后就可以无限次规划行程，完全免费。'
+    guestQuota: '你已经用完这次访客对话的 3 次免费推荐名额啦——谢谢你陪我探索！登入之后就可以无限次规划行程，完全免费。',
+    handoffTitle: (name) => `关于 ${name} 的问题`, handoffDescription: '我们为这个地点准备了一个问题。发送前请先查看。', handoffUseQuestion: '使用此问题', handoffKeepDraft: '保留我的草稿', handoffBackToDestination: '返回景点'
   },
   ms: {
     heroTitle: 'Rakan tempatan anda untuk hari yang baik seterusnya.',
@@ -161,7 +219,8 @@ const EXTRA_CORE_COPY = Object.freeze({
     preferencesSaved: 'Pilihan perjalanan disimpan.', catalogueRequestSaved: 'Permintaan semakan katalog dihantar.', actionFailed: 'Tindakan ini tidak dapat diselesaikan.', feedbackError: 'Maklum balas tidak dapat disimpan.', feedbackUnavailable: 'Maklum balas tersedia selepas sesi Guide disimpan.', persistenceWarning: 'Gemini telah membalas, tetapi giliran ini tidak dapat disimpan. Cuba lagi sebelum meninggalkan sembang ini.', languageUnavailable: 'Kemas kini bahasa penuh tidak tersedia buat sementara. Bahasa sebelumnya dikekalkan.',
     reviewsHeading: 'Kata pengunjung', gettingThere: 'Cara ke sana', whyGuide: 'Mengapa kami mencadangkan tempat ini', previousPhoto: 'Foto sebelumnya', nextPhoto: 'Foto seterusnya',
     voiceUnsupported: 'Rakaman suara tidak disokong oleh pelayar ini.', voicePermissionDenied: 'Kebenaran mikrofon ditolak.', voiceNoSpeech: 'Tiada pertuturan dikenal pasti. Anda boleh terus menaip.', voiceLanguageUnsupported: 'Bahasa ini tidak disokong untuk input suara. Anda boleh terus menaip.', voiceStopped: 'Input suara dihentikan. Anda boleh terus menaip.', voiceStartFailed: 'Rakaman suara tidak dapat dimulakan. Anda boleh terus menaip.', voiceMicrophoneUnavailable: 'Mikrofon yang berfungsi tidak ditemui. Semak peranti input dan cuba lagi.', voiceNetworkUnavailable: 'Perkhidmatan transkripsi suara tidak dapat dicapai. Semak sambungan dan cuba lagi.', voiceInterrupted: 'Input suara terganggu. Cuba sekali lagi atau teruskan menaip.', voiceProviderBusy: 'Perkhidmatan transkripsi suara sedang sibuk. Cuba sebentar lagi.', voiceTranscriptionFailed: 'Transkripsi suara tidak dapat diselesaikan. Cuba lagi atau teruskan menaip.', voiceLowConfidence: 'Saya tidak dapat mendengar rakaman itu dengan yakin, jadi tiada teks dimasukkan. Cuba lagi lebih dekat dengan mikrofon.',
-    guestQuota: 'Anda telah menggunakan 3 carian cadangan percuma untuk sesi tetamu ini — terima kasih kerana meneroka bersama saya! Log masuk untuk merancang seberapa banyak perjalanan yang anda mahu, percuma.'
+    guestQuota: 'Anda telah menggunakan 3 carian cadangan percuma untuk sesi tetamu ini — terima kasih kerana meneroka bersama saya! Log masuk untuk merancang seberapa banyak perjalanan yang anda mahu, percuma.',
+    handoffTitle: (name) => `Soalan tentang ${name}`, handoffDescription: 'Kami menyediakan soalan untuk tempat ini. Semak sebelum menghantar.', handoffUseQuestion: 'Gunakan soalan ini', handoffKeepDraft: 'Kekalkan draf saya', handoffBackToDestination: 'Kembali ke destinasi'
   },
   ta: {
     heroTitle: 'அடுத்த சிறந்த நாளுக்கான உங்கள் உள்ளூர் நண்பர்.',
@@ -180,7 +239,8 @@ const EXTRA_CORE_COPY = Object.freeze({
     preferencesSaved: 'பயண விருப்பங்கள் சேமிக்கப்பட்டன.', catalogueRequestSaved: 'பட்டியல் மதிப்பாய்வு கோரிக்கை அனுப்பப்பட்டது.', actionFailed: 'இந்தச் செயலை முடிக்க முடியவில்லை.', feedbackError: 'கருத்தைச் சேமிக்க முடியவில்லை.', feedbackUnavailable: 'Guide உரையாடல் சேமிக்கப்பட்ட பிறகு கருத்து கிடைக்கும்.', persistenceWarning: 'Gemini பதிலளித்தது, ஆனால் இந்தத் திருப்பம் சேமிக்கப்படவில்லை. இந்த உரையாடலை விட்டு வெளியேறும் முன் மீண்டும் முயற்சிக்கவும்.', languageUnavailable: 'முழு மொழி மாற்றம் தற்காலிகமாக கிடைக்கவில்லை. முந்தைய மொழி தொடர்கிறது.',
     reviewsHeading: 'பயணிகள் கூறுவது', gettingThere: 'அங்கு செல்வது எப்படி', whyGuide: 'இந்த இடத்தை ஏன் பரிந்துரைத்தோம்', previousPhoto: 'முந்தைய படம்', nextPhoto: 'அடுத்த படம்',
     voiceUnsupported: 'இந்த உலாவியில் குரல் பதிவு ஆதரிக்கப்படவில்லை.', voicePermissionDenied: 'மைக்ரோஃபோன் அனுமதி மறுக்கப்பட்டது.', voiceNoSpeech: 'பேச்சு அடையாளம் காணப்படவில்லை. தொடர்ந்து தட்டச்சு செய்யலாம்.', voiceLanguageUnsupported: 'இந்த மொழியில் குரல் உள்ளீடு ஆதரிக்கப்படவில்லை. தொடர்ந்து தட்டச்சு செய்யலாம்.', voiceStopped: 'குரல் உள்ளீடு நிறுத்தப்பட்டது. தொடர்ந்து தட்டச்சு செய்யலாம்.', voiceStartFailed: 'குரல் பதிவைத் தொடங்க முடியவில்லை. தொடர்ந்து தட்டச்சு செய்யலாம்.', voiceMicrophoneUnavailable: 'செயல்படும் மைக்ரோஃபோன் கிடைக்கவில்லை. உள்ளீட்டு சாதனத்தைச் சரிபார்த்து மீண்டும் முயலவும்.', voiceNetworkUnavailable: 'குரல் எழுத்தாக்கச் சேவையை அணுக முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.', voiceInterrupted: 'குரல் உள்ளீடு தடைப்பட்டது. மீண்டும் முயலவும் அல்லது தொடர்ந்து தட்டச்சு செய்யவும்.', voiceProviderBusy: 'குரல் எழுத்தாக்கச் சேவை பிஸியாக உள்ளது. சிறிது நேரத்தில் மீண்டும் முயலவும்.', voiceTranscriptionFailed: 'குரல் எழுத்தாக்கத்தை முடிக்க முடியவில்லை. மீண்டும் முயலவும் அல்லது தொடர்ந்து தட்டச்சு செய்யவும்.', voiceLowConfidence: 'இந்த குரலை நம்பகமாகக் கேட்க முடியாததால் எந்த உரையும் சேர்க்கப்படவில்லை. மைக்ரோஃபோனுக்கு அருகில் மீண்டும் முயலுங்கள்.',
-    guestQuota: 'இந்த விருந்தினர் அமர்விற்கான 3 இலவச பரிந்துரை தேடல்களையும் பயன்படுத்திவிட்டீர்கள் — என்னுடன் ஆராய்ந்ததற்கு நன்றி! உள்நுழைந்து விருப்பப்படி பயணங்களைத் திட்டமிடுங்கள், முழுக்க இலவசமாக.'
+    guestQuota: 'இந்த விருந்தினர் அமர்விற்கான 3 இலவச பரிந்துரை தேடல்களையும் பயன்படுத்திவிட்டீர்கள் — என்னுடன் ஆராய்ந்ததற்கு நன்றி! உள்நுழைந்து விருப்பப்படி பயணங்களைத் திட்டமிடுங்கள், முழுக்க இலவசமாக.',
+    handoffTitle: (name) => `${name} பற்றிய கேள்வி`, handoffDescription: 'இந்த இடத்திற்காக ஒரு கேள்வியைத் தயாரித்துள்ளோம். அனுப்பும் முன் சரிபார்க்கவும்.', handoffUseQuestion: 'இந்தக் கேள்வியைப் பயன்படுத்து', handoffKeepDraft: 'என் வரைவைக் காப்பாற்று', handoffBackToDestination: 'இடத்திற்குத் திரும்பு'
   }
 });
 
@@ -194,10 +254,10 @@ export function isCompleteGuideLanguagePack(pack) {
 }
 
 const AI_RUNTIME_COPY = Object.freeze({
-  en: { retryGemini: 'Retry AI', retryNotice: 'The AI service is temporarily unavailable. Your plan is still here—please retry.', sourceGemini: 'AI guide', sourceGroq: 'AI guide', recommend: 'I found catalogue-verified options that fit your plan.', historyNote: 'Off by default. Account IDs, contacts and precise coordinates are never sent to the AI Guide.' },
-  'zh-CN': { retryGemini: '重试 AI', retryNotice: 'AI 服务暂时不可用。你的计划仍保留在这里，请重试。', sourceGemini: 'AI 助手', sourceGroq: 'AI 助手', recommend: '我找到了符合计划并已通过资料库验证的选择。', historyNote: '默认关闭。帐户 ID、联系人和精确坐标不会发送给 AI 助手。' },
-  ms: { retryGemini: 'Cuba AI lagi', retryNotice: 'Perkhidmatan AI tidak tersedia buat sementara. Pelan anda masih ada—cuba lagi.', sourceGemini: 'Panduan AI', sourceGroq: 'Panduan AI', recommend: 'Saya menemui pilihan katalog yang sesuai dengan rancangan anda.', historyNote: 'Dimatikan secara lalai. ID akaun, kenalan dan koordinat tepat tidak dihantar kepada Panduan AI.' },
-  ta: { retryGemini: 'AI-ஐ மீண்டும் முயற்சி', retryNotice: 'AI சேவை தற்காலிகமாக கிடைக்கவில்லை. உங்கள் திட்டம் பாதுகாப்பாக உள்ளது—மீண்டும் முயற்சிக்கவும்.', sourceGemini: 'AI வழிகாட்டி', sourceGroq: 'AI வழிகாட்டி', recommend: 'உங்கள் திட்டத்திற்குப் பொருந்தும் சரிபார்க்கப்பட்ட பட்டியல் தேர்வுகள் கிடைத்தன.', historyNote: 'இயல்பாக முடக்கப்பட்டுள்ளது. கணக்கு ID, தொடர்புகள் மற்றும் துல்லியமான இருப்பிடம் AI வழிகாட்டிக்கு அனுப்பப்படாது.' }
+  en: { retryGemini: 'Retry AI', retryNotice: 'The AI service is temporarily unavailable. Please try again.', sourceGemini: 'AI guide', sourceGroq: 'AI guide', recommend: 'I found catalogue-verified options that fit your plan.', historyNote: 'Off by default. Account IDs, contacts and precise coordinates are never sent to the AI Guide.' },
+  'zh-CN': { retryGemini: '重试 AI', retryNotice: 'AI 服务暂时不可用，请重试。', sourceGemini: 'AI 助手', sourceGroq: 'AI 助手', recommend: '我找到了符合计划并已通过资料库验证的选择。', historyNote: '默认关闭。帐户 ID、联系人和精确坐标不会发送给 AI 助手。' },
+  ms: { retryGemini: 'Cuba AI lagi', retryNotice: 'Perkhidmatan AI tidak tersedia buat sementara. Sila cuba lagi.', sourceGemini: 'Panduan AI', sourceGroq: 'Panduan AI', recommend: 'Saya menemui pilihan katalog yang sesuai dengan rancangan anda.', historyNote: 'Dimatikan secara lalai. ID akaun, kenalan dan koordinat tepat tidak dihantar kepada Panduan AI.' },
+  ta: { retryGemini: 'AI-ஐ மீண்டும் முயற்சி', retryNotice: 'AI சேவை தற்காலிகமாக கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.', sourceGemini: 'AI வழிகாட்டி', sourceGroq: 'AI வழிகாட்டி', recommend: 'உங்கள் திட்டத்திற்குப் பொருந்தும் சரிபார்க்கப்பட்ட பட்டியல் தேர்வுகள் கிடைத்தன.', historyNote: 'இயல்பாக முடக்கப்பட்டுள்ளது. கணக்கு ID, தொடர்புகள் மற்றும் துல்லியமான இருப்பிடம் AI வழிகாட்டிக்கு அனுப்பப்படாது.' }
 });
 
 const VERIFIED_FACT_COPY = Object.freeze({
@@ -214,11 +274,107 @@ const GUIDE_CAPABILITY_COPY = Object.freeze({
   ta: { helpMissing: "Tumpang Guide இயல்பான பயணக் கோரிக்கைகளைப் புரிந்துகொள்கிறது; Let's Tumpang பட்டியலில் ஏற்கனவே உள்ள இடங்களை மட்டுமே பரிந்துரைக்கிறது; பெயரிடப்பட்ட பட்டியல் இடங்களை விளக்குகிறது; உறுதிப்படுத்திய பிறகு ஆதரிக்கப்படும் செயல்களைத் தயாரிக்கிறது; மேலும் உள்நுழைந்த பயனர்கள் Past Plans-ல் தங்கள் திட்டங்களை மீண்டும் பார்க்கலாம். நாள், இடம் அல்லது இந்த அம்சங்களில் ஏதேனும் ஒன்றைப் பற்றி என்னிடம் கேளுங்கள்." }
 });
 
+// Core-only additions for the revised planning flow. These are deliberately
+// supplemental client copy: they do not expand the generated language-pack
+// contract or require an Edge Function language-pack redeploy.
+const CORE_PRODUCT_COPY = Object.freeze({
+  en: {
+    anyCategory: 'Any', savePreferences: 'Use these interests next time', changesApply: 'Changes apply to your next answer.',
+    noDateRides: 'Choose a date to view listed rides', rideAvailable: (count) => `${count} listed ride${count === 1 ? '' : 's'}`,
+    rideFull: 'No seats remaining', rideInsufficient: 'No single listed ride has enough seats for everyone', rideNone: 'No listed ride for this date', rideUpcomingNone: 'No upcoming listed ride',
+    rideUnavailable: 'Ride information unavailable', seatsInOneRide: (n) => `Up to ${n} seat${n === 1 ? '' : 's'} in one listed ride`,
+    interestViewed: (n) => `${n} traveller${n === 1 ? '' : 's'} viewed this as an option for this date`,
+    distanceNote: 'Straight-line estimate, not driving time.', pickupNote: 'Confirm the pickup point, time and seats before requesting.',
+    noLiveCrowd: 'We do not have live crowd information.', practicalFilters: 'Practical filters', indoorFilter: 'Indoor', outdoorFilter: 'Outdoor', accessibleFilter: 'Accessible', childrenFilter: 'Suitable for children', clearFilter: 'Clear', useQuestion: 'Use this question', keepDraft: 'Keep my draft', voiceSettings: 'Voice settings',
+    howGuideWorks: 'How Guide works', startPlanning: 'Start planning', stillWorking: 'Still working…',
+    basicRecommendations: 'Show catalogue places', aiUnavailable: 'The AI service is temporarily unavailable. Please try again.',
+    sourceChecked: 'Sources and checked time', placeQuestion: (name) => `Question about ${name}`,
+    originResolved: 'Starting point confirmed', ambiguousOrigin: 'Choose your starting point', saveInterest: "Let drivers know I'm interested", interestSaved: 'Interest shared with drivers', cancelInterest: 'Remove my interest',
+    interestMeaning: 'This lets drivers see that you are considering this destination for this date. It is not a booking or notification.', saveInterestConfirm: (name, date) => `This lets drivers see that you are considering ${name} for ${date}. It is not a booking or notification.`,
+    earlierChoices: (n, origin, date) => `Earlier ${n} choices · ${origin} · ${date}`,
+    originResolutionFailed: 'Please choose a Malaysian starting point so I can rank places from it.',
+    howGuideWorksDescription: 'Tell me what you want to do and I will use the verified Let’s Tumpang catalogue. A starting point is required; date, group size and interests are optional. I can explain a listed place and prepare supported actions after you confirm them.',
+    starterNearby: (origin) => origin ? `Nature places near ${origin}` : 'Show me nature places to explore',
+    starterFood: (origin) => origin ? `Local food near ${origin}` : 'Show me local food places', starterSurprise: 'Surprise me with a place', retryPlaceInfo: 'Retry place information',
+    contentSafetyMasked: 'Some language was masked before sending.',
+    contentSafetyTargeted: 'Please remove personal insults and send your travel question again.',
+    contentSafetyHarmful: 'I can help with travel, but I cannot process hateful or threatening language.',
+    contentSafetyUnavailable: 'This message could not be checked safely. Please try again.',
+    contentSafetyCooldown: (seconds) => `Please wait ${seconds} seconds before trying again.`
+  },
+  'zh-CN': {
+    anyCategory: '不限', savePreferences: '下次使用这些兴趣', changesApply: '更改会用于下一次回答。',
+    noDateRides: '选择日期后查看已列出的共乘行程', rideAvailable: (count) => `${count} 段已列出的共乘行程`,
+    rideFull: '没有剩余座位', rideInsufficient: '没有一段已列行程有足够座位容纳所有人', rideNone: '所选日期没有已列出的共乘行程', rideUpcomingNone: '没有即将出发的已列行程',
+    rideUnavailable: '共乘信息暂时无法取得', seatsInOneRide: (n) => `一段已列行程最多有 ${n} 个座位`,
+    interestViewed: (n) => `${n} 位旅客在这个日期浏览过此地点`, distanceNote: '直线距离估算，不是车程时间。', practicalFilters: '实用条件', indoorFilter: '室内', outdoorFilter: '户外', accessibleFilter: '无障碍', childrenFilter: '适合儿童', clearFilter: '清除',
+    pickupNote: '请求前请确认上车地点、时间和座位。', noLiveCrowd: '我们没有实时人流信息。', useQuestion: '使用这个问题',
+    keepDraft: '保留我的草稿', voiceSettings: '语音设置', howGuideWorks: 'Guide 如何运作', startPlanning: '开始规划', stillWorking: '仍在处理…',
+    basicRecommendations: '查看资料库地点', aiUnavailable: 'AI 服务暂时不可用，请重试。', sourceChecked: '来源与查核时间',
+    placeQuestion: (name) => `关于 ${name} 的问题`, originResolved: '出发地点已确认', ambiguousOrigin: '选择你的出发地点', saveInterest: '让司机知道我有兴趣', interestSaved: '已向司机分享兴趣', cancelInterest: '移除我的兴趣', originResolutionFailed: '请选择马来西亚的出发地点，我才能从这里为你排序地点。',
+    interestMeaning: '这会让司机知道你在考虑这个日期的这个地点。这不是预订或通知。', saveInterestConfirm: (name, date) => `这会让司机知道你在考虑 ${date} 的 ${name}。这不是预订或通知。`, earlierChoices: (n, origin, date) => `之前的 ${n} 个选择 · ${origin} · ${date}`,
+    howGuideWorksDescription: '告诉我你想做什么，我会使用已经核实的 Let’s Tumpang 地点目录。出发地点是唯一必填资料；日期、人数和兴趣都可以之后再补充。我可以介绍目录内的地点，并在你确认后准备支持的操作。',
+    starterNearby: (origin) => origin ? `${origin} 附近的自然地点` : '给我一些值得探索的自然地点', starterFood: (origin) => origin ? `${origin} 附近的当地美食` : '给我一些当地美食地点', starterSurprise: '给我一个惊喜地点', retryPlaceInfo: '重试地点信息',
+    contentSafetyMasked: '发送前，部分用语已被遮蔽。',
+    contentSafetyTargeted: '请删除人身攻击内容，然后重新发送你的旅行问题。',
+    contentSafetyHarmful: '我可以协助旅行规划，但不能处理仇恨或威胁性用语。',
+    contentSafetyUnavailable: '这条消息暂时无法完成安全检查，请重试。',
+    contentSafetyCooldown: (seconds) => `请等待 ${seconds} 秒后再试。`
+  },
+  ms: {
+    anyCategory: 'Apa-apa', savePreferences: 'Gunakan minat ini lain kali', changesApply: 'Perubahan digunakan untuk jawapan seterusnya.',
+    noDateRides: 'Pilih tarikh untuk melihat tumpangan yang disenaraikan', rideAvailable: (count) => `${count} tumpangan disenaraikan`,
+    rideFull: 'Tiada tempat duduk berbaki', rideInsufficient: 'Tiada satu tumpangan disenaraikan mempunyai tempat duduk yang cukup untuk semua', rideNone: 'Tiada tumpangan disenaraikan untuk tarikh ini', rideUpcomingNone: 'Tiada tumpangan akan datang yang disenaraikan',
+    rideUnavailable: 'Maklumat tumpangan tidak tersedia', seatsInOneRide: (n) => `Sehingga ${n} tempat duduk dalam satu tumpangan`,
+    interestViewed: (n) => `${n} pelancong melihat tempat ini sebagai pilihan untuk tarikh ini`, distanceNote: 'Anggaran garis lurus, bukan masa memandu.', practicalFilters: 'Keperluan praktikal', indoorFilter: 'Dalam bangunan', outdoorFilter: 'Luar', accessibleFilter: 'Boleh diakses', childrenFilter: 'Sesuai untuk kanak-kanak', clearFilter: 'Padam',
+    pickupNote: 'Sahkan tempat naik, masa dan tempat duduk sebelum memohon.', noLiveCrowd: 'Kami tiada maklumat kesesakan secara langsung.', useQuestion: 'Gunakan soalan ini', voiceSettings: 'Tetapan suara',
+    keepDraft: 'Kekalkan draf saya', howGuideWorks: 'Cara Guide berfungsi', startPlanning: 'Mula merancang', stillWorking: 'Masih memproses…',
+    basicRecommendations: 'Lihat tempat dalam katalog', aiUnavailable: 'Perkhidmatan AI tidak tersedia buat sementara. Sila cuba lagi.', sourceChecked: 'Sumber dan masa semakan',
+    placeQuestion: (name) => `Soalan tentang ${name}`, originResolved: 'Tempat mula disahkan', ambiguousOrigin: 'Pilih tempat mula anda', saveInterest: 'Beritahu pemandu saya berminat', interestSaved: 'Minat dikongsi dengan pemandu', cancelInterest: 'Buang minat saya', originResolutionFailed: 'Pilih tempat mula di Malaysia supaya saya boleh menyusun tempat dari lokasi itu.',
+    interestMeaning: 'Ini membolehkan pemandu melihat bahawa anda mempertimbangkan tempat ini untuk tarikh tersebut. Ia bukan tempahan atau pemberitahuan.', saveInterestConfirm: (name, date) => `Ini membolehkan pemandu melihat bahawa anda mempertimbangkan ${name} untuk ${date}. Ia bukan tempahan atau pemberitahuan.`, earlierChoices: (n, origin, date) => `${n} pilihan terdahulu · ${origin} · ${date}`,
+    howGuideWorksDescription: 'Beritahu saya perkara yang anda mahu lakukan dan saya akan menggunakan katalog tempat Let’s Tumpang yang telah disahkan. Tempat mula diperlukan; tarikh, saiz kumpulan dan minat boleh ditambah kemudian. Saya boleh menerangkan tempat dalam katalog dan menyediakan tindakan selepas anda mengesahkannya.',
+    starterNearby: (origin) => origin ? `Tempat alam semula jadi dekat ${origin}` : 'Tunjukkan tempat alam semula jadi untuk diterokai', starterFood: (origin) => origin ? `Makanan tempatan dekat ${origin}` : 'Tunjukkan tempat makanan tempatan', starterSurprise: 'Kejutkan saya dengan satu tempat', retryPlaceInfo: 'Cuba maklumat tempat lagi',
+    contentSafetyMasked: 'Sebahagian bahasa disamarkan sebelum dihantar.',
+    contentSafetyTargeted: 'Sila buang penghinaan peribadi dan hantar semula soalan perjalanan anda.',
+    contentSafetyHarmful: 'Saya boleh membantu merancang perjalanan, tetapi tidak boleh memproses bahasa kebencian atau ugutan.',
+    contentSafetyUnavailable: 'Mesej ini tidak dapat diperiksa dengan selamat buat sementara. Cuba lagi.',
+    contentSafetyCooldown: (seconds) => `Sila tunggu ${seconds} saat sebelum mencuba lagi.`
+  },
+  ta: {
+    anyCategory: 'எதுவும்', savePreferences: 'அடுத்த முறை இந்த விருப்பங்களைப் பயன்படுத்து', changesApply: 'மாற்றங்கள் அடுத்த பதிலில் பயன்படுத்தப்படும்.',
+    noDateRides: 'பட்டியலிடப்பட்ட பயணங்களைப் பார்க்க தேதியைத் தேர்ந்தெடுக்கவும்', rideAvailable: (count) => `${count} பட்டியலிடப்பட்ட பயணம்`,
+    rideFull: 'காலி இருக்கைகள் இல்லை', rideInsufficient: 'அனைவருக்கும் போதுமான இருக்கைகளைக் கொண்ட ஒரே பட்டியலிடப்பட்ட பயணம் இல்லை', rideNone: 'இந்த தேதிக்கு பட்டியலிடப்பட்ட பயணம் இல்லை', rideUpcomingNone: 'வரவிருக்கும் பட்டியலிடப்பட்ட பயணம் இல்லை',
+    rideUnavailable: 'பயணத் தகவல் கிடைக்கவில்லை', seatsInOneRide: (n) => `ஒரு பட்டியலிடப்பட்ட பயணத்தில் அதிகபட்சம் ${n} இருக்கைகள்`,
+    interestViewed: (n) => `${n} பயணிகள் இந்த தேதிக்கான விருப்பமாக இந்த இடத்தைப் பார்த்துள்ளனர்`, distanceNote: 'நேர்கோட்டு தூர மதிப்பீடு; ஓட்டும் நேரம் அல்ல.', practicalFilters: 'நடைமுறைத் தேவைகள்', indoorFilter: 'உட்புறம்', outdoorFilter: 'வெளிப்புறம்', accessibleFilter: 'அணுகக்கூடியது', childrenFilter: 'குழந்தைகளுக்கு ஏற்றது', clearFilter: 'அழி',
+    pickupNote: 'கோருவதற்கு முன் ஏறும் இடம், நேரம் மற்றும் இருக்கைகளை உறுதிப்படுத்தவும்.', noLiveCrowd: 'நேரடி கூட்ட நெரிசல் தகவல் எங்களிடம் இல்லை.', useQuestion: 'இந்தக் கேள்வியைப் பயன்படுத்து',
+    keepDraft: 'என் வரைவைக் காப்பாற்று', voiceSettings: 'குரல் அமைப்புகள்', howGuideWorks: 'Guide எவ்வாறு செயல்படுகிறது', startPlanning: 'திட்டமிடத் தொடங்கு', stillWorking: 'இன்னும் செயல்படுகிறது…',
+    basicRecommendations: 'பட்டியல் இடங்களைக் காட்டு', aiUnavailable: 'AI சேவை தற்காலிகமாக கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.', sourceChecked: 'ஆதாரங்கள் மற்றும் சரிபார்த்த நேரம்',
+    placeQuestion: (name) => `${name} பற்றிய கேள்வி`, originResolved: 'தொடக்க இடம் உறுதிசெய்யப்பட்டது', ambiguousOrigin: 'உங்கள் தொடக்க இடத்தைத் தேர்ந்தெடுக்கவும்', saveInterest: 'ஓட்டுநர்களுக்கு எனக்கு ஆர்வம் இருப்பதைத் தெரிவி', interestSaved: 'ஓட்டுநர்களுடன் ஆர்வம் பகிரப்பட்டது', cancelInterest: 'என் ஆர்வத்தை அகற்று', originResolutionFailed: 'மலேசிய தொடக்க இடத்தைத் தேர்ந்தெடுக்கவும்; அதன் அடிப்படையில் இடங்களை வரிசைப்படுத்த முடியும்.',
+    interestMeaning: 'இந்தத் தேதியில் இந்த இடத்தை நீங்கள் பரிசீலிப்பதை ஓட்டுநர்கள் பார்க்க இது உதவும். இது முன்பதிவு அல்லது அறிவிப்பு அல்ல.', saveInterestConfirm: (name, date) => `இந்தத் தேதியில் ${name} பற்றி நீங்கள் பரிசீலிப்பதை ஓட்டுநர்கள் பார்க்க இது உதவும். இது முன்பதிவு அல்லது அறிவிப்பு அல்ல.`, earlierChoices: (n, origin, date) => `முந்தைய ${n} தேர்வுகள் · ${origin} · ${date}`,
+    howGuideWorksDescription: 'நீங்கள் செய்ய விரும்புவதைச் சொல்லுங்கள்; சரிபார்க்கப்பட்ட Let’s Tumpang இடப் பட்டியலைப் பயன்படுத்துவேன். தொடக்க இடம் மட்டும் அவசியம்; தேதி, குழு அளவு மற்றும் விருப்பங்களைப் பின்னர் சேர்க்கலாம். பட்டியலில் உள்ள இடங்களை விளக்கி, நீங்கள் உறுதிப்படுத்திய பிறகு ஆதரிக்கப்படும் செயல்களைத் தயாரிக்க முடியும்.',
+    starterNearby: (origin) => origin ? `${origin} அருகிலுள்ள இயற்கை இடங்கள்` : 'ஆராய இயற்கை இடங்களைக் காட்டு', starterFood: (origin) => origin ? `${origin} அருகிலுள்ள உள்ளூர் உணவு` : 'உள்ளூர் உணவு இடங்களைக் காட்டு', starterSurprise: 'ஒரு இடத்தைக் கொண்டு என்னை ஆச்சரியப்படுத்து', retryPlaceInfo: 'இடத் தகவலை மீண்டும் முயற்சி',
+    contentSafetyMasked: 'அனுப்பும் முன் சில சொற்கள் மறைக்கப்பட்டன.',
+    contentSafetyTargeted: 'தனிப்பட்ட அவமதிப்புகளை நீக்கி, உங்கள் பயணக் கேள்வியை மீண்டும் அனுப்பவும்.',
+    contentSafetyHarmful: 'பயணத்திற்கு உதவ முடியும்; வெறுப்பு அல்லது அச்சுறுத்தும் மொழியைச் செயல்படுத்த முடியாது.',
+    contentSafetyUnavailable: 'இந்தச் செய்தியைப் பாதுகாப்பாகச் சரிபார்க்க முடியவில்லை. மீண்டும் முயலவும்.',
+    contentSafetyCooldown: (seconds) => `மீண்டும் முயற்சிக்கும் முன் ${seconds} விநாடிகள் காத்திருக்கவும்.`
+  }
+});
+
 function withExtraCoreCopy(language, copy) {
   const normalized = normalizeGuideLanguage(language);
-  const merged = { ...EXTRA_CORE_COPY.en, ...(EXTRA_CORE_COPY[normalized] || {}), ...copy,
-    ...(AI_RUNTIME_COPY[normalized] || {}), ...(VERIFIED_FACT_COPY[normalized] || {}),
-    ...(GUIDE_CAPABILITY_COPY[normalized] || {}) };
+  const factual = CORE_FACTUAL_COPY[normalized] || {};
+  const merged = {
+    ...EXTRA_CORE_COPY.en,
+    ...(EXTRA_CORE_COPY[normalized] || {}),
+    ...copy,
+    ...(factual.tradeoffs ? { tradeoffs: { ...copy.tradeoffs, ...factual.tradeoffs } } : {}),
+    ...(factual.reasons ? { reasons: { ...copy.reasons, ...factual.reasons } } : {}),
+    ...(AI_RUNTIME_COPY[normalized] || {}),
+    ...(VERIFIED_FACT_COPY[normalized] || {}),
+    ...(GUIDE_CAPABILITY_COPY[normalized] || {}),
+    ...(CORE_PRODUCT_COPY[normalized] || {})
+  };
   const cloudFallbackLabels = {
     en: 'Use Groq cloud transcription',
     'zh-CN': '使用 Groq 云端转录',

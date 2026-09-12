@@ -31,7 +31,7 @@ describe('Tumpang Guide browser response policy', () => {
     expect(recent.at(-1).text).toBe('message-15');
   });
 
-  it.each(['I am in immediate danger', '有人昏迷，请拨打999', 'Bahaya segera, hubungi 999', 'உடனடி ஆபத்து, 999 அழை'])('stops recommendation on unequivocal emergency intent: %s', (text) => {
+  it.each(['I am in immediate danger', 'I am in danger', '有人昏迷，请拨打999', 'Bahaya segera, hubungi 999', 'உடனடி ஆபத்து, 999 அழை'])('stops recommendation on unequivocal emergency intent: %s', (text) => {
     expect(isEmergencyIntent(text)).toBe(true);
   });
 

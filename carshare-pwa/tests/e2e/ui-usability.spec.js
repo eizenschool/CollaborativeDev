@@ -111,22 +111,151 @@ test('public browsing preserves Discover to Search hand-off', async ({ page }) =
     localStorage.setItem(storageKey, JSON.stringify(database));
   }, MOCK_STORAGE_KEY);
   await openPage(page, '/discover/p_georgetown?date=2026-09-14', 'George Town Heritage Core');
-  await expect(page.getByText('Nobody is driving here yet')).toBeVisible();
+  await expect(page.getByText('No listed ride for this date')).toBeVisible();
+  await expect(page.getByText('Search may include listed rides ending within 10 km of this destination.')).toBeVisible();
   await page.getByRole('button', { name: /Find a ride/i }).click();
   await expect(page).toHaveURL(/\/search\?.*destination=/);
   await expect(page.getByRole('heading', { name: 'Find the right ride' })).toBeVisible();
   expect(new URL(page.url()).searchParams.get('pickup')).toBeNull();
-  expect(new URL(page.url()).searchParams.get('date')).toBeNull();
+  expect(new URL(page.url()).searchParams.get('date')).toBe('2026-09-14');
   await expect(page.getByRole('combobox', { name: 'Pickup', exact: true })).toHaveValue('');
-  await expect(page.getByRole('heading', { name: '1 journey found', exact: true })).toBeVisible();
+  // The selected date stays intact. The ride belongs to the following day,
+  // and the pickup remains blank until Module 4 confirms one, so this search
+  // must show zero journeys rather than silently changing the date.
+  await expect(page.getByRole('heading', { name: '0 journeys found', exact: true })).toBeVisible();
 
   await openPage(page, '/discover/p_georgetown?date=2026-09-15', 'George Town Heritage Core');
-  await expect(page.getByText(/1 ride going/)).toBeVisible();
+  await expect(page.getByText(/1 listed ride/)).toBeVisible();
   await page.getByRole('button', { name: /Find a ride/i }).click();
   expect(new URL(page.url()).searchParams.get('date')).toBe('2026-09-15');
 
   await openPage(page, '/discover/p_georgetown', 'George Town Heritage Core');
-  await expect(page.getByText(/1 upcoming ride/)).toBeVisible();
+  await expect(page.getByText(/1 upcoming listed ride/)).toBeVisible();
+});
+
+test('guest discovery keeps the selected tab origin in the page context', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = null;
+    localStorage.setItem(storageKey, JSON.stringify(database));
+    sessionStorage.setItem('m6-exploration:origin', JSON.stringify({
+      label: 'George Town, Penang', lat: 5.4141, lng: 100.3288, placeId: 'guest-origin'
+    }));
+  }, MOCK_STORAGE_KEY);
+  await page.reload();
+  await expect(page.locator('.dsc-eyebrow')).toHaveText('Starting from George Town, Penang');
+  await expect(page.getByRole('button', { name: /Starting point.*George Town, Penang/ })).toBeVisible();
+});
+
+test('homepage explains and opens the driver travel-demand view', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  const demandTab = page.getByRole('tab', { name: 'For drivers: see travel demand', exact: true });
+  await expect(demandTab).toBeVisible();
+  await demandTab.click();
+  await expect(page).toHaveURL(/\/discover\/demand\?date=2026-09-14/);
+  await expect(page.getByRole('heading', { name: 'Where travellers need a ride', exact: true })).toBeVisible();
+  await expect(page.getByText('Drivers can publish a ride here.', { exact: false })).toBeVisible();
+});
+
+test('an explicit traveller interest appears as open demand for the same date', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = 'u_demo_1';
+    localStorage.setItem(storageKey, JSON.stringify(database));
+    localStorage.setItem('letstumpang_discovery_v1', JSON.stringify({ interest: [], registrations: [], preferences: {} }));
+  }, MOCK_STORAGE_KEY);
+  await page.reload();
+  await page.goto('/discover/p_georgetown?date=2026-09-14');
+  await page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true }).click();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toBeVisible();
+  await page.goto('/discover/demand?date=2026-09-14');
+  await expect(page.getByRole('heading', { name: 'Where travellers need a ride', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
+  await expect(page.getByText('1 person has shown interest for 2026-09-14', { exact: true })).toBeVisible();
+});
+
+test('Home starting-point dialog uses the designed location controls', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.getByRole('button', { name: /Starting point/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Where are you starting from?' });
+  await expect(dialog).toBeVisible();
+  const currentLocation = dialog.getByRole('button', { name: 'Use current location' });
+  await expect(currentLocation).toBeVisible();
+  const style = await currentLocation.evaluate((element) => ({
+    display: getComputedStyle(element).display,
+    minHeight: parseFloat(getComputedStyle(element).minHeight),
+    borderRadius: parseFloat(getComputedStyle(element).borderRadius)
+  }));
+  expect(style.display).toBe('inline-flex');
+  expect(style.minHeight).toBeGreaterThanOrEqual(44);
+  expect(style.borderRadius).toBeGreaterThan(0);
+});
+
+test('destination detail separates browsing interest from ride state', async ({ page }) => {
+  await openPage(page, '/discover/p_georgetown?date=2026-09-14', 'George Town Heritage Core');
+  await page.evaluate(() => {
+    localStorage.setItem('letstumpang_discovery_v1', JSON.stringify({
+      interest: [{ userId: 'u_demo_1', placeId: 'p_georgetown', travelDate: '2026-09-14' }],
+      registrations: [], preferences: {}
+    }));
+  });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
+  await expect(page.getByText('No listed ride for this date')).toBeVisible();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 traveller has viewed this as an option for this date.')).toBeVisible();
+  await expect(page.getByText('Search may include listed rides ending within 10 km of this destination.')).toBeVisible();
+  await page.getByRole('button', { name: 'Tell me when there is a ride' }).click();
+  await expect(page.getByText('Ride alert active', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel ride notification' })).toBeVisible();
+});
+
+test('opening a destination does not record interest until the traveller chooses it', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = 'u_demo_1';
+    localStorage.setItem(storageKey, JSON.stringify(database));
+    localStorage.setItem('letstumpang_discovery_v1', JSON.stringify({ interest: [], registrations: [], preferences: {} }));
+  }, MOCK_STORAGE_KEY);
+  await page.reload();
+  await page.goto('/discover/p_georgetown?date=2026-09-14');
+  await expect(page.getByRole('heading', { name: 'George Town Heritage Core', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true })).toBeVisible();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true }).click();
+  await expect(page.getByText('Interest shared with drivers', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove my interest', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true })).toBeVisible();
+});
+
+test('guests can see the interest action and are sent to sign in when they choose it', async ({ page }) => {
+  await openPage(page, '/home?date=2026-09-14', 'Where should you go?');
+  await page.evaluate((storageKey) => {
+    const database = JSON.parse(localStorage.getItem(storageKey));
+    database.currentUserId = null;
+    localStorage.setItem(storageKey, JSON.stringify(database));
+    localStorage.setItem('letstumpang_discovery_v1', JSON.stringify({ interest: [], registrations: [], preferences: {} }));
+  }, MOCK_STORAGE_KEY);
+  await page.reload();
+  await page.goto('/discover/p_georgetown?date=2026-09-14');
+  await expect(page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Let drivers know I’m interested', exact: true }).click();
+  await expect(page).toHaveURL(/\/auth$/);
+  await expect(page.getByText('Sign in to let drivers know you’re interested in this destination.')).toBeVisible();
+});
+
+test('destination scoring explains evidence without claiming reachability or live crowding', async ({ page }) => {
+  await openPage(page, '/discover/p_georgetown?date=2026-09-14', 'George Town Heritage Core');
+  await page.getByRole('button', { name: 'See how this was scored' }).click();
+  await expect(page.getByText('Lower review coverage than comparable places', { exact: true })).toBeVisible();
+  await expect(page.getByText('Relative straight-line proximity', { exact: true })).toBeVisible();
+  await expect(page.getByText('Browsing interest for this date', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Pickup suitability still needs checking/)).toBeVisible();
+  await expect(page.getByText(/already on the road|easy to reach|quiet|crowded/i)).toHaveCount(0);
 });
 
 test('authentication returns the member to the guarded destination', async ({ page }) => {
@@ -552,7 +681,7 @@ test('personal destinations expose honest loading, empty, error, and content sta
 
 test('Discover reveals at most six cards per section before Show more', async ({ page }) => {
   await openPage(page, '/discover', 'Where should you go?');
-  const section = page.locator('.dsc-section').filter({ has: page.getByRole('heading', { name: 'Nobody is driving here yet' }) });
+  const section = page.locator('.dsc-section').filter({ has: page.getByRole('heading', { name: 'More places to explore' }) });
   const cards = section.locator('.dsc-card');
   const initialCount = await cards.count();
   expect(initialCount).toBeLessThanOrEqual(6);
@@ -652,13 +781,23 @@ test('shared motion uses staged feedback and honours reduced motion', async ({ p
     routeName: getComputedStyle(route).animationName,
     routeDuration: parseFloat(getComputedStyle(route).animationDuration),
   }));
+  // The default Explore view is deliberately local and the compact fixture has
+  // only one destination inside 80 km of Kuala Lumpur. Expand through the real
+  // user controls so this test still exercises a three-card stagger without
+  // weakening the new nearby-first product behaviour.
+  await page.getByRole('button', { name: /Explore \d+ farther places/ }).click();
+  await expect(page).toHaveURL(/(?:\?|&)range=all(?:&|$)/);
+  await expect(page.getByText('Showing destinations across Malaysia.')).toBeVisible();
+  await page.getByRole('button', { name: /further destinations? .*see them/ }).click();
   // Scoped to one list: each section's card list restarts its own index at
   // 0, so checking the whole page could land on two different sections'
   // first cards and see 0s twice instead of a real stagger. Whichever
   // section fixture data populates first is fine - the point under test is
   // the stagger pattern, not a specific section's card count.
   await expect(page.locator('.dsc-list-skeleton')).toHaveCount(0);
-  const cardMotion = await page.locator('.dsc-list:not(.dsc-list-skeleton)').first().locator('.dsc-card').evaluateAll((cards) => ({
+  const staggeredList = page.locator('.dsc-list:not(.dsc-list-skeleton):has(.dsc-card:nth-child(3))').first();
+  await expect(staggeredList).toBeVisible();
+  const cardMotion = await staggeredList.locator('.dsc-card').evaluateAll((cards) => ({
     cardName: cards.length ? getComputedStyle(cards[0]).animationName : null,
     cardDelays: cards.slice(0, 3).map((card) => getComputedStyle(card).animationDelay),
   }));

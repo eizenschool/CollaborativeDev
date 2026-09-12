@@ -593,7 +593,9 @@
   font-weight: 700;
 }
 
-.search-ride-card.unavailable .search-ride-card-body { opacity: .72; }
+/* Keep unavailable-card copy readable; the banner and orange border already
+   provide the unavailable state without lowering every text contrast ratio. */
+.search-ride-card.unavailable .search-ride-card-body { opacity: 1; }
 
 .search-ride-card-body { padding: 17px; }
 

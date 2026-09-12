@@ -23,6 +23,13 @@ import { resolveSeason } from './SeasonalCalendar.js';
 import { buildReasons } from './RecommendationReasons.js';
 import { DiscoveryContractAdapter } from './DiscoveryContractAdapter.js';
 
+// The Guide already treats 80 km as the default area around a confirmed
+// coordinate. Explore uses the same boundary before applying the unchanged
+// two-axis formula, so a ride hundreds of kilometres away cannot make a
+// destination look locally relevant. Callers can explicitly pass null to
+// widen the catalogue again.
+export const DEFAULT_EXPLORATION_RADIUS_KM = 80;
+
 // FR-6.24 now resolves against the declared calendar in SeasonalCalendar.js
 // rather than treating everything without an event as undeclared.
 
@@ -31,6 +38,11 @@ function peerMaxReviewCount(place, places) {
   return places
     .filter((p) => p.category === place.category && p.state === place.state)
     .reduce((max, p) => Math.max(max, Number(p.reviewCount) || 0), 0);
+}
+
+async function readTraffic() {
+  try { return { rides: await DiscoveryContractAdapter.getPublishedRides({ throwOnError: true }), status: 'available' }; }
+  catch { return { rides: [], status: 'unavailable' }; }
 }
 
 export const DestinationDiscoveryService = {
@@ -42,22 +54,37 @@ export const DestinationDiscoveryService = {
    * location permission is granted (UC6.1 A1 asks for a location, it does not
    * make one mandatory).
    */
-  async getRecommendations({ userId, origin, travelDate } = {}) {
-    const [allPlaces, rides, demand, preferences] = await Promise.all([
+  async getRecommendations({ userId, origin, travelDate, preferredCategories: sessionCategories, maxDistanceKm: candidateRadiusKm = null } = {}) {
+    const [allPlaces, traffic, demand, preferences] = await Promise.all([
       discoveryDb.listPlaces(),
-      DiscoveryContractAdapter.getPublishedRides(),
+      readTraffic(),
       discoveryDb.latentDemand(travelDate),
       userId ? discoveryDb.getPreferences(userId) : null
     ]);
 
+    const { rides, status: rideStatus } = traffic;
     // FR-6.4: Retired and unenriched places are withheld before anything else,
     // so no later step can accidentally surface one.
     const recommendable = selectRecommendable(allPlaces);
 
     // UC6.11 runs before scoring, not within it.
     const forecasts = await fetchForecasts(recommendable, travelDate);
-    const { candidates: afterWeather, withheld: weatherWithheld } =
+    const { candidates: allWeatherCandidates, withheld: weatherWithheld } =
       applyWeatherGate(recommendable, forecasts);
+
+    const allDistanceByPlace = new Map(allWeatherCandidates.map((place) =>
+      [place.id, distanceKm(origin, { lat: place.lat, lng: place.lng })]
+    ));
+    const hasDistanceBoundary = Number.isFinite(Number(candidateRadiusKm))
+      && Number(candidateRadiusKm) > 0
+      && Number.isFinite(Number(origin?.lat)) && Number.isFinite(Number(origin?.lng));
+    const afterWeather = hasDistanceBoundary
+      ? allWeatherCandidates.filter((place) => {
+        const distance = allDistanceByPlace.get(place.id);
+        return Number.isFinite(distance) && distance <= Number(candidateRadiusKm);
+      })
+      : allWeatherCandidates;
+    const outsideRadiusCount = allWeatherCandidates.length - afterWeather.length;
 
     const completedTrips = await DiscoveryContractAdapter.getCompletedTripCategories(userId, allPlaces);
     const ridesByPlace = DiscoveryContractAdapter.getRidesByPlace(afterWeather, rides, travelDate);
@@ -68,7 +95,7 @@ export const DestinationDiscoveryService = {
     const chainIndex = buildNameRecurrenceIndex(allPlaces);
 
     const distanceByPlace = new Map(afterWeather.map((place) =>
-      [place.id, distanceKm(origin, { lat: place.lat, lng: place.lng })]
+      [place.id, allDistanceByPlace.get(place.id)]
     ));
     const furthest = maxDistanceKm([...distanceByPlace.values()]);
 
@@ -83,8 +110,8 @@ export const DestinationDiscoveryService = {
     // this" are different claims and only one of them is true at a time.
     const affinityByPlace = new Map(afterWeather.map((place) =>
       [place.id, resolveAffinity(place.category, {
-        completedTrips,
-        preferredCategories: preferences?.preferredCategories
+        completedTrips: sessionCategories?.length ? [] : completedTrips,
+        preferredCategories: sessionCategories?.length ? sessionCategories : preferences?.preferredCategories
       })]
     ));
 
@@ -110,6 +137,13 @@ export const DestinationDiscoveryService = {
       const enriched = {
         ...entry,
         place,
+        rideStatus,
+        origin,
+        // A failed ride read is not evidence that the destination is
+        // unserved. Keep the scoring result for a degraded view, but remove
+        // the boolean claim that powers the "no ride" explanation.
+        servedByRide: rideStatus === 'available' ? entry.servedByRide : null,
+        weatherAdvisory: place?.weatherAdvisory,
         rides: ridesByPlace.get(entry.placeId) || [],
         interestedUsers: demand.get(entry.placeId) || 0,
         distanceKm: distanceByPlace.get(entry.placeId),
@@ -134,13 +168,26 @@ export const DestinationDiscoveryService = {
     };
 
     return {
+      rideStatus,
+      searchRadiusKm: hasDistanceBoundary ? Number(candidateRadiusKm) : null,
+      outsideRadiusCount,
+      alternativeDates: Object.fromEntries(afterWeather.map((place) => [
+        place.id,
+        [...new Set(rides
+          .filter((ride) => ride.date > travelDate
+            && ride.date !== travelDate
+            && Number(ride.seatsAvailable) > 0
+            && DiscoveryContractAdapter.rideReferencesPlace(ride, place))
+          .map((ride) => ride.date))]
+          .sort()
+      ])),
       primary: scored.primary.map(decorate),
       unserved: scored.unserved.map(decorate),
       withheld: scored.withheld.map(decorate),
       weatherWithheld,
       preferences,
-      // Lets the UI open on a date that actually has departures instead of a day
-      // with none, which would show an empty served list for no good reason.
+      // Kept for explicit callers that want to show possible alternative dates;
+      // Home does not silently switch the traveller's selected date.
       departureDates: DiscoveryContractAdapter.departureDates(rides)
     };
   },
@@ -166,22 +213,40 @@ export const DestinationDiscoveryService = {
    * from the card the user just tapped. Reusing the ranking guarantees the detail
    * screen and the list can never disagree.
    */
-  async getDestination(placeId, { userId, origin, travelDate, rideDate = travelDate } = {}) {
+  async getDestination(placeId, { userId, origin, travelDate, preferredCategories, maxDistanceKm: candidateRadiusKm = null, rideDate = travelDate } = {}) {
     const place = await discoveryDb.getPlace(placeId);
     if (!place) return null;
 
-    const [ranked, publishedRides] = await Promise.all([
-      this.getRecommendations({ userId, origin, travelDate }),
-      DiscoveryContractAdapter.getPublishedRides()
+    const [scopedRanked, traffic, demand] = await Promise.all([
+      this.getRecommendations({ userId, origin, travelDate, preferredCategories, maxDistanceKm: candidateRadiusKm }),
+      readTraffic(),
+      discoveryDb.latentDemand(travelDate)
     ]);
-    const candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
+    let ranked = scopedRanked;
+    let candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
       .find((entry) => entry.placeId === placeId);
+
+    // A directly opened or bookmarked detail URL may point outside the Home
+    // screen's current nearby boundary. Keep the place usable and preserve its
+    // established score explanation in that case. Places opened from Home are
+    // already inside the scoped set, so their list/detail scores stay identical.
+    if (!candidate && Number.isFinite(Number(candidateRadiusKm))) {
+      ranked = await this.getRecommendations({
+        userId,
+        origin,
+        travelDate,
+        preferredCategories,
+        maxDistanceKm: null
+      });
+      candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
+        .find((entry) => entry.placeId === placeId);
+    }
 
     // Recommendation scores remain specific to the selected travel date. Ride
     // availability is exact when Detail carries a date, while an undated Detail
     // deliberately lists every Published ride for this place.
     const rides = (DiscoveryContractAdapter
-      .getRidesByPlace([place], publishedRides, rideDate)
+      .getRidesByPlace([place], traffic.rides, rideDate)
       .get(place.id) || [])
       .sort((left, right) => String(left.departureAt || '').localeCompare(String(right.departureAt || '')));
 
@@ -191,9 +256,13 @@ export const DestinationDiscoveryService = {
 
     return {
       place,
+      rideStatus: traffic.status,
+      alternativeDates: ranked.alternativeDates[place.id] || [],
       candidate: candidate || null,
       rides,
-      interestedUsers: candidate?.interestedUsers || 0,
+      // Browsing interest belongs to the place/date, not to membership in the
+      // current recommendation slice. A far-away deep link must not erase it.
+      interestedUsers: demand.get(place.id) || 0,
       distanceKm: candidate?.distanceKm ?? null,
       weatherWithheld: Boolean(weatherWithheld),
       weatherReason: weatherWithheld?.weatherReason || null
@@ -215,7 +284,7 @@ export const DestinationDiscoveryService = {
   async getUnmetDemand({ userId, travelDate, origin } = {}) {
     const [places, rides, demand] = await Promise.all([
       discoveryDb.listPlaces(),
-      DiscoveryContractAdapter.getPublishedRides(),
+      DiscoveryContractAdapter.getPublishedRides({ throwOnError: true }),
       discoveryDb.latentDemand(travelDate)
     ]);
 
@@ -360,7 +429,9 @@ export const DestinationDiscoveryService = {
       return `/ride/publish${params.toString() ? `?${params}` : ''}`;
     }
 
-    if (payload.pickup) params.set('pickup', payload.pickup);
+    // The travel origin is deliberately not carried into Module 4's pickup
+    // field. It is a ranking origin, not a confirmed meeting point; Module 4's
+    // own location flow must establish the pickup with the traveller.
     if (payload.destination) params.set('destination', payload.destination);
     if (travelDate) params.set('date', travelDate);
     if (payload.destinationPlaceId) {
