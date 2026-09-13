@@ -18,6 +18,9 @@ const items = Array.from({ length: 200 }, (_, index) => ({
   canDelete: true, canDeleteForEveryone: true,
 }));
 const state = { items, loaded: true, loading: false, error: '' };
+if (new URLSearchParams(window.location.search).has('tombstone')) {
+  items[199] = { ...items[199], text: '', attachments: [], deletedAt: '2026-09-13T00:00:00Z', canEdit: false, canDeleteForEveryone: false };
+}
 window.chatTestSession = {
   getConversation: () => conversation,
   getMessagesState: () => state,
@@ -29,9 +32,26 @@ window.chatTestSession = {
     return options?.markRead ? Promise.resolve(conversation) : new Promise(() => {});
   },
 };
-MessagingService.deleteForMe = async () => { window.chatMetrics.deletes += 1; };
-MessagingService.deleteMessage = async () => { window.chatMetrics.deletes += 1; };
-MessagingService.editMessage = async () => { window.chatMetrics.edits += 1; };
-createRoot(document.getElementById('root')).render(
-  <StrictMode><MemoryRouter><ChatWindow conversationId={conversation.id} currentUser={{ id: 'me' }} /></MemoryRouter></StrictMode>,
+window.chatMutation = { delayed: false, finish: null };
+function mutation(result) {
+  if (!window.chatMutation.delayed) return Promise.resolve(result);
+  return new Promise((resolve, reject) => {
+    window.chatMutation.finish = (success) => success ? resolve(result) : reject(new Error('Request failed. Please retry.'));
+  });
+}
+MessagingService.deleteForMe = async () => { window.chatMetrics.deletes += 1; return mutation(); };
+MessagingService.deleteMessage = async () => { window.chatMetrics.deletes += 1; return mutation(); };
+MessagingService.editMessage = async ({ messageId, text }) => {
+  window.chatMetrics.edits += 1;
+  return mutation({ ...items.find((item) => item.id === messageId), text, editedAt: '2026-09-13T01:00:00Z' });
+};
+const root = createRoot(document.getElementById('root'));
+window.appendChatMessage = () => {
+  state.items = [...state.items, { ...items[0], id: `incoming-${state.items.length}`, senderId: 'other', text: 'New incoming message' }];
+  renderChat();
+};
+function renderChat() { root.render(
+  <StrictMode><MemoryRouter><div style={{ height: '100dvh' }}><ChatWindow conversationId={conversation.id} currentUser={{ id: 'me' }} /></div></MemoryRouter></StrictMode>,
 );
+}
+renderChat();

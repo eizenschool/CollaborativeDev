@@ -52,6 +52,7 @@ export const TRANSLATION_LANGUAGES = Object.freeze({
 
 export function countUnreadMessages(conversations = []) {
   return conversations.reduce((total, conversation) => {
+    if (conversation?.isHiddenByDelete) return total;
     const unreadCount = Number(conversation?.unreadCount);
     return total + (Number.isFinite(unreadCount) && unreadCount > 0 ? unreadCount : 0);
   }, 0);
@@ -332,7 +333,7 @@ export function mapConversationRow(row, currentUserId) {
     hasMessages: Boolean(lastMessage),
     hasCalls: Boolean(lastCall),
     hasActivity: Boolean(lastMessage || lastCall),
-    lastMessage: isCallLatest
+    lastMessage: isHiddenByDelete ? 'History deleted' : isCallLatest
       ? callHistoryLabel(
         lastCall.status,
         lastCall.caller_id === currentUserId ? 'outgoing' : 'incoming',
@@ -340,8 +341,8 @@ export function mapConversationRow(row, currentUserId) {
       )
       : messagePreview(lastMessage),
     lastMessageAt: lastAt,
-    lastTime: formatConversationTime(lastAt),
-    unreadCount: row.unread_count || 0,
+    lastTime: isHiddenByDelete ? '' : formatConversationTime(lastAt),
+    unreadCount: isHiddenByDelete ? 0 : row.unread_count || 0,
   };
 }
 
@@ -500,7 +501,7 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       return repository.openRideDirectConversation(rideId);
     },
 
-    async listConversations(folder = 'active') {
+    async listConversations(folder = 'active', { includeHiddenByDelete = false } = {}) {
       if (!['active', 'archived'].includes(folder)) {
         throw new Error('Unsupported conversation folder.');
       }
@@ -508,11 +509,12 @@ export function createMessagingService(repository = supabaseMessagingRepository)
       const rows = await repository.listConversations();
       const conversations = rows.map((row) => mapConversationRow(row, currentUserId));
       return conversations
-        .filter((conversation) => !conversation.isHiddenByDelete)
+        .filter((conversation) => !conversation.isHiddenByDelete || (folder === 'active' && includeHiddenByDelete))
         .filter((conversation) =>
           conversation.scope === CONVERSATION_SCOPE.FRIEND
           || conversation.type === CONVERSATION_TYPE.GROUP
-          || conversation.hasActivity,
+          || conversation.hasActivity
+          || (includeHiddenByDelete && conversation.isHiddenByDelete),
         )
         .filter((conversation) =>
           folder === 'archived' ? conversation.isArchived : !conversation.isArchived,

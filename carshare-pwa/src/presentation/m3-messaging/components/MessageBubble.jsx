@@ -129,6 +129,7 @@ function MediaAttachment({ attachment }) {
 }
 
 function MessageActions({ message, onEdit, onDelete }) {
+  if (message.pendingAction) return null;
   if (!message.canEdit && !message.canDelete) return null;
   return (
     <details className="message-bubble-actions">
@@ -164,7 +165,7 @@ export default memo(function MessageBubble({
   if (message.deletedAt) {
     return (
       <div id={`message-${message.id}`} className={`message-deleted-row ${isCurrentUser ? 'message-deleted-row-current-user' : ''} ${highlighted ? 'message-highlighted' : ''}`}>
-        <span className="message-deleted-text">Message deleted</span>
+        <span className="message-deleted-text" role={message.pendingAction ? 'status' : undefined}>{message.pendingAction || 'Message deleted'}</span>
         <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} />
       </div>
     );
@@ -197,7 +198,7 @@ export default memo(function MessageBubble({
           {location && <GoogleLocationMap latitude={location.latitude} longitude={location.longitude} compact />}
           {message.rideInvitation && <RideInvitationCard invitation={message.rideInvitation} />}
         </div>
-        {(audio || message.text) && (
+        {!message.pendingAction && (audio || message.text) && (
           <MessageTranslation
             message={message}
             targetLanguage={translationLanguage}
@@ -208,6 +209,7 @@ export default memo(function MessageBubble({
         )}
         <div className={`message-bubble-meta ${isCurrentUser ? 'message-bubble-meta-current-user' : ''}`}>
           <span>{message.timestamp}</span>
+          {message.pendingAction && <span role="status">{message.pendingAction}</span>}
           {message.editedAt && <span className="message-edited-label">edited</span>}
           {isCurrentUser && (
             <span className={message.isRead ? 'message-read-status message-read-status-read' : 'message-read-status'} aria-label={message.isRead ? 'Read' : 'Sent'}>

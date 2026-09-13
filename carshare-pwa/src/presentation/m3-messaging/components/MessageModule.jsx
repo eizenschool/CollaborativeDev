@@ -94,9 +94,15 @@ export default function MessageModule() {
   const {
     folder,
     folderState,
+    messageScope,
+    setMessageScope,
+    archiveNotice,
+    setArchiveNotice,
     setFolder,
     refreshConversations,
     refreshConversation,
+    invalidateDeletedConversation,
+    confirmArchivedConversation,
   } = useMessagingSession();
   const [isDesktop, setIsDesktop] = useState(getIsDesktop);
   const [manageConversation, setManageConversation] = useState(null);
@@ -123,13 +129,19 @@ export default function MessageModule() {
 
   useEffect(() => {
     if (isHistory) return;
+    let cancelled = false;
     refreshConversations();
     if (!conversationId) return;
     refreshConversation(conversationId, { markRead: true }).then((conversation) => {
+      if (cancelled) return;
       if (!conversation) navigate('/message', { replace: true });
-      else if (conversation.isArchived && folder !== 'archived') setFolder('archived');
+      else {
+        setMessageScope(conversation.scope === 'friend' ? 'friend' : 'ride');
+        if (conversation.isArchived && folder !== 'archived') setFolder('archived');
+      }
     });
-  }, [conversationId, folder, isHistory, navigate, refreshConversation, refreshConversations, setFolder]);
+    return () => { cancelled = true; };
+  }, [conversationId, folder, isHistory, navigate, refreshConversation, refreshConversations, setFolder, setMessageScope]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(min-width: ${DESKTOP_BREAKPOINT + 1}px)`);
@@ -154,10 +166,12 @@ export default function MessageModule() {
   }, [refreshFriendCount, user?.id]);
 
   function selectConversation(id) {
+    setArchiveNotice(false);
     navigate(`/message/${id}`);
   }
 
   function changeFolder(nextFolder) {
+    setArchiveNotice(false);
     setFolder(nextFolder);
     navigate('/message');
   }
@@ -185,14 +199,22 @@ export default function MessageModule() {
     try {
       if (action === 'archive') {
         await MessagingService.archiveConversation(manageConversation.id);
-        setFolder('archived');
-        navigate(`/message/${manageConversation.id}`);
+        confirmArchivedConversation(manageConversation);
+        const archivedScope = manageConversation.scope === 'friend' ? 'friend' : 'ride';
+        setMessageScope(archivedScope);
+        setManageConversation(null);
+        setFolder('active');
+        navigate('/message', { replace: true });
+        setArchiveNotice(true);
+        await Promise.allSettled([refreshConversations('active'), refreshConversations('archived')]);
+        return;
       } else if (action === 'unarchive') {
         await MessagingService.unarchiveConversation(manageConversation.id);
         setFolder('active');
         navigate(`/message/${manageConversation.id}`);
       } else if (action === 'delete') {
         await MessagingService.deleteConversationForMe(manageConversation.id);
+        invalidateDeletedConversation(manageConversation.id);
         navigate('/message');
       } else if (action === 'mute' || action === 'unmute') {
         await MessagingService.setConversationMuted(manageConversation.id, action === 'mute');
@@ -246,6 +268,8 @@ export default function MessageModule() {
       onManageConversation={openManage}
       folder={folder}
       onFolderChange={changeFolder}
+      messageScope={messageScope}
+      onMessageScopeChange={setMessageScope}
       isLoading={folderState.loading}
       error={folderState.error}
       onRetry={() => refreshConversations(folder)}
@@ -276,6 +300,12 @@ export default function MessageModule() {
         </main>
       ) : (
         <main className="message-module message-module-mobile">{conversationId ? chat : conversationList}</main>
+      )}
+      {archiveNotice && (
+        <div className="message-archive-notice">
+          <span role="status">Conversation archived</span>
+          <Button variant="secondary" aria-label="Dismiss archive confirmation" onClick={() => setArchiveNotice(false)}>Dismiss</Button>
+        </div>
       )}
       <ManageConversationDialog
         conversation={manageConversation}

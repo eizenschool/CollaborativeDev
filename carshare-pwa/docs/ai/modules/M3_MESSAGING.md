@@ -8,6 +8,7 @@ Supabase-backed Ride and friend communication for UC3.4, UC3.7, and UC3.8.
 
 ## Implemented Contract
 
+- Archiving returns to the active Messages list on every viewport and clears the selected chat, preserving the archived conversation's Ride/Friend tab. Once the mutation succeeds, the cached row moves to Archived immediately and the active tab count decreases without waiting for a refresh; pre-mutation refreshes are invalidated so they cannot restore the old row. A dismissible `Conversation archived` confirmation has no View action; on phones it sits above the bottom navigation. The existing archive icon opens Archived. The module retains the selected tab while the phone list is unmounted for a chat.
 - Phone list/conversation navigation remains split while layouts above 900 px use
   a two-column conversation-list + chat surface. Private and group conversation
   details use the same three-dot `Conversation details and management` action on
@@ -47,6 +48,11 @@ Supabase-backed Ride and friend communication for UC3.4, UC3.7, and UC3.8.
 - `call_sessions` rows merge with ordinary messages by creation time in the conversation timeline. Entries show local incoming/outgoing direction, terminal result, start time, and connected duration without counting as unread or moving the message read cursor. No call audio is recorded or uploaded.
 
 ## Architecture
+
+- Ride/Friend tab selection and archive confirmation belong to `MessagingSessionProvider`, outside the pathname-keyed app route subtree. They survive full MessageModule remounts during list/chat navigation and reset with the signed-in session. Archive browser fixtures mirror the app's keyed route remount.
+- Individual message edits and personal/shared deletion show an optimistic local result while the server validates the mutation. Pending messages disable repeated actions and translation; failures restore the server-backed content and retain editing drafts. Confirmed results remain visible while history refreshes. Timeline position transitions respect reduced motion, and deleting the last item no longer triggers the new-message auto-scroll.
+
+- Active search includes personally deleted conversations by name/title or route while ordinary lists and counts exclude them. Opening reuses the conversation without resetting `deleted_before`; old history stays inaccessible. A new message/activity resurfaces the row under the existing lifecycle rules. Deletion evicts local history and invalidates in-flight refreshes. Existing read-only and expiry rules still apply.
 
 - Presentation: `src/presentation/m3-messaging/` and routes `/message`, `/message/friends`, `/message/:conversationId`, `/message/:conversationId/history`. Its `components/` owns recorder hooks, while `context/` owns messaging and active-call session state.
 - Business logic: `src/business-logic/m3-messaging/` owns messaging, friendship, call, cache, and voice-activity rules. Shared browser-generated alert sound remains in `src/business-logic/shared/AlertSoundService.js`.

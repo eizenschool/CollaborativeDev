@@ -42,6 +42,8 @@ function createSession(userId = null) {
   return {
     userId,
     folder: 'active',
+    messageScope: 'ride',
+    archiveNotice: false,
     folders: {
       active: createFolderState(),
       archived: createFolderState(),
@@ -84,6 +86,7 @@ export function MessagingSessionProvider({ children }) {
   const activeUserIdRef = useRef(null);
   const draftsRef = useRef(createMessagingSessionCache());
   const inFlightRef = useRef(new Map());
+  const requestGenerationRef = useRef(0);
 
   const commitSession = useCallback((updater) => {
     const nextSession = updater(sessionRef.current);
@@ -92,11 +95,39 @@ export function MessagingSessionProvider({ children }) {
     return nextSession;
   }, []);
 
+  const invalidateDeletedConversation = useCallback((conversationId) => {
+    requestGenerationRef.current += 1;
+    inFlightRef.current.clear();
+    draftsRef.current.clearDraft(conversationId);
+    commitSession((current) => removeConversationFromSession(current, conversationId));
+  }, [commitSession]);
+
+  const confirmArchivedConversation = useCallback((conversation) => {
+    // A pre-archive refresh must not restore the row after the mutation succeeds.
+    requestGenerationRef.current += 1;
+    inFlightRef.current.clear();
+    commitSession((current) => {
+      const archived = { ...(current.conversations[conversation.id] || conversation), isArchived: true };
+      return {
+        ...current,
+        conversations: { ...current.conversations, [conversation.id]: archived },
+        folders: {
+          active: { ...current.folders.active, items: current.folders.active.items.filter((item) => item.id !== conversation.id) },
+          archived: {
+            ...current.folders.archived,
+            items: [archived, ...current.folders.archived.items.filter((item) => item.id !== conversation.id)],
+          },
+        },
+      };
+    });
+  }, [commitSession]);
+
   const refreshConversations = useCallback(async (folder = sessionRef.current.folder) => {
     if (!userId || !['active', 'archived'].includes(folder)) return [];
     const requestKey = `folder:${userId}:${folder}`;
     const activeRequest = inFlightRef.current.get(requestKey);
     if (activeRequest) return activeRequest;
+    const generation = requestGenerationRef.current;
 
     const currentFolderState = sessionRef.current.folders[folder];
     if (!currentFolderState.loaded) {
@@ -111,15 +142,26 @@ export function MessagingSessionProvider({ children }) {
 
     const request = (async () => {
       try {
-        const conversations = await MessagingService.listConversations(folder);
-        if (activeUserIdRef.current !== userId) return [];
+        const conversations = await MessagingService.listConversations(folder, { includeHiddenByDelete: folder === 'active' });
+        if (activeUserIdRef.current !== userId || generation !== requestGenerationRef.current) return [];
         commitSession((current) => {
           if (current.userId !== userId) return current;
           const conversationMap = { ...current.conversations };
-          conversations.forEach((conversation) => { conversationMap[conversation.id] = conversation; });
+          const messages = { ...current.messages };
+          conversations.forEach((conversation) => {
+            conversationMap[conversation.id] = conversation;
+            const cutoff = conversation.currentMembership?.deletedBefore;
+            if (cutoff && messages[conversation.id]) {
+              messages[conversation.id] = {
+                ...messages[conversation.id],
+                items: messages[conversation.id].items.filter((item) => new Date(item.sortAt || item.createdAt) > new Date(cutoff)),
+              };
+            }
+          });
           return {
             ...current,
             conversations: conversationMap,
+            messages,
             folders: {
               ...current.folders,
               [folder]: { items: conversations, loaded: true, loading: false, error: '' },
@@ -128,7 +170,7 @@ export function MessagingSessionProvider({ children }) {
         });
         return conversations;
       } catch (error) {
-        if (activeUserIdRef.current === userId) {
+        if (activeUserIdRef.current === userId && generation === requestGenerationRef.current) {
           commitSession((current) => current.userId !== userId ? current : ({
             ...current,
             folders: {
@@ -157,6 +199,7 @@ export function MessagingSessionProvider({ children }) {
     const requestKey = `conversation:${userId}:${conversationId}`;
     const activeRequest = inFlightRef.current.get(requestKey);
     if (activeRequest) return activeRequest;
+    const generation = requestGenerationRef.current;
 
     const cachedMessages = sessionRef.current.messages[conversationId];
     const hasCachedConversation = Boolean(
@@ -176,6 +219,7 @@ export function MessagingSessionProvider({ children }) {
     const request = (async () => {
       try {
         const conversation = await MessagingService.getConversation(conversationId);
+        if (activeUserIdRef.current !== userId || generation !== requestGenerationRef.current) return null;
         if (!conversation) {
           if (activeUserIdRef.current === userId) {
             draftsRef.current.clearDraft(conversationId);
@@ -200,7 +244,10 @@ export function MessagingSessionProvider({ children }) {
           const timeDifference = new Date(first.sortAt) - new Date(second.sortAt);
           return timeDifference || first.id.localeCompare(second.id);
         });
-        if (activeUserIdRef.current !== userId) return null;
+        if (activeUserIdRef.current !== userId || generation !== requestGenerationRef.current) return null;
+        const latestCutoff = sessionRef.current.conversations[conversationId]?.currentMembership?.deletedBefore;
+        if (latestCutoff && (!conversation.currentMembership?.deletedBefore
+          || new Date(latestCutoff) > new Date(conversation.currentMembership.deletedBefore))) return null;
         commitSession((current) => {
           if (current.userId !== userId) return current;
           return {
@@ -216,6 +263,7 @@ export function MessagingSessionProvider({ children }) {
         if (markRead && activeUserIdRef.current === userId) {
           try {
             await MessagingService.markConversationRead(conversationId);
+            if (generation !== requestGenerationRef.current) return null;
             commitSession((current) => {
               if (current.userId !== userId) return current;
               const currentConversation = current.conversations[conversationId];
@@ -234,7 +282,7 @@ export function MessagingSessionProvider({ children }) {
         }
         return conversation;
       } catch (error) {
-        if (activeUserIdRef.current === userId) {
+        if (activeUserIdRef.current === userId && generation === requestGenerationRef.current) {
           commitSession((current) => {
             if (current.userId !== userId) return current;
             const previous = current.messages[conversationId] || createMessageState();
@@ -267,6 +315,15 @@ export function MessagingSessionProvider({ children }) {
     commitSession((current) => ({ ...current, folder }));
   }, [commitSession]);
 
+  const setMessageScope = useCallback((messageScope) => {
+    if (!['ride', 'friend'].includes(messageScope)) return;
+    commitSession((current) => ({ ...current, messageScope }));
+  }, [commitSession]);
+
+  const setArchiveNotice = useCallback((archiveNotice) => {
+    commitSession((current) => ({ ...current, archiveNotice }));
+  }, [commitSession]);
+
   const getDraft = useCallback((conversationId) => draftsRef.current.getDraft(conversationId), []);
 
   const saveDraft = useCallback((conversationId, draft) => {
@@ -280,6 +337,7 @@ export function MessagingSessionProvider({ children }) {
   useEffect(() => {
     if (activeUserIdRef.current === userId) return;
     activeUserIdRef.current = userId;
+    requestGenerationRef.current += 1;
     inFlightRef.current.clear();
     draftsRef.current.setActiveUser(userId);
     commitSession(() => createSession(userId));
@@ -309,6 +367,11 @@ export function MessagingSessionProvider({ children }) {
     };
     const unsubscribe = MessagingService.subscribeToMessaging((change) => {
       const changedConversationId = getMessagingChangeConversationId(change);
+      if (changedConversationId && change.new?.user_id === userId && change.new?.deleted_before
+        && change.new.deleted_before !== sessionRef.current.conversations[changedConversationId]?.currentMembership?.deletedBefore) {
+        invalidateDeletedConversation(changedConversationId);
+        void refreshConversation(changedConversationId);
+      }
       if (changedConversationId) conversationIds.add(changedConversationId);
       else refreshAll = true;
       if (timerId) window.clearTimeout(timerId);
@@ -318,7 +381,7 @@ export function MessagingSessionProvider({ children }) {
       if (timerId) window.clearTimeout(timerId);
       unsubscribe();
     };
-  }, [refreshConversation, refreshConversations, userId]);
+  }, [invalidateDeletedConversation, refreshConversation, refreshConversations, userId]);
 
   useEffect(() => {
     if (!userId) return undefined;
@@ -349,6 +412,10 @@ export function MessagingSessionProvider({ children }) {
 
   const value = useMemo(() => ({
     folder: session.folder,
+    messageScope: session.messageScope,
+    archiveNotice: session.archiveNotice,
+    setMessageScope,
+    setArchiveNotice,
     folderState: session.folders[session.folder],
     unreadMessageCount: session.folders.active.loaded && !session.folders.active.error
       ? countUnreadMessages(session.folders.active.items)
@@ -358,17 +425,23 @@ export function MessagingSessionProvider({ children }) {
     setFolder,
     refreshConversations,
     refreshConversation,
+    invalidateDeletedConversation,
+    confirmArchivedConversation,
     getDraft,
     saveDraft,
     clearDraft,
   }), [
     clearDraft,
+    invalidateDeletedConversation,
+    confirmArchivedConversation,
     getDraft,
     refreshConversation,
     refreshConversations,
     saveDraft,
     session,
     setFolder,
+    setMessageScope,
+    setArchiveNotice,
   ]);
 
   return <MessagingSessionContext.Provider value={value}>{children}</MessagingSessionContext.Provider>;

@@ -380,6 +380,26 @@ describe('MessagingService repository orchestration', () => {
     expect(visible.map((conversation) => conversation.id)).not.toContain('10000000-0000-4000-8000-000000000010');
   });
 
+  it('includes deleted empty direct chats only for active search without exposing old previews', async () => {
+    const row = rawConversation({
+      last_message: null,
+      unread_count: 8,
+      members: [
+        { user_id: userId, role: 'member', deleted_before: '2026-08-10T03:00:00Z', profile: { full_name: 'Aina' } },
+        { user_id: otherId, role: 'member', profile: { full_name: 'Ahmad' } },
+      ],
+    });
+    const service = createMessagingService(createRepository({ conversations: [row] }));
+    expect(await service.listConversations()).toEqual([]);
+    expect(await service.listConversations('archived', { includeHiddenByDelete: true })).toEqual([]);
+    const results = await service.listConversations('active', { includeHiddenByDelete: true });
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: row.id, isHiddenByDelete: true, lastMessage: 'History deleted', lastTime: '', unreadCount: 0 });
+    expect(countUnreadMessages([{ isHiddenByDelete: true, unreadCount: 8 }])).toBe(0);
+    expect(mapConversationRow({ ...row, last_message: rawMessage({ text_content: 'Old secret', created_at: '2026-08-10T02:00:00Z' }) }, userId).lastMessage).toBe('History deleted');
+    expect(mapConversationRow({ ...row, last_message: rawMessage({ text_content: 'New message', created_at: '2026-08-10T04:00:00Z' }) }, userId).isHiddenByDelete).toBe(false);
+  });
+
   it('reveals a personally deleted conversation when a newer call is created', () => {
     const conversation = mapConversationRow(rawConversation({
       members: [

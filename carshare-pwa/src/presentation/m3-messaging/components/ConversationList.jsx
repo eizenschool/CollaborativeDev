@@ -170,16 +170,20 @@ export default function ConversationList({
   onBrowseRides,
   incomingFriendCount = 0,
   onOpenFriends,
+  messageScope: controlledMessageScope,
+  onMessageScopeChange,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [messageScope, setMessageScope] = useState('ride');
+  const [localMessageScope, setLocalMessageScope] = useState('ride');
+  const messageScope = controlledMessageScope ?? localMessageScope;
+  const setMessageScope = onMessageScopeChange ?? setLocalMessageScope;
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
   useEffect(() => {
     if (!selectedConversationId) return;
     const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId);
     if (selectedConversation) setMessageScope(selectedConversation.scope === 'friend' ? 'friend' : 'ride');
-  }, [conversations, selectedConversationId]);
+  }, [conversations, selectedConversationId, setMessageScope]);
 
   const scopedConversations = useMemo(
     () => conversations.filter((conversation) => (messageScope === 'friend') === (conversation.scope === 'friend')),
@@ -187,15 +191,15 @@ export default function ConversationList({
   );
 
   const messageCounts = useMemo(() => ({
-    ride: conversations.filter((conversation) => conversation.scope !== 'friend').length,
-    friend: conversations.filter((conversation) => conversation.scope === 'friend').length,
+    ride: conversations.filter((conversation) => !conversation.isHiddenByDelete && conversation.scope !== 'friend').length,
+    friend: conversations.filter((conversation) => !conversation.isHiddenByDelete && conversation.scope === 'friend').length,
   }), [conversations]);
 
   const filteredConversations = useMemo(() => {
-    if (!normalizedSearchQuery) return scopedConversations;
+    if (!normalizedSearchQuery) return scopedConversations.filter((conversation) => !conversation.isHiddenByDelete);
     return scopedConversations.filter((conversation) =>
       conversation.title.toLowerCase().includes(normalizedSearchQuery)
-      || conversation.lastMessage.toLowerCase().includes(normalizedSearchQuery)
+      || (!conversation.isHiddenByDelete && conversation.lastMessage.toLowerCase().includes(normalizedSearchQuery))
       || conversation.tripRoute?.toLowerCase().includes(normalizedSearchQuery),
     );
   }, [normalizedSearchQuery, scopedConversations]);
@@ -210,7 +214,7 @@ export default function ConversationList({
           <div className="message-conversation-heading-copy">
             <h1 className="message-conversation-page-title">{folder === 'archived' ? 'Archived' : 'Messages'}</h1>
             <p className="message-conversation-page-subtitle">
-              {isLoading ? 'Syncing your conversations' : `${conversations.length} ${folder} conversation${conversations.length === 1 ? '' : 's'}`}
+              {isLoading ? 'Syncing your conversations' : `${messageCounts.ride + messageCounts.friend} ${folder} conversation${messageCounts.ride + messageCounts.friend === 1 ? '' : 's'}`}
             </p>
           </div>
           <button

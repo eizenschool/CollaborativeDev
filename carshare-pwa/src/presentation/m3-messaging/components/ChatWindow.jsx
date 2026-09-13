@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import useOptimisticMessages from './useOptimisticMessages.js';
 import {
   IconArrowLeft,
   IconArchive,
@@ -184,6 +186,7 @@ export default function ChatWindow({
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, setIsPending] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const [isCaptureMenuOpen, setIsCaptureMenuOpen] = useState(false);
   const [isVideoCameraPickerOpen, setIsVideoCameraPickerOpen] = useState(false);
@@ -197,7 +200,13 @@ export default function ChatWindow({
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
   const messageInputRef = useRef(null);
-  const messageBottomRef = useRef(null);
+  const messageScrollRef = useRef(null);
+  const messageContentRef = useRef(null);
+  const scrollConversationRef = useRef(null);
+  const scrolledHighlightRef = useRef(null);
+  const followLatestRef = useRef(true);
+  const scrollDimensionsRef = useRef({ height: 0, viewport: 0 });
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const photoPreviewRef = useRef(null);
   const videoPreviewRef = useRef(null);
   const photoDialogRef = useRef(null);
@@ -229,7 +238,12 @@ export default function ChatWindow({
 
   const conversation = getConversation(conversationId);
   const messageState = getMessagesState(conversationId);
-  const messageList = messageState.items;
+  const { messages: messageList, begin: beginOptimisticChange } = useOptimisticMessages(messageState.items, conversationId);
+  const reduceMotion = useReducedMotion();
+  const mutationPendingRef = useRef(false);
+  const currentConversationRef = useRef(conversationId);
+  currentConversationRef.current = conversationId;
+  const previousMessagesRef = useRef([]);
   const isLoading = messageState.loading;
   const loadError = messageState.error;
 
@@ -563,13 +577,83 @@ export default function ChatWindow({
   }, [isPhotoBusy, isVideoBusy]);
 
   useEffect(() => {
-    if (highlightedMessageId) {
-      document.getElementById(`message-${highlightedMessageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else if (messageList.at(-1)?.id !== lastMessageIdRef.current) {
-      messageBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    function dismissMessageActions(event) {
+      const menus = messageScrollRef.current?.querySelectorAll('.message-bubble-actions[open]');
+      menus?.forEach((menu) => {
+        if (event.type === 'keydown') {
+          if (event.key !== 'Escape') return;
+          if (menu.contains(document.activeElement)) menu.querySelector('summary')?.focus();
+          menu.open = false;
+        } else if (!menu.contains(event.target)) {
+          menu.open = false;
+        }
+      });
     }
+    document.addEventListener('pointerdown', dismissMessageActions, true);
+    document.addEventListener('keydown', dismissMessageActions);
+    return () => {
+      document.removeEventListener('pointerdown', dismissMessageActions, true);
+      document.removeEventListener('keydown', dismissMessageActions);
+    };
+  }, []);
+
+  const updateScrollPosition = useCallback(() => {
+    const element = messageScrollRef.current;
+    if (!element) return;
+    const height = element.scrollHeight;
+    const viewport = element.clientHeight;
+    const previous = scrollDimensionsRef.current;
+    // Media, fonts and composer resizing can trigger scroll before ResizeObserver.
+    // Keep following the bottom through layout changes instead of treating them as reading history.
+    if (followLatestRef.current && (height !== previous.height || viewport !== previous.viewport)) {
+      element.scrollTo({ top: height, behavior: 'instant' });
+    }
+    scrollDimensionsRef.current = { height, viewport };
+    const awayFromBottom = element.scrollHeight - element.clientHeight - element.scrollTop > 64;
+    followLatestRef.current = !awayFromBottom;
+    setShowScrollToLatest(awayFromBottom);
+  }, []);
+
+  const scrollToLatest = useCallback(() => {
+    const element = messageScrollRef.current;
+    if (!element) return;
+    followLatestRef.current = true;
+    element.scrollTo({ top: element.scrollHeight, behavior: 'instant' });
+    updateScrollPosition();
+  }, [updateScrollPosition]);
+
+  useLayoutEffect(() => {
+    const element = messageScrollRef.current;
+    if (!element) return;
+    const opening = scrollConversationRef.current !== conversationId;
+    const target = highlightedMessageId && element.querySelector(`[id="message-${CSS.escape(highlightedMessageId)}"]`);
+    if (target && (opening || highlightedMessageId !== scrolledHighlightRef.current)) {
+      followLatestRef.current = false;
+      element.scrollTop += target.getBoundingClientRect().top - element.getBoundingClientRect().top
+        - element.clientHeight / 2 + target.clientHeight / 2;
+    } else if (opening || (followLatestRef.current && messageList.at(-1)?.id !== lastMessageIdRef.current
+      && !previousMessagesRef.current.some((item) => item.id === messageList.at(-1)?.id))) {
+      element.scrollTo({ top: element.scrollHeight, behavior: 'instant' });
+    }
+    scrollConversationRef.current = conversationId;
+    scrolledHighlightRef.current = target ? highlightedMessageId : null;
+    updateScrollPosition();
     lastMessageIdRef.current = messageList.at(-1)?.id || null;
-  }, [messageList, highlightedMessageId]);
+    previousMessagesRef.current = messageList;
+  }, [conversationId, conversation, isLoading, messageList, highlightedMessageId, updateScrollPosition]);
+
+  useLayoutEffect(() => {
+    const element = messageScrollRef.current;
+    const content = messageContentRef.current;
+    if (!element || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (followLatestRef.current) element.scrollTo({ top: element.scrollHeight, behavior: 'instant' });
+      updateScrollPosition();
+    });
+    observer.observe(element);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [conversationId, conversation, isLoading, updateScrollPosition]);
 
   function addFiles(fileList) {
     const additions = Array.from(fileList || []).map(mediaEntryFromFile);
@@ -628,6 +712,7 @@ export default function ChatWindow({
   }
 
   const beginEdit = useCallback((message) => {
+    if (mutationPendingRef.current) return;
     resetComposer();
     setEditingMessage(message);
     setText(message.text);
@@ -722,6 +807,7 @@ export default function ChatWindow({
   }
 
   const openDeleteDialog = useCallback((message) => {
+    if (mutationPendingRef.current) return;
     deleteReturnFocusRef.current = document.activeElement;
     setDeleteTarget(message);
   }, []);
@@ -744,16 +830,27 @@ export default function ChatWindow({
   }
 
   async function submitMessage() {
-    if (isPending || isVoiceStarting || isVoiceRecording || isVoiceProcessing
+    if (mutationPendingRef.current || isPending || isVoiceStarting || isVoiceRecording || isVoiceProcessing
         || isPhotoStarting || isPhotoCapturing || isVideoStarting || isVideoRecording || isVideoProcessing) return;
     setIsPending(true);
     setErrorMessage('');
-    const shouldRevealRideConversation = conversation.scope !== 'friend'
+    mutationPendingRef.current = true;
+    let optimistic;
+    setPendingOperation(editingMessage ? 'Saving message…' : 'Uploading and sending…');
+    const shouldRevealConversation = conversation.isHiddenByDelete || (conversation.scope !== 'friend'
       && conversation.type === 'direct'
-      && !conversation.hasMessages;
+      && !conversation.hasMessages);
     try {
       if (editingMessage) {
-        await MessagingService.editMessage({
+        validateMessageDraft({ text, files: validationFiles(mediaEntries), location });
+        const attachments = mediaEntries.map((entry) => entry.source === 'existing' ? entry.attachment : {
+          id: entry.token, kind: entry.kind, url: entry.previewUrl, fileName: entry.name,
+        });
+        if (location) attachments.push({ id: 'pending-location', kind: 'location', ...location });
+        optimistic = beginOptimisticChange(editingMessage, {
+          ...editingMessage, text: text.trim(), attachments, pendingAction: 'Saving…',
+        });
+        const updated = await MessagingService.editMessage({
           messageId: editingMessage.id,
           text,
           existingAttachmentIds: mediaEntries.filter((item) => item.source === 'existing').map((item) => item.attachment.id),
@@ -761,6 +858,7 @@ export default function ChatWindow({
           mediaOrder: mediaEntries.map((item) => item.token),
           location,
         });
+        optimistic.commit(updated);
       } else if (rideInvitation) {
         await MessagingService.sendRideInvitation({
           conversationId,
@@ -778,31 +876,44 @@ export default function ChatWindow({
             : null,
         });
       }
+      if (currentConversationRef.current !== conversationId) return;
       resetComposer();
       void refreshConversation(conversationId);
-      if (shouldRevealRideConversation) void refreshConversations('active');
+      if (shouldRevealConversation) void refreshConversations('active');
     } catch (error) {
-      setErrorMessage(`${error.message || 'Unable to save message.'} Your draft has been kept for Retry.`);
+      optimistic?.rollback();
+      if (currentConversationRef.current === conversationId) setErrorMessage(`${error.message || 'Unable to save message.'} Your draft has been kept for Retry.`);
     } finally {
+      mutationPendingRef.current = false;
       setIsPending(false);
     }
   }
 
   async function confirmDelete(scope) {
-    if (!deleteTarget || isPending) return;
+    if (!deleteTarget || isPending || mutationPendingRef.current) return;
+    mutationPendingRef.current = true;
+    const target = deleteTarget;
+    setPendingOperation('Deleting message…');
+    const optimistic = beginOptimisticChange(target, scope === 'everyone'
+      ? { ...target, deletedAt: new Date().toISOString(), text: '', attachments: [], pendingAction: 'Deleting…', canEdit: false, canDeleteForEveryone: false }
+      : null);
+    setDeleteTarget(null);
+    window.requestAnimationFrame(() => messageInputRef.current?.focus());
     setIsPending(true);
     setErrorMessage('');
     try {
       if (scope === 'everyone') {
-        await MessagingService.deleteMessage(deleteTarget.id);
+        await MessagingService.deleteMessage(target.id);
       } else {
-        await MessagingService.deleteForMe(deleteTarget.id, deleteTarget.itemType === 'call' ? 'call' : 'message');
+        await MessagingService.deleteForMe(target.id, target.itemType === 'call' ? 'call' : 'message');
       }
-      setDeleteTarget(null);
+      optimistic.commit();
       void refreshConversation(conversationId);
     } catch (error) {
-      setErrorMessage(error.message || 'Unable to delete message.');
+      optimistic.rollback();
+      if (currentConversationRef.current === conversationId) setErrorMessage(error.message || 'Unable to delete message.');
     } finally {
+      mutationPendingRef.current = false;
       setIsPending(false);
     }
   }
@@ -955,9 +1066,14 @@ export default function ChatWindow({
         </div>
       )}
 
-      <div className="message-chat-scroll" aria-live="polite">
-        {messageList.length ? messageList.map((item) => item.itemType === 'call' ? (
-          <CallEventBubble key={`call-${item.id}`} call={item} onDelete={openDeleteDialog} />
+      <div className="message-chat-timeline">
+      <div ref={messageScrollRef} className="message-chat-scroll" aria-live="polite" onScroll={updateScrollPosition}>
+        <div ref={messageContentRef}>
+        <AnimatePresence initial={false}>
+        {messageList.length ? messageList.map((item) => <motion.div key={`${item.itemType || 'message'}-${item.id}`}
+          layout={reduceMotion ? false : 'position'} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.16 }}>
+          {item.itemType === 'call' ? (
+          <CallEventBubble call={item} onDelete={openDeleteDialog} />
         ) : (
           <MessageBubble
             key={`message-${item.id}`}
@@ -970,10 +1086,18 @@ export default function ChatWindow({
             onTranslationLanguageChange={changeTranslationLanguage}
             highlighted={item.id === highlightedMessageId}
           />
-        )) : <ChatEmptyState />}
-        <div ref={messageBottomRef} />
+        )}</motion.div>) : <ChatEmptyState key="empty" />}
+        </AnimatePresence>
+        </div>
+      </div>
+      {showScrollToLatest && (
+        <button type="button" className="message-scroll-to-latest" onClick={scrollToLatest} aria-label="Scroll to latest messages" title="Scroll to latest messages">
+          <IconArrowLeft size={22} aria-hidden="true" />
+        </button>
+      )}
       </div>
 
+      {errorMessage && <p className="message-composer-error" role="alert" aria-live="assertive">{errorMessage}</p>}
       {conversation.isReadOnly ? (
         <footer className="message-read-only-banner">
           <IconArchive size={17} aria-hidden="true" />
@@ -995,7 +1119,7 @@ export default function ChatWindow({
           {editingMessage && (
             <div className="message-editing-banner">
               <span>Editing message — changes apply to the whole text/media/location bundle.</span>
-              <button type="button" onClick={resetComposer}>Cancel</button>
+              <button type="button" onClick={resetComposer} disabled={isPending}>Cancel</button>
             </div>
           )}
           {rideInvitation && (
@@ -1004,6 +1128,7 @@ export default function ChatWindow({
               <button type="button" onClick={() => setRideInvitation(null)} aria-label="Remove Ride invitation"><IconX size={15} /></button>
             </div>
           )}
+          <fieldset disabled={isPending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <ComposerMedia entries={mediaEntries} onMove={moveMedia} onRemove={removeMedia} />
           {location && (
             <div className="message-draft-location">
@@ -1011,6 +1136,7 @@ export default function ChatWindow({
               <button type="button" onClick={() => setLocation(null)} aria-label="Remove shared location"><IconX size={14} /></button>
             </div>
           )}
+          </fieldset>
           <input
             ref={fileInputRef}
             className="message-file-input"
@@ -1099,8 +1225,7 @@ export default function ChatWindow({
               <span className={text.length >= 900 ? 'message-character-count message-character-count-warning' : 'message-character-count'}>{text.length}/1000</span>
             </div>
           )}
-          {errorMessage && <p className="message-composer-error" role="alert" aria-live="assertive">{errorMessage}</p>}
-          {isPending && <p className="message-pending-status" role="status" aria-live="polite">{editingMessage ? 'Saving message…' : 'Uploading and sending…'}</p>}
+          {isPending && <p className="message-pending-status" role="status" aria-live="polite">{pendingOperation}</p>}
         </footer>
       )}
 

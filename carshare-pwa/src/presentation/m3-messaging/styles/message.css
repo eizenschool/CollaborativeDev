@@ -91,6 +91,12 @@
     background 0.15s ease;
 }
 
+.message-conversation-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 .message-conversation-search input::placeholder {
   color: #9ca3af;
 }
@@ -1419,6 +1425,38 @@
 
 .message-chat-menu .message-chat-menu-danger:hover {
   background: var(--danger-tint);
+}
+
+.message-chat-timeline {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.message-scroll-to-latest {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: white;
+  color: var(--teal-dark);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+  cursor: pointer;
+}
+
+.message-scroll-to-latest svg {
+  transform: rotate(-90deg);
+}
+
+.message-scroll-to-latest:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
 }
 
 .message-chat-scroll {
@@ -4189,6 +4227,12 @@
 }
 
 @media (max-width: 700px) {
+  /* Keep the list's own scrollport between the app bar and fixed bottom tabs. */
+  .message-module-mobile:has(> .message-conversation-list) {
+    height: calc(100vh - var(--nav-offset) - env(safe-area-inset-top) - 64px - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--nav-offset) - env(safe-area-inset-top) - 64px - env(safe-area-inset-bottom));
+  }
+
   .message-module {
     height: calc(100vh - 64px - env(safe-area-inset-bottom));
     height: calc(100dvh - 64px - env(safe-area-inset-bottom));
@@ -4751,4 +4795,29 @@
   color: var(--teal-dark);
   font-size: 10px;
   font-weight: 800;
+}
+.message-archive-notice {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--teal-tint);
+  color: var(--ink);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 12%);
+}
+
+.message-archive-notice > span { flex: 1; min-width: 0; }
+.message-archive-notice button { min-height: 44px; flex-shrink: 0; }
+
+@media (max-width: 700px) {
+  .message-archive-notice { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
