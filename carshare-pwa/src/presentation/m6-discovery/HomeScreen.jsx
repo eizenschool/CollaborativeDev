@@ -628,11 +628,24 @@ export default function HomeScreen() {
             <p className="dsc-section-note">Ranked by fit, distance and the signals available for your selected date.</p>
 
             {gridPrimary.length === 0 ? (
-              <p className="dsc-empty">
-                {hero
-                  ? 'That is the only destination in the top matches for these conditions.'
-                  : 'No recommended destinations match this date and your current conditions.'}
-              </p>
+              <div className="dsc-empty">
+                <p>
+                  {hero
+                    ? 'That is the only destination in the top matches for these conditions.'
+                    : 'No recommended destinations match this date and your current conditions.'}
+                </p>
+                {/* A blank top section next to a populated catalogue reads as
+                    "the app is broken" to a first-time visitor. Point at the
+                    section that actually holds the candidates instead of
+                    leaving the page looking empty. */}
+                {!hero && unserved.length > 0 && (
+                  <p className="dsc-empty-hint">
+                    {unserved.length} more destination{unserved.length === 1 ? '' : 's'} did not
+                    meet today's ranking thresholds but {unserved.length === 1 ? 'is' : 'are'} listed
+                    under "More places to explore" below.
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="dsc-list">
                 {gridPrimary.slice(0, primaryLimit).map((candidate, index) => (

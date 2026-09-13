@@ -26,6 +26,16 @@ describe('Tumpang Guide content safety policy', () => {
     expect(classifyGuideContent('நீ முட்டாள்').category).toBe('targeted_abuse');
   });
 
+  it('still catches a targeted insult when an intensifier sits between the subject and the insult', () => {
+    // Regression test: "you are so stupid" previously slipped through as
+    // decision "allow" because the pattern only accepted an optional
+    // article ("an idiot"), not an intensifier like "so"/"really"/"such a".
+    expect(classifyGuideContent('you are so stupid, I hate this app').decision).toBe('block');
+    expect(classifyGuideContent('you are so stupid, I hate this app').category).toBe('targeted_abuse');
+    expect(classifyGuideContent("you're really such an idiot").category).toBe('targeted_abuse');
+    expect(classifyGuideContent('so stupid').category).toBe('targeted_abuse');
+  });
+
   it('blocks threats and keeps an urgent help request on the emergency path', () => {
     expect(classifyGuideContent('I will kill you').decision).toBe('block');
     expect(classifyGuideContent('我正在被攻击，拨打 999').decision).toBe('emergency');

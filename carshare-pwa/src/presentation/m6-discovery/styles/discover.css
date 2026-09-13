@@ -656,6 +656,14 @@
   text-align: center;
 }
 
+.dsc-empty p { margin: 0 0 6px; }
+.dsc-empty p:last-child { margin-bottom: 0; }
+
+.dsc-empty-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .dsc-notice {
   background: var(--teal-tint);
   color: var(--teal-dark);

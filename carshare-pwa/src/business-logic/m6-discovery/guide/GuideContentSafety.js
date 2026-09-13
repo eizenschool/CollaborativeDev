@@ -53,15 +53,19 @@ const POLICY_RULES = Object.freeze([
     /(?:தேவடியா|போடா|சீடா)/u
   ] },
   { id: 'en-targeted', category: 'targeted_abuse', patterns: [
-    /\b(?:you(?:'re| are)?|u r|ur)\s+(?:an?\s+)?(?:idiot|stupid|dumb|moron|asshole|bastard)\b/iu,
-    /^\s*(?:idiot|stupid|dumb|moron|asshole|bastard)\s*[.!?]*\s*$/iu
+    // Intensifiers ("so", "really", "such a", ...) commonly sit between the
+    // subject and the insult in natural speech (e.g. "you are so stupid");
+    // the alternation below allows zero or more of them so the phrase is
+    // caught the same as the bare "you are stupid".
+    /\b(?:you(?:'re| are)?|u r|ur)\b(?:\s+(?:so|really|very|truly|totally|absolutely|honestly|such))*\s+(?:an?\s+)?(?:idiot|stupid|dumb|moron|asshole|bastard)\b/iu,
+    /^\s*(?:so|really|very|truly|totally|absolutely|honestly)?\s*(?:idiot|stupid|dumb|moron|asshole|bastard)\s*[.!?]*\s*$/iu
   ] },
   { id: 'zh-targeted', category: 'targeted_abuse', patterns: [
-    /(?:你|妳)(?:很|真|就是|这个|這個|是个|是個|真是)?(?:蠢|笨蛋|白痴|傻逼|傻B|废物)/u,
+    /(?:你|妳)(?:很|真|就是|这个|這個|是个|是個|真是|真的很|實在|简直)?(?:蠢|笨蛋|白痴|傻逼|傻B|废物)/u,
     /^\s*(?:蠢货|笨蛋|白痴|傻逼|废物)\s*[。！？.!?]*\s*$/u
   ] },
   { id: 'ms-targeted', category: 'targeted_abuse', patterns: [
-    /\b(?:kau|awak|kamu|anda)\s+(?:memang\s+)?(?:bodoh|bangang|bengap|sial|celaka)\b/iu,
+    /\b(?:kau|awak|kamu|anda)\s+(?:memang\s+|betul-betul\s+|sangat\s+)?(?:bodoh|bangang|bengap|sial|celaka)\b/iu,
     /^\s*(?:bodoh|bangang|bengap|sial|celaka)\s*[.!?]*\s*$/iu
   ] },
   { id: 'ta-targeted', category: 'targeted_abuse', patterns: [
