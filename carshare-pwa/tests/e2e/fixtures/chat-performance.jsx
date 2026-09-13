@@ -50,8 +50,16 @@ window.appendChatMessage = () => {
   state.items = [...state.items, { ...items[0], id: `incoming-${state.items.length}`, senderId: 'other', text: 'New incoming message' }];
   renderChat();
 };
-function renderChat() { root.render(
-  <StrictMode><MemoryRouter><div style={{ height: '100dvh' }}><ChatWindow conversationId={conversation.id} currentUser={{ id: 'me' }} /></div></MemoryRouter></StrictMode>,
+function renderChat() {
+  const chat = <ChatWindow conversationId={conversation.id} currentUser={{ id: 'me' }} />;
+  root.render(
+  <StrictMode><MemoryRouter>{new URLSearchParams(location.search).has('shell') ? (
+    <div className="app-shell">
+      <header className="mobile-appbar">Let's Tumpang</header>
+      <header className="topnav">Navigation</header>
+      <div className="app-main"><main className="message-module message-module-mobile">{chat}</main></div>
+    </div>
+  ) : <div style={{ height: '100dvh' }}>{chat}</div>}</MemoryRouter></StrictMode>,
 );
 }
 renderChat();

@@ -4227,15 +4227,10 @@
 }
 
 @media (max-width: 700px) {
-  /* Keep the list's own scrollport between the app bar and fixed bottom tabs. */
-  .message-module-mobile:has(> .message-conversation-list) {
+  /* Keep both the conversation list and chat composer between the app bar and bottom tabs. */
+  .message-module {
     height: calc(100vh - var(--nav-offset) - env(safe-area-inset-top) - 64px - env(safe-area-inset-bottom));
     height: calc(100dvh - var(--nav-offset) - env(safe-area-inset-top) - 64px - env(safe-area-inset-bottom));
-  }
-
-  .message-module {
-    height: calc(100vh - 64px - env(safe-area-inset-bottom));
-    height: calc(100dvh - 64px - env(safe-area-inset-bottom));
   }
 
   .message-history-page {

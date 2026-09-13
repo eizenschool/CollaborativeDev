@@ -18,6 +18,24 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Open camera options' })).toBeVisible();
 });
 
+test('phone composer stays above navigation, including a multiline draft', async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.startsWith('phone'), 'Phone app shell.');
+  await page.goto('/__chat-performance?shell=1');
+  const composer = page.locator('.message-composer');
+  await expect(composer).toBeVisible();
+  const checkBounds = async () => {
+    const navTop = await page.locator('.topnav').evaluate(e => e.getBoundingClientRect().top);
+    const composerBottom = await composer.evaluate(e => e.getBoundingClientRect().bottom);
+    expect(composerBottom).toBeLessThanOrEqual(navTop + 1);
+    await expect(page.locator('textarea')).toBeInViewport({ ratio: 1 });
+  };
+  await checkBounds();
+  await page.locator('textarea').fill('First line\nSecond line\nThird line\nFourth line');
+  await checkBounds();
+  await page.setViewportSize({ width: 375, height: 560 });
+  await checkBounds();
+});
+
 test('opens at latest messages and offers an arrow after scrolling into history', async ({ page }) => {
   const scroll = page.locator('.message-chat-scroll');
   const arrow = page.getByRole('button', { name: 'Scroll to latest messages' });
