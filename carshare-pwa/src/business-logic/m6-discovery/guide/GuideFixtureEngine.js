@@ -7,7 +7,7 @@ import { resetDemo, setWeatherOverride } from '../discovery/DiscoveryDemoControl
 import { GUIDE_ACTION, GUIDE_MODE, GUIDE_ORIGIN } from './constants.js';
 import { guideCopy } from './GuideLanguage.js';
 import { dateRangeDays, mergeGuideIntent, mostImportantMissingField, normalizePlanState } from './GuideIntentParser.js';
-import { createTraceId, isEmergencyIntent, isGuideHelpIntent } from './GuidePolicy.js';
+import { createTraceId, isEmergencyIntent, isGuideHelpIntent, isSelfHarmIntent } from './GuidePolicy.js';
 import { selectGuideBatch } from './GuideRecommendationEngine.js';
 import { searchGuideHelp } from './GuideHelpIndex.js';
 import { resolveKnownGuideOrigin } from './GuideOriginResolver.js';
@@ -83,6 +83,26 @@ export async function runFixtureGuideTurn({ text, planState, userId, remainingTu
   }
   const copy = guideCopy(nextPlan.language);
   const traceId = createTraceId('fixture');
+
+  // Checked before the external-danger emergency branch: a person in
+  // psychological crisis needs a supportive message and a crisis line, not
+  // "call 999 for the police", and must never be scored as ordinary abuse.
+  if (isSelfHarmIntent(text)) {
+    const selfHarmMessage = {
+      'zh-CN': '听起来你现在很不好受。这不是你能自己解决的重担，也有人愿意听你说。你可以拨打 Befrienders KL 03-7627 2929（24 小时），如果有即时生命危险请拨打 999。我会先停在这里，你想聊的话我都在。',
+      ms: 'Bunyinya anda sedang melalui detik yang sangat berat. Anda tak perlu hadapinya sendirian. Hubungi Befrienders KL di 03-7627 2929 (24 jam), atau 999 jika nyawa dalam bahaya serta-merta. Saya berhenti di sini buat masa ini - saya ada jika anda mahu bercakap.',
+      ta: 'நீங்கள் இப்போது மிகவும் கடினமான தருணத்தில் இருப்பது போல் தெரிகிறது. இதை நீங்கள் தனியே சமாளிக்க வேண்டியதில்லை. Befrienders KL - 03-7627 2929 (24 மணி நேரமும்) அழைக்கலாம், உடனடி உயிராபத்து இருந்தால் 999 ஐ அழைக்கவும். நான் இங்கே நிறுத்திக்கொள்கிறேன் - பேச விரும்பினால் நான் இருக்கிறேன்.'
+    }[nextPlan.language] || 'It sounds like you are going through something really heavy right now, and you should not have to carry it alone. You can call Befrienders KL at 03-7627 2929 (24 hours), or 999 if there is immediate danger to life. I am pausing travel planning here - I am here if you want to talk.';
+    const helplineLabel = { 'zh-CN': '致电 Befrienders (24小时)', ms: 'Hubungi Befrienders (24 jam)', ta: 'Befrienders-ஐ அழைக்கவும் (24 மணி)' }[nextPlan.language] || 'Call Befrienders (24/7)';
+    return { response: {
+      mode: GUIDE_MODE.EMERGENCY, assistantMessage: selfHarmMessage, language: nextPlan.language,
+      planState: nextPlan, quickReplies: [], recommendations: [],
+      actions: [
+        { type: GUIDE_ACTION.CALL_EMERGENCY, label: helplineLabel, href: 'tel:0376272929', requiresConfirmation: false },
+        { type: GUIDE_ACTION.OPEN_PROFILE, label: nextPlan.language === 'zh-CN' ? 'Trusted Family' : nextPlan.language === 'ms' ? 'Trusted Family' : nextPlan.language === 'ta' ? 'Trusted Family' : 'Open Trusted Family settings', href: '/profile', requiresConfirmation: false }
+      ], remainingTurns, fallbackReason: null, traceId
+    }, allowedCandidates: [] };
+  }
 
   if (isEmergencyIntent(text)) {
     return { response: {

@@ -101,6 +101,19 @@ const POLICY_RULES = Object.freeze([
   ] }
 ]);
 
+// Self-harm / suicide ideation is its own decision, checked before every
+// other rule. It must never be scored as targeted abuse (the person is not
+// attacking anyone), never masked like casual profanity (masking "i want to
+// die" into a censored fragment would defeat the point of detecting it), and
+// never routed through the external-danger emergency copy ("call 999 for the
+// police" is the wrong response to someone in psychological crisis).
+const SELF_HARM_PATTERNS = Object.freeze([
+  /\b(?:i(?:'m| am)?\s+(?:going to|gonna)\s+kill myself|i\s+(?:really\s+|just\s+|honestly\s+)?want(?:\s+to)?\s+die|i\s+don'?t\s+want\s+to\s+live|end(?:ing)?\s+my\s+(?:own\s+)?life|kill\s+myself|suicidal|thinking\s+about\s+suicide|hurt(?:ing)?\s+myself|harm(?:ing)?\s+myself|self[\s-]?harm)\b/iu,
+  /(?:我想死|我不想活了|我要自杀|想自杀|自残|想結束自己的生命|不想活了)/u,
+  /\b(?:nak\s+mati|saya\s+nak\s+bunuh\s+diri|bunuh\s+diri|cederakan\s+diri\s+sendiri|tak\s+nak\s+hidup\s+lagi)\b/iu,
+  /(?:தற்கொலை|நான்\s+செத்துவிட\s+வேண்டும்|எனக்கு\s+செத்துவிடணும்|என்னைத்\s+தானே\s+காயப்படுத்த)/u
+]);
+
 // These phrases represent a person asking for urgent help, rather than
 // threatening somebody. They are checked before abuse rules so a distressed
 // traveller is not blocked merely because their wording is impolite.
@@ -149,11 +162,25 @@ function hasEmergencyRequest(text) {
   return EMERGENCY_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function hasSelfHarmRequest(text) {
+  return SELF_HARM_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 export function classifyGuideContent(value) {
   const normalized = normalizeForPolicy(value);
   const hints = languageHints(normalized);
   if (!normalized) {
     return { decision: 'allow', category: 'none', sanitizedText: '', languageHints: hints, policyVersion: GUIDE_CONTENT_SAFETY_POLICY_VERSION };
+  }
+
+  // Checked before every other rule, including threat/hate: a traveller in
+  // psychological crisis must reach a supportive response even if their
+  // wording happens to also brush against another category's word list.
+  if (hasSelfHarmRequest(normalized)) {
+    return {
+      decision: 'self_harm', category: 'self_harm', sanitizedText: normalized,
+      languageHints: hints, policyVersion: GUIDE_CONTENT_SAFETY_POLICY_VERSION
+    };
   }
 
   const matches = findMatches(normalized);
@@ -177,4 +204,4 @@ export function classifyGuideContent(value) {
   return { decision: 'allow', category: 'none', sanitizedText: normalized, languageHints: hints, policyVersion: GUIDE_CONTENT_SAFETY_POLICY_VERSION };
 }
 
-export const guideContentSafetyInternals = Object.freeze({ normalizeForPolicy, languageHints, maskMatches });
+export const guideContentSafetyInternals = Object.freeze({ normalizeForPolicy, languageHints, maskMatches, hasSelfHarmRequest });

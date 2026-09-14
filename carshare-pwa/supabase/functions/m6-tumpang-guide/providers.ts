@@ -122,7 +122,11 @@ export const RECOMMENDATION_COPY_SCHEMA = {
         }
       }
     },
-    quickReplies: { type: "array", maxItems: 3, items: { type: "string" } }
+    // Bias toward suggestions the backend can reliably fulfil (more places,
+    // nearby food, replan) over a transport/travel-info question, which
+    // depends on a live web search that can occasionally fail.
+    quickReplies: { type: "array", maxItems: 3, items: { type: "string" },
+      description: "Prefer catalogue-backed follow-ups (more places, nearby food, replan) over a live-search-dependent transport question." }
   }
 };
 

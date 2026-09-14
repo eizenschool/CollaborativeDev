@@ -23,8 +23,27 @@ const HELP_TERMS = [
   /எப்படி|எங்கே|செயலியை|விருப்பம்|அறிவிப்பு/u
 ];
 
+// Self-harm / suicide ideation is deliberately its own category, separate from
+// EMERGENCY_TERMS above (which is about danger from someone/something else -
+// an accident, an attacker) and separate from the threat rules in
+// GuideContentSafety.js (which are about harming another named person). A
+// traveller expressing distress about themselves needs a supportive,
+// resource-pointing response, not the "call 999 for the police" framing an
+// external emergency gets, and it must never be scored as targeted abuse or
+// masked like ordinary profanity.
+const SELF_HARM_TERMS = [
+  /\b(?:i(?:'m| am)?\s+(?:going to|gonna)\s+kill myself|i\s+(?:really\s+|just\s+|honestly\s+)?want(?:\s+to)?\s+die|i\s+don'?t\s+want\s+to\s+live|end(?:ing)?\s+my\s+(?:own\s+)?life|kill\s+myself|suicidal|thinking\s+about\s+suicide|hurt(?:ing)?\s+myself|harm(?:ing)?\s+myself|self[\s-]?harm)\b/iu,
+  /(?:我想死|我不想活了|我要自杀|想自杀|自残|想結束自己的生命|不想活了)/u,
+  /\b(?:nak\s+mati|saya\s+nak\s+bunuh\s+diri|bunuh\s+diri|cederakan\s+diri\s+sendiri|tak\s+nak\s+hidup\s+lagi)\b/iu,
+  /(?:தற்கொலை|நான்\s+செத்துவிட\s+வேண்டும்|எனக்கு\s+செத்துவிடணும்|என்னைத்\s+தானே\s+காயப்படுத்த)/u
+];
+
 export function isEmergencyIntent(text) {
   return EMERGENCY_TERMS.some((pattern) => pattern.test(String(text || '')));
+}
+
+export function isSelfHarmIntent(text) {
+  return SELF_HARM_TERMS.some((pattern) => pattern.test(String(text || '')));
 }
 
 export function isGuideHelpIntent(text) {

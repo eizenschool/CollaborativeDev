@@ -144,6 +144,9 @@ Important audit warning: the current `index.ts`, `providers.ts` and
 | `prepare_guide_action` | prepare supported writes for confirmation | write before confirmation |
 | `trigger_emergency` | select the fixed server response/actions after emergency understanding | generate custom emergency prose |
 | `change_interface_language` | explicit UI-language changes | infer a full UI switch from every message |
+| `get_travel_info` | answer a general transport/travel question via grounded live search | invent facts when search fails (must fall back to an honest brush-off) |
+| `get_route_estimate` | answer a point-to-point distance/travel-time question for one named destination | claim a real driving route while routes are kill-switched (see section 5) |
+| `get_weather_forecast` | answer a weather-forecast question for a bounded date/location window | guess a forecast without checking the real service |
 
 Each tool needs its own mutually exclusive schema. Do not restore a shared
 `COMMON_PROPERTIES` object that lets a recommendation call masquerade as place information.
@@ -152,6 +155,13 @@ Each tool needs its own mutually exclusive schema. Do not restore a shared
 
 `database/sql/085_m6_guide_agent_reliability.sql` is currently untracked locally.
 The user says it is already applied remotely. Verify before relying on it.
+
+Route estimation is currently degraded-by-default: `M6_GUIDE_ROUTES_ENABLED` is
+unset and migration `082` is unapplied, so every `get_route_estimate` answer
+returns a straight-line estimate rather than a real driving route (see
+`docs/TUMPANG-GUIDE-TODO.md`). This is a known, deliberate pending state, not
+a bug to silently fix by flipping the switch - enabling it needs the env var,
+the migration applied, and a real `GOOGLE_ROUTES_SERVER_KEY`.
 
 Expected responsibilities:
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  guideResponseContextText, isEmergencyIntent, safeRecentMessages, shouldUseLocalGuideRules, validateGuideResponse
+  guideResponseContextText, isEmergencyIntent, isSelfHarmIntent, safeRecentMessages, shouldUseLocalGuideRules, validateGuideResponse
 } from '../GuidePolicy.js';
 
 const valid = {
@@ -93,6 +93,15 @@ describe('Tumpang Guide browser response policy', () => {
 
   it('does not mistake an ordinary help request for an emergency', () => {
     expect(isEmergencyIntent('help me save this to my interest')).toBe(false);
+  });
+
+  it.each(['I want to kill myself', 'I don\'t want to live anymore', '我不想活了', '我要自杀', 'saya nak bunuh diri', 'தற்கொலை'])('recognises self-harm intent as its own signal: %s', (text) => {
+    expect(isSelfHarmIntent(text)).toBe(true);
+  });
+
+  it('does not mistake an ordinary complaint or a threat toward someone else for self-harm', () => {
+    expect(isSelfHarmIntent('this ride is going to kill me, it is so slow')).toBe(false);
+    expect(isSelfHarmIntent('I will kill you')).toBe(false);
   });
 
   it('never lets online production turns bypass AI into local rules', () => {

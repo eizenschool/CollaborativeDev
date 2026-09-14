@@ -66,6 +66,16 @@ Every tool has a dedicated schema.
 - `prepare_guide_action`: prepares a supported write for user confirmation.
 - `trigger_emergency`: selects the server-owned emergency response/actions.
 - `change_interface_language`: explicit interface-language change only.
+- `get_travel_info`: answers a general transport/travel fact question (e.g.
+  "how do I get around without a car?") via live grounded web search
+  (Gemini/Groq). Gives an honest brush-off rather than inventing an answer
+  when both providers fail to return anything.
+- `get_route_estimate`: answers a point-to-point distance/travel-time question
+  for one named destination. Currently degrades to a straight-line estimate
+  by default rather than a real driving route, because `M6_GUIDE_ROUTES_ENABLED`
+  is unset and SQL migration `082` is unapplied - see `docs/TUMPANG-GUIDE-TODO.md`.
+- `get_weather_forecast`: answers a weather-forecast question for a bounded
+  date/location window.
 
 Ordinary chat calls no travel tool. A named catalogue place cannot become a
 recommendation or missing-field clarification. A non-catalogue name is rejected

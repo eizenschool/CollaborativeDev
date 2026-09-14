@@ -42,6 +42,23 @@ describe('Tumpang Guide content safety policy', () => {
     expect(classifyGuideContent('Damn, I am in danger, please help me now.').decision).toBe('emergency');
   });
 
+  it('routes self-harm intent to its own decision, distinct from threat/emergency/abuse', () => {
+    // "kill myself" must never be caught by the "kill you/him/her/them"
+    // threat rule (wrong object), scored as targeted abuse, or answered with
+    // the external-danger emergency copy ("call 999 for the police").
+    expect(classifyGuideContent('I want to kill myself').decision).toBe('self_harm');
+    expect(classifyGuideContent('I want to kill myself').category).toBe('self_harm');
+    expect(classifyGuideContent('我不想活了').decision).toBe('self_harm');
+    expect(classifyGuideContent('saya nak bunuh diri').decision).toBe('self_harm');
+    expect(classifyGuideContent('எனக்கு செத்துவிடணும்').decision).toBe('self_harm');
+  });
+
+  it('never masks or drops self-harm wording the way it would ordinary profanity', () => {
+    const result = classifyGuideContent('I really want to die, can you help me find somewhere quiet');
+    expect(result.decision).toBe('self_harm');
+    expect(result.sanitizedText).toContain('die');
+  });
+
   it('does not expose matched words and reports a stable policy version', () => {
     const result = classifyGuideContent('you are stupid');
     expect(result).toEqual({

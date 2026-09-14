@@ -65,6 +65,17 @@ describe('Tumpang Guide place-information fallback contract', () => {
   });
 });
 
+describe('Tumpang Guide travel-info fallback contract', () => {
+  it('marks a live travel-info fallback as retryable (regression: this path built fallbackReason and a brush-off message but never set retryable, so the Retry button silently never appeared)', () => {
+    const branch = source.slice(
+      source.indexOf('if (intent.requestedMode === "travel_info")'),
+      source.indexOf('if (intent.requestedMode === "help")')
+    );
+    expect(branch).toContain('fallbackReason = "live_place_info_unavailable"');
+    expect(branch).toContain('retryable: Boolean(fallbackReason)');
+  });
+});
+
 describe('Tumpang Guide pendingClarification wiring (regression: a bare one-word reply to a weather/route clarify question got reinterpreted as an unrelated fresh request, since nothing told the routing call a specific question was still pending)', () => {
   it('validates the client-echoed shape narrowly before it ever reaches the routing prompt', () => {
     expect(source).toContain('function safePendingClarification');

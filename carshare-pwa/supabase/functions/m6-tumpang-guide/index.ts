@@ -835,6 +835,36 @@ function emergencyResponse(plan: Record<string, unknown>, remainingTurns: number
   };
 }
 
+// Self-harm / suicide ideation is deliberately routed away from
+// emergencyResponse() above: "call 999 if anyone is in immediate danger" is
+// written for an external threat (an accident, an attacker), not for a
+// traveller in psychological crisis. This mirrors the same fixed-copy,
+// no-provider-call shape so it is exactly as reliable as the external-danger
+// path, but with supportive wording and a Malaysian crisis line
+// (Befrienders KL, 24 hours) instead of the police.
+function selfHarmResponse(plan: Record<string, unknown>, remainingTurns: number, trace: string, source: string, responseLanguage = String(plan.language || "en")) {
+  const language = String(responseLanguage || plan.language || "en");
+  const assistantMessage = language === "zh-CN"
+    ? "听起来你现在很不好受。这不是你一个人需要扛下来的重担，也有人愿意听你说。你可以拨打 Befrienders KL 03-7627 2929（24 小时），如果有即时生命危险请拨打 999。我先停在这里，你想聊的话我都在。"
+    : language === "ms"
+      ? "Bunyinya anda sedang melalui detik yang sangat berat, dan anda tak perlu hadapinya seorang diri. Hubungi Befrienders KL di 03-7627 2929 (24 jam), atau 999 jika nyawa dalam bahaya serta-merta. Saya berhenti di sini buat masa ini - saya ada jika anda mahu bercakap."
+      : language === "ta"
+        ? "நீங்கள் இப்போது மிகவும் கடினமான தருணத்தில் இருப்பது போல் தெரிகிறது, இதை நீங்கள் தனியே சுமக்க வேண்டியதில்லை. Befrienders KL - 03-7627 2929 (24 மணி நேரமும்) அழைக்கலாம், உடனடி உயிராபத்து இருந்தால் 999 ஐ அழைக்கவும். நான் இங்கே நிறுத்திக்கொள்கிறேன் - பேச விரும்பினால் நான் இருக்கிறேன்."
+        : "It sounds like you are going through something really heavy right now, and you should not have to carry it alone. You can call Befrienders KL at 03-7627 2929 (24 hours), or 999 if there is immediate danger to life. I am pausing travel planning here - I am here if you want to talk.";
+  const helplineLabel = language === "zh-CN" ? "致电 Befrienders (24小时)"
+    : language === "ms" ? "Hubungi Befrienders (24 jam)"
+      : language === "ta" ? "Befrienders-ஐ அழைக்கவும் (24 மணி)" : "Call Befrienders (24/7)";
+  const trustedFamilyLabel = language === "zh-CN" || language === "ms" || language === "ta" ? "Trusted Family" : "Open Trusted Family settings";
+  return {
+    mode: "emergency", assistantMessage, language, responseLanguage: language, planState: plan,
+    quickReplies: [], recommendations: [], actions: [
+      { type: "call_emergency", label: helplineLabel, href: "tel:0376272929", requiresConfirmation: false },
+      { type: "open_profile", label: trustedFamilyLabel, href: "/profile", requiresConfirmation: false }
+    ], remainingTurns, fallbackReason: null, source, providerModel: null, intentConfidence: null,
+    batchId: null, traceId: trace
+  };
+}
+
 async function namedPlaceGuardResponse({
   admin, user, body, plan, trace, started, quota, origin, kind, language, choices = []
 }: {
@@ -932,6 +962,12 @@ async function handleTurnAttempt(
   // response before the provider route. This keeps distressed wording from
   // being rejected by the ordinary abuse policy, while the content classifier
   // still blocks threats directed at another person.
+  if (body.__contentSafetyDecision === "self_harm") {
+    const answerLanguage = namedPlaceResponseLanguage(message, plan.language);
+    return await finalize(admin, user, body,
+      selfHarmResponse(plan, quota.remaining, trace, "safety", answerLanguage),
+      [], started, true, key, quota.globalKey, origin);
+  }
   if (body.__contentSafetyDecision === "emergency") {
     const answerLanguage = namedPlaceResponseLanguage(message, plan.language);
     return await finalize(admin, user, body,
@@ -1597,6 +1633,12 @@ async function handleTurnAttempt(
       language: responseLanguage, responseLanguage, planState: plan,
       quickReplies: [], recommendations: [], actions: [], travelInfo,
       remainingTurns: Math.max(0, quota.remaining - 1), fallbackReason, source, providerModel,
+      // Regression: this path built fallbackReason and a brush-off message but
+      // never set retryable, so the client's Retry button (gated purely on
+      // this flag - see GuideTranscript.jsx) silently never appeared here even
+      // though a live-search outage is exactly as retriable as any other
+      // provider failure. Mirrors the sibling get_place_information path above.
+      retryable: Boolean(fallbackReason),
       intentProvider: intent.provider, intentConfidence: intent.confidence,
       contractVersion: "m6-guide-travel-info-v1", conversationFocus: "none", batchId: null, traceId: trace
     };
@@ -1831,7 +1873,7 @@ async function handleTurnAttempt(
     counts[category] = (counts[category] || 0) + 1; return counts;
   }, {});
   const prompt = JSON.stringify({
-    instruction: `You are Tumpang Guide's friendly Malaysian travel concierge. The server has already selected an immutable catalogue batch. You do not choose places or rankings. assistantMessage must be ONE short introductory sentence for the whole batch (for example naming the count and category/occasion) - it must NOT describe, summarize or list the individual places one by one; that per-place writing belongs only in recommendationCopy. For each supplied Place ID, write one vivid, traveller-centred reason, one fuller explanation of why it fits this specific plan, and one honest trade-off using only supplied verified facts, as separate recommendationCopy entries - never repeat that same material inside assistantMessage. Explain the experience and practical value; never mention algorithms, weights, scores, reason codes or internal rules. Do not invent activities, opening hours, prices, routes, safety guarantees or live conditions. Review count is evidence coverage, never proof that a place is quiet, busy, crowded or overrun; never use those claims. A published ride only proves that the destination is listed on a ride; availableSeats only describes that listed ride and never confirms that this traveller can use it, that the pickup point is suitable, or that the route is convenient. distanceKm is a relative straight-line signal, never travel time, road distance or reachability. Never say that a ride is on the way, that a place is easy to reach, or that a traveller is guaranteed a seat. Preserve official place names exactly. No web or map search is available in this recommendation-writing step; later place questions use a separately verified live-information flow. Return exactly one copy item for every supplied Place ID and no others. Write every human-facing sentence in responseLanguage without mixing English UI labels into another language, except official names, brands, dates and numbers.`,
+    instruction: `You are Tumpang Guide's friendly Malaysian travel concierge. The server has already selected an immutable catalogue batch. You do not choose places or rankings. assistantMessage must be ONE short introductory sentence for the whole batch (for example naming the count and category/occasion) - it must NOT describe, summarize or list the individual places one by one; that per-place writing belongs only in recommendationCopy. For each supplied Place ID, write one vivid, traveller-centred reason, one fuller explanation of why it fits this specific plan, and one honest trade-off using only supplied verified facts, as separate recommendationCopy entries - never repeat that same material inside assistantMessage. Explain the experience and practical value; never mention algorithms, weights, scores, reason codes or internal rules. Do not invent activities, opening hours, prices, routes, safety guarantees or live conditions. Review count is evidence coverage, never proof that a place is quiet, busy, crowded or overrun; never use those claims. A published ride only proves that the destination is listed on a ride; availableSeats only describes that listed ride and never confirms that this traveller can use it, that the pickup point is suitable, or that the route is convenient. distanceKm is a relative straight-line signal, never travel time, road distance or reachability. Never say that a ride is on the way, that a place is easy to reach, or that a traveller is guaranteed a seat. Preserve official place names exactly. No web or map search is available in this recommendation-writing step; later place questions use a separately verified live-information flow. Return exactly one copy item for every supplied Place ID and no others. Write every human-facing sentence in responseLanguage without mixing English UI labels into another language, except official names, brands, dates and numbers. Prefer quick-reply suggestions that ask to see more catalogue places, nearby food, or replan the trip; only suggest a transport/travel-info question when it is clearly what the traveller needs next, since that answer depends on a live search that can occasionally be unavailable.`,
     responseLanguage,
     promptVersion: PROMPT_VERSION,
     planState: { ...(sanitizePlanState(plan) as Record<string, unknown>), tripHistoryConsent: Boolean(user && plan.tripHistoryConsent) },
@@ -2366,7 +2408,8 @@ async function handle(request: Request) {
   body = {
     ...body,
     message: contentSafety.sanitizedText || String(body.message || "").trim(),
-    ...(contentSafety.decision === "emergency" ? { __contentSafetyDecision: "emergency" } : {})
+    ...(contentSafety.decision === "emergency" ? { __contentSafetyDecision: "emergency" } : {}),
+    ...(contentSafety.decision === "self_harm" ? { __contentSafetyDecision: "self_harm" } : {})
   };
   if (contentSafety.decision === "mask") {
     console.info(JSON.stringify({ event: "m6_guide_content_safety_mask", traceId: traceId(),
@@ -2375,6 +2418,15 @@ async function handle(request: Request) {
       decision: contentSafety.decision, policyVersion: contentSafety.policyVersion }));
   } else if (contentSafety.decision === "emergency") {
     console.info(JSON.stringify({ event: "m6_guide_content_safety_emergency", traceId: traceId(),
+      inputSource: body.inputSource === "voice" ? "voice" : "text",
+      languageHints: contentSafety.languageHints, category: contentSafety.category,
+      decision: contentSafety.decision, policyVersion: contentSafety.policyVersion }));
+  } else if (contentSafety.decision === "self_harm") {
+    // No matched words are logged here either - see GuideContentSafety.js's
+    // own policy note. Distinct event name so this never gets grouped with
+    // external-danger emergencies in monitoring, which would misreport a
+    // traveller's psychological crisis as an accident/attack signal.
+    console.info(JSON.stringify({ event: "m6_guide_content_safety_self_harm", traceId: traceId(),
       inputSource: body.inputSource === "voice" ? "voice" : "text",
       languageHints: contentSafety.languageHints, category: contentSafety.category,
       decision: contentSafety.decision, policyVersion: contentSafety.policyVersion }));
