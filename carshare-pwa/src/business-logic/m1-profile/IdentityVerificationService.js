@@ -318,5 +318,39 @@ export const IdentityVerificationService = {
 
     const { error } = await identityVerificationSupabaseAdapter.review(userId, outcome, note);
     if (error) throw error;
+  },
+
+  // Admin-only (105_m1). Lists every active member with zero
+  // identity_verifications row - never submitted, not merely pending or
+  // rejected - oldest signup first, so the reviewer sees who has waited
+  // longest. RLS/the RPC's own admin check reject a non-admin caller outright.
+  async adminListUnverifiedMembers() {
+    if (!identityVerificationSupabaseAdapter.isConfigured) {
+      const rows = await profileMockAdapter.adminListUnverifiedMembers();
+      return rows.map((row) => ({ userId: row.userId, fullName: row.fullName, createdAt: row.createdAt, daysSinceSignup: row.daysSinceSignup }));
+    }
+
+    const { data, error } = await identityVerificationSupabaseAdapter.listUnverifiedMembers();
+    if (error) {
+      if (isUndeployedIdentityContract(error)) return [];
+      throw error;
+    }
+    return (data || []).map((row) => ({
+      userId: row.user_id,
+      fullName: row.full_name,
+      createdAt: row.created_at,
+      daysSinceSignup: Number(row.days_since_signup ?? 0)
+    }));
+  },
+
+  // Admin-only (105_m1). A deliberate, manual exception to "identity
+  // documents do not affect reputation" - routes through
+  // public.admin_apply_identity_overdue_penalty, which re-checks the admin
+  // allowlist server-side and applies a day-scoped, idempotent -5 event.
+  async adminApplyOverduePenalty(userId, reason = null) {
+    if (!identityVerificationSupabaseAdapter.isConfigured) return profileMockAdapter.adminApplyIdentityOverduePenalty(userId, reason);
+
+    const { error } = await identityVerificationSupabaseAdapter.applyOverduePenalty(userId, reason);
+    if (error) throw error;
   }
 };

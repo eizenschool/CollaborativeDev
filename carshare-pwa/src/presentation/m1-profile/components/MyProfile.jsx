@@ -13,7 +13,7 @@ import { HostImpactEngine } from '../../../business-logic/m1-profile/HostImpactE
 import { ReputationService } from '../../../business-logic/m1-profile/ReputationService.js';
 import { canPublishWithIdentity, IdentityVerificationService } from '../../../business-logic/m1-profile/IdentityVerificationService.js';
 import IdentityVerificationCard from './IdentityVerificationCard.jsx';
-import { describeReputationEvent, REPUTATION_POLICY } from '../../../business-logic/m1-profile/ReputationPolicy.js';
+import { CONDUCT_SEVERITY_TIERS, describeReputationEvent, REPUTATION_EVENT_DELTAS, REPUTATION_POLICY } from '../../../business-logic/m1-profile/ReputationPolicy.js';
 import { sharePublicProfile } from '../../../business-logic/m1-profile/ProfileShareService.js';
 import TrustedFamilyCard from '../../m2-rides/components/trusted-family/TrustedFamilyCard.jsx';
 import {
@@ -138,7 +138,7 @@ export default function MyProfile() {
             </button>
           ))}
         </nav>
-        <p className="rail-note">Reputation is calculated from verified Module 2 ride outcomes. Host Impact is calculated separately by Module 5.</p>
+        <p className="rail-note">Reputation is calculated from verified ride outcomes, plus a narrow manual admin exception for unresolved identity verification. Host Impact is calculated separately by Module 5.</p>
       </aside>
 
       <main className="panels">
@@ -750,6 +750,12 @@ function ReputationImpactPanel({ summary, reputation }) {
 
   const maxForBar = summary.nextTier ? summary.nextTier.minScore : summary.compositeScore * 1.2;
   const pct = Math.min(100, Math.round((summary.compositeScore / maxForBar) * 100));
+  // Derived from the actual tier deltas (104_m1) rather than hardcoded, so
+  // this copy cannot silently drift out of date the way it just did when a
+  // new severity tier was added.
+  const conductDeltas = CONDUCT_SEVERITY_TIERS.map((tier) => tier.delta);
+  const conductMin = Math.max(...conductDeltas);
+  const conductMax = Math.min(...conductDeltas);
 
   return (
     <>
@@ -779,7 +785,8 @@ function ReputationImpactPanel({ summary, reputation }) {
               <li>Completed ride +1; on-time check-in +1</li>
               <li>4-star review +1; 5-star review +2</li>
               <li>Cancellation −1 to −6 depending on notice</li>
-              <li>Verified no-show −10; confirmed conduct cases −8 to −20</li>
+              <li>Verified no-show −10; confirmed conduct cases {conductMin} to {conductMax}, escalating on repeat offenses</li>
+              <li>Identity never verified since signup: an admin may apply a one-time {REPUTATION_EVENT_DELTAS.identity_verification_overdue} penalty, at most once per day</li>
             </ul>
             <p className="card-subtitle reputation-login-note">Normal login does not add reputation points because it does not prove ride reliability.</p>
           </div>

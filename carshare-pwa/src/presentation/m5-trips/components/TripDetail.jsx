@@ -84,6 +84,22 @@ export default function TripDetail() {
         <StatusBadge tone={statusTone(trip.status)}>{trip.status}</StatusBadge>
       </div>
 
+      {/* Not an edit affordance (this screen stays read-only per the header
+          comment) - reviewing is a separate member action, same as it is on
+          Module 2's own RideDetail. Reuses that page's actual review form
+          (/ride/:id/review) rather than rebuilding review-eligibility and
+          already-reviewed state here; RateReview.jsx already handles both. */}
+      {trip.status === 'Completed' && (
+        <button
+          type="button"
+          className="btn-primary"
+          style={{ width: '100%', marginBottom: 20 }}
+          onClick={() => navigate(`/ride/${trip.id}/review`)}
+        >
+          {trip.role === 'Host' ? 'Rate passengers' : 'Rate Driver'}
+        </button>
+      )}
+
       <div className="m5-detail-layout">
         <div>
           <MapPreview trip={trip} />

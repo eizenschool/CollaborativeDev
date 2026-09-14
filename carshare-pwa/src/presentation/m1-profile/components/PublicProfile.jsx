@@ -8,6 +8,7 @@ import {
   FriendshipService,
 } from '../../../business-logic/m3-messaging/FriendshipService.js';
 import { IdentityVerificationService } from '../../../business-logic/m1-profile/IdentityVerificationService.js';
+import { ReputationService } from '../../../business-logic/m1-profile/ReputationService.js';
 import { sharePublicProfile } from '../../../business-logic/m1-profile/ProfileShareService.js';
 import { useAuth } from '../../shared/context/AuthContext.jsx';
 import { IconArrowLeft, IconCar, IconLeaf, IconMedal, IconMessage, IconShield, IconStar, IconUser, IconUsers } from '../../shared/components/icons.jsx';
@@ -31,6 +32,12 @@ export default function PublicProfile() {
   const [friendsUnavailable, setFriendsUnavailable] = useState(false);
   const [relationshipAction, setRelationshipAction] = useState('');
   const [shareFeedback, setShareFeedback] = useState('');
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportRideId, setReportRideId] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -41,6 +48,14 @@ export default function PublicProfile() {
       .catch((loadError) => active && setError(loadError.message || 'This profile could not be loaded.'))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
+  }, [userId]);
+
+  useEffect(() => {
+    setReportOpen(false);
+    setReportReason('');
+    setReportRideId('');
+    setReportError('');
+    setReportSubmitted(false);
   }, [userId]);
 
   useEffect(() => {
@@ -104,6 +119,27 @@ export default function PublicProfile() {
       if (result.method === 'shared') setShareFeedback('Profile shared.');
     } catch (shareError) {
       setShareFeedback(shareError.message || 'Unable to share this profile.');
+    }
+  }
+
+  async function submitReport(event) {
+    event.preventDefault();
+    if (!reportReason.trim()) {
+      setReportError('Tell us what happened before submitting.');
+      return;
+    }
+    setReportBusy(true);
+    setReportError('');
+    try {
+      await ReputationService.submitSafetyReport(user.id, userId, reportReason.trim(), reportRideId.trim() || null);
+      setReportSubmitted(true);
+      setReportOpen(false);
+      setReportReason('');
+      setReportRideId('');
+    } catch (reportSubmitError) {
+      setReportError(reportSubmitError.message || 'That report could not be submitted.');
+    } finally {
+      setReportBusy(false);
     }
   }
 
@@ -233,6 +269,66 @@ export default function PublicProfile() {
         <h2>How reputation works</h2>
         <p>Only verified ride outcomes, participant reviews, cancellations, no-shows, and confirmed conduct decisions change this standing. Opening the app or editing a profile does not award trust points.</p>
       </section>
+
+      {!isOwnProfile && user && (
+        <section className="card public-profile-section" aria-label="Report this member">
+          {reportSubmitted && (
+            <p className="card-subtitle" style={{ marginBottom: 0 }}>
+              Report submitted. A Trust &amp; Safety reviewer will follow up - this does not change {profile.displayName}&apos;s score on its own.
+            </p>
+          )}
+          {!reportSubmitted && !reportOpen && (
+            <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '10px 20px' }} onClick={() => setReportOpen(true)}>
+              Report this member
+            </button>
+          )}
+          {!reportSubmitted && reportOpen && (
+            <form onSubmit={submitReport}>
+              <p className="card-title">Report {profile.displayName}</p>
+              <p className="card-subtitle" style={{ marginBottom: 14 }}>
+                Tell a Trust &amp; Safety reviewer what happened. This does not change anyone&apos;s score by itself.
+              </p>
+              <div className="field">
+                <label htmlFor="report-reason">What happened</label>
+                <div className="input-wrap">
+                  <input
+                    id="report-reason"
+                    value={reportReason}
+                    onChange={(event) => setReportReason(event.target.value)}
+                    placeholder="e.g. Was rude and aggressive during the ride."
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="report-ride-id">Related ride ID (optional)</label>
+                <div className="input-wrap">
+                  <input
+                    id="report-ride-id"
+                    value={reportRideId}
+                    onChange={(event) => setReportRideId(event.target.value)}
+                    placeholder="Leave blank if this is not tied to one ride"
+                  />
+                </div>
+              </div>
+              {reportError && <div className="alert alert-error" style={{ marginBottom: 12 }}>{reportError}</div>}
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }} disabled={reportBusy}>
+                  {reportBusy ? 'Submitting…' : 'Submit report'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ width: 'auto', padding: '10px 20px' }}
+                  disabled={reportBusy}
+                  onClick={() => { setReportOpen(false); setReportError(''); }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
     </PageShell>
   );
 }

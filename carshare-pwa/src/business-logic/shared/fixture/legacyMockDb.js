@@ -9,6 +9,7 @@ import {
 import {
   cancellationReputationEvent,
   clampReputationScore,
+  conductEscalationCounts,
   describeReputationEvent,
   getRideEligibility,
   isReputationEventType,
@@ -16,6 +17,7 @@ import {
   REPUTATION_POLICY,
   reputationEvidenceCount,
   reputationStanding,
+  resolveConductSeverity,
   reviewReputationDelta,
 } from '../../m1-profile/ReputationPolicy.js';
 import {
@@ -29,6 +31,7 @@ configureLegacyMockDataStore({
   rideIntervalsOverlap,
   cancellationReputationEvent,
   clampReputationScore,
+  conductEscalationCounts,
   describeReputationEvent,
   getRideEligibility,
   isReputationEventType,
@@ -36,6 +39,7 @@ configureLegacyMockDataStore({
   REPUTATION_POLICY,
   reputationEvidenceCount,
   reputationStanding,
+  resolveConductSeverity,
   reviewReputationDelta,
   buildPublicProfile,
   DEFAULT_PROFILE_VISIBILITY,

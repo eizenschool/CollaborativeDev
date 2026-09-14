@@ -13,6 +13,7 @@ let DEPARTURE_GRACE_MINUTES;
 let rideIntervalsOverlap;
 let cancellationReputationEvent;
 let clampReputationScore;
+let conductEscalationCounts;
 let describeReputationEvent;
 let getRideEligibility;
 let isReputationEventType;
@@ -20,6 +21,7 @@ let REPUTATION_EVENT_DELTAS;
 let REPUTATION_POLICY;
 let reputationEvidenceCount;
 let reputationStanding;
+let resolveConductSeverity;
 let reviewReputationDelta;
 let buildPublicProfile;
 let DEFAULT_PROFILE_VISIBILITY;
@@ -34,6 +36,7 @@ export function configureLegacyMockDataStore(dependencies) {
     rideIntervalsOverlap,
     cancellationReputationEvent,
     clampReputationScore,
+    conductEscalationCounts,
     describeReputationEvent,
     getRideEligibility,
     isReputationEventType,
@@ -41,6 +44,7 @@ export function configureLegacyMockDataStore(dependencies) {
     REPUTATION_POLICY,
     reputationEvidenceCount,
     reputationStanding,
+    resolveConductSeverity,
     reviewReputationDelta,
     buildPublicProfile,
     DEFAULT_PROFILE_VISIBILITY,
@@ -144,6 +148,7 @@ const seedData = {
   profileVisibility: {},
   identityVerifications: {},
   reputationEvents: {},
+  safetyReports: {},
   // Ride Sharing Management (Module 2, FR-2.x) - Ride Management Component's
   // records. Seeded with 4 published rides so Find a Ride has something to browse.
   rides: {
@@ -777,6 +782,178 @@ export const mockDb = {
     record.review_note = note || '';
     save(db);
     return { userId, ...record };
+  },
+
+  // Mirrors 105_m1's admin_list_unverified_members: every active member with
+  // zero identity_verifications row (a pending/rejected row belongs on the
+  // existing tabs instead), oldest signup first.
+  async adminListUnverifiedMembers() {
+    await delay();
+    const db = load();
+    const now = Date.now();
+    return Object.values(db.users || {})
+      .filter((user) => user.status === 'active' && !db.identityVerifications?.[user.id])
+      .map((user) => {
+        const createdAt = user.createdAt || new Date(0).toISOString();
+        return {
+          userId: user.id,
+          fullName: user.fullName,
+          createdAt,
+          daysSinceSignup: Math.floor((now - new Date(createdAt).getTime()) / 86400000)
+        };
+      })
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  },
+
+  // Mirrors 105_m1's admin_apply_identity_overdue_penalty: one penalty per
+  // user per calendar day, via the same idempotent ledger recordMockReputationEvent uses.
+  async adminApplyIdentityOverduePenalty(userId, reason = null) {
+    await delay();
+    const db = load();
+    const today = new Date().toISOString().slice(0, 10);
+    const stored = recordMockReputationEvent(db, {
+      userId,
+      rideId: null,
+      sourceModule: 'm1',
+      sourceEventId: `identity-overdue:${today}`,
+      type: 'identity_verification_overdue',
+      role: 'traveller',
+      delta: REPUTATION_EVENT_DELTAS.identity_verification_overdue,
+      reason: reason || 'Identity verification still not submitted since signup'
+    });
+    save(db);
+    return stored;
+  },
+
+  // Mirrors 106_m1's admin_get_reputation_summary: Safety-sourced (confirmed
+  // conduct) history only, not the member's full ride ledger - a reviewer
+  // needs prior-case counts for the escalation preview, not every review or
+  // cancellation.
+  async adminGetReputationSummary(userId) {
+    await delay();
+    const db = load();
+    const stats = db.impact[userId] || { completedTrips: 0, reputationScore: REPUTATION_POLICY.baseScore, rating: null };
+    const allEvents = Object.values(db.reputationEvents).filter((event) => event.userId === userId);
+    const conductEvents = allEvents
+      .filter((event) => event.sourceModule === 'safety')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return {
+      score: stats.reputationScore ?? REPUTATION_POLICY.baseScore,
+      hold: Boolean(stats.reputationHold),
+      evidenceCount: reputationEvidenceCount(allEvents, stats.completedTrips),
+      conductEvents
+    };
+  },
+
+  // Mirrors 106_m1's admin_apply_conduct_outcome: resolveConductSeverity
+  // decides the *effective* type/delta/hold (escalating a repeat offender
+  // exactly as private.apply_conduct_outcome does), and a fresh id per call
+  // means confirming two incidents the same day never collapses into one.
+  async adminApplyConductOutcome(userId, eventType, reason, rideId = null, setHold = false) {
+    await delay();
+    const db = load();
+    const priorConductEvents = Object.values(db.reputationEvents)
+      .filter((event) => event.userId === userId && event.sourceModule === 'safety');
+    const resolved = resolveConductSeverity(eventType, conductEscalationCounts(priorConductEvents));
+    const stored = recordMockReputationEvent(db, {
+      userId,
+      rideId: rideId || null,
+      sourceModule: 'safety',
+      sourceEventId: `conduct:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+      type: resolved.effectiveType,
+      role: 'traveller',
+      delta: resolved.delta,
+      reason
+    });
+    if (resolved.hold || setHold) {
+      db.impact[userId] ||= { completedTrips: 0, co2SavedKg: 0, reputationScore: REPUTATION_POLICY.baseScore, rating: null };
+      db.impact[userId].reputationHold = true;
+    }
+    save(db);
+    return Boolean(stored);
+  },
+
+  // Mirrors 106_m1's admin_clear_reputation_hold: only clears the flag, same
+  // as the real function - no compensating score event.
+  async adminClearReputationHold(userId) {
+    await delay();
+    const db = load();
+    if (db.impact[userId]) db.impact[userId].reputationHold = false;
+    save(db);
+  },
+
+  // Mirrors 107_m1's submit_safety_report: one open report per (reporter,
+  // reported member) pair, no self-reports, target must be an active
+  // profile. Returns the created report's id.
+  async submitSafetyReport(reporterId, reportedUserId, reason, rideId = null) {
+    await delay();
+    const db = load();
+    db.safetyReports ||= {};
+    const trimmedReason = (reason || '').trim();
+    if (!trimmedReason) throw new Error('A reason is required to report a member.');
+    if (reportedUserId === reporterId) throw new Error('You cannot report yourself.');
+    const target = db.users[reportedUserId];
+    if (!target || target.status !== 'active') throw new Error('That member could not be found.');
+    const hasOpenReport = Object.values(db.safetyReports).some((report) =>
+      report.reporterId === reporterId && report.reportedUserId === reportedUserId && report.status === 'open');
+    if (hasOpenReport) throw new Error('You already have an open report for this member.');
+
+    const id = `report_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    db.safetyReports[id] = {
+      id,
+      reporterId,
+      reportedUserId,
+      rideId: rideId || null,
+      reason: trimmedReason,
+      status: 'open',
+      createdAt: new Date().toISOString(),
+      resolvedAt: null,
+      resolutionNote: null
+    };
+    save(db);
+    return id;
+  },
+
+  // Mirrors 107_m1's admin_list_safety_reports: 'open' (the default) sorts
+  // oldest first, matching queue semantics; any other status sorts newest
+  // first as a resolution history.
+  async adminListSafetyReports(status = 'open') {
+    await delay();
+    const db = load();
+    db.safetyReports ||= {};
+    const reports = Object.values(db.safetyReports).filter((report) => status === 'all' || report.status === status);
+    reports.sort((a, b) => (status === 'open'
+      ? new Date(a.createdAt) - new Date(b.createdAt)
+      : new Date(b.createdAt) - new Date(a.createdAt)));
+    return reports.map((report) => ({
+      id: report.id,
+      reporterId: report.reporterId,
+      reporterName: db.users[report.reporterId]?.fullName || 'Member',
+      reportedUserId: report.reportedUserId,
+      reportedName: db.users[report.reportedUserId]?.fullName || 'Member',
+      rideId: report.rideId,
+      reason: report.reason,
+      status: report.status,
+      createdAt: report.createdAt,
+      resolvedAt: report.resolvedAt,
+      resolutionNote: report.resolutionNote
+    }));
+  },
+
+  // Mirrors 107_m1's admin_resolve_safety_report: only a currently-open
+  // report can be resolved or dismissed, and this never edits the report's
+  // own contents - only its resolution state.
+  async adminResolveSafetyReport(reportId, status, note = null) {
+    await delay();
+    const db = load();
+    db.safetyReports ||= {};
+    const report = db.safetyReports[reportId];
+    if (!report || report.status !== 'open') throw new Error('That report is no longer open.');
+    if (!['resolved', 'dismissed'].includes(status)) throw new Error('A report must be marked resolved or dismissed.');
+    report.status = status;
+    report.resolvedAt = new Date().toISOString();
+    report.resolutionNote = note || null;
+    save(db);
   },
 
   async removeVehicle(userId, vehicleId) {

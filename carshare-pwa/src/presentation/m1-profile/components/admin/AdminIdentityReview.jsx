@@ -22,6 +22,10 @@ import { IdentityDocumentPreview } from '../IdentityVerificationCard.jsx';
 import { Chip } from '../../../shared/components/ui/Primitives.jsx';
 
 const STATUS_TABS = [IDENTITY_STATUS.PENDING, IDENTITY_STATUS.APPROVED, IDENTITY_STATUS.REJECTED];
+// Not an IDENTITY_STATUS value - this tab lists members with zero
+// identity_verifications row at all (105_m1), a separate query from the
+// submission tabs above.
+const UNVERIFIED_TAB = 'unverified';
 // btn-primary/btn-secondary are full-width by default (see BasicInfoCard's
 // Save Changes button) - these actions sit next to each other, not stacked.
 const BUTTON_STYLE = { width: 'auto', padding: '10px 20px' };
@@ -121,6 +125,49 @@ function SubmissionCard({ submission, onReviewed }) {
   );
 }
 
+// 105_m1: a member with zero identity_verifications row, not a pending or
+// rejected submission - there is no document to preview here, only how long
+// they have gone without starting the process.
+function UnverifiedMemberCard({ member, onPenalized }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [applied, setApplied] = useState(false);
+
+  async function applyPenalty() {
+    setBusy(true);
+    setError('');
+    try {
+      await IdentityVerificationService.adminApplyOverduePenalty(member.userId);
+      setApplied(true);
+      onPenalized();
+    } catch (cause) {
+      setError(cause.message || 'That penalty could not be applied.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <p className="card-title" style={{ marginBottom: 10 }}>{member.fullName || member.userId}</p>
+      <ul className="reputation-rules" style={{ marginBottom: 18 }}>
+        <li>Signed up {new Date(member.createdAt).toLocaleDateString('en-MY')}</li>
+        <li>{member.daysSinceSignup} day{member.daysSinceSignup === 1 ? '' : 's'} since signup with no identity document submitted</li>
+      </ul>
+
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+      {applied ? (
+        <p className="card-subtitle">Overdue penalty applied today.</p>
+      ) : (
+        <button type="button" className="btn-secondary" style={BUTTON_STYLE} disabled={busy} onClick={applyPenalty}>
+          {busy ? 'Applying…' : 'Apply overdue penalty (-5)'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function AdminIdentityReview() {
   const { user } = useAuth();
   const authorized = isIdentityReviewAdmin(user);
@@ -134,6 +181,10 @@ export default function AdminIdentityReview() {
     setLoading(true);
     setError('');
     try {
+      if (statusFilter === UNVERIFIED_TAB) {
+        setSubmissions(await IdentityVerificationService.adminListUnverifiedMembers());
+        return;
+      }
       const rows = await IdentityVerificationService.adminListSubmissions(statusFilter);
       const withNames = await Promise.all(rows.map(async (row) => {
         try {
@@ -175,15 +226,22 @@ export default function AdminIdentityReview() {
             {describeIdentityStatus(status)}
           </Chip>
         ))}
+        <Chip selected={statusFilter === UNVERIFIED_TAB} onClick={() => setStatusFilter(UNVERIFIED_TAB)}>
+          Not verified
+        </Chip>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
       {loading && <p className="card-subtitle">Loading…</p>}
       {!loading && submissions.length === 0 && <p className="card-subtitle">Nothing here.</p>}
 
-      {submissions.map((submission) => (
-        <SubmissionCard key={submission.userId} submission={submission} onReviewed={load} />
-      ))}
+      {statusFilter === UNVERIFIED_TAB
+        ? submissions.map((member) => (
+          <UnverifiedMemberCard key={member.userId} member={member} onPenalized={load} />
+        ))
+        : submissions.map((submission) => (
+          <SubmissionCard key={submission.userId} submission={submission} onReviewed={load} />
+        ))}
     </div>
   );
 }

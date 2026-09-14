@@ -76,5 +76,16 @@ export const identityVerificationSupabaseAdapter = {
       p_outcome: outcome,
       p_note: note
     });
+  },
+
+  listUnverifiedMembers() {
+    return supabase.rpc('admin_list_unverified_members');
+  },
+
+  applyOverduePenalty(userId, reason) {
+    return supabase.rpc('admin_apply_identity_overdue_penalty', {
+      p_user_id: userId,
+      p_reason: reason
+    });
   }
 };

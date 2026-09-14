@@ -34,4 +34,42 @@ export const reputationSupabaseAdapter = {
     if (error) throw error;
     return data;
   },
+
+  adminGetSummary(userId) {
+    return requireClient().rpc('admin_get_reputation_summary', { p_user_id: userId });
+  },
+
+  adminApplyConductOutcome(userId, eventType, reason, rideId, setHold) {
+    return requireClient().rpc('admin_apply_conduct_outcome', {
+      p_user_id: userId,
+      p_event_type: eventType,
+      p_reason: reason,
+      p_ride_id: rideId,
+      p_set_hold: setHold
+    });
+  },
+
+  adminClearHold(userId, reason) {
+    return requireClient().rpc('admin_clear_reputation_hold', { p_user_id: userId, p_reason: reason });
+  },
+
+  submitSafetyReport(reportedUserId, reason, rideId) {
+    return requireClient().rpc('submit_safety_report', {
+      p_reported_user_id: reportedUserId,
+      p_reason: reason,
+      p_ride_id: rideId
+    });
+  },
+
+  adminListSafetyReports(status) {
+    return requireClient().rpc('admin_list_safety_reports', { p_status: status });
+  },
+
+  adminResolveSafetyReport(reportId, status, note) {
+    return requireClient().rpc('admin_resolve_safety_report', {
+      p_report_id: reportId,
+      p_status: status,
+      p_note: note
+    });
+  },
 };
