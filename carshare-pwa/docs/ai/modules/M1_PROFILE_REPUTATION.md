@@ -187,7 +187,42 @@ service-role-only path (`private.apply_conduct_outcome`,
 `private.clear_reputation_hold`) so confirmed conduct events and safety holds
 are reachable without a client-facing admin surface; a shared Trust & Safety
 admin UI is still an open, whole-team decision per
-`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`. Host Impact formula and badge
+`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`. Authored migration `104_m1`
+replaces `078_m1`'s two-value minor/serious penalty with four graduated
+tiers - Minor (-8), Moderate (-14), Major (-20, was "serious"), Severe (-30) -
+and teaches `apply_conduct_outcome` to escalate a repeat offender to the next
+tier itself (3rd confirmed Minor in 90 days -> Moderate; 2nd confirmed
+Moderate in 180 days -> Major; 2nd confirmed Major ever -> Severe), so a
+member cannot absorb the same -8 indefinitely. Major and Severe always set
+`reputation_hold`; Minor/Moderate only do if the reviewer explicitly asks.
+`078_m1` itself is unmodified and both its original event types keep working;
+`ReputationPolicy.js`'s `CONDUCT_SEVERITY_TIERS`/`resolveConductSeverity`
+mirror the SQL escalation exactly, for a future reviewer UI to preview an
+outcome before confirming it. `106_m1` adds that reviewer UI -
+`AdminConductReview.jsx` at `/admin/conduct`, same admin allowlist as
+`097_m1` - to review a member and confirm a graduated Trust Case; there is
+still no appeals path. `107_m1` adds the self-service slice of the case
+queue `106_m1` initially left out: any signed-in member can report another
+from `PublicProfile.jsx`, and `/admin/conduct`'s Case queue lists open
+reports. This is a deliberately narrow, by user decision, self-service
+report - it does not pull M2 ride-dispute, M3 message, or M5 trip evidence
+automatically, which remains a separate, larger, cross-module decision.
+`106_m1` and `107_m1` are deployed (by user action, 2026-09-14); by the same
+user decision the page's manual "paste a user ID" lookup was then removed
+entirely - a raw Supabase UUID has no easy source for a reviewer to copy
+from, so the Case queue's Review button is now the only way into a member's
+standing here. `108_m1` (authored, not yet deployed) fixes a live
+`admin_list_safety_reports` bug caught immediately after `107_m1` went live
+(an ORDER BY referenced a pre-alias column name).
+Authored `105_m1` adds the one deliberate, manual exception to "identity
+documents do not affect reputation": `/admin/identity`'s new "Not verified"
+tab lists every active member with zero `identity_verifications` row at all
+(never submitted - a pending/rejected row already belongs on the other tabs),
+oldest signup first, and lets the same allowlisted reviewer apply a -5,
+non-holding `identity_verification_overdue` event, day-scoped so a double
+click cannot double it. Deliberately not a cron job - nothing else in
+reputation runs on elapsed time today. See `docs/M1-REPUTATION-SCORE-RULES.md`
+for the full current rule set. Host Impact formula and badge
 tiers are implemented (`HostImpactEngine.js`). Per D034 the composite is
 contribution only (`trips x 2.0 + co2 x 0.5`, tiers 0/50/120/200) and
 reputation acts as a ceiling through `badgeIsWithheld` rather than as a term:

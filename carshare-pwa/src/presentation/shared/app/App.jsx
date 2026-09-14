@@ -48,6 +48,7 @@ const FamilyLocationShare = lazy(() => import('../../m2-rides/components/ride/Fa
 const TrustedFamilyInvite = lazy(() => import('../../m2-rides/components/ride/TrustedFamilyInvite.jsx'));
 const SOSFamilyView = lazy(() => import('../../m2-rides/components/ride/SOSFamilyView.jsx'));
 const AdminIdentityReview = lazy(() => import('../../m1-profile/components/admin/AdminIdentityReview.jsx'));
+const AdminConductReview = lazy(() => import('../../m1-profile/components/admin/AdminConductReview.jsx'));
 const SOS_ENABLED = import.meta.env.VITE_M2_SOS_ENABLED === 'true';
 
 function RequireAuth({ children, reason = 'Sign in to use this service.' }) {
@@ -134,6 +135,7 @@ function AppShell({ routeLocation }) {
             Server-side admin allowlist (097_m1) is the real gate; RequireAuth
             here only rules out a signed-out visitor. */}
         <Route path="/admin/identity" element={<RequireAuth reason="Sign in to review identity submissions."><AdminIdentityReview /></RequireAuth>} />
+        <Route path="/admin/conduct" element={<RequireAuth reason="Sign in to review Trust Cases."><AdminConductReview /></RequireAuth>} />
         <Route path="/users/:userId" element={<PublicProfile />} />
         <Route path="/vehicles" element={<Navigate to="/profile" replace />} />
         <Route path="/reputation" element={<Navigate to="/profile" replace />} />

@@ -17,9 +17,13 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, and 099_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-103 (`087_m1` and `088_m1` are authored and not
-  deployed; `093_m1`-`097_m1` are live without tracked migration entries;
-  `099_m1` is deployed as a tracked migration)
+Repository SQL history: 001-108 (`087_m1`, `088_m1`, `104_m1`, and `105_m1`
+  are authored and not deployed; `106_m1` and `107_m1` are deployed by user
+  action outside this repo's own migration tooling - status not otherwise
+  verified here, see the "Case queue live-fix" note below; `108_m1` is
+  authored, fixing a bug caught immediately after `107_m1` went live, and is
+  not yet deployed; `093_m1`-`097_m1` are live without tracked migration
+  entries; `099_m1` is deployed as a tracked migration)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -60,7 +64,7 @@ confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that. `082_m4` and `099_m1`
-are deployed; the next unused repository sequence is `104`.)
+are deployed; the next unused repository sequence is `109`.)
 ```
 
 ### Driver document rollout (2026-09-06)
@@ -519,6 +523,7 @@ Discovery - see `docs/ai/modules/M6_DESTINATION_DISCOVERY.md`.
 - `vehicles`: owner-only CRUD, an owner-managed `driver_license_number`, at most one active vehicle per owner, and deployed nullable `vehicle_type` from `039`.
 - `host_impact_stats`: authenticated read-only; Module 2 review inserts maintain the public `rating` average, while other impact fields remain unchanged. Deployed `072_m1` adds a 70-point default, safety hold, and reputation update timestamp; authored `087_m1` moves that default to 100 and rebases existing scores by +30 clamped at 100.
 - `reputation_events` (deployed `072_m1`): owner-readable, trigger-written, idempotent verified-Ride reputation ledger with a +3 positive cap per Ride.
+- `safety_reports` (deployed `107_m1`): reporter- and admin-readable member-raised Trust & Safety queue entries (reason, optional Ride ID, open/resolved/dismissed status); RPC-only mutation, one open report per reporter/reported pair. `admin_list_safety_reports`'s ORDER BY bug is fixed by authored, undeployed `108_m1`.
 - `rides`: authoritative `departure_at`, lifecycle metadata, nullable Place ID/device-coordinate route references, pickup instructions, one nullable private pickup-photo path after undeployed `059`, authenticated browsing, and RPC-only mutation.
 - `ride_requests`: private to requester and ride Host; multi-seat request state and companion names; RPC-only mutation. Authored migration `051` adds stable nullable `accepted_at` but it is not live until separately deployed.
 - `ride_reviews`: authenticated-readable mutual reviews for Completed rides; RPC-only insert.
@@ -729,6 +734,84 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
   `reputation_hold` reachable for the first time since `072_m1` defined them,
   without a client-facing admin surface.
+- `104_m1_graduated_conduct_severity.sql` - authored, not deployed; widens
+  `reputation_events_event_type_check` with two new tiers
+  (`confirmed_moderate_conduct` -14, `confirmed_severe_conduct` -30) between
+  and above `078_m1`'s original two, and replaces (`create or replace`, same
+  signature) `private.apply_conduct_outcome` so it escalates a repeat
+  offender itself: 3rd confirmed Minor in 90 days -> Moderate; 2nd confirmed
+  Moderate in 180 days -> Major; 2nd confirmed Major ever -> Severe. Major and
+  Severe always set `reputation_hold`; the escalated (not requested) type is
+  what gets written to the ledger, with the original request kept in
+  `metadata.requestedType`. `078_m1`'s file and grants are untouched.
+  `ReputationPolicy.js`'s `CONDUCT_SEVERITY_TIERS`/`resolveConductSeverity`
+  mirror this for client-side preview only; the SQL function is authoritative.
+- `105_m1_identity_overdue_penalty.sql` - authored, not deployed; the one
+  deliberate, manual exception to "identity documents do not affect
+  reputation" (`072_m1`, `087_m1`). Widens
+  `reputation_events_event_type_check` with `identity_verification_overdue`
+  (-5, no hold) and adds two admin-gated functions:
+  `public.admin_list_unverified_members()` (every active member with zero
+  `identity_verifications` row at all - a pending/rejected row already
+  belongs on the existing admin tabs and is excluded - oldest signup first)
+  and `public.admin_apply_identity_overdue_penalty(p_user_id, p_reason)`
+  (day-scoped `source_event_id` so a double click cannot double the
+  deduction). No cron/worker involved - this stays a manual reviewer action,
+  same allowlist as `097_m1`. `AdminIdentityReview.jsx`'s "Not verified" tab
+  and `IdentityVerificationService.adminListUnverifiedMembers`/
+  `adminApplyOverduePenalty` are the client side; until this is deployed the
+  RPC 404s and the client shows an empty list rather than an error, matching
+  the existing `isUndeployedIdentityContract` pattern.
+- `106_m1_admin_conduct_review.sql` - deployed by the user outside this
+  repo's own migration tooling (exact deployment mechanism/date not recorded
+  here); the reviewer surface `104_m1`'s header flagged as missing. Same
+  admin allowlist as `097_m1`/`104_m1`/`105_m1`. Adds
+  `public.admin_get_reputation_summary` (Safety-sourced conduct history only,
+  not the full ride ledger), `public.admin_apply_conduct_outcome` (requires a
+  non-empty reason, generates its own per-call `source_event_id` so same-day
+  confirmations never collapse), and `public.admin_clear_reputation_hold` -
+  all narrow wrappers around `078_m1`/`104_m1`'s existing service-role-only
+  functions, none of which are widened. **These wrapper functions call
+  `private.apply_conduct_outcome`/`private.clear_reputation_hold`, which only
+  exist if `078_m1` (superseded by `104_m1`) is also deployed** - confirm
+  that separately if Confirm a Trust Case / Clear hold error out live.
+  `AdminConductReview.jsx` (`/admin/conduct`) is the client side: see a
+  member's score/standing/prior confirmed-conduct history and confirm a
+  graduated Trust Case. Originally had no Safety Report intake or case
+  queue - `107_m1` below adds that, and by user decision (2026-09-14) the
+  page's manual "paste a user ID" lookup was then removed entirely, since a
+  raw Supabase UUID has no easy source for a reviewer to copy from; the case
+  queue is now the only way into this page.
+- `107_m1_safety_report_queue.sql` - deployed by the user (2026-09-14)
+  outside this repo's own migration tooling; adds the self-service slice of
+  the case queue `106_m1` explicitly left out, by user decision (not the
+  full cross-module M2/M3/M5 evidence intake the Conduct Severity Rulebook's
+  scoping note describes - that remains separate, larger work). New table
+  `public.safety_reports` (reporter/reported member, reason, optional Ride
+  ID, open/resolved/dismissed status, resolution metadata); owner and admin
+  RLS SELECT policies, no other browser table grant. Adds
+  `public.submit_safety_report` (any signed-in member, self-report and empty
+  reason rejected, one open report per reporter/reported pair via a partial
+  unique index), and admin-gated `public.admin_list_safety_reports` (`open`
+  sorts oldest first, queue order; other filters sort newest first) and
+  `public.admin_resolve_safety_report` (marks a still-open report resolved or
+  dismissed; never edits the report's own contents). Resolving a report is
+  intentionally decoupled from confirming a Trust Case - a report can be
+  dismissed with no conduct outcome, and one confirmed case might close
+  several open reports about the same member at once. Client side:
+  `PublicProfile.jsx` gets a "Report this member" action (any signed-in
+  viewer, not the profile owner); `AdminConductReview.jsx` gets a Case queue
+  card whose Review button loads that member directly. **Live bug found
+  immediately after this file was deployed** - `admin_list_safety_reports`'s
+  ORDER BY referenced the pre-alias column name (`r.created_at` instead of
+  `r."createdAt"`), erroring `column r.created_at does not exist` every time
+  the queue loaded. Fixed by `108_m1` below; `107_m1` itself is not rewritten
+  since it is already deployed history.
+- `108_m1_fix_safety_report_queue_order_by.sql` - authored, not yet
+  deployed; supersedes only `admin_list_safety_reports`'s body (same
+  signature, same admin gate, same status-filter validation) to fix the bug
+  above. `submit_safety_report` and `admin_resolve_safety_report` have no
+  equivalent alias mismatch and are untouched.
 - `094_m1_identity_holds_the_licence.sql` - live without a tracked migration
   entry; adds
   `ic_number` and `license_expiry` to `identity_verifications` so the MyKad is

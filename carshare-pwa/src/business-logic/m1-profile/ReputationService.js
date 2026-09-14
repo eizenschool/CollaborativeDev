@@ -64,6 +64,83 @@ export const ReputationService = {
       throw error;
     }
     return result;
+  },
+
+  // Admin-only (106_m1). get_reputation_summary (072_m1) hard-requires
+  // auth.uid() = p_user_id, so a reviewer confirming a case about someone
+  // else cannot use it - this routes through admin_get_reputation_summary,
+  // which re-checks the allowlist server-side, and only ever returns
+  // Safety-sourced (confirmed conduct) history, not the member's full ride
+  // ledger.
+  async adminGetSummary(userId) {
+    if (!reputationSupabaseAdapter.isConfigured) {
+      const data = await profileMockAdapter.adminGetReputationSummary(userId);
+      return mapSummary({ ...data, events: data.conductEvents });
+    }
+    const { data, error } = await reputationSupabaseAdapter.adminGetSummary(userId);
+    if (error) throw error;
+    return mapSummary({ ...(data || {}), events: (data || {}).conductEvents });
+  },
+
+  // Admin-only (106_m1). Routes through admin_apply_conduct_outcome, which
+  // re-checks the allowlist and requires a non-empty reason before it will
+  // ever call private.apply_conduct_outcome - a reviewer cannot confirm a
+  // case with no stated reason. The server generates its own source_event_id
+  // per call, so confirming two separate incidents the same day never
+  // collapses into one.
+  async adminApplyConductOutcome(userId, eventType, reason, { rideId = null, setHold = false } = {}) {
+    if (!reputationSupabaseAdapter.isConfigured) {
+      return profileMockAdapter.adminApplyConductOutcome(userId, eventType, reason, rideId, setHold);
+    }
+    const { data, error } = await reputationSupabaseAdapter.adminApplyConductOutcome(userId, eventType, reason, rideId, setHold);
+    if (error) throw error;
+    return Boolean(data);
+  },
+
+  // Admin-only (106_m1). Only clears the hold flag - it does not insert a
+  // compensating score event. A full appeal path that nets the score back is
+  // separate, larger work this does not attempt (see the Conduct Severity
+  // Rulebook's appeal section).
+  async adminClearHold(userId, reason = null) {
+    if (!reputationSupabaseAdapter.isConfigured) return profileMockAdapter.adminClearReputationHold(userId, reason);
+    const { error } = await reputationSupabaseAdapter.adminClearHold(userId, reason);
+    if (error) throw error;
+  },
+
+  // Self-service Safety Report intake (107_m1) - any signed-in member can
+  // flag another member with a reason and an optional ride ID. This is
+  // deliberately the narrow slice of the case queue that stays inside
+  // Module 1: it does not pull ride/message/trip evidence from M2/M3/M5,
+  // it just gives a Trust & Safety reviewer a starting point instead of
+  // requiring they already know a member's user ID from outside the app.
+  async submitSafetyReport(reporterId, reportedUserId, reason, rideId = null) {
+    if (!reputationSupabaseAdapter.isConfigured) {
+      return profileMockAdapter.submitSafetyReport(reporterId, reportedUserId, reason, rideId);
+    }
+    const { data, error } = await reputationSupabaseAdapter.submitSafetyReport(reportedUserId, reason, rideId);
+    if (error) throw error;
+    return data;
+  },
+
+  // Admin-only (107_m1). 'open' (the default) is queue order - oldest
+  // first; 'resolved'/'dismissed'/'all' are a resolution history instead.
+  async adminListSafetyReports(status = 'open') {
+    if (!reputationSupabaseAdapter.isConfigured) return profileMockAdapter.adminListSafetyReports(status);
+    const { data, error } = await reputationSupabaseAdapter.adminListSafetyReports(status);
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Admin-only (107_m1). Resolving/dismissing a queue entry is separate
+  // from confirming a Trust Case (adminApplyConductOutcome above) - a
+  // report can be dismissed with no conduct outcome, and one confirmed
+  // case might close several open reports about the same member at once.
+  async adminResolveSafetyReport(reportId, status, note = null) {
+    if (!reputationSupabaseAdapter.isConfigured) {
+      return profileMockAdapter.adminResolveSafetyReport(reportId, status, note);
+    }
+    const { error } = await reputationSupabaseAdapter.adminResolveSafetyReport(reportId, status, note);
+    if (error) throw error;
   }
 };
 
