@@ -35,9 +35,29 @@ import {
   resolveConductSeverity
 } from '../../../../business-logic/m1-profile/ReputationPolicy.js';
 import { ReputationService } from '../../../../business-logic/m1-profile/ReputationService.js';
-import { Chip } from '../../../shared/components/ui/Primitives.jsx';
+import { Chip, StatusBadge } from '../../../shared/components/ui/Primitives.jsx';
 
 const BUTTON_STYLE = { width: 'auto', padding: '10px 20px' };
+
+// Fetched once as 'all' and filtered client-side, so switching tabs is
+// instant and each tab can show its own count without a second round trip.
+const REPORT_STATUS_TABS = [
+  { key: 'open', label: 'Open' },
+  { key: 'resolved', label: 'Resolved' },
+  { key: 'dismissed', label: 'Dismissed' }
+];
+
+const REPORT_STATUS_COPY = {
+  open: { label: 'Open', tone: 'warning' },
+  resolved: { label: 'Resolved', tone: 'success' },
+  dismissed: { label: 'Dismissed', tone: 'neutral' }
+};
+
+const REPORT_EMPTY_COPY = {
+  open: "No open reports right now - a member's \"Report this member\" action will show up here.",
+  resolved: 'No resolved reports yet.',
+  dismissed: 'No dismissed reports yet.'
+};
 
 function CaseQueue({ onReview }) {
   const [reports, setReports] = useState([]);
@@ -45,12 +65,13 @@ function CaseQueue({ onReview }) {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
   const [notes, setNotes] = useState({});
+  const [statusFilter, setStatusFilter] = useState('open');
 
   async function load() {
     setLoading(true);
     setError('');
     try {
-      setReports(await ReputationService.adminListSafetyReports('open'));
+      setReports(await ReputationService.adminListSafetyReports('all'));
     } catch (cause) {
       setError(cause.message || 'The case queue could not be loaded.');
     } finally {
@@ -73,58 +94,101 @@ function CaseQueue({ onReview }) {
     }
   }
 
+  const counts = reports.reduce((acc, report) => {
+    acc[report.status] = (acc[report.status] || 0) + 1;
+    return acc;
+  }, {});
+  const visible = reports
+    .filter((report) => report.status === statusFilter)
+    .sort((a, b) => (statusFilter === 'open'
+      ? new Date(a.createdAt) - new Date(b.createdAt)
+      : new Date(b.resolvedAt || b.createdAt) - new Date(a.resolvedAt || a.createdAt)));
+
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <p className="card-title">Case queue</p>
       <p className="card-subtitle" style={{ marginBottom: 14 }}>
-        Reports members raised from another member&apos;s public profile, oldest first. Reviewing does not change
-        anyone&apos;s score by itself - use Confirm a Trust Case below for that.
+        Reports members raised from another member&apos;s public profile. Reviewing does not change anyone&apos;s
+        score by itself - use Confirm a Trust Case below for that.
       </p>
+
+      <div className="dsc-filters" role="group" aria-label="Filter by report status" style={{ gap: 12, marginBottom: 18 }}>
+        {REPORT_STATUS_TABS.map((tab) => (
+          <Chip key={tab.key} selected={statusFilter === tab.key} onClick={() => setStatusFilter(tab.key)}>
+            {tab.label} ({counts[tab.key] || 0})
+          </Chip>
+        ))}
+      </div>
+
       {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
       {loading && <p className="card-subtitle" style={{ marginBottom: 0 }}>Loading…</p>}
-      {!loading && reports.length === 0 && (
-        <p className="card-subtitle" style={{ marginBottom: 0 }}>No open reports.</p>
+      {!loading && visible.length === 0 && (
+        <p className="card-subtitle" style={{ marginBottom: 0 }}>{REPORT_EMPTY_COPY[statusFilter]}</p>
       )}
-      {!loading && reports.length > 0 && (
+      {!loading && visible.length > 0 && (
         <ul className="reputation-event-list">
-          {reports.map((report) => (
+          {visible.map((report) => (
             <li key={report.id} style={{ flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', gap: 10 }}>
-              <div>
-                <strong>{report.reporterName} reported {report.reportedName}</strong>
-                {report.createdAt && <span>{new Date(report.createdAt).toLocaleDateString('en-MY')}</span>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <div>
+                  <strong>{report.reporterName} reported {report.reportedName}</strong>
+                  {report.createdAt && <span>{new Date(report.createdAt).toLocaleDateString('en-MY')}</span>}
+                </div>
+                <StatusBadge tone={REPORT_STATUS_COPY[report.status].tone}>
+                  {REPORT_STATUS_COPY[report.status].label}
+                </StatusBadge>
               </div>
               <p className="card-subtitle" style={{ margin: 0 }}>{report.reason}</p>
               {report.rideId && <p className="card-subtitle" style={{ margin: 0 }}>Ride: {report.rideId}</p>}
-              <div className="input-wrap">
-                <input
-                  value={notes[report.id] || ''}
-                  onChange={(event) => setNotes((prev) => ({ ...prev, [report.id]: event.target.value }))}
-                  placeholder="Resolution note (optional)"
-                />
-              </div>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button type="button" className="btn-primary" style={BUTTON_STYLE} disabled={Boolean(busyId)} onClick={() => onReview(report.reportedUserId)}>
-                  Review
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={BUTTON_STYLE}
-                  disabled={Boolean(busyId)}
-                  onClick={() => resolve(report.id, 'resolved')}
-                >
-                  {busyId === report.id ? 'Working…' : 'Mark resolved'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={BUTTON_STYLE}
-                  disabled={Boolean(busyId)}
-                  onClick={() => resolve(report.id, 'dismissed')}
-                >
-                  Dismiss
-                </button>
-              </div>
+
+              {report.status === 'open' ? (
+                <>
+                  <div className="input-wrap">
+                    <input
+                      value={notes[report.id] || ''}
+                      onChange={(event) => setNotes((prev) => ({ ...prev, [report.id]: event.target.value }))}
+                      placeholder="Resolution note (optional)"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn-primary" style={BUTTON_STYLE} disabled={Boolean(busyId)} onClick={() => onReview(report.reportedUserId)}>
+                      Review
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={BUTTON_STYLE}
+                      disabled={Boolean(busyId)}
+                      onClick={() => resolve(report.id, 'resolved')}
+                    >
+                      {busyId === report.id ? 'Working…' : 'Mark resolved'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={BUTTON_STYLE}
+                      disabled={Boolean(busyId)}
+                      onClick={() => resolve(report.id, 'dismissed')}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="card-subtitle" style={{ margin: 0 }}>
+                  {REPORT_STATUS_COPY[report.status].label}
+                  {report.resolvedAt ? ` ${new Date(report.resolvedAt).toLocaleDateString('en-MY')}` : ''}
+                  {report.resolutionNote ? ` — "${report.resolutionNote}"` : ''}
+                  <button
+                    type="button"
+                    className="btn-link"
+                    style={{ marginLeft: 10 }}
+                    onClick={() => onReview(report.reportedUserId)}
+                  >
+                    Review member
+                  </button>
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -330,13 +394,20 @@ export default function AdminConductReview() {
       {target && (
         <>
           <div className="card" style={{ marginBottom: 20 }}>
-            <p className="card-title">{target.userId}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+              <p className="card-title" style={{ marginBottom: 0, wordBreak: 'break-all' }}>{target.userId}</p>
+              {target.summary.hold && <StatusBadge tone="danger">Safety hold active</StatusBadge>}
+            </div>
             <ul className="reputation-rules">
-              <li>Current score: {target.summary.score}/100 ({target.summary.standing.label})</li>
+              <li>
+                Current score: {target.summary.score}/100 -{' '}
+                <span className={`reputation-standing reputation-standing-${target.summary.standing.key}`} style={{ marginTop: 0 }}>
+                  {target.summary.standing.label}
+                </span>
+              </li>
               <li>Evidence rides: {target.summary.evidenceCount}{target.summary.provisional ? ' (still provisional)' : ''}</li>
-              <li>Safety hold: {target.summary.hold ? 'Active' : 'None'}</li>
             </ul>
-            {target.summary.events.length > 0 && (
+            {target.summary.events.length > 0 ? (
               <>
                 <p className="card-title" style={{ marginTop: 16, fontSize: 14 }}>Prior confirmed conduct</p>
                 <ul className="reputation-event-list">
@@ -351,6 +422,8 @@ export default function AdminConductReview() {
                   ))}
                 </ul>
               </>
+            ) : (
+              <p className="card-subtitle" style={{ marginTop: 16, marginBottom: 0 }}>No prior confirmed conduct on record.</p>
             )}
           </div>
 
