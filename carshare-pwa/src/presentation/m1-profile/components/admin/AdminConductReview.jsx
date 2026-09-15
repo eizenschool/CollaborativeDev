@@ -38,6 +38,7 @@ import { ReputationService } from '../../../../business-logic/m1-profile/Reputat
 import { Chip } from '../../../shared/components/ui/Primitives.jsx';
 
 const BUTTON_STYLE = { width: 'auto', padding: '10px 20px' };
+const REASON_MAX_LENGTH = 500;
 
 function CaseQueue({ onReview }) {
   const [reports, setReports] = useState([]);
@@ -98,10 +99,12 @@ function CaseQueue({ onReview }) {
               <div className="input-wrap">
                 <input
                   value={notes[report.id] || ''}
+                  maxLength={REASON_MAX_LENGTH}
                   onChange={(event) => setNotes((prev) => ({ ...prev, [report.id]: event.target.value }))}
                   placeholder="Resolution note (optional)"
                 />
               </div>
+              <small>{(notes[report.id] || '').length}/{REASON_MAX_LENGTH}</small>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <button type="button" className="btn-primary" style={BUTTON_STYLE} disabled={Boolean(busyId)} onClick={() => onReview(report.reportedUserId)}>
                   Review
@@ -191,10 +194,12 @@ function ConductCaseForm({ userId, summary, onChanged }) {
           <input
             id="conduct-reason"
             value={reason}
+            maxLength={REASON_MAX_LENGTH}
             onChange={(event) => setReason(event.target.value)}
             placeholder="e.g. Confirmed harassment reported by a ride passenger."
           />
         </div>
+        <small>{reason.length}/{REASON_MAX_LENGTH}</small>
       </div>
 
       <div className="field">
@@ -263,10 +268,12 @@ function HoldCard({ userId, onCleared }) {
           <input
             id="hold-reason"
             value={reason}
+            maxLength={REASON_MAX_LENGTH}
             onChange={(event) => setReason(event.target.value)}
             placeholder="e.g. Appeal upheld the reduction, case closed."
           />
         </div>
+        <small>{reason.length}/{REASON_MAX_LENGTH}</small>
       </div>
       {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
       <button type="button" className="btn-secondary" style={BUTTON_STYLE} disabled={busy} onClick={clear}>
