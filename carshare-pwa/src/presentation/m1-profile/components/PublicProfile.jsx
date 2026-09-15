@@ -15,6 +15,8 @@ import { IconArrowLeft, IconCar, IconLeaf, IconMedal, IconMessage, IconShield, I
 import { PageShell } from '../../shared/components/ui/Primitives.jsx';
 import { Button } from '../../shared/components/ui/Button.jsx';
 
+const REPORT_REASON_MAX_LENGTH = 500;
+
 function initials(name = 'Member') {
   return name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
 }
@@ -294,10 +296,12 @@ export default function PublicProfile() {
                   <input
                     id="report-reason"
                     value={reportReason}
+                    maxLength={REPORT_REASON_MAX_LENGTH}
                     onChange={(event) => setReportReason(event.target.value)}
                     placeholder="e.g. Was rude and aggressive during the ride."
                   />
                 </div>
+                <small>{reportReason.length}/{REPORT_REASON_MAX_LENGTH}</small>
               </div>
               <div className="field">
                 <label htmlFor="report-ride-id">Related ride ID (optional)</label>
