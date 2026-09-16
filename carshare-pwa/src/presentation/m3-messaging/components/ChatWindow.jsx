@@ -27,6 +27,7 @@ import {
 import { useMessagingSession } from '../context/MessagingSessionContext.jsx';
 import { useCallSession } from '../context/CallSessionContext.jsx';
 import MessageBubble from './MessageBubble.jsx';
+import ReportMessageDialog from './ReportMessageDialog.jsx';
 import CallEventBubble from './CallEventBubble.jsx';
 import RideInvitationCard from './RideInvitationCard.jsx';
 import GoogleLocationMap from '../../shared/components/maps/GoogleLocationMap.jsx';
@@ -185,6 +186,7 @@ export default function ChatWindow({
   const [composerConversationId, setComposerConversationId] = useState(conversationId);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [reportMessage, setReportMessage] = useState(null);
   const [isPending, setIsPending] = useState(false);
   const [pendingOperation, setPendingOperation] = useState('');
   const [isLocating, setIsLocating] = useState(false);
@@ -1081,6 +1083,7 @@ export default function ChatWindow({
             currentUserId={currentUser.id}
             onEdit={beginEdit}
             onDelete={openDeleteDialog}
+            onReport={setReportMessage}
             onTranslate={translateMessage}
             translationLanguage={translationLanguage}
             onTranslationLanguageChange={changeTranslationLanguage}
@@ -1436,6 +1439,7 @@ export default function ChatWindow({
           </section>
         </div>
       )}
+      {reportMessage && <ReportMessageDialog key={reportMessage.id} message={reportMessage} onClose={() => setReportMessage(null)} />}
     </section>
   );
 }

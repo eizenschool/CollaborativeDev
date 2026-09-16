@@ -397,6 +397,7 @@ export function mapMessageRow(row, conversation, currentUserId) {
     createdAt: row.created_at,
     editedAt: row.edited_at,
     deletedAt: row.deleted_at,
+    moderatedAt: row.moderated_at,
     timestamp: formatMessageTime(row.created_at),
     isRead,
     canEdit: row.sender_id === currentUserId

@@ -102,6 +102,23 @@ test('desktop camera opens and captures after StrictMode effect cleanup', async 
   await expect(page.getByRole('img', { name: /photo-.*jpg/ })).toBeVisible();
 });
 
+test('deleted messages align with the same sender’s normal message column', async ({ page }, testInfo) => {
+  for (const other of [false, true]) {
+    await page.goto(`/__chat-performance?tombstone=1${other ? '&other=1' : ''}`);
+    const deleted = page.locator('#message-message-199');
+    const normal = page.locator('#message-message-198');
+    await expect(deleted).toContainText('Message deleted');
+    for (const selector of ['.message-bubble-avatar', '.message-bubble-column', '.message-bubble-meta']) {
+      const a = await deleted.locator(selector).boundingBox();
+      const b = await normal.locator(selector).boundingBox();
+      expect(a).not.toBeNull(); expect(b).not.toBeNull();
+      const edge = (box) => other ? box.x : box.x + box.width;
+      expect(Math.abs(edge(a) - edge(b))).toBeLessThanOrEqual(1);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`deleted-${other ? 'received' : 'sent'}.png`) });
+  }
+});
+
 test('personal deletion keeps a shared tombstone hidden while history refresh is pending', async ({ page }) => {
   await page.goto('/__chat-performance?tombstone=1');
   const last = page.locator('#message-message-199');

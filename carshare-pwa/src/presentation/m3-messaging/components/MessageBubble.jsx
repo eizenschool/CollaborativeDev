@@ -1,3 +1,4 @@
+import { canReportMessage } from '../../../business-logic/m3-messaging/MessageReportService.js';
 import { memo, useEffect, useState } from 'react';
 import { IconCheck, IconEdit, IconMoreVertical, IconTrash } from '../../shared/components/icons.jsx';
 import GoogleLocationMap from '../../shared/components/maps/GoogleLocationMap.jsx';
@@ -128,13 +129,15 @@ function MediaAttachment({ attachment }) {
   );
 }
 
-function MessageActions({ message, onEdit, onDelete }) {
+function MessageActions({ message, onEdit, onDelete, onReport, currentUserId }) {
   if (message.pendingAction) return null;
-  if (!message.canEdit && !message.canDelete) return null;
+  const reportable = canReportMessage(message, currentUserId);
+  if (!message.canEdit && !message.canDelete && !reportable) return null;
   return (
     <details className="message-bubble-actions">
       <summary aria-label="Message actions" title="Message actions"><IconMoreVertical size={18} /></summary>
       <div>
+        {reportable && <button type="button" onClick={() => onReport(message)}>Report message</button>}
         {message.canEdit && <button type="button" onClick={() => onEdit(message)}><IconEdit size={14} /> Edit</button>}
         {message.canDelete && <button type="button" className="danger" onClick={() => onDelete(message)}><IconTrash size={14} /> Delete</button>}
       </div>
@@ -147,6 +150,7 @@ export default memo(function MessageBubble({
   currentUserId,
   onEdit = () => {},
   onDelete = () => {},
+  onReport = () => {},
   onTranslate = () => Promise.reject(new Error('Translation is unavailable.')),
   translationLanguage = '',
   onTranslationLanguageChange = () => {},
@@ -156,7 +160,7 @@ export default memo(function MessageBubble({
     return (
       <div id={`message-${message.id}`} className={`message-system-row ${highlighted ? 'message-highlighted' : ''}`} role="status">
         <span className="message-system-text">{message.text}</span>
-        <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} />
+        <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} onReport={onReport} currentUserId={currentUserId} />
       </div>
     );
   }
@@ -164,9 +168,16 @@ export default memo(function MessageBubble({
   const isCurrentUser = message.senderId === currentUserId;
   if (message.deletedAt) {
     return (
-      <div id={`message-${message.id}`} className={`message-deleted-row ${isCurrentUser ? 'message-deleted-row-current-user' : ''} ${highlighted ? 'message-highlighted' : ''}`}>
-        <span className="message-deleted-text" role={message.pendingAction ? 'status' : undefined}>{message.pendingAction || 'Message deleted'}</span>
-        <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} />
+      <div id={`message-${message.id}`} className={`message-bubble-row message-deleted-row ${isCurrentUser ? 'message-bubble-row-current-user' : 'message-bubble-row-other-user'} ${highlighted ? 'message-highlighted' : ''}`}>
+        <SenderAvatar message={message} />
+        <div className={`message-bubble-column ${isCurrentUser ? 'message-bubble-column-current-user' : ''}`}>
+          {!isCurrentUser && <span className="message-bubble-sender">{message.senderName}</span>}
+          <span className="message-deleted-text" role={message.pendingAction ? 'status' : undefined}>{message.pendingAction || (message.moderatedAt ? 'Message removed by an administrator' : 'Message deleted')}</span>
+          <div className={`message-bubble-meta ${isCurrentUser ? 'message-bubble-meta-current-user' : ''}`}>
+            <span>{message.timestamp}</span>
+            <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} onReport={onReport} currentUserId={currentUserId} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -217,7 +228,7 @@ export default memo(function MessageBubble({
               {message.isRead && <span className="message-read-status-second-check"><IconCheck size={11} /></span>}
             </span>
           )}
-          <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} />
+          <MessageActions message={message} onEdit={onEdit} onDelete={onDelete} onReport={onReport} currentUserId={currentUserId} />
         </div>
       </div>
     </div>

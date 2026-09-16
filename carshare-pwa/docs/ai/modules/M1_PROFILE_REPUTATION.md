@@ -241,3 +241,7 @@ Bronze. Badge perks are display
 labels only and are now non-monetary: the scaffold's "platform fee" ladder
 contradicted the platform's non-monetary definition and was replaced with
 visibility, support and discovery perks, guarded by a test.
+
+## M3 message evidence integration (2026-09-16)
+
+Supersedes the earlier statement that the case queue has no M3 evidence. `AdminConductReview` now renders `MessageReportReview` for reports with `messageEvidenceId`; ordinary profile reports keep their existing workflow. The new M3 server endpoint checks the existing admin allowlist and atomically links the decision, grouped report closure and `private.apply_conduct_outcome`, preventing duplicate penalties. Four-tier severity/escalation was verified live. Evidence playback is restricted to this report; there is no general administrator chat browser. Backend 109/110 and the Edge Function are deployed; frontend release and signed-in media acceptance are pending. See `docs/M3-MESSAGE-REPORTS.md`.
