@@ -33,6 +33,12 @@ const severity = await readFile('database/sql/104_m1_graduated_conduct_severity.
 await db.exec(severity.slice(severity.indexOf('create or replace function private.apply_conduct_outcome')));
 const migration = await readFile('database/sql/109_m3_message_reports.sql','utf8');
 await db.exec(migration.slice(0,migration.indexOf('-- Dedicated cleanup token')) + '\ncommit;');
+// Reproduce the live regression: the older M1 queue definition omits the M3
+// discriminator, then verify the compensating migration restores it.
+const legacyQueue = await readFile('database/sql/108_m1_fix_safety_report_queue_order_by.sql','utf8');
+await db.exec(legacyQueue);
+const queueFix = await readFile('database/sql/111_m3_fix_message_report_admin_queue.sql','utf8');
+await db.exec(queueFix);
 const sender='00000000-0000-4000-8000-000000000001', viewer='00000000-0000-4000-8000-000000000002', viewer2='00000000-0000-4000-8000-000000000003';
 const message='10000000-0000-4000-8000-000000000001';
 await db.exec(`insert into profiles(id,full_name) values('${sender}','Sender'),('${viewer}','Viewer'),('${viewer2}','Viewer 2'); insert into host_impact_stats(user_id) values('${sender}'); insert into conversations(id) values('${message}'); insert into messages(id,sender_id,conversation_id,text_content) values('${message}','${sender}','${message}','Evidence text');`);

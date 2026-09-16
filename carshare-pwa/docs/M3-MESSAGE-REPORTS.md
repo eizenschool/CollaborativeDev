@@ -22,6 +22,7 @@ Implemented 2026-09-16. Backend deployed to `pnetstmovctfwqcumodx` (Tokyo), the 
 ## Deployment and validation
 
 - `109_m3_message_reports.sql` / live migration `20260916041406_m3_message_reports` adds evidence, report linkage, protected RPCs, the private bucket and hourly job. `110_m3_message_report_cleanup_indexes.sql` / live `20260916042030_m3_message_report_cleanup_indexes` indexes expiration and grouped resolution.
+- Deployed `111_m3_fix_message_report_admin_queue.sql` (`20260916113610_fix_message_report_admin_queue`) restores `messageEvidenceId` in the queue response. Without it, the UI shows ordinary `Mark resolved` / `Dismiss` controls and the database correctly rejects them with `Use the message evidence review action`.
 - Existing M1 `apply_conduct_outcome`, admin allowlist and report queue were inspected live before deployment. No old reputation origin/threshold migration was applied.
 - Edge Function `m3-message-reports` uses its own JWT check (`verify_jwt=false`) because the scheduled cleanup uses a dedicated token. Its dependency is pinned. The cron URL targets the project above; change it for another deployment.
 - Build, layer validation, 80 relevant unit tests, 12 browser tests across four viewports, and in-memory PostgreSQL integration tests verify the feature. UI fixtures substitute service responses; a signed-in live photo/video/voice acceptance pass remains required. Production checks verified private storage, restrictive grants, anonymous rejection and a successful scheduled cleanup HTTP response.

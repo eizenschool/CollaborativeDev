@@ -75,3 +75,5 @@ Telephone-number/PSTN access, video calling, call recording, email notifications
 ## Message reports (2026-09-16)
 
 Received text/image/video/audio messages now offer Report message through `MessageReportService` and the authenticated `m3-message-reports` function. Server snapshots plus private attachment copies survive personal/shared deletion and edits. The M1 `/admin/conduct` queue loads evidence on demand, applies existing severity rules once per message version and optionally removes that version with an administrator tombstone. No new ban or ride-cancellation policy is introduced. Backend migrations 109/110 are deployed; the UI is in source pending application release. See `docs/M3-MESSAGE-REPORTS.md` for retention, costs and validation limits.
+
+Deployed `111_m3_fix_message_report_admin_queue.sql` restores the message-evidence identifier in the admin queue response so these cases always enter `MessageReportReview` rather than the ordinary profile-report controls.

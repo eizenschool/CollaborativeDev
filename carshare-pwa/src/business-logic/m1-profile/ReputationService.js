@@ -39,6 +39,13 @@ function mapSummary(value = {}) {
   };
 }
 
+export function normalizeSafetyReport(value = {}) {
+  return {
+    ...value,
+    messageEvidenceId: value.messageEvidenceId ?? value.message_evidence_id ?? null,
+  };
+}
+
 export const ReputationService = {
   backend: reputationSupabaseAdapter.isConfigured ? 'supabase' : 'mock',
 
@@ -125,10 +132,13 @@ export const ReputationService = {
   // Admin-only (107_m1). 'open' (the default) is queue order - oldest
   // first; 'resolved'/'dismissed'/'all' are a resolution history instead.
   async adminListSafetyReports(status = 'open') {
-    if (!reputationSupabaseAdapter.isConfigured) return profileMockAdapter.adminListSafetyReports(status);
+    if (!reputationSupabaseAdapter.isConfigured) {
+      const reports = await profileMockAdapter.adminListSafetyReports(status);
+      return reports.map(normalizeSafetyReport);
+    }
     const { data, error } = await reputationSupabaseAdapter.adminListSafetyReports(status);
     if (error) throw error;
-    return data || [];
+    return (data || []).map(normalizeSafetyReport);
   },
 
   // Admin-only (107_m1). Resolving/dismissing a queue entry is separate
