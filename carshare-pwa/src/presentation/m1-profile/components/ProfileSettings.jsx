@@ -1,8 +1,9 @@
 // ===== PRESENTATION LAYER (ProfileSettings) =====
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from '../../shared/context/AuthContext.jsx';
 import { ProfileService } from '../../../business-logic/m1-profile/ProfileService.js';
 import { IconUser, IconMail, IconPhone, IconLock, IconEye, IconEyeOff, IconSave, IconHeart } from '../../shared/components/icons.jsx';
+import AvatarCropModal from './AvatarCropModal.jsx';
 
 export default function ProfileSettings() {
   const { user, setUser } = useAuth();
@@ -109,14 +110,34 @@ function ProfilePhotoForm({ user, onSaved }) {
   const [preview, setPreview] = useState(user?.profilePhotoUrl || null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
+  const [cropTarget, setCropTarget] = useState(null); // { file, imageUrl } | null
+  const fileInputRef = useRef(null);
 
-  async function handleFile(e) {
+  function handlePick(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setSaving(true);
     setStatus(null);
+    setCropTarget({ file, imageUrl: URL.createObjectURL(file) });
+  }
+
+  function closeCrop() {
+    if (cropTarget) URL.revokeObjectURL(cropTarget.imageUrl);
+    setCropTarget(null);
+    // Resets the native input so picking the same file again still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function handleCropConfirm(croppedFile) {
+    // Close the crop modal immediately rather than leaving it open for the
+    // whole upload+content-check - the crop/export work is already done by
+    // the time this fires, so there's nothing left for it to show, and
+    // leaving it up just duplicates the "Uploading…" state below.
+    if (cropTarget) URL.revokeObjectURL(cropTarget.imageUrl);
+    setCropTarget(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setSaving(true);
     try {
-      const updated = await ProfileService.updateProfilePhoto(user.id, file);
+      const updated = await ProfileService.updateProfilePhoto(user.id, croppedFile);
       setPreview(typeof updated === 'string' ? updated : updated?.profilePhotoUrl);
       onSaved((prev) => ({ ...prev, profilePhotoUrl: typeof updated === 'string' ? updated : updated?.profilePhotoUrl }));
       setStatus({ type: 'success', text: 'Profile picture updated.' });
@@ -138,9 +159,17 @@ function ProfilePhotoForm({ user, onSaved }) {
         </div>
         <label className="btn-secondary" style={{ cursor: 'pointer' }}>
           {saving ? 'Uploading…' : 'Upload photo'}
-          <input type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} disabled={saving} />
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePick} style={{ display: 'none' }} disabled={saving} />
         </label>
       </div>
+      {cropTarget && (
+        <AvatarCropModal
+          file={cropTarget.file}
+          imageUrl={cropTarget.imageUrl}
+          onCancel={closeCrop}
+          onConfirm={handleCropConfirm}
+        />
+      )}
     </div>
   );
 }

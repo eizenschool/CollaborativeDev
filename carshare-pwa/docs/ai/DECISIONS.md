@@ -807,7 +807,142 @@ passenger updates. 103 was deployed with separate user approval on 2026-09-06.
 Preflight found the live publish guard checks status only, so 103 adds a narrow
 Passport-only publish restriction without activating pending 102.
 
+## D039 - Profile photo uploads get an AI content check before the public bucket, avatar only for now
+
+Accepted 2026-09-16. The `avatars` storage bucket is public with no reviewer
+(unlike identity documents, which are private and admin-reviewed), so it was
+the one upload in the app where an accidentally-uploaded ID document, visible
+personal information, or other unsafe content would go public instantly.
+Adds a new Edge Function, `supabase/functions/m1-avatar-content-check`, that
+sends the photo to Gemini (reusing the `GEMINI_API_KEY` Module 6's Tumpang
+Guide already depends on, not a new vendor) and returns a
+`{ flagged, categories, reason }` verdict against a fixed category list:
+`identity_document`, `personal_information_visible`, `sexual_content`,
+`graphic_violence`, `hate_or_extremist_symbols`, `offensive_gesture`, `other`.
+`offensive_gesture` (e.g. a raised middle finger) was added after a live
+upload slipped through the initial category list - a vague `other`
+catch-all is not reliable enough for the model to act on; each category
+needs its own explicit example in the prompt. An ordinary photo
+of one or more people is never flagged on its own - only those specific
+categories trigger a rejection.
+`ProfileService.updateProfilePhoto()` calls this after its existing
+size/type checks and before `uploadAvatar()`, so a flagged photo never
+reaches the public bucket. Fails open on any check error (Gemini down,
+rate-limited, timed out) - a third-party outage never blocks someone from
+setting a profile photo, only an actual flagged verdict does. Only runs
+against the Supabase backend; the mock/demo backend has no Edge Function to
+call and skips the check entirely, same as every other Supabase-only path in
+this file.
+Deliberately scoped to the avatar field only, not every upload/input in the
+app - the identity-document upload is designed to collect exactly this kind
+of sensitive data into a private bucket, so the same check there would work
+against the feature rather than for it. Vehicle/ride photos, message
+attachments, and free-text fields (messages, reviews, safety reports) were
+identified as follow-up candidates but are explicitly out of scope for this
+decision; each would need its own scoping pass (some already have basic
+input validation, none currently have content-based detection).
+Deployed 2026-09-16 (`GEMINI_API_KEY` already existed from Module 6;
+`M1_AVATAR_CHECK_ALLOWED_ORIGINS` added). First live test still failed open
+on every photo - Supabase's own function logs showed `Avatar content check
+failed The signal has been aborted` at ~10.8s, meaning the original
+single-attempt, 10s-timeout `checkAvatarImage()` was aborting before Gemini's
+multimodal (image) response came back; nothing was misconfigured. Raised the
+default budget to 25s and added one retry on a transient failure
+(abort/429/5xx), mirroring Module 6's own `callGemini` retry pattern instead
+of a bespoke one. Redeployed - still failed the same way, now aborting at
+~24s (both attempts exhausted, never a response either time).
+
+Root cause found by testing directly against the real Gemini API from
+outside Supabase entirely (a fresh personal API key, plain PowerShell
+`Invoke-RestMethod`, no app code involved): `gemini-3.7-flash` - this
+project's own default elsewhere (Module 6's Tumpang Guide) - hangs
+indefinitely (60s+, confirmed with a hard timeout cap, never any response)
+on any request that includes an image. It is a real, currently available
+model (confirmed via the API's own `ListModels` endpoint), so this is not a
+typo or a deprecated name; Module 6 simply never exercised it with image
+input, only text, so this was never caught before. `gemini-3.5-flash` was
+confirmed working for the identical multimodal request in the same direct
+test (successfully processed both TEXT and IMAGE token modalities). Switched
+`m1-avatar-content-check/index.ts`'s `DEFAULT_MODEL` to `gemini-3.5-flash`;
+`gemini-3.7-flash` remains Module 6's own default and is unaffected by this
+change (Module 6 doesn't send images, so it was never actually broken
+there). Redeployed the same day.
+
+Live testing then hit Gemini's free-tier quota mid-session (`Gemini 429:
+You exceeded your current quota... limit: 5`) - every photo failed open
+again, this time for a real external reason rather than a bug, but with the
+same visible symptom (nothing gets checked). Since `GEMINI_API_KEY` is
+shared with Module 6's Tumpang Guide, this quota is shared too - heavy
+testing or demoing of either feature can exhaust it for both. First
+response was to add Google Cloud Vision as a second, independent provider
+run alongside Gemini (`visionCheck.ts`, merged via `mergeCheckResults()` -
+union of categories, flagged if either flags), so a Gemini outage no longer
+left the check fully blind. By user decision, taken further the same day:
+Gemini dropped entirely from this check rather than kept as a second
+provider - three separate live issues from one model in one session (a
+timeout too tight for image input, `gemini-3.7-flash` hanging indefinitely
+on any image, then the shared free-tier quota) outweighed what it uniquely
+covered. `contentCheck.ts` (the Gemini-calling module, `mergeCheckResults`,
+`M1_AVATAR_CHECK_GEMINI_MODEL`) and its tests were deleted; `visionCheck.ts`
+is now the sole provider and owns the `FLAG_CATEGORIES`/`ContentCheckResult`
+types itself. Vision's SafeSearch Detection gives calibrated
+LIKELY/VERY_LIKELY-or-above likelihood scores for adult/racy/violent
+content (a purpose-built classifier, not a prompted judgment call), and its
+Text Detection (OCR) catches an ID document or visible phone number/email
+by reading the actual text in the photo rather than asking a model to
+recognise a document by eye. Its free tier (1,000 units/month per feature)
+and default rate limits are both far more generous than Gemini AI Studio's,
+at the cost of needing a Google Cloud project with billing enabled (Vision
+refuses to run at all without one, even within the free allowance) rather
+than AI Studio's no-billing key flow.
+**Known gap, accepted by user decision**: Vision has no concept of an
+open-ended category like `offensive_gesture` - the raised-middle-finger
+incident that originally motivated adding that category is no longer
+caught by this check. `identity_document`, `personal_information_visible`,
+`sexual_content`, and `graphic_violence` remain fully covered;
+`hate_or_extremist_symbols`/`offensive_gesture`/`other` stay in the
+category enum for shape compatibility but nothing today can ever populate
+them. This does not touch `supabase/functions/m6-tumpang-guide` -
+Module 6's own `GEMINI_API_KEY`/`gemini-3.7-flash` usage is a separate,
+unrelated feature and is unaffected. Authored, not yet deployed;
+`GOOGLE_VISION_API_KEY` still needs to be provisioned and set.
+
+**Vision never went live; switched to Sightengine.** `GOOGLE_VISION_API_KEY`
+provisioning hit a Google Cloud billing-account "payment anomaly" (project
+`#540288475775`, the same "Default Gemini Project" AI Studio auto-created) -
+Vision refuses to run at all without billing enabled, even within its free
+allowance, and the block was never resolved. Evaluated two alternatives
+before picking a replacement: Hive AI was ruled out outright - its live
+`visual-moderation` endpoint only accepts a `media_url` (confirmed against
+Hive's own Playground and API Reference, no `media_data`/base64 alternative
+exists), which cannot work here since the avatar check must run *before* a
+photo is public anywhere. Sightengine was chosen and its contract verified
+against real live `check.json` calls (not assumed from docs) before writing
+any integration code: it accepts the image as multipart form-data with raw
+bytes in a `media` field (confirmed via its Quickstart curl/nodejs examples
+and a live test call with real API keys), and returns continuous 0-1
+probability scores per class rather than Vision's LIKELY/VERY_LIKELY
+buckets - `sightengineCheck.ts` treats 0.5 as the flag threshold, Sightengine's
+own documented rule-of-thumb. Models used: `nudity-2.1` (sexual content),
+`gore-2.0` (graphic violence), `offensive-2.0`, and `ocr` (raw extracted
+text, matched against the exact same MyKad/phone/email regex patterns
+Vision's OCR path used, so `identity_document`/`personal_information_visible`
+behave identically to before). **The `offensive_gesture` gap Vision left
+open is now closed**: `offensive-2.0` has a dedicated `middle_finger` class
+(confirmed live, not just in docs), plus `nazi`/`asian_swastika`/
+`confederate`/`supremacist`/`terrorist` covering `hate_or_extremist_symbols`
+- both categories are live again for the first time since Gemini was
+dropped. `visionCheck.ts` and its tests were deleted outright (matching how
+`contentCheck.ts`/Gemini was handled earlier in this same decision) rather
+than kept as a dormant fallback, since Vision was never successfully
+deployed live in the first place. `index.ts` now requires
+`SIGHTENGINE_API_USER`/`SIGHTENGINE_API_SECRET` instead of
+`GOOGLE_VISION_API_KEY`. Authored and unit-tested 2026-09-16, not yet
+deployed; `SIGHTENGINE_API_USER`/`SIGHTENGINE_API_SECRET` still need to be
+set as Supabase Edge Function secrets.
+
 ## Open Decisions
+- whether the avatar content-check pattern (D039) extends to vehicle/ride photos, message attachments, or free-text fields, and on what timeline;
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);

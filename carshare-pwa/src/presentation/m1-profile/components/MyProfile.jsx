@@ -13,6 +13,7 @@ import { HostImpactEngine } from '../../../business-logic/m1-profile/HostImpactE
 import { ReputationService } from '../../../business-logic/m1-profile/ReputationService.js';
 import { canPublishWithIdentity, IdentityVerificationService } from '../../../business-logic/m1-profile/IdentityVerificationService.js';
 import IdentityVerificationCard from './IdentityVerificationCard.jsx';
+import AvatarCropModal from './AvatarCropModal.jsx';
 import { CONDUCT_SEVERITY_TIERS, describeReputationEvent, REPUTATION_EVENT_DELTAS, REPUTATION_POLICY } from '../../../business-logic/m1-profile/ReputationPolicy.js';
 import { sharePublicProfile } from '../../../business-logic/m1-profile/ProfileShareService.js';
 import TrustedFamilyCard from '../../m2-rides/components/trusted-family/TrustedFamilyCard.jsx';
@@ -45,6 +46,59 @@ function initialsOf(name) {
   return (name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
+// Shared by both avatar-change entry points (the always-visible sidebar
+// camera badge and the "Profile picture" card further down Info & Security)
+// so there is one crop modal, one upload-in-flight state, and one hidden
+// file input - not two independent copies that could drift or show
+// conflicting "Uploading..." states at once.
+function useAvatarPhotoUpload(user, setUser) {
+  const [cropTarget, setCropTarget] = useState(null); // { file, imageUrl } | null
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState(null);
+  const fileInputRef = useRef(null);
+
+  function openPicker() {
+    fileInputRef.current?.click();
+  }
+
+  function pickFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setStatus(null);
+    setCropTarget({ file, imageUrl: URL.createObjectURL(file) });
+  }
+
+  function closeCrop() {
+    if (cropTarget) URL.revokeObjectURL(cropTarget.imageUrl);
+    setCropTarget(null);
+    // Resets the native input so picking the same file again still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function confirmCrop(croppedFile) {
+    // Close the crop modal immediately rather than leaving it open for the
+    // whole upload+content-check - the crop/export work is already done by
+    // the time this fires, so there's nothing left for it to show, and
+    // leaving it up just duplicates the "Uploading…" state below.
+    if (cropTarget) URL.revokeObjectURL(cropTarget.imageUrl);
+    setCropTarget(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setSaving(true);
+    try {
+      const updated = await ProfileService.updateProfilePhoto(user.id, croppedFile);
+      const url = typeof updated === 'string' ? updated : updated?.profilePhotoUrl;
+      setUser((prev) => ({ ...prev, profilePhotoUrl: url }));
+      setStatus({ type: 'success', text: 'Profile picture updated.' });
+    } catch (err) {
+      setStatus({ type: 'error', text: err.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return { fileInputRef, cropTarget, saving, status, openPicker, pickFile, closeCrop, confirmCrop };
+}
+
 export default function MyProfile() {
   const { user, setUser, signOut } = useAuth();
   const navigate = useNavigate();
@@ -58,6 +112,7 @@ export default function MyProfile() {
   const [reputation, setReputation] = useState(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
+  const avatarUpload = useAvatarPhotoUpload(user, setUser);
 
   useEffect(() => {
     if (!user) return;
@@ -112,9 +167,19 @@ export default function MyProfile() {
             >
               {!user.profilePhotoUrl && initials}
             </div>
-            <button className="hero-card-camera" onClick={() => setPanel('info')} title="Change photo" aria-label="Change profile photo" type="button">
+            <button className="hero-card-camera" onClick={avatarUpload.openPicker} title="Change photo" aria-label="Change profile photo" type="button" disabled={avatarUpload.saving}>
               <IconCamera size={13} aria-hidden="true" />
             </button>
+            {avatarUpload.status?.type === 'error' && (
+              <span className="hero-card-avatar-error-badge" title={avatarUpload.status.text} aria-label={'Photo upload failed: ' + avatarUpload.status.text}>
+                <IconAlertTriangle size={10} aria-hidden="true" />
+              </span>
+            )}
+            <input
+              ref={avatarUpload.fileInputRef}
+              type="file" accept="image/*" onChange={avatarUpload.pickFile}
+              style={{ display: 'none' }} disabled={avatarUpload.saving}
+            />
           </div>
           <div className="hero-card-name">{user.fullName}</div>
           {reputation && (
@@ -152,7 +217,7 @@ export default function MyProfile() {
             onOpenImpact={() => navigate('/trip')}
           />
         )}
-        {panel === 'info' && <InfoSecurityPanel user={user} onSaved={setUser} />}
+        {panel === 'info' && <InfoSecurityPanel user={user} onSaved={setUser} avatarUpload={avatarUpload} />}
         {panel === 'vehicles' && (
           <VehiclesPanel
             vehicles={vehicles}
@@ -174,6 +239,15 @@ export default function MyProfile() {
         </button>
         {signOutError && <p className="profile-mobile-signout-error" role="alert">{signOutError}</p>}
       </div>
+
+      {avatarUpload.cropTarget && (
+        <AvatarCropModal
+          file={avatarUpload.cropTarget.file}
+          imageUrl={avatarUpload.cropTarget.imageUrl}
+          onCancel={avatarUpload.closeCrop}
+          onConfirm={avatarUpload.confirmCrop}
+        />
+      )}
     </div>
   );
 }
@@ -234,7 +308,7 @@ function OverviewPanel({ user, summary, reputation, vehicles, activeVehicleCount
 
 // ---------- INFO & SECURITY (merges Profile Info + Profile Picture + Emergency Contact) ----------
 
-function InfoSecurityPanel({ user, onSaved }) {
+function InfoSecurityPanel({ user, onSaved, avatarUpload }) {
   const [identityState, setIdentityState] = useState(null);
   const [identityError, setIdentityError] = useState('');
 
@@ -266,7 +340,7 @@ function InfoSecurityPanel({ user, onSaved }) {
           <ChangePasswordCard userId={user.id} />
         </div>
         <div>
-          <ProfilePhotoCard user={user} onSaved={onSaved} />
+          <ProfilePhotoCard user={user} avatarUpload={avatarUpload} />
           <EmergencyContactCard user={user} onSaved={onSaved} />
           {import.meta.env.VITE_M2_SOS_ENABLED === 'true' && <TrustedFamilyCard />}
         </div>
@@ -465,34 +539,21 @@ function ChangePasswordCard({ userId }) {
   );
 }
 
-function ProfilePhotoCard({ user, onSaved }) {
-  const [preview, setPreview] = useState(user?.profilePhotoUrl || null);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState(null);
-
-  async function handleFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSaving(true);
-    setStatus(null);
-    try {
-      const updated = await ProfileService.updateProfilePhoto(user.id, file);
-      const url = typeof updated === 'string' ? updated : updated?.profilePhotoUrl;
-      setPreview(url);
-      onSaved((prev) => ({ ...prev, profilePhotoUrl: url }));
-      setStatus({ type: 'success', text: 'Profile picture updated.' });
-    } catch (err) {
-      setStatus({ type: 'error', text: err.message });
-    } finally {
-      setSaving(false);
-    }
-  }
-
+// Purely presentational - file-picking, cropping, and uploading all live in
+// useAvatarPhotoUpload (shared with the sidebar hero camera badge, the
+// always-visible entry point) so there is one crop modal and one upload
+// state between the two, not two independent copies.
+function ProfilePhotoCard({ user, avatarUpload }) {
+  const preview = user?.profilePhotoUrl || null;
   return (
     <div className="card">
       <p className="card-title">Profile picture</p>
       <p className="card-subtitle">JPG or PNG, under 5MB</p>
-      {status && <div className={'alert ' + (status.type === 'error' ? 'alert-error' : 'alert-success')}>{status.text}</div>}
+      {avatarUpload.status && (
+        <div className={'alert ' + (avatarUpload.status.type === 'error' ? 'alert-error' : 'alert-success')}>
+          {avatarUpload.status.text}
+        </div>
+      )}
       <div className="avatar-upload">
         <div
           className="big-avatar"
@@ -500,10 +561,9 @@ function ProfilePhotoCard({ user, onSaved }) {
         >
           {!preview && (user?.fullName?.[0] || '?')}
         </div>
-        <label className="btn-ghost" style={{ cursor: 'pointer' }}>
-          <IconEdit size={12} /> {saving ? 'Uploading…' : 'Upload new photo'}
-          <input type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} disabled={saving} />
-        </label>
+        <button type="button" className="btn-ghost" style={{ cursor: 'pointer' }} onClick={avatarUpload.openPicker} disabled={avatarUpload.saving}>
+          <IconEdit size={12} /> {avatarUpload.saving ? 'Uploading…' : 'Upload new photo'}
+        </button>
       </div>
     </div>
   );

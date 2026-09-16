@@ -84,6 +84,14 @@ export const profileSupabaseAdapter = {
     return { data: data?.publicUrl || null, error: null };
   },
 
+  // Runs before uploadAvatar() - the avatars bucket is public with no
+  // reviewer, unlike identity documents, so this is the one content gate a
+  // profile photo gets. imageBase64 excludes the "data:image/...;base64,"
+  // prefix; the Edge Function pairs it with mimeType itself.
+  checkAvatarContent(imageBase64, mimeType) {
+    return supabase.functions.invoke('m1-avatar-content-check', { body: { image: imageBase64, mimeType } });
+  },
+
   updatePhotoUrl(userId, profilePhotoUrl) {
     return supabase.from('profiles').update({ profile_photo_url: profilePhotoUrl }).eq('id', userId);
   },

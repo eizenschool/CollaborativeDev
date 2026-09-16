@@ -106,6 +106,64 @@ async function currentAuthUser(authUser) {
   return data.user;
 }
 
+// file.arrayBuffer() rather than FileReader's readAsDataURL(): both the
+// browser and Node (used by this file's own tests) implement Blob/File's
+// arrayBuffer(), whereas FileReader is browser-only and unavailable in the
+// Vitest node environment.
+async function fileToBase64(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+// Keep in sync with supabase/functions/m1-avatar-content-check/sightengineCheck.ts's
+// FLAG_CATEGORIES - duplicated here rather than shared, since that file runs
+// in Deno and this one in the browser/Vite build. `other` is kept here for
+// shape compatibility even though nothing today ever produces it; every
+// other category (including hate_or_extremist_symbols/offensive_gesture,
+// unreachable under the earlier Vision-only check - see D039) is reachable
+// now that Sightengine's offensive-2.0 model is live.
+const AVATAR_FLAG_MESSAGES = {
+  identity_document: 'it looks like an ID document (MyKad, passport, or licence)',
+  personal_information_visible: 'it appears to show personal information such as a phone number or address',
+  sexual_content: 'it may contain sexual content',
+  graphic_violence: 'it may contain graphic violence',
+  hate_or_extremist_symbols: 'it may contain hateful or extremist content',
+  offensive_gesture: 'it appears to show an offensive or insulting gesture',
+  other: 'it doesn’t look safe to publish'
+};
+
+// The avatars bucket is public with no reviewer, unlike identity documents -
+// this is the one content gate a profile photo gets, so it runs before
+// uploadAvatar() ever makes the file public. Only against Supabase: the mock
+// backend has no Edge Function to call and updateProfilePhoto() never
+// reaches this branch for it. Fails open on any error checking the photo
+// (network issue, Sightengine unavailable, rate-limited) - a third-party outage
+// should never block someone from setting a profile photo; only an actual
+// flagged verdict throws.
+async function assertAvatarContentSafe(file) {
+  let base64;
+  try {
+    base64 = await fileToBase64(file);
+  } catch {
+    return; // Could not read the file locally; let the upload proceed and fail there if it's really unreadable.
+  }
+  const { data, error } = await profileSupabaseAdapter.checkAvatarContent(base64, file.type).catch((cause) => ({ data: null, error: cause }));
+  if (error || !data) {
+    console.warn('Avatar content check unavailable, allowing upload:', error?.message || error);
+    return;
+  }
+  if (data.flagged) {
+    const category = Array.isArray(data.categories) ? data.categories[0] : null;
+    const detail = AVATAR_FLAG_MESSAGES[category] || data.reason || 'it doesn’t look safe to publish';
+    throw new Error(`This photo can’t be used as your profile picture: ${detail}. Please choose a different photo.`);
+  }
+}
+
 export const ProfileService = {
   backend: profileSupabaseAdapter.isConfigured ? 'supabase' : 'mock',
 
@@ -258,6 +316,7 @@ export const ProfileService = {
     }
 
     if (profileSupabaseAdapter.isConfigured) {
+      await assertAvatarContentSafe(file);
       const { data: publicUrl, error: uploadError } = await profileSupabaseAdapter.uploadAvatar(userId, file);
       if (uploadError) throw uploadError;
       const { error } = await profileSupabaseAdapter.updatePhotoUrl(userId, publicUrl);

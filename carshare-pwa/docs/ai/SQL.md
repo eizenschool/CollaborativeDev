@@ -17,13 +17,17 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, and 099_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-108 (`087_m1`, `088_m1`, `104_m1`, and `105_m1`
+Repository SQL history: 001-110 (`087_m1`, `088_m1`, `104_m1`, and `105_m1`
   are authored and not deployed; `106_m1` and `107_m1` are deployed by user
   action outside this repo's own migration tooling - status not otherwise
   verified here, see the "Case queue live-fix" note below; `108_m1` is
   authored, fixing a bug caught immediately after `107_m1` went live, and is
   not yet deployed; `093_m1`-`097_m1` are live without tracked migration
-  entries; `099_m1` is deployed as a tracked migration)
+  entries; `098_m1` has no tracked entry and no note in this file at all -
+  its deployment status is unverified, see its own entry below; `099_m1` is
+  deployed as a tracked migration; `109_m1` and `110_m1` are authored, not
+  deployed, fixing gaps found auditing the Host Impact badge system - see
+  their own entries below)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -856,6 +860,45 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   those two column privileges. Live verification confirms both are granted,
   broad table INSERT remains false for `authenticated` and `anon`, RLS remains
   enabled, and the owner INSERT/UPDATE policies remain present.
+- `098_m1_badge_tier_change_notification.sql` - deployment status unverified;
+  this file previously had no entry in this document at all (gap found
+  2026-09-16 while auditing the Host Impact badge system). Adds
+  `last_badge_tier` to `host_impact_stats` and a `before insert or update`
+  trigger (`notify_badge_tier_change`) that recomputes a host's badge tier via
+  `private.badge_tier_for_stats()` on every write and notifies on an actual
+  tier transition. Its own header says the function mirrors
+  `HostImpactEngine.js`'s formula and `REPUTATION_POLICY.hostMinimum` exactly,
+  but hard-coded the withholding threshold at 65 - stale even at authoring
+  time, since `087_m1` (an earlier migration number, already in force) had
+  already raised `hostMinimum` to 90. Not rewritten itself (prior history);
+  `110_m1` below supersedes only the threshold. Confirm whether `098_m1` is
+  even deployed before treating that drift as a live bug rather than a
+  dormant one.
+- `109_m1_host_impact_trip_completion.sql` - authored, not deployed; fixes the
+  main gap found in that same audit. `host_impact_stats.completed_trips` and
+  `co2_saved_kg` were never written by any ride-completion code path -
+  `private.record_reputation_event` (072_m1) only ever touches
+  `reputation_score`, and `074_m1`'s `private.reputation_from_ride_status`
+  (the trigger that fires when a ride reaches Completed) records a
+  `ride_completed` reputation event and stops there. Every account's
+  `HostImpactEngine.js` composite score was therefore permanently 0 (Bronze),
+  and the Module 5 leaderboard (which filters `completed_trips > 0`) was
+  permanently empty, independent of the "no Completed rides yet" data-gap
+  already noted in `docs/ai/DECISIONS.md`. Adds
+  `private.ride_carbon_saved_kg()` - mirroring
+  `src/business-logic/m5-trips/TripHistoryEngine.js`'s `estimateCarbonSavedKg()`
+  exactly (same 18/340 km `AVG_DISTANCE_KM` fallback, same 0.12 kg/passenger-km
+  factor, itself still an unratified estimate per `docs/ai/modules/
+  M5_TRIP_ECO.md`) rather than a new formula - and supersedes
+  `private.reputation_from_ride_status()` (same trigger, not a second one) to
+  increment both counters for the host and each checked-in traveller,
+  guarded on `record_reputation_event`'s own return value so a ride's
+  `Completed` transition can never double-count.
+- `110_m1_fix_badge_notification_threshold_drift.sql` - authored, not
+  deployed; supersedes only `private.badge_tier_for_stats()`'s body (same
+  signature, same grant) to replace the stale `< 65` with `< 90`, matching
+  `087_m1`'s current `REPUTATION_POLICY.hostMinimum`. `098_m1` itself is left
+  as authored history.
 - `093_m1_identity_document_verification.sql` - live without a tracked migration
   entry;
   moves identity verification from sign-up to the point of use (D035). Adds the

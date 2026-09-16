@@ -38,7 +38,17 @@ at eight seconds with a non-blocking retry notice; foreground token/profile
 events stay silent and never replace the mounted route with the startup screen.
 Public-safe profile fields are separate from owner-only phone/emergency data,
 email is sourced from Supabase Auth, avatars use an owner-folder policy, and
-vehicles are owner-only with one active vehicle per user. Email verification
+vehicles are owner-only with one active vehicle per user.
+`ProfileService.updateProfilePhoto()` now runs a Sightengine-backed content
+check (`supabase/functions/m1-avatar-content-check`, D039) before a photo
+reaches the public `avatars` bucket, flagging identity documents, visible
+personal information, nudity, violence, hate/extremist symbols, and
+offensive gestures (e.g. a raised middle finger); it fails open on a check
+error. Two earlier providers were tried and dropped: Gemini (three separate
+live issues in one session - timeout, a model that hangs on image input, a
+free-tier quota shared with Module 6's Tumpang Guide), then Google Cloud
+Vision (fully built and tested but never deployable live - blocked by a
+Google Cloud billing-account issue). Email verification
 does not establish an app session until Supabase returns one. Deactivation is
 reversible on the next successful login and hides published rides; hard account
 deletion is hidden until Auth identity deletion can be implemented safely.

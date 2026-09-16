@@ -839,6 +839,12 @@ body.dialog-open { overflow: hidden; }
   justify-content: center; cursor: pointer;
 }
 .hero-card-camera:hover { background: var(--teal-dark); }
+.hero-card-avatar-error-badge {
+  position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; border-radius: 999px;
+  border: 2px solid #fff; background: var(--danger); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  animation: ui-badge-pop var(--motion-slow) var(--ease-spring) both;
+}
 .hero-card-name { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin-bottom: 6px; }
 .hero-card-meta-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .hero-card-rating { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--warning); }

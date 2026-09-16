@@ -67,9 +67,11 @@ describe('Host Impact badge', () => {
 });
 
 // 098_m1 replicates this exact formula server-side to decide whether to
-// notify a host of a tier change - these assertions keep that SQL copy from
-// silently drifting the way the reputation-weighted one in this project's own
-// report already had, before this migration existed.
+// notify a host of a tier change. 098_m1 itself is left unmodified (prior
+// migration history), including its now-known-stale `< 65` withholding
+// threshold - see the 110_m1 describe block below for the corrected,
+// currently-effective threshold. The assertions here just describe what
+// 098_m1's own file still says.
 describe('Module 1 badge tier change notification SQL contract (098_m1)', () => {
   async function readSql() {
     return import('node:fs/promises').then(({ readFile }) => readFile(
@@ -90,7 +92,7 @@ describe('Module 1 badge tier change notification SQL contract (098_m1)', () => 
     expect(formulaLine).not.toMatch(/reputation/i);
   });
 
-  it('withholds above Bronze on a safety hold or a score below the host minimum (65)', async () => {
+  it('originally withheld above Bronze below a score of 65 - superseded by 110_m1, see below', async () => {
     const sql = await readSql();
     expect(sql).toContain('coalesce(p_reputation_hold, false)');
     expect(sql).toContain('p_reputation_score < 65');
@@ -114,5 +116,78 @@ describe('Module 1 badge tier change notification SQL contract (098_m1)', () => 
     expect(sql).toMatch(/revoke all on function private\.badge_tier_for_stats\(int, numeric, int, boolean\) from public, anon, authenticated;/);
     expect(sql).toMatch(/revoke all on function private\.badge_tier_rank\(text\) from public, anon, authenticated;/);
     expect(sql).toMatch(/revoke all on function private\.notify_badge_tier_change\(\) from public, anon, authenticated;/);
+  });
+});
+
+// 110_m1 fixes the drift the block above documents: 087_m1 raised
+// REPUTATION_POLICY.hostMinimum to 90 with an earlier migration number than
+// 098_m1, so 098_m1 should have used 90 and instead kept 65. This asserts the
+// currently-effective threshold (110_m1's create-or-replace) actually matches
+// the client constant, the way 098_m1's own header always claimed it did.
+describe('Module 1 badge notification threshold fix (110_m1)', () => {
+  async function readSql() {
+    return import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../../database/sql/110_m1_fix_badge_notification_threshold_drift.sql', import.meta.url),
+      'utf8'
+    ));
+  }
+
+  it('re-points badge_tier_for_stats\'s withholding check at REPUTATION_POLICY.hostMinimum (90)', async () => {
+    const sql = await readSql();
+    expect(sql).toContain('create or replace function private.badge_tier_for_stats(');
+    expect(sql).toContain('coalesce(p_reputation_hold, false)');
+    expect(sql).toContain(`p_reputation_score < ${REPUTATION_POLICY.hostMinimum}`);
+    expect(sql).not.toContain('p_reputation_score < 65');
+  });
+
+  it('keeps the same formula, tiers, and grant as 098_m1 - only the threshold changes', async () => {
+    const sql = await readSql();
+    expect(sql).toContain("p_completed_trips, 0) * 2.0 + coalesce(p_co2_saved_kg, 0) * 0.5");
+    expect(sql).toContain(">= 200 then 'Platinum Host'");
+    expect(sql).toContain(">= 120 then 'Gold Host'");
+    expect(sql).toContain(">= 50 then 'Silver Host'");
+    expect(sql).toMatch(/revoke all on function private\.badge_tier_for_stats\(int, numeric, int, boolean\) from public, anon, authenticated;/);
+  });
+});
+
+// 109_m1 closes the gap this test file's own top-of-file comment did not
+// cover: completedTrips/co2SavedKg are unit-tested here as pure functions,
+// but nothing previously wrote host_impact_stats.completed_trips/co2_saved_kg
+// from a real ride completion, so every live score was permanently 0.
+describe('Module 1 Host Impact trip-completion write path (109_m1)', () => {
+  async function readSql() {
+    return import('node:fs/promises').then(({ readFile }) => readFile(
+      new URL('../../../../database/sql/109_m1_host_impact_trip_completion.sql', import.meta.url),
+      'utf8'
+    ));
+  }
+
+  it('increments completed_trips and co2_saved_kg only when the reputation event newly applied', async () => {
+    const sql = await readSql();
+    expect(sql).toContain('v_applied := private.record_reputation_event(');
+    expect(sql).toContain('if v_applied then');
+    expect(sql).toContain('completed_trips = completed_trips + 1');
+    expect(sql).toContain('co2_saved_kg = co2_saved_kg + v_carbon');
+  });
+
+  it('credits both the host and each checked-in traveller for the same ride', async () => {
+    const sql = await readSql();
+    const hostIndex = sql.indexOf("':completed:host'");
+    const travellerIndex = sql.indexOf("':completed'");
+    expect(hostIndex).toBeGreaterThan(-1);
+    expect(travellerIndex).toBeGreaterThan(-1);
+    expect(sql.match(/completed_trips = completed_trips \+ 1/g)).toHaveLength(2);
+  });
+
+  it('mirrors TripHistoryEngine.js\'s carbon estimate (18/340 km fallback, 0.12 kg/passenger-km)', async () => {
+    const sql = await readSql();
+    expect(sql).toContain('then 340');
+    expect(sql).toContain('else 18');
+    expect(sql).toContain('* 0.12');
+  });
+
+  it('keeps the new helper function locked down like every other private.* function', async () => {
+    const sql = await readSql();
+    expect(sql).toMatch(/revoke all on function private\.ride_carbon_saved_kg\(integer, text, integer, integer\)\s*\n\s*from public, anon, authenticated;/);
   });
 });
