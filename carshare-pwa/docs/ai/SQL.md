@@ -17,17 +17,13 @@ Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, and 099_m1 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-110 (`087_m1`, `088_m1`, `104_m1`, and `105_m1`
-  are authored and not deployed; `106_m1` and `107_m1` are deployed by user
-  action outside this repo's own migration tooling - status not otherwise
-  verified here, see the "Case queue live-fix" note below; `108_m1` is
-  authored, fixing a bug caught immediately after `107_m1` went live, and is
-  not yet deployed; `093_m1`-`097_m1` are live without tracked migration
-  entries; `098_m1` has no tracked entry and no note in this file at all -
-  its deployment status is unverified, see its own entry below; `099_m1` is
-  deployed as a tracked migration; `109_m1` and `110_m1` are authored, not
-  deployed, fixing gaps found auditing the Host Impact badge system - see
-  their own entries below)
+Repository SQL history: 001-110 (`078_m1`, `087_m1`, `098_m1`, `104_m1`,
+  `105_m1`, `106_m1`, `107_m1`, `108_m1`, `109_m1`, and `110_m1` are all
+  confirmed live via a direct query against the linked database on
+  2026-09-16 - see each entry below for what was checked; `088_m1` remains
+  authored, not deployed (its `profile_private.ic_checked_at` column does
+  not exist live); `093_m1`-`097_m1` are live without tracked migration
+  entries; `099_m1` is deployed as a tracked migration)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -112,11 +108,14 @@ are deployed; the next unused repository sequence is `109`.)
   `20260906073043_m1_validate_driver_document_birth_date`; replaces the RPC's
   date validation with inferred-century `make_date`, including leap birthdays,
   and rejects underage driver submissions. Apply 100 then 101.
-- `102_m1_require_driver_documents_to_publish.sql` is authored, NOT deployed.
-  Activate after the new frontend is released. It checks both stored owner
-  photos, number, expiry and age on transitions into Published only. Existing
-  published rides remain untouched. The current live trigger still checks the
-  earlier identity status rule until this activation.
+- `102_m1_require_driver_documents_to_publish.sql` - deployed, confirmed live
+  2026-09-16: a direct query of `private.enforce_ride_identity_verification`'s
+  live function body matches this file exactly (requires
+  `license_document_path`, checks its storage object exists, enforces
+  `license_expiry`), not the earlier, looser identity-status-only rule this
+  file's header says to keep running until activation. It checks both stored
+  owner photos, number, expiry and age on transitions into Published only.
+  Existing published rides remain untouched.
 - Live checks confirm private bucket, RLS, authenticated column grants,
   no anonymous read/RPC execution and SECURITY INVOKER submission. Transactional
   negative checks cover missing session, other-owner photo paths and underage
@@ -732,13 +731,18 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   caller-device ownership, participant heartbeat timestamps, 90-second orphan
   expiry, same-device refresh recovery, and compatible one-/two-argument call
   start RPCs without granting browser roles direct call-session mutations.
-- `078_m1_conduct_outcome_and_hold_reversal.sql` - authored, not deployed;
+- `078_m1_conduct_outcome_and_hold_reversal.sql` - deployed, confirmed live
+  2026-09-16 (`private.clear_reputation_hold` exists; `apply_conduct_outcome`
+  itself now carries `104_m1`'s superseding body - see that entry);
   adds `private.apply_conduct_outcome` and `private.clear_reputation_hold`,
   service-role-only functions (no grant to `anon`/`authenticated`) that make
   `confirmed_minor_conduct`/`confirmed_serious_conduct` events and
   `reputation_hold` reachable for the first time since `072_m1` defined them,
   without a client-facing admin surface.
-- `104_m1_graduated_conduct_severity.sql` - authored, not deployed; widens
+- `104_m1_graduated_conduct_severity.sql` - deployed, confirmed live
+  2026-09-16 (`private.apply_conduct_outcome`'s live body carries the full
+  four-tier escalation logic below, not `078_m1`'s original two-tier
+  version); widens
   `reputation_events_event_type_check` with two new tiers
   (`confirmed_moderate_conduct` -14, `confirmed_severe_conduct` -30) between
   and above `078_m1`'s original two, and replaces (`create or replace`, same
@@ -750,7 +754,8 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `metadata.requestedType`. `078_m1`'s file and grants are untouched.
   `ReputationPolicy.js`'s `CONDUCT_SEVERITY_TIERS`/`resolveConductSeverity`
   mirror this for client-side preview only; the SQL function is authoritative.
-- `105_m1_identity_overdue_penalty.sql` - authored, not deployed; the one
+- `105_m1_identity_overdue_penalty.sql` - deployed, confirmed live
+  2026-09-16 (`public.admin_apply_identity_overdue_penalty` exists); the one
   deliberate, manual exception to "identity documents do not affect
   reputation" (`072_m1`, `087_m1`). Widens
   `reputation_events_event_type_check` with `identity_verification_overdue`
@@ -763,9 +768,11 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   deduction). No cron/worker involved - this stays a manual reviewer action,
   same allowlist as `097_m1`. `AdminIdentityReview.jsx`'s "Not verified" tab
   and `IdentityVerificationService.adminListUnverifiedMembers`/
-  `adminApplyOverduePenalty` are the client side; until this is deployed the
-  RPC 404s and the client shows an empty list rather than an error, matching
-  the existing `isUndeployedIdentityContract` pattern.
+  `adminApplyOverduePenalty` are the client side; now that this is deployed,
+  the `isUndeployedIdentityContract` empty-list fallback in those methods is
+  dead code for this RPC specifically (it still applies to any other
+  genuinely undeployed identity contract) rather than a currently-exercised
+  path.
 - `106_m1_admin_conduct_review.sql` - deployed by the user outside this
   repo's own migration tooling (exact deployment mechanism/date not recorded
   here); the reviewer surface `104_m1`'s header flagged as missing. Same
@@ -775,10 +782,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   non-empty reason, generates its own per-call `source_event_id` so same-day
   confirmations never collapse), and `public.admin_clear_reputation_hold` -
   all narrow wrappers around `078_m1`/`104_m1`'s existing service-role-only
-  functions, none of which are widened. **These wrapper functions call
-  `private.apply_conduct_outcome`/`private.clear_reputation_hold`, which only
-  exist if `078_m1` (superseded by `104_m1`) is also deployed** - confirm
-  that separately if Confirm a Trust Case / Clear hold error out live.
+  functions, none of which are widened. `private.apply_conduct_outcome`/
+  `private.clear_reputation_hold` (`078_m1`, superseded by `104_m1`) are
+  confirmed live, so Confirm a Trust Case / Clear hold both have a real
+  function to call.
   `AdminConductReview.jsx` (`/admin/conduct`) is the client side: see a
   member's score/standing/prior confirmed-conduct history and confirm a
   graduated Trust Case. Originally had no Safety Report intake or case
@@ -811,8 +818,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `r."createdAt"`), erroring `column r.created_at does not exist` every time
   the queue loaded. Fixed by `108_m1` below; `107_m1` itself is not rewritten
   since it is already deployed history.
-- `108_m1_fix_safety_report_queue_order_by.sql` - authored, not yet
-  deployed; supersedes only `admin_list_safety_reports`'s body (same
+- `108_m1_fix_safety_report_queue_order_by.sql` - deployed, confirmed live
+  2026-09-16 (`admin_list_safety_reports`'s live body orders by
+  `r."createdAt"`, the post-alias fix, not the original bug); supersedes only
+  `admin_list_safety_reports`'s body (same
   signature, same admin gate, same status-filter validation) to fix the bug
   above. `submit_safety_report` and `admin_resolve_safety_report` have no
   equivalent alias mismatch and are untouched.
@@ -860,9 +869,11 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   those two column privileges. Live verification confirms both are granted,
   broad table INSERT remains false for `authenticated` and `anon`, RLS remains
   enabled, and the owner INSERT/UPDATE policies remain present.
-- `098_m1_badge_tier_change_notification.sql` - deployment status unverified;
-  this file previously had no entry in this document at all (gap found
-  2026-09-16 while auditing the Host Impact badge system). Adds
+- `098_m1_badge_tier_change_notification.sql` - deployed, confirmed live
+  2026-09-16 (`host_impact_stats.last_badge_tier` column, the
+  `notify_badge_tier_change` trigger, and `private.badge_tier_rank()` all
+  exist); this file previously had no entry in this document at all (gap
+  found 2026-09-16 while auditing the Host Impact badge system). Adds
   `last_badge_tier` to `host_impact_stats` and a `before insert or update`
   trigger (`notify_badge_tier_change`) that recomputes a host's badge tier via
   `private.badge_tier_for_stats()` on every write and notifies on an actual
@@ -871,10 +882,12 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   but hard-coded the withholding threshold at 65 - stale even at authoring
   time, since `087_m1` (an earlier migration number, already in force) had
   already raised `hostMinimum` to 90. Not rewritten itself (prior history);
-  `110_m1` below supersedes only the threshold. Confirm whether `098_m1` is
-  even deployed before treating that drift as a live bug rather than a
-  dormant one.
-- `109_m1_host_impact_trip_completion.sql` - authored, not deployed; fixes the
+  `110_m1` below supersedes only the threshold, and its corrected `< 90`
+  comparison is confirmed present in `badge_tier_for_stats`'s live body - the
+  drift this entry originally flagged was a real live bug until `110_m1`
+  shipped, not a dormant one.
+- `109_m1_host_impact_trip_completion.sql` - deployed, confirmed live
+  2026-09-16 (`private.ride_carbon_saved_kg()` exists); fixes the
   main gap found in that same audit. `host_impact_stats.completed_trips` and
   `co2_saved_kg` were never written by any ride-completion code path -
   `private.record_reputation_event` (072_m1) only ever touches
@@ -894,8 +907,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   increment both counters for the host and each checked-in traveller,
   guarded on `record_reputation_event`'s own return value so a ride's
   `Completed` transition can never double-count.
-- `110_m1_fix_badge_notification_threshold_drift.sql` - authored, not
-  deployed; supersedes only `private.badge_tier_for_stats()`'s body (same
+- `110_m1_fix_badge_notification_threshold_drift.sql` - deployed, confirmed
+  live 2026-09-16 (`badge_tier_for_stats`'s live body compares against 90,
+  not 65); supersedes only `private.badge_tier_for_stats()`'s body (same
   signature, same grant) to replace the stale `< 65` with `< 90`, matching
   `087_m1`'s current `REPUTATION_POLICY.hostMinimum`. `098_m1` itself is left
   as authored history.
@@ -911,8 +925,9 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `handle_new_user()` to a body that does not write `ic_checked_at` and then
   drops that column, retiring the `088_m1` sign-up flag - the restore must stay
   ahead of the drop or account creation breaks.
-- `087_m1_reputation_starts_at_ceiling.sql` - authored, not deployed;
-  moves the reputation origin from 70 to 100, rebases live scores by +30
+- `087_m1_reputation_starts_at_ceiling.sql` - deployed, confirmed live
+  2026-09-16 (`host_impact_stats.reputation_score`'s column default is 100,
+  not 70); moves the reputation origin from 70 to 100, rebases live scores by +30
   clamped at 100 (guarded by the current column default, so re-running is a
   no-op), and raises the publish/request gates to 90/75 in
   `private.enforce_ride_reputation_eligibility`,
