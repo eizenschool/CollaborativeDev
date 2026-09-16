@@ -11,6 +11,19 @@ create schema auth; create schema private; create schema storage;
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid',true),'')::uuid $$;
 create function private.is_identity_review_admin() returns boolean language sql stable as $$ select coalesce(current_setting('test.admin',true),'false')='true' $$;
 create table public.profiles(id uuid primary key, full_name text, status text default 'active');
+create table public.user_notifications(
+  id uuid primary key default gen_random_uuid(), recipient_id uuid not null,
+  source_module text not null, event_type text not null, title text not null,
+  body text not null, action_path text not null, payload jsonb not null,
+  dedupe_key text not null, unique(recipient_id,dedupe_key)
+);
+create function private.create_user_notification(p_recipient_id uuid,p_source_module text,p_event_type text,p_title text,p_body text,p_action_path text,p_payload jsonb,p_dedupe_key text)
+returns uuid language plpgsql as $$ declare v_id uuid; begin
+insert into public.user_notifications(recipient_id,source_module,event_type,title,body,action_path,payload,dedupe_key)
+values(p_recipient_id,p_source_module,p_event_type,p_title,p_body,p_action_path,p_payload,p_dedupe_key)
+on conflict(recipient_id,dedupe_key) do nothing returning id into v_id;
+if v_id is null then select id into v_id from public.user_notifications where recipient_id=p_recipient_id and dedupe_key=p_dedupe_key; end if;
+return v_id; end $$;
 create table public.rides(id uuid primary key);
 create table public.conversations(id uuid primary key, ride_id uuid);
 create table public.messages(id uuid primary key, sender_id uuid, conversation_id uuid, kind text default 'user', text_content text, created_at timestamptz default now(), edited_at timestamptz, deleted_at timestamptz);
@@ -39,6 +52,8 @@ const legacyQueue = await readFile('database/sql/108_m1_fix_safety_report_queue_
 await db.exec(legacyQueue);
 const queueFix = await readFile('database/sql/111_m3_fix_message_report_admin_queue.sql','utf8');
 await db.exec(queueFix);
+const notifications = await readFile('supabase/migrations/20260916115931_safety_report_notifications.sql','utf8');
+await db.exec(notifications);
 const sender='00000000-0000-4000-8000-000000000001', viewer='00000000-0000-4000-8000-000000000002', viewer2='00000000-0000-4000-8000-000000000003';
 const message='10000000-0000-4000-8000-000000000001';
 await db.exec(`insert into profiles(id,full_name) values('${sender}','Sender'),('${viewer}','Viewer'),('${viewer2}','Viewer 2'); insert into host_impact_stats(user_id) values('${sender}'); insert into conversations(id) values('${message}'); insert into messages(id,sender_id,conversation_id,text_content) values('${message}','${sender}','${message}','Evidence text');`);
@@ -72,6 +87,8 @@ await db.query("select admin_review_message_report($1,'confirmed_serious_conduct
 assert.equal(await scalar('select reputation_score as value from host_impact_stats'),92);
 assert.equal(await scalar('select count(*)::int as value from reputation_events'),1);
 assert.equal(await scalar("select count(*)::int as value from safety_reports where status='resolved'"),2);
+assert.equal(await scalar("select count(*)::int as value from user_notifications where event_type='message_report_result'"),2);
+assert.equal(await scalar("select count(*)::int as value from user_notifications where recipient_id=$1 and event_type='message_conduct_outcome'",[sender]),1);
 // An edit between copy preparation and finalization cannot save mismatched evidence.
 await db.exec(`update messages set text_content='New version',deleted_at=null,edited_at=now() where id='${message}'`);
 await actor(viewer2);
@@ -91,7 +108,25 @@ assert.equal(await scalar('select count(*)::int as value from message_attachment
 assert.equal(await scalar('select moderated_at is not null as value from messages'),true);
 assert.equal((await scalar('select admin_message_report_evidence($1) as value',[media.attemptId])).snapshot.attachments.length,1);
 assert.equal(await scalar('select reputation_score as value from host_impact_stats'),92);
+assert.equal(await scalar("select count(*)::int as value from user_notifications where recipient_id=$1 and event_type='message_conduct_warning'",[sender]),1);
+
+// Profile-report resolution informs the reporter. Confirmed conduct separately
+// informs the reported member, while a dismissal never notifies that member.
+await actor(viewer);
+const profileReport=await scalar('select submit_safety_report($1,$2,null) as value',[sender,'Unsafe profile conduct']);
+await actor(viewer,true);
+await db.query("select admin_apply_conduct_outcome($1,'confirmed_minor_conduct','Confirmed profile conduct',null,false)",[sender]);
+await db.query("select admin_resolve_safety_report($1,'resolved','Action taken')",[profileReport]);
+assert.equal(await scalar("select count(*)::int as value from user_notifications where recipient_id=$1 and event_type='conduct_outcome'",[sender]),1);
+assert.equal(await scalar("select count(*)::int as value from user_notifications where recipient_id=$1 and event_type='safety_report_result' and payload->>'result'='action_taken'",[viewer]),1);
+await actor(viewer2);
+const dismissedReport=await scalar('select submit_safety_report($1,$2,null) as value',[sender,'Unconfirmed concern']);
+await actor(viewer,true);
+const senderNoticeCount=await scalar('select count(*)::int as value from user_notifications where recipient_id=$1',[sender]);
+await db.query("select admin_resolve_safety_report($1,'dismissed','No violation found')",[dismissedReport]);
+assert.equal(await scalar("select count(*)::int as value from user_notifications where recipient_id=$1 and event_type='safety_report_result' and payload->>'result'='no_violation'",[viewer2]),1);
+assert.equal(await scalar('select count(*)::int as value from user_notifications where recipient_id=$1',[sender]),senderNoticeCount);
 assert.equal(await scalar("select has_function_privilege('authenticated','finish_message_report(uuid)','EXECUTE') as value"),false);
 assert.equal(await scalar("select has_table_privilege('authenticated','message_report_evidence','SELECT') as value"),false);
-console.log('Postgres integration checks passed: authorization, queue, immutable evidence, media completeness, deletion, duplicate reports and once-only penalties.');
+console.log('Postgres integration checks passed: authorization, queue, evidence, deletion, penalties and safety notifications.');
 await db.close();
