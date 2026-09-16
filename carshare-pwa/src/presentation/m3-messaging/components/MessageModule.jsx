@@ -96,13 +96,13 @@ export default function MessageModule() {
     folderState,
     messageScope,
     setMessageScope,
-    archiveNotice,
-    setArchiveNotice,
+    archiveFeedback,
+    setArchiveFeedback,
     setFolder,
     refreshConversations,
     refreshConversation,
     invalidateDeletedConversation,
-    confirmArchivedConversation,
+    confirmConversationArchiveState,
   } = useMessagingSession();
   const [isDesktop, setIsDesktop] = useState(getIsDesktop);
   const [manageConversation, setManageConversation] = useState(null);
@@ -166,12 +166,12 @@ export default function MessageModule() {
   }, [refreshFriendCount, user?.id]);
 
   function selectConversation(id) {
-    setArchiveNotice(false);
+    setArchiveFeedback(false);
     navigate(`/message/${id}`);
   }
 
   function changeFolder(nextFolder) {
-    setArchiveNotice(false);
+    setArchiveFeedback(false);
     setFolder(nextFolder);
     navigate('/message');
   }
@@ -197,21 +197,19 @@ export default function MessageModule() {
     setManageError('');
     setIsManaging(true);
     try {
-      if (action === 'archive') {
-        await MessagingService.archiveConversation(manageConversation.id);
-        confirmArchivedConversation(manageConversation);
-        const archivedScope = manageConversation.scope === 'friend' ? 'friend' : 'ride';
-        setMessageScope(archivedScope);
+      if (action === 'archive' || action === 'unarchive') {
+        const isArchived = action === 'archive';
+        await (isArchived
+          ? MessagingService.archiveConversation(manageConversation.id)
+          : MessagingService.unarchiveConversation(manageConversation.id));
+        confirmConversationArchiveState(manageConversation, isArchived);
+        setArchiveFeedback(isArchived ? 'Conversation archived' : 'Conversation unarchived');
+        setMessageScope(manageConversation.scope === 'friend' ? 'friend' : 'ride');
         setManageConversation(null);
-        setFolder('active');
+        setFolder(isArchived ? 'active' : 'archived');
         navigate('/message', { replace: true });
-        setArchiveNotice(true);
         await Promise.allSettled([refreshConversations('active'), refreshConversations('archived')]);
         return;
-      } else if (action === 'unarchive') {
-        await MessagingService.unarchiveConversation(manageConversation.id);
-        setFolder('active');
-        navigate(`/message/${manageConversation.id}`);
       } else if (action === 'delete') {
         await MessagingService.deleteConversationForMe(manageConversation.id);
         invalidateDeletedConversation(manageConversation.id);
@@ -301,10 +299,10 @@ export default function MessageModule() {
       ) : (
         <main className="message-module message-module-mobile">{conversationId ? chat : conversationList}</main>
       )}
-      {archiveNotice && (
-        <div className="message-archive-notice">
-          <span role="status">Conversation archived</span>
-          <Button variant="secondary" aria-label="Dismiss archive confirmation" onClick={() => setArchiveNotice(false)}>Dismiss</Button>
+      {archiveFeedback && (
+        <div className="message-unarchive-notice">
+          <span role="status">{archiveFeedback}</span>
+          <Button variant="secondary" onClick={() => setArchiveFeedback(false)}>Dismiss</Button>
         </div>
       )}
       <ManageConversationDialog

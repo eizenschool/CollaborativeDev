@@ -4781,7 +4781,7 @@
   font-size: 10px;
   font-weight: 800;
 }
-.message-archive-notice {
+.message-unarchive-notice {
   position: fixed;
   bottom: 24px;
   left: 50%;
@@ -4799,10 +4799,8 @@
   color: var(--ink);
   box-shadow: 0 4px 20px rgb(0 0 0 / 12%);
 }
-
-.message-archive-notice > span { flex: 1; min-width: 0; }
-.message-archive-notice button { min-height: 44px; flex-shrink: 0; }
-
+.message-unarchive-notice > span { flex: 1; min-width: 0; }
+.message-unarchive-notice button { min-height: 44px; flex-shrink: 0; }
 @media (max-width: 700px) {
-  .message-archive-notice { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .message-unarchive-notice { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }

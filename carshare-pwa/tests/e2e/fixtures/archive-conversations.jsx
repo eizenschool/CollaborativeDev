@@ -26,6 +26,10 @@ MessagingService.archiveConversation = async () => {
   if (window.archiveFixture.fail) throw new Error('Unable to archive conversation.');
   conversation.isArchived = true;
 };
+MessagingService.unarchiveConversation = async () => {
+  if (window.archiveFixture.fail) throw new Error('Unable to unarchive conversation.');
+  conversation.isArchived = false;
+};
 FriendshipService.listConnections = async () => [];
 FriendshipService.subscribe = () => () => {};
 
@@ -33,7 +37,7 @@ function RefreshControls() {
   const session = useMessagingSession();
   window.archiveFixture.holdRefresh = () => {
     holdRefresh = true;
-    window.archiveFixture.staleRequest = session.refreshConversations('active');
+    window.archiveFixture.staleRequest = session.refreshConversations(session.folder);
   };
   window.archiveFixture.releaseStale = async () => {
     pending.shift()?.();

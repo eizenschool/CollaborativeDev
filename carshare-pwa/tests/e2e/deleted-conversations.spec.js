@@ -14,6 +14,7 @@ test('deleted chat is searchable without old history, including stale refresh re
   await expect(chat).toBeVisible();
   await chat.click();
   await expect(page.getByRole('region', { name: 'Opened conversation' })).toContainText('Old secret');
+  await expect(page.getByText('Old incoming call', { exact: true })).toBeVisible();
   await page.evaluate(() => window.deletedChatTest.startSlowRefresh());
   await expect.poll(() => page.evaluate(() => window.deletedChatTest.pending())).toBe(2);
   await page.getByRole('button', { name: 'Delete fixture conversation' }).click();
@@ -28,11 +29,16 @@ test('deleted chat is searchable without old history, including stale refresh re
   await chat.click();
   await expect(page.getByRole('region', { name: 'Opened conversation' })).toContainText('Ahmad');
   await expect(page.getByText('Old secret', { exact: true })).toHaveCount(0);
+  await page.evaluate(() => window.deletedChatTest.refresh());
+  await expect(page.getByText('Old incoming call', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Call at deletion cutoff', { exact: true })).toHaveCount(0);
   await search.fill('');
   await expect(chat).toHaveCount(0);
   await page.evaluate(() => window.deletedChatTest.newMessage());
   await expect(chat).toContainText('Hello again');
   await expect(page.getByRole('region', { name: 'Opened conversation' })).toContainText('Hello again');
+  await expect(page.getByText('New incoming call', { exact: true })).toBeVisible();
+  await expect(page.getByText('Old incoming call', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Old secret', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Delete fixture conversation' }).click();
   await expect(chat).toHaveCount(0);
@@ -40,5 +46,8 @@ test('deleted chat is searchable without old history, including stale refresh re
   await expect(chat).toContainText('History deleted');
   await chat.click();
   await expect(page.getByText('Hello again', { exact: true })).toHaveCount(0);
+  await page.evaluate(() => window.deletedChatTest.refresh());
+  await expect(page.getByText('Old incoming call', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('New incoming call', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

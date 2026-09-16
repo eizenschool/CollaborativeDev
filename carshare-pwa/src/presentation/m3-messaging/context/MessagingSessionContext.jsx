@@ -43,7 +43,7 @@ function createSession(userId = null) {
     userId,
     folder: 'active',
     messageScope: 'ride',
-    archiveNotice: false,
+    archiveFeedback: false,
     folders: {
       active: createFolderState(),
       archived: createFolderState(),
@@ -102,22 +102,20 @@ export function MessagingSessionProvider({ children }) {
     commitSession((current) => removeConversationFromSession(current, conversationId));
   }, [commitSession]);
 
-  const confirmArchivedConversation = useCallback((conversation) => {
-    // A pre-archive refresh must not restore the row after the mutation succeeds.
+  const confirmConversationArchiveState = useCallback((conversation, isArchived) => {
+    // Older refreshes must not undo a confirmed archive or unarchive.
     requestGenerationRef.current += 1;
     inFlightRef.current.clear();
     commitSession((current) => {
-      const archived = { ...(current.conversations[conversation.id] || conversation), isArchived: true };
+      const updated = { ...(current.conversations[conversation.id] || conversation), isArchived };
+      const destination = isArchived ? 'archived' : 'active';
       return {
         ...current,
-        conversations: { ...current.conversations, [conversation.id]: archived },
-        folders: {
-          active: { ...current.folders.active, items: current.folders.active.items.filter((item) => item.id !== conversation.id) },
-          archived: {
-            ...current.folders.archived,
-            items: [archived, ...current.folders.archived.items.filter((item) => item.id !== conversation.id)],
-          },
-        },
+        conversations: { ...current.conversations, [conversation.id]: updated },
+        folders: Object.fromEntries(Object.entries(current.folders).map(([folder, state]) => {
+          const remaining = state.items.filter((item) => item.id !== conversation.id);
+          return [folder, { ...state, items: folder === destination ? [updated, ...remaining] : remaining }];
+        })),
       };
     });
   }, [commitSession]);
@@ -233,6 +231,7 @@ export function MessagingSessionProvider({ children }) {
           MessagingService.listMessages(conversationId, { conversation, currentUserId: userId }),
           CallService.listConversationCalls(conversationId).catch(() => []),
         ]);
+        const deletedBefore = conversation.currentMembership?.deletedBefore;
         const timeline = [
           ...messages.map((message) => ({
             ...message,
@@ -240,10 +239,11 @@ export function MessagingSessionProvider({ children }) {
             sortAt: message.createdAt,
           })),
           ...calls,
-        ].sort((first, second) => {
-          const timeDifference = new Date(first.sortAt) - new Date(second.sortAt);
-          return timeDifference || first.id.localeCompare(second.id);
-        });
+        ].filter((item) => !deletedBefore || new Date(item.sortAt || item.createdAt) > new Date(deletedBefore))
+          .sort((first, second) => {
+            const timeDifference = new Date(first.sortAt) - new Date(second.sortAt);
+            return timeDifference || first.id.localeCompare(second.id);
+          });
         if (activeUserIdRef.current !== userId || generation !== requestGenerationRef.current) return null;
         const latestCutoff = sessionRef.current.conversations[conversationId]?.currentMembership?.deletedBefore;
         if (latestCutoff && (!conversation.currentMembership?.deletedBefore
@@ -320,8 +320,8 @@ export function MessagingSessionProvider({ children }) {
     commitSession((current) => ({ ...current, messageScope }));
   }, [commitSession]);
 
-  const setArchiveNotice = useCallback((archiveNotice) => {
-    commitSession((current) => ({ ...current, archiveNotice }));
+  const setArchiveFeedback = useCallback((archiveFeedback) => {
+    commitSession((current) => ({ ...current, archiveFeedback }));
   }, [commitSession]);
 
   const getDraft = useCallback((conversationId) => draftsRef.current.getDraft(conversationId), []);
@@ -413,9 +413,9 @@ export function MessagingSessionProvider({ children }) {
   const value = useMemo(() => ({
     folder: session.folder,
     messageScope: session.messageScope,
-    archiveNotice: session.archiveNotice,
+    archiveFeedback: session.archiveFeedback,
+    setArchiveFeedback,
     setMessageScope,
-    setArchiveNotice,
     folderState: session.folders[session.folder],
     unreadMessageCount: session.folders.active.loaded && !session.folders.active.error
       ? countUnreadMessages(session.folders.active.items)
@@ -426,22 +426,22 @@ export function MessagingSessionProvider({ children }) {
     refreshConversations,
     refreshConversation,
     invalidateDeletedConversation,
-    confirmArchivedConversation,
+    confirmConversationArchiveState,
     getDraft,
     saveDraft,
     clearDraft,
   }), [
     clearDraft,
     invalidateDeletedConversation,
-    confirmArchivedConversation,
+    confirmConversationArchiveState,
     getDraft,
     refreshConversation,
     refreshConversations,
     saveDraft,
     session,
+    setArchiveFeedback,
     setFolder,
     setMessageScope,
-    setArchiveNotice,
   ]);
 
   return <MessagingSessionContext.Provider value={value}>{children}</MessagingSessionContext.Provider>;

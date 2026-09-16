@@ -37,12 +37,17 @@ Object.assign(MessagingService, createMessagingService({
   markConversationRead: async () => {},
 }));
 MessagingService.subscribeToMessaging = () => () => {};
-CallService.listConversationCalls = async () => [];
+const oldCall = { id: 'old-call', itemType: 'call', text: 'Old incoming call', createdAt: oldMessage.created_at, sortAt: oldMessage.created_at };
+const boundaryCall = { ...oldCall, id: 'boundary-call', text: 'Call at deletion cutoff', sortAt: '2026-09-01T02:00:00Z', createdAt: '2026-09-01T02:00:00Z' };
+const newCall = { ...oldCall, id: 'new-call', text: 'New incoming call', sortAt: newMessage.created_at, createdAt: newMessage.created_at };
+// Call history can return older records independently of message history.
+CallService.listConversationCalls = async () => [oldCall, boundaryCall, ...(newer ? [newCall] : [])];
 
 function Harness() {
   const session = useMessagingSession();
   const [selected, setSelected] = useState(null);
   window.deletedChatTest = {
+    refresh: () => session.refreshConversation('deleted-chat'),
     startSlowRefresh: () => {
       hold = true;
       void session.refreshConversation('deleted-chat');

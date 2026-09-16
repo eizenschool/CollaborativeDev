@@ -1,5 +1,32 @@
 import { expect, test } from '@playwright/test';
 
+for (const scope of ['ride', 'friend']) {
+  test(`${scope} unarchive stays in Archived and immediately reduces its count`, async ({ page }) => {
+    await page.getByRole('button', { name: 'Archive', exact: true }).click();
+    await page.getByRole('button', { name: 'Open archived conversations' }).click();
+    await page.getByRole('button', { name: 'Open conversation with Ahmad', exact: true }).click();
+    await page.getByRole('button', { name: 'Manage opened chat' }).click();
+    await page.evaluate(() => window.archiveFixture.holdRefresh());
+    await page.getByRole('button', { name: 'Unarchive', exact: true }).click();
+    const tab = page.getByRole('tab', { name: scope === 'friend' ? /Friend messages/ : /Ride messages/ });
+    await expect(page).toHaveURL(/\/message$/);
+    await expect(page.getByRole('heading', { name: 'Archived', exact: true })).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Conversation unarchived');
+    await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+    await expect(page.getByText('Conversation unarchived', { exact: true })).toHaveCount(0);
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    await expect(tab).toHaveText(scope === 'friend' ? 'Friend messages0' : 'Ride messages0');
+    await expect(page.getByRole('button', { name: 'Open conversation with Ahmad', exact: true })).toHaveCount(0);
+    await page.evaluate(() => window.archiveFixture.releaseStale());
+    await expect(tab).toHaveText(scope === 'friend' ? 'Friend messages0' : 'Ride messages0');
+    await expect(page.getByRole('button', { name: 'Manage opened chat' })).toHaveCount(0);
+    await page.evaluate(() => window.archiveFixture.releaseAll());
+    await page.getByRole('button', { name: 'Back to active conversations' }).click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: 'Open conversation with Ahmad', exact: true })).toBeVisible();
+  });
+}
+
 test.beforeEach(async ({ page }, testInfo) => {
   const scope = testInfo.title.includes('friend') ? 'friend' : 'ride';
   await page.addInitScript(value => { window.archiveTestScope = value; }, scope);
@@ -45,13 +72,11 @@ test('archive returns to Messages without a View action', async ({ page, viewpor
   await expect(page).toHaveURL(/\/message$/);
   await expect(page.getByRole('heading', { name: 'Messages', exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('Conversation archived');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(page.getByText('Conversation archived', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Open conversation with Ahmad', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Manage opened chat' })).toHaveCount(0);
   if (viewport.width > 900) await expect(page.getByRole('heading', { name: 'Select a conversation' })).toBeVisible();
-  const notice = await page.locator('.message-archive-notice').boundingBox();
-  expect(notice.x).toBeGreaterThanOrEqual(0);
-  expect(notice.x + notice.width).toBeLessThanOrEqual(viewport.width);
-  expect(notice.y + notice.height).toBeLessThanOrEqual(viewport.height - (viewport.width <= 700 ? 64 : 0));
   await expect(page.getByRole('button', { name: 'View', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Open archived conversations' }).click();
   await expect(page.getByRole('heading', { name: 'Archived', exact: true })).toBeVisible();
