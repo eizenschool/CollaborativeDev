@@ -1033,3 +1033,7 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 ## Ride invitation label rollback (2026-09-05)
 
 - Deployed `091_m3_ride_invitation_viewer_role.sql`, then immediately superseded it with deployed `092_m3_restore_ride_invitation_card_contract.sql` at the user's request. The live `get_friend_ride_invitation_cards` response contract and client label behaviour are restored to their pre-091 state; both files remain in history because deployed migrations are immutable.
+
+## Message reports — deployed 2026-09-16
+
+`109_m3_message_reports.sql` is live as `20260916041406_m3_message_reports`; `110_m3_message_report_cleanup_indexes.sql` is live as `20260916042030_m3_message_report_cleanup_indexes`. This extends the existing `safety_reports` queue with versioned message evidence, private media copies, atomic admin decisions/removal and existing reputation outcomes. Profile reports retain their existing path. The private `message-report-evidence` bucket and `m3-message-reports` Edge Function are live; the hourly Vault-authenticated cleanup successfully returned HTTP 200. Closed evidence expires after 90 days; open evidence is retained. Frontend release and signed-in live media acceptance remain outstanding. See `docs/M3-MESSAGE-REPORTS.md`.
