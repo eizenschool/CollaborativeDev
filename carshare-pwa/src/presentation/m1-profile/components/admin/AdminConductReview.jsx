@@ -1,30 +1,8 @@
-// ===== PRESENTATION LAYER (AdminConductReview) =====
-// The in-app side of database/sql/106_m1_admin_conduct_review.sql and
-// 107_m1_safety_report_queue.sql. Reachable only by URL (/admin/conduct) -
-// same reasoning as /admin/identity.
-//
-// 107_m1 adds the self-service case queue 106_m1's own header said was
-// missing: any signed-in member can flag another from their public profile
-// (PublicProfile.jsx), and CaseQueue below lists the open reports. By user
-// decision, that queue is now the ONLY way into a member's standing here -
-// there is no manual "paste a user ID" fallback, since a raw Supabase UUID
-// is not something a reviewer has any easy way to get on its own (see
-// PublicProfile.jsx's own header on the missing copy-ID affordance). A
-// report with no queue entry - raised by direct contact, elsewhere in the
-// app - has no path into this page today. Still deliberately narrow - no
-// automatic M2 (ride/check-in evidence), M3 (message evidence), or M5 (trip
-// records) intake, per the Conduct Severity Rulebook's own scoping note; a
-// report is free text a member wrote, not pulled evidence. Resolving a
-// queue entry (Dismiss / Mark resolved) is a separate, manual action from
-// confirming a Trust Case, since a report can turn out to need no action, or
-// one confirmed case might close several open reports at once.
-//
-// The `authorized` check below is a UX convenience only. Every action here
-// is re-checked server-side by admin_get_reputation_summary /
-// admin_apply_conduct_outcome / admin_clear_reputation_hold /
-// admin_list_safety_reports / admin_resolve_safety_report's own admin check,
-// so this component being bypassed would still fail at the database.
+// Existing member safety queue plus message-evidence cases from M3.
+// Message decisions resolve all reports for a version atomically with reputation.
+// Every evidence read and decision is authorized again by the server.
 import { useEffect, useState } from 'react';
+import MessageReportReview from './MessageReportReview.jsx';
 import { useAuth } from '../../../shared/context/AuthContext.jsx';
 import { isIdentityReviewAdmin } from '../../../../business-logic/m1-profile/IdentityVerificationService.js';
 import {
@@ -109,8 +87,7 @@ function CaseQueue({ onReview }) {
     <div className="card" style={{ marginBottom: 20 }}>
       <p className="card-title">Case queue</p>
       <p className="card-subtitle" style={{ marginBottom: 14 }}>
-        Reports members raised from another member&apos;s public profile. Reviewing does not change anyone&apos;s
-        score by itself - use Confirm a Trust Case below for that.
+        Reports from member profiles and messages. Open message evidence to review and resolve a message case.
       </p>
 
       <div className="dsc-filters" role="group" aria-label="Filter by report status" style={{ gap: 12, marginBottom: 18 }}>
@@ -141,7 +118,56 @@ function CaseQueue({ onReview }) {
               </div>
               <p className="card-subtitle" style={{ margin: 0 }}>{report.reason}</p>
               {report.rideId && <p className="card-subtitle" style={{ margin: 0 }}>Ride: {report.rideId}</p>}
-              {report.status === 'open' ? (\n                <>\n                  <div className="input-wrap">\n                    <input\n                      value={notes[report.id] || ''}\n                      maxLength={REASON_MAX_LENGTH}\n                      onChange={(event) => setNotes((prev) => ({ ...prev, [report.id]: event.target.value }))}\n                      placeholder="Resolution note (optional)"\n                    />\n                  </div>\n                  <small>{(notes[report.id] || '').length}/{REASON_MAX_LENGTH}</small>\n                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>\n                    <button type="button" className="btn-primary" style={BUTTON_STYLE} disabled={Boolean(busyId)} onClick={() => onReview(report.reportedUserId)}>\n                      Review\n                    </button>\n                    <button\n                      type="button"\n                      className="btn-secondary"\n                      style={BUTTON_STYLE}\n                      disabled={Boolean(busyId)}\n                      onClick={() => resolve(report.id, 'resolved')}\n                    >\n                      {busyId === report.id ? 'Working…' : 'Mark resolved'}\n                    </button>\n                    <button\n                      type="button"\n                      className="btn-secondary"\n                      style={BUTTON_STYLE}\n                      disabled={Boolean(busyId)}\n                      onClick={() => resolve(report.id, 'dismissed')}\n                    >\n                      Dismiss\n                    </button>\n                  </div>\n                </>\n              ) : (\n                <p className="card-subtitle" style={{ margin: 0 }}>\n                  {REPORT_STATUS_COPY[report.status].label}\n                  {report.resolvedAt ? ` ${new Date(report.resolvedAt).toLocaleDateString('en-MY')}` : ''}\n                  {report.resolutionNote ? ` — "${report.resolutionNote}"` : ''}\n                  <button\n                    type="button"\n                    className="btn-link"\n                    style={{ marginLeft: 10 }}\n                    onClick={() => onReview(report.reportedUserId)}\n                  >\n                    Review member\n                  </button>\n                </p>\n              )}
+              {report.messageEvidenceId ? <MessageReportReview report={report} onResolved={load} /> : report.status === 'open' ? (
+                <>
+                  <div className="input-wrap">
+                    <input
+                      value={notes[report.id] || ''}
+                      maxLength={REASON_MAX_LENGTH}
+                      onChange={(event) => setNotes((prev) => ({ ...prev, [report.id]: event.target.value }))}
+                      placeholder="Resolution note (optional)"
+                    />
+                  </div>
+                  <small>{(notes[report.id] || '').length}/{REASON_MAX_LENGTH}</small>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn-primary" style={BUTTON_STYLE} disabled={Boolean(busyId)} onClick={() => onReview(report.reportedUserId)}>
+                      Review
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={BUTTON_STYLE}
+                      disabled={Boolean(busyId)}
+                      onClick={() => resolve(report.id, 'resolved')}
+                    >
+                      {busyId === report.id ? 'Working…' : 'Mark resolved'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={BUTTON_STYLE}
+                      disabled={Boolean(busyId)}
+                      onClick={() => resolve(report.id, 'dismissed')}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="card-subtitle" style={{ margin: 0 }}>
+                  {REPORT_STATUS_COPY[report.status].label}
+                  {report.resolvedAt ? ` ${new Date(report.resolvedAt).toLocaleDateString('en-MY')}` : ''}
+                  {report.resolutionNote ? ` — "${report.resolutionNote}"` : ''}
+                  <button
+                    type="button"
+                    className="btn-link"
+                    style={{ marginLeft: 10 }}
+                    onClick={() => onReview(report.reportedUserId)}
+                  >
+                    Review member
+                  </button>
+                </p>
+              )}
             </li>
           ))}
         </ul>

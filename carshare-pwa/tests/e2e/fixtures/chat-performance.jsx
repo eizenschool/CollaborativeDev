@@ -21,6 +21,10 @@ const state = { items, loaded: true, loading: false, error: '' };
 if (new URLSearchParams(window.location.search).has('tombstone')) {
   items[199] = { ...items[199], text: '', attachments: [], deletedAt: '2026-09-13T00:00:00Z', canEdit: false, canDeleteForEveryone: false };
 }
+if (new URLSearchParams(window.location.search).has('other')) {
+  items[198] = { ...items[198], senderId: 'other', senderName: 'Other member' };
+  items[199] = { ...items[199], senderId: 'other', senderName: 'Other member' };
+}
 window.chatTestSession = {
   getConversation: () => conversation,
   getMessagesState: () => state,

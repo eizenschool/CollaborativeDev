@@ -847,16 +847,6 @@
   text-decoration: underline;
 }
 
-.message-deleted-row {
-  display: flex;
-  justify-content: flex-start;
-  margin: 0 16px 14px;
-}
-
-.message-deleted-row-current-user {
-  justify-content: flex-end;
-}
-
 .message-deleted-text {
   padding: 8px 12px;
   border: 1px dashed #d1d5db;
