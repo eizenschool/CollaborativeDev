@@ -62,11 +62,65 @@ describe('Tumpang Guide Groq transcription', () => {
   it('accepts a confident genuine short utterance', () => {
     expect(guideTranscriptionQuality({
       segments: [{ start: 0, end: .8, no_speech_prob: .02, avg_logprob: -.12, compression_ratio: 1.1 }]
-    }, '测试')).toMatchObject({ valid: true, uncertainShortUtterance: false });
+    }, '测试')).toMatchObject({ valid: true, weakAcousticEvidence: false });
   });
 
-  it('rejects provider segments that indicate silence or very low confidence', () => {
-    expect(guideTranscriptionQuality({ segments: [{ no_speech_prob: .91, avg_logprob: -1.4 }] }, 'KL Bird Park'))
-      .toMatchObject({ valid: false, likelySilence: true, lowConfidence: true });
+  it('accepts a genuine short mobile utterance despite moderate acoustic scores', () => {
+    expect(guideTranscriptionQuality({
+      segments: [{ start: 0, end: 1.2, no_speech_prob: .6, avg_logprob: -.8, compression_ratio: 1.1 }]
+    }, 'nak pergi Batu Caves')).toMatchObject({
+      valid: true, likelySilence: false, lowConfidence: false, weakAcousticEvidence: false
+    });
+  });
+
+  it('rejects only extreme silence or extreme low confidence on their own', () => {
+    expect(guideTranscriptionQuality({
+      segments: [{ no_speech_prob: .95, avg_logprob: -.4, compression_ratio: 1.1 }]
+    }, 'KL Bird Park')).toMatchObject({ valid: false, likelySilence: true });
+    expect(guideTranscriptionQuality({
+      segments: [{ no_speech_prob: .1, avg_logprob: -1.6, compression_ratio: 1.1 }]
+    }, 'KL Bird Park')).toMatchObject({ valid: false, lowConfidence: true });
+  });
+
+  it('rejects combined weak acoustic evidence but accepts text with no segment scores', () => {
+    expect(guideTranscriptionQuality({
+      segments: [{ start: 0, end: 1, no_speech_prob: .8, avg_logprob: -1.2, compression_ratio: 1.1 }]
+    }, 'KL Bird Park')).toMatchObject({ valid: false, weakAcousticEvidence: true });
+    expect(guideTranscriptionQuality({}, 'We should go to Batu Caves'))
+      .toMatchObject({ valid: true, likelySilence: false, lowConfidence: false, weakAcousticEvidence: false });
+  });
+
+  it('returns nonempty text without acoustic metadata for manual draft review', async () => {
+    const audio = new File([new Uint8Array(256)], 'voice.webm', { type: 'audio/webm' });
+    const result = await transcribeGuideAudio({
+      apiKey: 'test-key', audio,
+      fetchImpl: async () => ({
+        ok: true, status: 200, json: async () => ({ text: 'We should go to Batu Caves' })
+      })
+    });
+    expect(result.text).toBe('We should go to Batu Caves');
+  });
+
+  it('attaches acoustic diagnostics to the error when extreme evidence is rejected', async () => {
+    const audio = new File([new Uint8Array(256)], 'voice.webm', { type: 'audio/webm' });
+    let caught;
+    try {
+      await transcribeGuideAudio({
+        apiKey: 'test-key', audio,
+        fetchImpl: async () => ({
+          ok: true, status: 200,
+          json: async () => ({
+            text: 'um',
+            segments: [{ start: 0, end: 1, no_speech_prob: .8, avg_logprob: -1.2, compression_ratio: 1.1 }]
+          })
+        })
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught?.code).toBe('transcription_low_confidence');
+    expect(caught?.quality).toMatchObject({
+      valid: false, weakAcousticEvidence: true, noSpeechAverage: .8, logProbAverage: -1.2
+    });
   });
 });

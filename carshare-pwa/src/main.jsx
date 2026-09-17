@@ -17,6 +17,12 @@ import { registerSW } from 'virtual:pwa-register';
 
 const SOS_ENABLED = import.meta.env.VITE_M2_SOS_ENABLED === 'true';
 
+// The browser's own scroll restoration otherwise races HomeScreen's async
+// data refetch on a native back/forward navigation - HomeScreen.jsx's own
+// restore effect (via DiscoveryJourney.js's consumeExploreReturn) handles
+// this deliberately instead.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
 async function clearDevelopmentPwaState() {
   if (!('serviceWorker' in navigator)) return;
   const resetKey = 'lets-tumpang-dev-pwa-reset-v1';

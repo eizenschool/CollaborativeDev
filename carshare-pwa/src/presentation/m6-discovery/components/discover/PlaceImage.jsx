@@ -26,6 +26,7 @@
 import { useEffect, useState } from 'react';
 import { buildPlacePhotoUrl } from '../../../../business-logic/m6-discovery/discovery/placePhotos.js';
 import { useMediaEnabled } from './useMediaMode.js';
+import { getCachedPhotoStatus, setCachedPhotoStatus } from './photoLoadCache.js';
 import PlacePoster from './PlacePoster.jsx';
 
 /**
@@ -55,11 +56,24 @@ export default function PlaceImage({
 }) {
   const mediaEnabled = useMediaEnabled();
   const [revealed, setRevealed] = useState(false);
-  const [failed, setFailed] = useState(false);
 
   const reference = place?.photoReferences?.[variant]?.reference;
-  const candidateUrl = failed ? null : buildPlacePhotoUrl(reference, { maxWidthPx: widthPx });
-  const shown = candidateUrl !== null && (mediaEnabled || revealed);
+  const baseUrl = buildPlacePhotoUrl(reference, { maxWidthPx: widthPx });
+
+  // Read once, at mount, from a cache a previous mount of this same photo
+  // (DestinationDetail.jsx's Carousel only keeps the active slide mounted, so
+  // swiping away and back is a real unmount/remount, not a props update) may
+  // already have written to - not on every render, so this still behaves
+  // like ordinary component state the rest of the time.
+  const [failed, setFailed] = useState(() => getCachedPhotoStatus(baseUrl) === 'failed');
+  const [wasLoaded] = useState(() => getCachedPhotoStatus(baseUrl) === 'loaded');
+  const [retried, setRetried] = useState(false);
+
+  const candidateUrl = failed ? null : baseUrl;
+  // wasLoaded lets a photo that already proved it loads stay shown across a
+  // remount, instead of re-demanding a "View real photo" tap every time the
+  // carousel is swiped back to it.
+  const shown = candidateUrl !== null && (mediaEnabled || revealed || wasLoaded);
 
   useEffect(() => {
     onShownChange?.(shown);
@@ -97,8 +111,20 @@ export default function PlaceImage({
     );
   }
 
+  const handleLoad = () => setCachedPhotoStatus(baseUrl, 'loaded');
+  const handleError = () => {
+    // A single onError is at least as likely to be a transient mobile-network
+    // blip as a genuinely broken reference - one retry (a fresh <img>, forced
+    // by the key below so the browser actually re-requests) before this photo
+    // is given up on for the rest of the tab's session.
+    if (!retried) { setRetried(true); return; }
+    setCachedPhotoStatus(baseUrl, 'failed');
+    setFailed(true);
+  };
+
   return (
     <img
+      key={retried ? 'retry' : 'initial'}
       className="dsc-photo"
       src={candidateUrl}
       alt={place?.name || ''}
@@ -106,7 +132,8 @@ export default function PlaceImage({
       // for, and - now - neither is a card nobody asked to see a photo of.
       loading="lazy"
       decoding="async"
-      onError={() => setFailed(true)}
+      onLoad={handleLoad}
+      onError={handleError}
     />
   );
 }
