@@ -5,11 +5,11 @@
 .guide-chat.guide-chat--welcome .guide-chat__messages { min-height: 120px; }
 .guide-page .guide-composer { gap: 12px; }
 .guide-page .guide-composer__header label { font-size: 16px; }
-.guide-page .guide-composer__input-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; }
+.guide-page .guide-composer__input-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .guide-page .guide-composer textarea { grid-column: 1 / -1; min-height: 112px; padding: 16px; border: 2px solid var(--teal); border-radius: 16px; background: #fff; color: var(--ink); font: inherit; font-size: 16px; line-height: 1.6; }
 .guide-page .guide-composer textarea::placeholder { color: var(--muted); opacity: 1; }
 .guide-page .guide-composer textarea:focus { outline: 3px solid var(--teal-tint); outline-offset: 3px; }
-.guide-page .guide-voice-language { max-width: 180px; }
+.guide-page .guide-voice-language { max-width: 280px; }
 .guide-page .guide-voice-language select { min-height: 44px; }
 .guide-page { width: min(100%, 1380px); min-width: 0; max-width: 1380px; margin: 0 auto; padding: 24px clamp(16px, 3vw, 36px) calc(56px + env(safe-area-inset-bottom)); overflow-wrap: anywhere; }
 .guide-page h1, .guide-page h2, .guide-page h3 { font-family: var(--font-display); margin-top: 0; color: var(--ink); }
@@ -152,7 +152,7 @@
 .guide-rec-card__body { display: grid; gap: 12px; padding: 16px; }.guide-rec-card h3 { margin: 0 0 3px; font-size: 17px; }.guide-rec-card__location { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--muted); font-size: 12px; }.guide-rec-card ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; font-size: 12px; }.guide-rec-card__lead { margin: 0; color: #334155; font-size: 13px; line-height: 1.55; }.guide-rec-card__tradeoff { margin: 0; color: var(--muted); font-size: 11px; }.guide-rec-card__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.guide-rec-card__actions .ui-button { width: 100%; min-width: 0; }.guide-rec-card__secondary-actions { display: flex; flex-wrap: wrap; gap: 3px 12px; padding-top: 9px; border-top: 1px solid var(--border); }.guide-rec-card__secondary-actions .guide-text-action { display: inline-flex; align-items: center; gap: 4px; }.guide-text-action { min-height: 34px; border: 0; padding: 4px 0; color: var(--teal-dark); background: transparent; font-size: 11px; font-weight: 750; }
 .guide-why { min-width: 0; padding: 11px 12px; border-left: 3px solid var(--teal); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: var(--teal-tint); }.guide-why p { margin: 5px 0; font-size: 12px; line-height: 1.45; }.guide-why small { color: var(--muted); font-size: 10px; }.guide-rec-card__repeat { position: absolute; right: 8px; top: 10px; max-width: 58%; padding: 6px 8px; border-radius: var(--radius-pill); color: var(--ink); background: rgba(255,255,255,.88); font-size: 10px; font-weight: 750; text-align: right; }
 .guide-dock { position: sticky; bottom: 0; z-index: 8; padding: 14px 20px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: rgba(251,253,251,.98); backdrop-filter: blur(8px); }
-.guide-composer { display: grid; gap: 7px; min-width: 0; }.guide-composer__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }.guide-composer__header label { min-width: 0; font-size: 12px; font-weight: 750; }.guide-composer__header .ui-button { flex: 0 0 auto; }.guide-composer__input-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(96px, auto) auto auto; align-items: end; gap: 8px; min-width: 0; }.guide-composer textarea { display: block; width: 100%; min-width: 0; min-height: 50px; max-height: 160px; resize: vertical; padding: 11px 13px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 16px; }.guide-voice-language { align-self: end; min-width: 0; }.guide-voice-language__label { display: block; margin: 0 0 3px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }.guide-voice-language select { display: block; width: 100%; min-width: 96px; max-width: 100%; height: 42px; padding: 0 28px 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; text-overflow: ellipsis; cursor: pointer; }.guide-voice-language select:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 24%, transparent); outline-offset: 2px; }.guide-composer small { color: var(--muted); }.guide-field-error { margin: 0; color: var(--danger); font-size: 12px; }
+.guide-composer { display: grid; gap: 7px; min-width: 0; }.guide-composer__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }.guide-composer__header label { min-width: 0; font-size: 12px; font-weight: 750; }.guide-composer__header .ui-button { flex: 0 0 auto; }.guide-composer__input-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; gap: 8px; min-width: 0; }.guide-composer textarea { display: block; width: 100%; min-width: 0; min-height: 50px; max-height: 160px; resize: vertical; padding: 11px 13px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 16px; }.guide-composer__controls { display: grid; grid-template-columns: minmax(0, 1fr) 44px auto; align-items: end; gap: 8px; min-width: 0; }.guide-composer__controls > .ui-button { min-width: 0; min-height: 44px; justify-self: end; }.guide-voice-language { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; }.guide-voice-language__label { display: block; margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }.guide-voice-language select { display: block; width: 100%; min-width: 96px; max-width: 100%; height: 42px; padding: 0 28px 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; text-overflow: ellipsis; cursor: pointer; }.guide-voice-language select:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 24%, transparent); outline-offset: 2px; }.guide-composer small { color: var(--muted); }.guide-field-error { margin: 0; color: var(--danger); font-size: 12px; }
 .guide-composer__safety-note { margin: 0; color: var(--muted); font-size: 12px; }.guide-composer__safety-error { font-weight: 650; }
 .guide-thinking { display: flex; align-items: center; gap: 9px; color: var(--muted); }.guide-thinking span { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); animation: guide-pulse 1s var(--ease-standard) infinite alternate; }
 .guide-notice, .guide-fallback-note { display: flex; align-items: center; gap: 6px; margin: 0 20px 12px; padding: 9px 11px; border-radius: var(--radius); color: var(--teal-dark); background: var(--teal-tint); font-size: 12px; }.guide-fallback-note { margin: 8px 0; color: #7c2d12; background: #ffedd5; }
@@ -221,13 +221,7 @@
   .guide-spotlight__actions .ui-button { width: 100%; }
   .guide-quick-replies { padding-left: 16px; }
   .guide-dock { padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); }
-  /* The 4-column input row (text, voice language, mic, send) is comfortable
-     down to tablet width; below 700px it no longer fits without crowding the
-     textarea, so the voice controls move to their own row underneath it. */
-  .guide-composer__input-row { grid-template-rows: auto auto; gap: 8px 6px; }
   .guide-composer textarea { grid-column: 1 / -1; }
-  .guide-voice-language { grid-column: 1; grid-row: 2; }
-  .guide-voice-language select { width: 100%; }
   .guide-composer__header { align-items: flex-start; flex-wrap: wrap; }
   .guide-composer__header .ui-button { margin-left: auto; }
   .guide-qa__grid { grid-template-columns: 1fr; }
@@ -245,16 +239,10 @@
 .guide-starters > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .guide-starter { min-height: 38px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--teal-dark); background: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .guide-starter:hover, .guide-starter:focus-visible { border-color: var(--teal); background: var(--teal-tint); }
-.guide-voice-settings { position: relative; align-self: end; min-width: 0; }
-.guide-voice-settings summary { display: flex; align-items: center; min-height: 42px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--teal-dark); background: var(--surface); font-size: 11px; font-weight: 750; cursor: pointer; list-style: none; white-space: nowrap; }
-.guide-voice-settings summary::-webkit-details-marker { display: none; }
-/* Closed, this stays a single auto-placed grid item (a small pill next to the
-   mic/send buttons). Open, it spans the whole input row - grid's default
-   sparse auto-placement then pushes mic/send down to a fresh row on their
-   own, so nothing needs to be repositioned by hand and nothing overlaps. */
-.guide-voice-settings[open] { grid-column: 1 / -1; }
-.guide-voice-settings[open] summary { border-color: var(--teal); background: var(--teal-tint); }
-.guide-voice-settings .guide-voice-language { position: static; width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: var(--shadow-sm); }
+.guide-composer__controls > .ui-icon-button { width: 44px; height: 44px; flex: 0 0 44px; }
+.guide-composer__controls { display: flex; align-items: end; gap: 8px; }
+.guide-composer__controls > .ui-button { margin-left: auto; }
+.guide-voice-language { flex: 0 1 280px; }
 .guide-place-followup { padding-top: 2px; }
 .guide-place-followup__name { color: var(--ink); font-size: 15px; }
 .guide-place-followup__sources { margin: 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
@@ -266,6 +254,9 @@
 .guide-rec-card__ride small { color: var(--muted); font-size: 11px; line-height: 1.35; }
 .guide-rec-card__ride .guide-text-action { justify-self: start; margin-top: 2px; }
 
-@media (max-width: 700px) {
-  .guide-voice-settings .guide-voice-language select { width: 100%; }
+@media (max-width: 480px) {
+  .guide-composer__controls { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; }
+  .guide-voice-language { grid-column: 1 / -1; max-width: none; }
+  .guide-voice-language select { min-width: 0; max-width: 180px; }
+  .guide-composer__controls > .ui-button { width: 100%; justify-self: stretch; margin-left: 0; }
 }

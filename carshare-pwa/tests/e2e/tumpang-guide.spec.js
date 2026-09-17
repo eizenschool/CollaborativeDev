@@ -2,6 +2,10 @@ import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 test.beforeEach(async ({ page }) => {
+  // Keep the selected fixture travel date in the future regardless of when
+  // this suite runs. The product correctly prevents choosing dates before
+  // today, so a real-time clock would make these fixed-date fixtures stale.
+  await page.clock.install({ time: new Date('2026-09-14T12:00:00.000Z') });
   await page.addInitScript(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -169,6 +173,93 @@ test('Tumpang Guide stays keyboard-accessible and stops recommendations for emer
   expect(results.violations).toEqual([]);
   const width = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+});
+
+test('cloud transcription inserts an editable draft without sending it', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) }
+    });
+    window.MediaRecorder = class {
+      constructor(_stream, options = {}) {
+        this.mimeType = options.mimeType || 'audio/webm';
+        this.state = 'inactive';
+      }
+      static isTypeSupported() { return true; }
+      start() {
+        this.state = 'recording';
+        this.ondataavailable?.({ data: new Blob([new Uint8Array(256)], { type: 'audio/webm' }) });
+      }
+      stop() {
+        if (this.state !== 'recording') return;
+        this.state = 'inactive';
+        this.onstop?.();
+      }
+    };
+  });
+  await page.route('**/functions/v1/m6-tumpang-guide', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ text: 'We should go to Batu Caves', language: 'en' })
+  }));
+
+  await page.goto('/assistant');
+  await openGuide(page);
+  const message = page.getByLabel('Message Tumpang Guide');
+  await page.getByRole('button', { name: /Try cloud transcription/ }).click();
+  await expect(page.getByRole('button', { name: 'Stop voice input' })).toBeVisible();
+  await page.getByRole('button', { name: 'Stop voice input' }).click();
+  await expect(message).toHaveValue('We should go to Batu Caves');
+  await expect(page.locator('.guide-message--user')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeEnabled();
+});
+
+test('voice controls remain visible and aligned from phone to desktop widths', async ({ page }) => {
+  await page.goto('/assistant');
+  await openGuide(page);
+  await expect(page.locator('.guide-voice-settings')).toHaveCount(0);
+  const language = page.locator('.guide-voice-language select');
+  const options = ['en', 'zh', 'ms', 'ta'];
+
+  for (const [index, width] of [320, 375, 768, 1280].entries()) {
+    await page.setViewportSize({ width, height: 900 });
+    await language.selectOption(options[index]);
+    const layout = await page.locator('.guide-composer__controls').evaluate((controls) => {
+      const rect = (element) => {
+        const { x, y, width: w, height } = element.getBoundingClientRect();
+        return { x, y, right: x + w, bottom: y + height, width: w, height };
+      };
+      const root = rect(controls);
+      const items = [...controls.children].map(rect);
+      const mic = rect(controls.querySelector('.ui-icon-button'));
+      const send = rect(controls.querySelector('.ui-button'));
+      return {
+        root,
+        items,
+        mic,
+        send,
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth
+      };
+    });
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+    expect(layout.mic.width).toBeGreaterThanOrEqual(44);
+    expect(layout.mic.height).toBeGreaterThanOrEqual(44);
+    expect(layout.send.height).toBeGreaterThanOrEqual(44);
+    for (const item of layout.items) {
+      expect(item.x).toBeGreaterThanOrEqual(layout.root.x - 1);
+      expect(item.right).toBeLessThanOrEqual(layout.root.right + 1);
+    }
+    for (let i = 0; i < layout.items.length; i += 1) {
+      for (let j = i + 1; j < layout.items.length; j += 1) {
+        const a = layout.items[i];
+        const b = layout.items[j];
+        const overlaps = a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
+        expect(overlaps).toBe(false);
+      }
+    }
+  }
 });
 
 test('browser voice inserts one editable draft after silence without sending', async ({ page }) => {

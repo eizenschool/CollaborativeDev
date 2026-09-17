@@ -67,27 +67,24 @@ export function guideTranscriptionQuality(body: Record<string, unknown>, text: s
   const logProbAverage = logProb.length ? logProb.reduce((sum, value) => sum + value, 0) / logProb.length : 0;
   const duration = transcriptDuration(body, segments);
   const spokenUnits = [...text.replace(/[\s\p{P}\p{S}]/gu, "")].length;
-  const likelySilence = noSpeech.length > 0 && noSpeechAverage >= .65;
-  const lowConfidence = logProb.length > 0 && logProbAverage < -1;
+  const likelySilence = noSpeech.length > 0 && noSpeechAverage >= .9;
+  const lowConfidence = logProb.length > 0 && logProbAverage < -1.5;
+  const weakAcousticEvidence = noSpeech.length > 0 && logProb.length > 0
+    && noSpeechAverage >= .75 && logProbAverage < -1.1;
   const overCompressed = compression.some((value) => value > 2.4);
   const repeated = repeatedTranscript(text);
   const hallucinatedOutro = knownWhisperHallucination(text);
   const implausiblyDense = duration > 0 && duration <= 4
     && spokenUnits > Math.max(18, Math.ceil(duration * 14));
-  // Widened modestly from the original -.55/.35: this gate is extra scrutiny
-  // layered on top of the absolute lowConfidence(-1)/likelySilence(.65)
-  // floors above, specifically for short clips, and real mobile mic input
-  // (see useGuideSpeechInput.js's getUserMedia echoCancellation/
-  // noiseSuppression/autoGainControl) appears to shift these values enough to
-  // trip it on genuine speech - see the `quality` diagnostics attached to the
-  // thrown error below for real numbers to refine this further if it recurs.
-  const uncertainShortUtterance = duration > 0 && duration <= 2.5
-    && ((logProb.length > 0 && logProbAverage < -.75) || (noSpeech.length > 0 && noSpeechAverage > .5));
+  // Successful text is inserted into an editable draft and is never sent
+  // automatically, so only strong evidence of silence or poor recognition
+  // should block a transcript.
   return {
-    valid: Boolean(text) && !likelySilence && !lowConfidence && !overCompressed && !repeated
-      && !hallucinatedOutro && !implausiblyDense && !uncertainShortUtterance,
-    likelySilence, lowConfidence, overCompressed, repeated, hallucinatedOutro,
-    implausiblyDense, uncertainShortUtterance, duration
+    valid: Boolean(text) && !likelySilence && !lowConfidence && !weakAcousticEvidence
+      && !overCompressed && !repeated && !hallucinatedOutro && !implausiblyDense,
+    likelySilence, lowConfidence, weakAcousticEvidence, overCompressed, repeated, hallucinatedOutro,
+    implausiblyDense, noSpeechAverage: noSpeech.length ? noSpeechAverage : null,
+    logProbAverage: logProb.length ? logProbAverage : null, duration
   };
 }
 

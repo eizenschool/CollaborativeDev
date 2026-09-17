@@ -39,8 +39,7 @@ export default function GuideComposer({
           onChange={(event) => onDraftChange(event.target.value)}
           placeholder={copy.composerPlaceholder || 'Tell me what you have in mind…'}
         />
-        <details className="guide-voice-settings">
-          <summary>{copy.voiceSettings || 'Voice settings'}</summary>
+        <div className="guide-composer__controls">
           <label className="guide-voice-language">
             <span className="guide-voice-language__label">{copy.voiceInputLabel || 'Voice input'}</span>
             <select
@@ -53,17 +52,17 @@ export default function GuideComposer({
               {GUIDE_SPEECH_LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-        </details>
-        <IconButton
-          label={speech.listening ? copy.stopVoice : copy.startVoice}
-          onClick={speech.listening ? speech.stop : onStartSpeech}
-          disabled={!speech.supported || speech.processing}
-        >
-          {speech.listening ? <IconStop size={19} /> : <IconMicrophone size={19} />}
-        </IconButton>
-        <Button variant="primary" type="submit" disabled={busy || !draft.trim() || contentSafetyCooldownSeconds > 0}>
-          <IconSend size={19} /> {copy.sendMessage}
-        </Button>
+          <IconButton
+            label={speech.listening ? copy.stopVoice : copy.startVoice}
+            onClick={speech.listening ? speech.stop : onStartSpeech}
+            disabled={!speech.supported || speech.processing}
+          >
+            {speech.listening ? <IconStop size={19} /> : <IconMicrophone size={19} />}
+          </IconButton>
+          <Button variant="primary" type="submit" disabled={busy || !draft.trim() || contentSafetyCooldownSeconds > 0}>
+            <IconSend size={19} /> {copy.sendMessage}
+          </Button>
+        </div>
       </div>
       {contentSafetyNotice && <p className="guide-composer__safety-note" role="status">{contentSafetyNotice}</p>}
       {contentSafetyError && <p className="guide-field-error guide-composer__safety-error" role="alert">{contentSafetyError}</p>}

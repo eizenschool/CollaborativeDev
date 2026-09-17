@@ -62,33 +62,46 @@ describe('Tumpang Guide Groq transcription', () => {
   it('accepts a confident genuine short utterance', () => {
     expect(guideTranscriptionQuality({
       segments: [{ start: 0, end: .8, no_speech_prob: .02, avg_logprob: -.12, compression_ratio: 1.1 }]
-    }, '测试')).toMatchObject({ valid: true, uncertainShortUtterance: false });
+    }, '测试')).toMatchObject({ valid: true, weakAcousticEvidence: false });
   });
 
-  it('rejects provider segments that indicate silence or very low confidence', () => {
-    expect(guideTranscriptionQuality({ segments: [{ no_speech_prob: .91, avg_logprob: -1.4 }] }, 'KL Bird Park'))
-      .toMatchObject({ valid: false, likelySilence: true, lowConfidence: true });
-  });
-
-  it('accepts a short mobile-mic utterance that the old -.55/.35 thresholds would have rejected', () => {
-    // Regression: real Android mic input processed through getUserMedia's
-    // echoCancellation/noiseSuppression/autoGainControl plausibly lands
-    // between the old and new uncertainShortUtterance thresholds even for
-    // genuine speech, which is exactly what made cloud transcription fail
-    // "every single time" on a real phone while Web Speech (no such gate)
-    // succeeded on the same audio.
+  it('accepts a genuine short mobile utterance despite moderate acoustic scores', () => {
     expect(guideTranscriptionQuality({
-      segments: [{ start: 0, end: 1.2, no_speech_prob: .2, avg_logprob: -.6, compression_ratio: 1.1 }]
-    }, 'nak pergi Batu Caves')).toMatchObject({ valid: true, uncertainShortUtterance: false });
+      segments: [{ start: 0, end: 1.2, no_speech_prob: .6, avg_logprob: -.8, compression_ratio: 1.1 }]
+    }, 'nak pergi Batu Caves')).toMatchObject({
+      valid: true, likelySilence: false, lowConfidence: false, weakAcousticEvidence: false
+    });
   });
 
-  it('still rejects a genuinely low-confidence short utterance at the widened thresholds', () => {
+  it('rejects only extreme silence or extreme low confidence on their own', () => {
     expect(guideTranscriptionQuality({
-      segments: [{ start: 0, end: 1, no_speech_prob: .55, avg_logprob: -.9, compression_ratio: 1.1 }]
-    }, 'um')).toMatchObject({ valid: false, uncertainShortUtterance: true });
+      segments: [{ no_speech_prob: .95, avg_logprob: -.4, compression_ratio: 1.1 }]
+    }, 'KL Bird Park')).toMatchObject({ valid: false, likelySilence: true });
+    expect(guideTranscriptionQuality({
+      segments: [{ no_speech_prob: .1, avg_logprob: -1.6, compression_ratio: 1.1 }]
+    }, 'KL Bird Park')).toMatchObject({ valid: false, lowConfidence: true });
   });
 
-  it('attaches the quality diagnostics to the thrown error when transcription is rejected as low-confidence', async () => {
+  it('rejects combined weak acoustic evidence but accepts text with no segment scores', () => {
+    expect(guideTranscriptionQuality({
+      segments: [{ start: 0, end: 1, no_speech_prob: .8, avg_logprob: -1.2, compression_ratio: 1.1 }]
+    }, 'KL Bird Park')).toMatchObject({ valid: false, weakAcousticEvidence: true });
+    expect(guideTranscriptionQuality({}, 'We should go to Batu Caves'))
+      .toMatchObject({ valid: true, likelySilence: false, lowConfidence: false, weakAcousticEvidence: false });
+  });
+
+  it('returns nonempty text without acoustic metadata for manual draft review', async () => {
+    const audio = new File([new Uint8Array(256)], 'voice.webm', { type: 'audio/webm' });
+    const result = await transcribeGuideAudio({
+      apiKey: 'test-key', audio,
+      fetchImpl: async () => ({
+        ok: true, status: 200, json: async () => ({ text: 'We should go to Batu Caves' })
+      })
+    });
+    expect(result.text).toBe('We should go to Batu Caves');
+  });
+
+  it('attaches acoustic diagnostics to the error when extreme evidence is rejected', async () => {
     const audio = new File([new Uint8Array(256)], 'voice.webm', { type: 'audio/webm' });
     let caught;
     try {
@@ -98,7 +111,7 @@ describe('Tumpang Guide Groq transcription', () => {
           ok: true, status: 200,
           json: async () => ({
             text: 'um',
-            segments: [{ start: 0, end: 1, no_speech_prob: .55, avg_logprob: -.9, compression_ratio: 1.1 }]
+            segments: [{ start: 0, end: 1, no_speech_prob: .8, avg_logprob: -1.2, compression_ratio: 1.1 }]
           })
         })
       });
@@ -106,6 +119,8 @@ describe('Tumpang Guide Groq transcription', () => {
       caught = error;
     }
     expect(caught?.code).toBe('transcription_low_confidence');
-    expect(caught?.quality).toMatchObject({ valid: false, uncertainShortUtterance: true });
+    expect(caught?.quality).toMatchObject({
+      valid: false, weakAcousticEvidence: true, noSpeechAverage: .8, logProbAverage: -1.2
+    });
   });
 });

@@ -19,7 +19,8 @@ open.
 
 ## What was fixed and how confident each one is
 
-### 1. Voice settings panel invisible / garbled (guide.css) - VERIFIED LIVE, high confidence
+### 1. Voice settings panel invisible / garbled (guide.css) - INVALIDATED BY DEVICE SCREENSHOTS
+**Update (2026-09-18):** The user's phone and desktop screenshots show clipped rounded fragments and misaligned voice controls. These real-device results invalidate the earlier browser-only "high confidence" conclusion. The replacement removes the expandable control, gives the textarea its own row, and places language, microphone and Send in a stable toolbar. Treat the earlier screenshots and layout claims below as historical; recheck 320px, 375px, 768px and 1280px, then confirm on the user's actual devices.
 
 File: `src/presentation/m6-discovery/styles/guide.css`
 (`.guide-voice-settings` block, plus one dead-code removal in the same
@@ -134,7 +135,8 @@ simulated network failure (e.g. throttle/offline mid-load in devtools) shows
 one retry before falling back to the illustration, not an immediate
 permanent fallback.
 
-### 4. Groq cloud transcription rejecting genuine short mobile utterances (transcription.ts, index.ts) - CODE-VERIFIED AND UNIT-TESTED, but NOT verified against a real Groq response
+### 4. Groq cloud transcription rejecting genuine short mobile utterances - UPDATED POLICY
+**Updated policy (2026-09-18):** Draft-first transcription accepts nonempty text for review unless no-speech probability is at least 0.90, average log probability is below -1.50, or both weaker signals occur together (at least 0.75 no-speech and below -1.10 log probability). Missing acoustic scores alone do not block a transcript. Empty text, known subtitle/outro hallucinations, repeated text, implausibly dense text and over-compressed output remain blocked. Available average acoustic scores are included in the quality diagnostics without transcript text. The previous threshold and verification notes below are historical; local verification of this update is pending.
 
 Files: `supabase/functions/m6-tumpang-guide/transcription.ts` (widened
 `uncertainShortUtterance` thresholds, `-.55`→`-.75` /
