@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ProfileService } from '../../../business-logic/m1-profile/ProfileService.js';
 import { reputationStanding, REPUTATION_POLICY } from '../../../business-logic/m1-profile/ReputationPolicy.js';
+import { getBadgeForStats } from '../../../business-logic/m1-profile/HostImpactEngine.js';
 import { spokenLanguageLabel } from '../../../business-logic/m1-profile/CompatibilityOptions.js';
 import {
   FRIENDSHIP_STATUS,
@@ -162,6 +163,7 @@ export default function PublicProfile() {
 
   const provisional = profile.provisional ?? ((profile.completedTrips ?? 0) < REPUTATION_POLICY.minEvidenceRides);
   const standing = reputationStanding(profile.reputationScore, { provisional });
+  const badgeTier = profile.completedTrips != null ? getBadgeForStats(profile).name.replace(' Host', '') : null;
   const joined = profile.createdAt
     ? new Intl.DateTimeFormat('en-MY', { month: 'long', year: 'numeric' }).format(new Date(profile.createdAt))
     : null;
@@ -221,6 +223,7 @@ export default function PublicProfile() {
           <p>{joined ? `Member since ${joined}` : 'Community member'}</p>
           <div className="public-profile-badges">
             <span className={`reputation-standing standing-${standing.key}`}><IconShield size={13} />{standing.label}</span>
+            {badgeTier && <span><IconMedal size={13} />{badgeTier} Host</span>}
             {profile.rating != null && <span><IconStar size={13} />{profile.rating.toFixed(1)} from {profile.reviewCount} review{profile.reviewCount === 1 ? '' : 's'}</span>}
           </div>
         </div>
