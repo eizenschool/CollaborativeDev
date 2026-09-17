@@ -435,10 +435,10 @@ one-hour urgent SOS delivery. The next new
 migration starts at `046`.
 M2 migrations `041`-`043` are now deployed.
 
-`046_m2_adaptive_checkin.sql` is deployed as `m2_adaptive_checkin`. Passenger
-check-in accepts accuracy up to 150 m and distance up to
-`least(200 + accuracy, 350)` m; Driver arrival remains 100 m/200 m. Raw
-submitted coordinates are not stored.
+`046_m2_adaptive_checkin.sql` is deployed as `m2_adaptive_checkin`; its original
+passenger distance rule was later superseded by deployed migration `058` below.
+Passenger Check-in still accepts accuracy up to 150 m, Driver arrival remains
+100 m/200 m, and raw submitted Check-in coordinates are not stored.
 
 `047_m2_live_location_tracking.sql` is deployed as `m2_live_location_tracking`.
 It adds private consent sessions, latest points, sampled history, expiring
@@ -486,15 +486,18 @@ terminal Ride, and removes unavailable live coordinates after two minutes.
 `m2-live-share` active version 4 consumes the UUID-free snapshot RPC; remote
 `project-admin` and `ride-dispute-evidence` Edge Functions were deleted.
 
-`056_m2_lifecycle_expiry_and_validation.sql` is authored locally and is **not
-deployed**. It adds stable nullable `ride_requests.accepted_at`, a partial
+`056_m2_lifecycle_expiry_and_validation.sql` is live on the shared project, but
+has no dedicated entry in `supabase_migrations.schema_migrations`. A read-only
+verification on 2026-09-18 confirmed its `accepted_at` column/comment/backfill,
+participant index/helper, replacement RPC bodies, exact 30-minute lifecycle
+processor, notification triggers, authenticated-only public grants, and active
+minute Cron. It adds stable nullable `ride_requests.accepted_at`, a partial
 participant-history index, the exact 30-minute unstarted-Ride expiry boundary,
 Matched/Accepted invariants, terminal former-participant history access, and
 safe expiry notifications. It replaces existing RPC bodies without changing
 their signatures and leaves active Realtime/family access restricted to
-current Accepted participants. Deployment must be separately approved; after
-deployment, verify the existing overdue Matched Ride and requests, Cron,
-notifications, and security/performance advisors.
+current Accepted participants. The verification found no overdue Ride or
+request waiting for an immediate lifecycle correction.
 
 `057_m2_fix_family_link_crypto_schema.sql` is now recorded as tracked migration
 `m2_fix_family_link_crypto_schema`. It replaced only
@@ -522,12 +525,16 @@ no browser grants and every narrow RPC performs explicit authorization.
 Two-account/two-device acceptance is still required before
 `VITE_M2_SOS_ENABLED` is enabled.
 
-`058_m2_widen_checkin_tolerance.sql` is authored locally and is **not
-deployed**. It widens passenger Check-in distance from
+`058_m2_widen_checkin_tolerance.sql` is deployed as tracked migration
+`m2_widen_checkin_tolerance` (version `20260917160025`). It widens passenger
+Check-in distance from
 `least(200 + accuracy, 350)` m to `least(250 + accuracy, 400)` m while retaining
 the 150 m accuracy ceiling, nullable accuracy for historical Checked In rows,
 coordinate non-persistence, and the Driver arrival policy. It replaces the
-existing RPC body without changing its signature or execute grant.
+existing RPC body without changing its signature or execute grant. Post-deploy
+verification confirmed the 400 m constraint, widened formula, zero incompatible
+existing rows, authenticated-only execution, and the unchanged active lifecycle
+Cron.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -700,14 +707,16 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   compensating removal
   of the Trust Admin/dispute/evidence rollout while preserving and tightening
   participant/family live tracking and sampled history.
-- `056_m2_lifecycle_expiry_and_validation.sql` - authored, not deployed;
+- `056_m2_lifecycle_expiry_and_validation.sql` - live without a dedicated
+  migration-history entry;
   stable acceptance history, exact departure-grace expiry, Matched/request
   invariants, terminal former-participant access, validation alignment, and
   deduplicated expiry notifications.
 - `057_m2_fix_family_link_crypto_schema.sql` - deployed as tracked migration;
   schema-qualifies the pgcrypto token generator and digest inside the existing
   authenticated Family Link creation RPC.
-- `058_m2_widen_checkin_tolerance.sql` - authored, not deployed; slightly
+- `058_m2_widen_checkin_tolerance.sql` - deployed as tracked migration
+  `m2_widen_checkin_tolerance`; slightly
   widens passenger-only adaptive Check-in distance while retaining the GPS
   accuracy, privacy, historical compatibility, and RPC authorization boundary.
 - `059_m2_ride_pickup_destination_photos.sql` - live without a tracked

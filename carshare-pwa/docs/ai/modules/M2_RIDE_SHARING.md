@@ -64,7 +64,7 @@ location confirmation, quote invalidation, and Draft contracts while adding
 focused validation recovery and responsive actions. Ride/request confirmations
 use the shared adaptive dialog; no lifecycle or service contract changed.
 
-Accepted decision D025 and authored, undeployed migration
+Accepted decision D025 and live migration
 `056_m2_lifecycle_expiry_and_validation.sql` make the database the only status
 authority. Published rides without an Accepted request expire at departure;
 rides with an Accepted request become Matched and receive a 30-minute Start
@@ -291,17 +291,12 @@ Migration `038` is now deployed as `m2_ride_usability_notifications`; it uses
 the shared Module 3 notification inbox, unread Realtime count, Web Push and
 service-worker path. Module 2 does not create a second notification centre.
 
-Passenger check-in uses adaptive GPS tolerance from deployed migration `041`:
-accuracy must be at most 150 m and measured distance must be at most
-`min(200 m + accuracy, 350 m)`. Driver destination arrival intentionally keeps
-the existing 100 m accuracy and 200 m distance limits. Authored, undeployed
-follow-up `049` preserves nullable accuracy only for historical Checked In rows;
-every new check-in still writes the measured accuracy.
-
-Authored, undeployed migration `058_m2_widen_checkin_tolerance.sql` makes the
-requested small passenger-only adjustment to `min(250 m + accuracy, 400 m)`.
-It retains the 150 m accuracy ceiling, historical nullable-accuracy
-compatibility, coordinate non-persistence, and the Driver arrival limits.
+Passenger check-in uses the adaptive GPS tolerance from deployed migrations
+`046` and `058`: accuracy must be at most 150 m and measured distance must be at
+most `min(250 m + accuracy, 400 m)`. Driver destination arrival intentionally
+keeps the existing 100 m accuracy and 200 m distance limits. Historical Checked
+In rows may retain nullable accuracy, but every new check-in writes the measured
+accuracy. Submitted Check-in coordinates are not persisted.
 
 Publish Ride autocomplete supplies a 5 km location bias and origin only when
 the existing foreground preview is at most 500 m inaccurate. Malaysia remains
