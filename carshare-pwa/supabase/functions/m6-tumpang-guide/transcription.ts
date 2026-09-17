@@ -74,8 +74,15 @@ export function guideTranscriptionQuality(body: Record<string, unknown>, text: s
   const hallucinatedOutro = knownWhisperHallucination(text);
   const implausiblyDense = duration > 0 && duration <= 4
     && spokenUnits > Math.max(18, Math.ceil(duration * 14));
+  // Widened modestly from the original -.55/.35: this gate is extra scrutiny
+  // layered on top of the absolute lowConfidence(-1)/likelySilence(.65)
+  // floors above, specifically for short clips, and real mobile mic input
+  // (see useGuideSpeechInput.js's getUserMedia echoCancellation/
+  // noiseSuppression/autoGainControl) appears to shift these values enough to
+  // trip it on genuine speech - see the `quality` diagnostics attached to the
+  // thrown error below for real numbers to refine this further if it recurs.
   const uncertainShortUtterance = duration > 0 && duration <= 2.5
-    && ((logProb.length > 0 && logProbAverage < -.55) || (noSpeech.length > 0 && noSpeechAverage > .35));
+    && ((logProb.length > 0 && logProbAverage < -.75) || (noSpeech.length > 0 && noSpeechAverage > .5));
   return {
     valid: Boolean(text) && !likelySilence && !lowConfidence && !overCompressed && !repeated
       && !hallucinatedOutro && !implausiblyDense && !uncertainShortUtterance,
@@ -112,8 +119,9 @@ export async function transcribeGuideAudio({
   if (!text) throw new Error("No speech was recognised.");
   const quality = guideTranscriptionQuality(body, text);
   if (!quality.valid) {
-    const error = new Error("The transcription was too uncertain to use.") as Error & { code?: string };
+    const error = new Error("The transcription was too uncertain to use.") as Error & { code?: string; quality?: unknown };
     error.code = "transcription_low_confidence";
+    error.quality = quality;
     throw error;
   }
   return { text, language: detectedLanguage || String(body.language || "").trim() || null,

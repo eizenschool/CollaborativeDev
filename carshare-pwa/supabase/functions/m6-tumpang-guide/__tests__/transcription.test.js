@@ -69,4 +69,43 @@ describe('Tumpang Guide Groq transcription', () => {
     expect(guideTranscriptionQuality({ segments: [{ no_speech_prob: .91, avg_logprob: -1.4 }] }, 'KL Bird Park'))
       .toMatchObject({ valid: false, likelySilence: true, lowConfidence: true });
   });
+
+  it('accepts a short mobile-mic utterance that the old -.55/.35 thresholds would have rejected', () => {
+    // Regression: real Android mic input processed through getUserMedia's
+    // echoCancellation/noiseSuppression/autoGainControl plausibly lands
+    // between the old and new uncertainShortUtterance thresholds even for
+    // genuine speech, which is exactly what made cloud transcription fail
+    // "every single time" on a real phone while Web Speech (no such gate)
+    // succeeded on the same audio.
+    expect(guideTranscriptionQuality({
+      segments: [{ start: 0, end: 1.2, no_speech_prob: .2, avg_logprob: -.6, compression_ratio: 1.1 }]
+    }, 'nak pergi Batu Caves')).toMatchObject({ valid: true, uncertainShortUtterance: false });
+  });
+
+  it('still rejects a genuinely low-confidence short utterance at the widened thresholds', () => {
+    expect(guideTranscriptionQuality({
+      segments: [{ start: 0, end: 1, no_speech_prob: .55, avg_logprob: -.9, compression_ratio: 1.1 }]
+    }, 'um')).toMatchObject({ valid: false, uncertainShortUtterance: true });
+  });
+
+  it('attaches the quality diagnostics to the thrown error when transcription is rejected as low-confidence', async () => {
+    const audio = new File([new Uint8Array(256)], 'voice.webm', { type: 'audio/webm' });
+    let caught;
+    try {
+      await transcribeGuideAudio({
+        apiKey: 'test-key', audio,
+        fetchImpl: async () => ({
+          ok: true, status: 200,
+          json: async () => ({
+            text: 'um',
+            segments: [{ start: 0, end: 1, no_speech_prob: .55, avg_logprob: -.9, compression_ratio: 1.1 }]
+          })
+        })
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught?.code).toBe('transcription_low_confidence');
+    expect(caught?.quality).toMatchObject({ valid: false, uncertainShortUtterance: true });
+  });
 });

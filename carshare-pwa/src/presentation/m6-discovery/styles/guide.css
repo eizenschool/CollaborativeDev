@@ -224,7 +224,7 @@
   /* The 4-column input row (text, voice language, mic, send) is comfortable
      down to tablet width; below 700px it no longer fits without crowding the
      textarea, so the voice controls move to their own row underneath it. */
-  .guide-composer__input-row { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto auto; gap: 8px 6px; }
+  .guide-composer__input-row { grid-template-rows: auto auto; gap: 8px 6px; }
   .guide-composer textarea { grid-column: 1 / -1; }
   .guide-voice-language { grid-column: 1; grid-row: 2; }
   .guide-voice-language select { width: 100%; }
@@ -248,8 +248,13 @@
 .guide-voice-settings { position: relative; align-self: end; min-width: 0; }
 .guide-voice-settings summary { display: flex; align-items: center; min-height: 42px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--teal-dark); background: var(--surface); font-size: 11px; font-weight: 750; cursor: pointer; list-style: none; white-space: nowrap; }
 .guide-voice-settings summary::-webkit-details-marker { display: none; }
+/* Closed, this stays a single auto-placed grid item (a small pill next to the
+   mic/send buttons). Open, it spans the whole input row - grid's default
+   sparse auto-placement then pushes mic/send down to a fresh row on their
+   own, so nothing needs to be repositioned by hand and nothing overlaps. */
+.guide-voice-settings[open] { grid-column: 1 / -1; }
 .guide-voice-settings[open] summary { border-color: var(--teal); background: var(--teal-tint); }
-.guide-voice-settings .guide-voice-language { position: absolute; z-index: 12; right: 0; bottom: calc(100% + 7px); width: 190px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: var(--shadow-md); }
+.guide-voice-settings .guide-voice-language { position: static; width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: var(--shadow-sm); }
 .guide-place-followup { padding-top: 2px; }
 .guide-place-followup__name { color: var(--ink); font-size: 15px; }
 .guide-place-followup__sources { margin: 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
@@ -262,6 +267,5 @@
 .guide-rec-card__ride .guide-text-action { justify-self: start; margin-top: 2px; }
 
 @media (max-width: 700px) {
-  .guide-voice-settings .guide-voice-language { grid-column: auto; grid-row: auto; }
   .guide-voice-settings .guide-voice-language select { width: 100%; }
 }
