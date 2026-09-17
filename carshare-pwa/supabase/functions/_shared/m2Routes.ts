@@ -224,7 +224,7 @@ function encodeBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
 }
 
-function decodeBase64Url(value: string): Uint8Array {
+function decodeBase64Url(value: string) {
   const base64 = value.replaceAll("-", "+").replaceAll("_", "/") + "=".repeat((4 - value.length % 4) % 4);
   const binary = atob(base64);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));

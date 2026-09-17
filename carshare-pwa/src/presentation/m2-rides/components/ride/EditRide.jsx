@@ -42,6 +42,16 @@ export default function EditRide() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [contentErrors, setContentErrors] = useState({});
+  const [contentErrorFocusRequest, setContentErrorFocusRequest] = useState(0);
+  useEffect(() => {
+    if (!contentErrorFocusRequest) return;
+    const id = contentErrors.contribution ? 'contribution' : contentErrors.pickupInstructions ? 'edit-pickup-instructions' : contentErrors.pickupPhoto ? 'pickup-photo-content-error' : null;
+    if (id) document.getElementById(id)?.focus();
+  // Focus once for each rejected save. Typing must not make a remaining photo
+  // error steal focus from the field the Host is correcting.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentErrorFocusRequest]);
   const [quote, setQuote] = useState(null);
   const [quoteMessage, setQuoteMessage] = useState('');
   const [vehicles, setVehicles] = useState(null);
@@ -79,6 +89,8 @@ export default function EditRide() {
   const locked = !['Draft', 'Published'].includes(ride.status) || (ride.status === 'Published' && ride.hasAcceptedRequests);
 
   function patch(fields) {
+    if (saving) return;
+    setContentErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !(key in fields))));
     setForm((current) => ({ ...current, ...fields }));
     setQuote(null);
     setQuoteMessage('');
@@ -150,13 +162,14 @@ export default function EditRide() {
     }
     setSaving(true);
     setError('');
+    setContentErrors({});
     try {
       const routeQuote = ride.status === 'Published' ? await calculateQuote() : null;
-      const updated = await RideService.updateRide(rideId, { ...form, ...(routeQuote ? { routeQuote } : {}) });
+      const updated = await RideService.updateRide(rideId, { ...form, ...(routeQuote ? { routeQuote } : {}) }, { file: pickupPhotoFile, remove: pickupPhotoRemoved });
       setRide(updated);
       setForm(rideForm(updated));
       try {
-        await syncPickupPhoto();
+        if (ride.status === 'Draft') await syncPickupPhoto();
       } catch (photoError) {
         setPhotoRetry(true);
         setError(`Ride changes were saved, but the pickup photo was not updated: ${photoError.message}`);
@@ -165,6 +178,8 @@ export default function EditRide() {
       setSaved(true);
       window.setTimeout(() => navigate(`/ride/${rideId}`), 700);
     } catch (err) {
+      setContentErrors(err.fieldErrors || {});
+      if (err.fieldErrors) setContentErrorFocusRequest((current) => current + 1);
       setQuote(null);
       setQuoteMessage('');
       setError(err.message);
@@ -182,15 +197,15 @@ export default function EditRide() {
 
         <section className="ride-info-card edit-route-fields">
           <p className="eyebrow">CONFIRMED ROUTE</p>
-          <ConfirmedLocationInput id="edit-ride-pickup" label="Pickup point" placeholder="Search in Malaysia" value={form.pickup} location={form.pickupLocation} disabled={locked} onChange={(pickup, pickupLocation) => patch({ pickup, pickupLocation })} />
-          <ConfirmedLocationInput id="edit-ride-destination" label="Destination" placeholder="Search in Malaysia" value={form.destination} location={form.destinationLocation} disabled={locked} onChange={(destination, destinationLocation) => patch({ destination, destinationLocation })} />
+          <ConfirmedLocationInput id="edit-ride-pickup" label="Pickup point" placeholder="Search in Malaysia" value={form.pickup} location={form.pickupLocation} disabled={locked || saving} onChange={(pickup, pickupLocation) => patch({ pickup, pickupLocation })} />
+          <ConfirmedLocationInput id="edit-ride-destination" label="Destination" placeholder="Search in Malaysia" value={form.destination} location={form.destinationLocation} disabled={locked || saving} onChange={(destination, destinationLocation) => patch({ destination, destinationLocation })} />
         </section>
 
         <section className="ride-info-card">
           <p className="eyebrow">SCHEDULE</p>
           <div className="schedule-grid">
-            <div className="field"><label htmlFor="edit-ride-date">Departure date</label><input id="edit-ride-date" type="date" disabled={locked} value={form.date} onChange={(event) => patch({ date: event.target.value })} /></div>
-            <div className="field"><label htmlFor="edit-ride-time">Departure time</label><input id="edit-ride-time" type="time" disabled={locked} value={form.time} onChange={(event) => patch({ time: event.target.value })} /></div>
+            <div className="field"><label htmlFor="edit-ride-date">Departure date</label><input id="edit-ride-date" type="date" disabled={locked || saving} value={form.date} onChange={(event) => patch({ date: event.target.value })} /></div>
+            <div className="field"><label htmlFor="edit-ride-time">Departure time</label><input id="edit-ride-time" type="time" disabled={locked || saving} value={form.time} onChange={(event) => patch({ time: event.target.value })} /></div>
           </div>
           {ride.status === 'Published' && <small>Saving recalculates ETA and rechecks schedule conflicts.</small>}
         </section>
@@ -203,7 +218,7 @@ export default function EditRide() {
             <RideVehicleSelector
               vehicles={vehicles}
               vehicleId={form.vehicleId}
-              disabled={locked}
+              disabled={locked || saving}
               onSelect={(vehicle) => patch({
                 vehicleId: vehicle.id,
                 vehicleCapacity: vehicle.seats,
@@ -215,10 +230,10 @@ export default function EditRide() {
           {!locked && vehicles?.length > 0 && !form.vehicleId && <p className="location-field-message error">Choose the vehicle passengers should expect.</p>}
         </section>
 
-        <section className="ride-info-card pickup-instructions-field"><label className="eyebrow" htmlFor="edit-pickup-instructions">PICKUP INSTRUCTIONS</label><textarea id="edit-pickup-instructions" disabled={locked} rows="3" maxLength="300" value={form.pickupInstructions} onChange={(event) => patch({ pickupInstructions: event.target.value })} placeholder="e.g. Meet beside Entrance A" /><small>{form.pickupInstructions.length}/300</small><PickupPhotoField rideId={rideId} file={pickupPhotoFile} hasExisting={pickupPhotoHasExisting} removed={pickupPhotoRemoved} disabled={locked} onFileChange={(file) => { setPickupPhotoFile(file); setPickupPhotoRemoved(false); setPhotoRetry(false); }} onRemove={() => { setPickupPhotoFile(null); setPickupPhotoRemoved(pickupPhotoHasExisting); setPhotoRetry(false); }} /></section>
-        <section className="ride-info-card"><p className="eyebrow">JOURNEY SCALE</p><div className="scale-picker">{['Urban', 'Intercity'].map((scale) => <button type="button" aria-pressed={form.journeyScale === scale} key={scale} disabled={locked} className={form.journeyScale === scale ? 'selected' : ''} onClick={() => patch({ journeyScale: scale })}>{scale} route</button>)}</div></section>
-        <section className="ride-info-card"><label className="eyebrow" htmlFor="contribution">NON-MONETARY CONTRIBUTION</label><input id="contribution" disabled={locked} value={form.contribution} onChange={(event) => patch({ contribution: event.target.value })} placeholder="e.g. Snacks, toll fee, coffee…" /></section>
-        <section className="ride-info-card"><p className="eyebrow">TRIP RESTRICTIONS</p><div className="restriction-picker">{restrictionOptions.map((tag) => <button type="button" aria-pressed={form.restrictionTags.includes(tag)} key={tag} disabled={locked} className={form.restrictionTags.includes(tag) ? 'selected' : ''} onClick={() => toggleTag(tag)}>{tag}</button>)}</div></section>
+        <section className="ride-info-card pickup-instructions-field"><label className="eyebrow" htmlFor="edit-pickup-instructions">PICKUP INSTRUCTIONS</label><textarea id="edit-pickup-instructions" aria-invalid={Boolean(contentErrors.pickupInstructions)} aria-describedby={contentErrors.pickupInstructions ? "edit-instructions-error" : undefined} disabled={locked || saving} rows="3" maxLength="300" value={form.pickupInstructions} onChange={(event) => patch({ pickupInstructions: event.target.value })} placeholder="e.g. Meet beside Entrance A" /><small>{form.pickupInstructions.length}/300</small>{contentErrors.pickupInstructions && <p id="edit-instructions-error" className="location-field-message error" role="alert">{contentErrors.pickupInstructions}</p>}<PickupPhotoField moderationError={contentErrors.pickupPhoto} rideId={rideId} file={pickupPhotoFile} hasExisting={pickupPhotoHasExisting} removed={pickupPhotoRemoved} disabled={locked || saving} onFileChange={(file) => { setPickupPhotoFile(file); setPickupPhotoRemoved(false); setPhotoRetry(false); }} onRemove={() => { setPickupPhotoFile(null); setPickupPhotoRemoved(pickupPhotoHasExisting); setPhotoRetry(false); }} /></section>
+        <section className="ride-info-card"><p className="eyebrow">JOURNEY SCALE</p><div className="scale-picker">{['Urban', 'Intercity'].map((scale) => <button type="button" aria-pressed={form.journeyScale === scale} key={scale} disabled={locked || saving} className={form.journeyScale === scale ? 'selected' : ''} onClick={() => patch({ journeyScale: scale })}>{scale} route</button>)}</div></section>
+        <section className="ride-info-card"><label className="eyebrow" htmlFor="contribution">NON-MONETARY CONTRIBUTION</label><input id="contribution" maxLength="500" aria-invalid={Boolean(contentErrors.contribution)} aria-describedby={contentErrors.contribution ? "edit-contribution-error" : undefined} disabled={locked || saving} value={form.contribution} onChange={(event) => patch({ contribution: event.target.value })} placeholder="e.g. Snacks, toll fee, coffee…" />{contentErrors.contribution && <p id="edit-contribution-error" className="location-field-message error" role="alert">{contentErrors.contribution}</p>}</section>
+        <section className="ride-info-card"><p className="eyebrow">TRIP RESTRICTIONS</p><div className="restriction-picker">{restrictionOptions.map((tag) => <button type="button" aria-pressed={form.restrictionTags.includes(tag)} key={tag} disabled={locked || saving} className={form.restrictionTags.includes(tag) ? 'selected' : ''} onClick={() => toggleTag(tag)}>{tag}</button>)}</div></section>
 
         <section className="ride-info-card">
           <p className="eyebrow">CONFIRMED WAYPOINTS</p>
@@ -227,12 +242,12 @@ export default function EditRide() {
             <div className="waypoint-stop-row"><label htmlFor="edit-waypoint-stop">Stop duration</label><div><input id="edit-waypoint-stop" type="number" min="0" max="180" step="5" value={stopMinutes} onChange={(event) => setStopMinutes(Math.max(0, Math.min(180, Number(event.target.value) || 0)))} /><span>minutes</span></div></div>
             <button type="button" className="btn-secondary waypoint-confirm-add" onClick={addWaypoint}><IconPlus size={16} /> Add confirmed stop</button>
           </div>}
-          {form.waypoints.length ? <div className="waypoint-lines">{form.waypoints.map((waypoint, index) => <div key={`${waypoint.placeId || waypoint.name}-${index}`}><span><IconMapPin size={14} />{waypoint.name}<small>{waypoint.placeId ? 'Confirmed Google stop' : 'Reconfirm before publishing'}</small></span>{waypoint.placeId && <label className="waypoint-selected-duration"><span>Stop duration</span><input type="number" min="0" max="180" step="5" disabled={locked} value={waypoint.stopMinutes} aria-label={`${waypoint.name} stop duration in minutes`} onChange={(event) => { const minutes = Number(event.target.value); if (!Number.isInteger(minutes) || minutes < 0 || minutes > 180) { setError('Stop duration must be a whole number from 0 to 180 minutes.'); return; } patch({ waypoints: form.waypoints.map((item, itemIndex) => itemIndex === index ? { ...item, stopMinutes: minutes } : item) }); setError(''); }} /><small>minutes</small></label>}{!locked && <button type="button" onClick={() => patch({ waypoints: form.waypoints.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remove ${waypoint.name}`}><IconX size={15} /></button>}</div>)}</div> : <p className="empty-waypoints">No waypoints added</p>}
+          {form.waypoints.length ? <div className="waypoint-lines">{form.waypoints.map((waypoint, index) => <div key={`${waypoint.placeId || waypoint.name}-${index}`}><span><IconMapPin size={14} />{waypoint.name}<small>{waypoint.placeId ? 'Confirmed Google stop' : 'Reconfirm before publishing'}</small></span>{waypoint.placeId && <label className="waypoint-selected-duration"><span>Stop duration</span><input type="number" min="0" max="180" step="5" disabled={locked || saving} value={waypoint.stopMinutes} aria-label={`${waypoint.name} stop duration in minutes`} onChange={(event) => { const minutes = Number(event.target.value); if (!Number.isInteger(minutes) || minutes < 0 || minutes > 180) { setError('Stop duration must be a whole number from 0 to 180 minutes.'); return; } patch({ waypoints: form.waypoints.map((item, itemIndex) => itemIndex === index ? { ...item, stopMinutes: minutes } : item) }); setError(''); }} /><small>minutes</small></label>}{!locked && <button type="button" onClick={() => patch({ waypoints: form.waypoints.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remove ${waypoint.name}`}><IconX size={15} /></button>}</div>)}</div> : <p className="empty-waypoints">No waypoints added</p>}
         </section>
 
         {quoteMessage && <section className="route-quote-card" role="status"><p className="card-title">Route verification</p><span>{quoteMessage}</span>{quote && <strong>ETA {new Date(quote.estimatedArrivalAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' })}</strong>}</section>}
       </div>
-      {!locked && <div className="ride-bottom-actions"><button type="button" className="primary-action full" disabled={saving || saved || photoRetry || vehicles === null || Boolean(vehicleError)} onClick={save}>{saved ? '✓ Changes saved' : saving ? (ride.status === 'Published' ? 'Checking route…' : 'Saving…') : 'Save changes'}</button></div>}
+      {!locked && <div className="ride-bottom-actions"><button type="button" className="primary-action full" disabled={saving || saved || photoRetry || vehicles === null || Boolean(vehicleError)} onClick={save}>{saved ? '✓ Changes saved' : saving ? (ride.status === 'Published' ? 'Checking content and route…' : 'Saving…') : 'Save changes'}</button></div>}
     </main>
   );
 }

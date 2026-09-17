@@ -28,3 +28,15 @@ verify_jwt = false
 [functions.m3-message-reports]
 # Handler verifies user JWTs or a dedicated scheduled-cleanup secret.
 verify_jwt = false
+
+[functions.m2-content-check]
+# Handler verifies the user with Auth before checking ownership or content.
+verify_jwt = false
+
+[functions.m2-content-cleanup]
+# Dedicated scheduled-cleanup secret, never a browser credential.
+verify_jwt = false
+
+[functions.m2-content-evaluate]
+# Temporary synthetic-corpus evaluator; requires a server credential.
+verify_jwt = false

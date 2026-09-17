@@ -69,6 +69,17 @@ export default function PublishRide() {
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [preparedDraftId, setPreparedDraftId] = useState(null);
+  const [contentErrors, setContentErrors] = useState({});
+  const [contentErrorFocusRequest, setContentErrorFocusRequest] = useState(0);
+  useEffect(() => {
+    if (!contentErrorFocusRequest || step !== 3) return;
+    const id = contentErrors.contribution ? 'ride-contribution' : contentErrors.pickupInstructions ? 'pickup-instructions' : contentErrors.pickupPhoto ? 'pickup-photo-content-error' : null;
+    if (id) document.getElementById(id)?.focus();
+  // Focus once for each rejected submission. Editing a field changes the error
+  // object but must not repeatedly move focus to another remaining error.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentErrorFocusRequest, step]);
   const [vehicles, setVehicles] = useState(null);
   const [vehicleGateError, setVehicleGateError] = useState('');
   const [identityState, setIdentityState] = useState(null);
@@ -185,6 +196,8 @@ export default function PublishRide() {
   }, [identityState, reputationEligibility, vehicles]);
 
   function patch(fields) {
+    if (saving) return;
+    setContentErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !(key in fields))));
     setForm((f) => ({ ...f, ...fields }));
     setRouteQuote(null);
     setQuoteStatus({ state: 'idle', message: '' });
@@ -282,8 +295,8 @@ export default function PublishRide() {
     setSaving(true);
     setError('');
     try {
-      const saved = draftRideId
-        ? await RideService.updateRide(draftRideId, form)
+      const saved = (draftRideId || preparedDraftId)
+        ? await RideService.updateRide(draftRideId || preparedDraftId, form)
         : await RideService.publishRide(user.id, form, 'Draft');
       await finishSavedRide(saved, { path: '/ride', options: { state: { notice: 'Draft saved.' } } });
     } catch (err) {
@@ -302,17 +315,24 @@ export default function PublishRide() {
     }
     setSaving(true);
     setError('');
+    setContentErrors({});
     try {
-      const quote = isRouteQuoteFresh(routeQuote) ? routeQuote : await calculateRouteQuote();
-      const published = draftRideId
-        ? await RideService.publishDraft(draftRideId, form, quote)
-        : await RideService.publishRide(user.id, { ...form, routeQuote: quote }, 'Published');
-      await finishSavedRide(published, {
-        path: `/ride/${published.id}`,
-        options: { replace: true, state: { returnTo: '/ride', notice: 'Ride published.' } },
-      });
+      let id = draftRideId || preparedDraftId;
+      if (!id) {
+        const draft = await RideService.publishRide(user.id, form, 'Draft');
+        id = draft.id;
+        setPreparedDraftId(id);
+      }
+      const quote = draftRideId && isRouteQuoteFresh(routeQuote) ? routeQuote : await RideService.quoteRide(form, { rideId: id });
+      const published = await RideService.publishDraft(id, form, quote, { file: pickupPhotoFile, remove: pickupPhotoRemoved });
+      navigate(`/ride/${published.id}`, { replace: true, state: { returnTo: '/ride', notice: 'Ride published.' } });
     } catch (err) {
       setError(err.message);
+      if (err.fieldErrors) {
+        setContentErrors(err.fieldErrors);
+        setContentErrorFocusRequest((current) => current + 1);
+        setStep(3);
+      }
     } finally {
       setSaving(false);
     }
@@ -418,12 +438,13 @@ export default function PublishRide() {
 
         {location.state?.republishedFromRideId && <div className="alert alert-info" role="status">New Draft created from your Ride history. Review the old departure date and time before publishing. The previous Ride's pickup photo was not copied.</div>}
         {error && <div ref={errorRef} className="alert alert-error publish-error" role="alert" tabIndex={-1}><span>{error}</span>{/In Transit/i.test(error) && <button type="button" className="btn-link" onClick={() => navigate('/ride')}>Open My rides to complete it</button>}</div>}
+        {saving && <p role="status">Checking and saving your Ride. Please wait…</p>}
         {photoRecovery && <div className="alert alert-error pickup-photo-recovery" role="alert"><div><strong>Ride saved, but the pickup photo was not uploaded.</strong><span>{photoRecovery.message}</span></div><button type="button" className="btn-secondary" disabled={saving} onClick={retryPickupPhoto}>Retry photo</button><button type="button" className="btn-link" onClick={() => navigate(photoRecovery.navigation.path, photoRecovery.navigation.options)}>Continue without photo</button></div>}
 
         {step === 0 && <RouteStep form={form} patch={patch} previewLocation={previewLocation} previewStatus={previewStatus} />}
         {step === 1 && <ScheduleStep form={form} patch={patch} />}
         {step === 2 && <RideVehicleSelector vehicles={vehicles} vehicleId={form.vehicleId} onSelect={(vehicle) => patch({ vehicleId: vehicle.id, vehicleCapacity: vehicle.seats, seatsTotal: Math.min(form.seatsTotal, vehicle.seats) })} />}
-        {step === 3 && <TripDetailsStep form={form} patch={patch} previewLocation={previewLocation} recommendationRoute={waypointRecommendationRoute} quoteStatus={quoteStatus} pickupPhoto={{ file: pickupPhotoFile, hasExisting: pickupPhotoHasExisting, removed: pickupPhotoRemoved, rideId: draftRideId || null }} onPickupPhoto={(file) => { setPickupPhotoFile(file); setPickupPhotoRemoved(false); }} onRemovePickupPhoto={() => { setPickupPhotoFile(null); setPickupPhotoRemoved(pickupPhotoHasExisting); }} />}
+        {step === 3 && <TripDetailsStep contentErrors={contentErrors} disabled={saving} form={form} patch={patch} previewLocation={previewLocation} recommendationRoute={waypointRecommendationRoute} quoteStatus={quoteStatus} pickupPhoto={{ file: pickupPhotoFile, hasExisting: pickupPhotoHasExisting, removed: pickupPhotoRemoved, rideId: draftRideId || null }} onPickupPhoto={(file) => { setPickupPhotoFile(file); setPickupPhotoRemoved(false); }} onRemovePickupPhoto={() => { setPickupPhotoFile(null); setPickupPhotoRemoved(pickupPhotoHasExisting); }} />}
         {step === 4 && <ReviewStep form={form} routeQuote={routeQuote} quoteStatus={quoteStatus} onRefreshQuote={() => calculateRouteQuote().catch(() => {})} onBack={back} onPublish={publish} onDraft={saveAsDraft} saving={saving || Boolean(photoRecovery)} pickupPhoto={{ file: pickupPhotoFile, hasExisting: pickupPhotoHasExisting, removed: pickupPhotoRemoved, rideId: draftRideId || null }} />}
 
         {step < STEPS.length - 1 && (
@@ -539,7 +560,7 @@ function ScheduleStep({ form, patch }) {
 }
 
 // ---------- STEP 4: TRIP DETAILS ----------
-function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, quoteStatus, pickupPhoto, onPickupPhoto, onRemovePickupPhoto }) {
+function TripDetailsStep({ contentErrors = {}, disabled = false, form, patch, previewLocation, recommendationRoute, quoteStatus, pickupPhoto, onPickupPhoto, onRemovePickupPhoto }) {
   const [waypoint, setWaypoint] = useState('');
   const [waypointLocation, setWaypointLocation] = useState(null);
   const [stopMinutes, setStopMinutes] = useState(10);
@@ -585,20 +606,22 @@ function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, qu
   return (
     <>
       <div className="field">
-        <label>Non-monetary contribution requirement</label>
+        <label htmlFor="ride-contribution">Non-monetary contribution requirement</label>
         <div className="input-wrap">
           <input
+            id="ride-contribution" maxLength="500" disabled={disabled} aria-invalid={Boolean(contentErrors.contribution)} aria-describedby={contentErrors.contribution ? "contribution-error" : undefined}
             placeholder="e.g. Snacks & drinks, help with directions"
             value={form.contribution}
             onChange={(e) => patch({ contribution: e.target.value })}
           />
         </div>
+        {contentErrors.contribution && <p id="contribution-error" className="location-field-message error" role="alert">{contentErrors.contribution}</p>}
       </div>
 
       <div className="field pickup-instructions-field">
         <label htmlFor="pickup-instructions">Pickup instructions <span>(optional)</span></label>
         <textarea
-          id="pickup-instructions"
+          id="pickup-instructions" disabled={disabled} aria-invalid={Boolean(contentErrors.pickupInstructions)} aria-describedby={contentErrors.pickupInstructions ? "pickup-instructions-error" : undefined}
           rows="3"
           maxLength="300"
           placeholder="e.g. Meet beside Entrance A, next to the taxi stand"
@@ -606,7 +629,9 @@ function TripDetailsStep({ form, patch, previewLocation, recommendationRoute, qu
           onChange={(event) => patch({ pickupInstructions: event.target.value })}
         />
         <small>{form.pickupInstructions.length}/300</small>
+        {contentErrors.pickupInstructions && <p id="pickup-instructions-error" className="location-field-message error" role="alert">{contentErrors.pickupInstructions}</p>}
         <PickupPhotoField
+          moderationError={contentErrors.pickupPhoto} disabled={disabled}
           rideId={pickupPhoto.rideId}
           file={pickupPhoto.file}
           hasExisting={pickupPhoto.hasExisting}
@@ -695,7 +720,7 @@ function ReviewStep({ form, routeQuote, quoteStatus, onRefreshQuote, onBack, onP
         <button className="btn-secondary" onClick={onBack} disabled={saving}>Back</button>
         <button className="btn-secondary" onClick={onDraft} disabled={saving}>Save as Draft</button>
         <button className="btn-primary publish-confirm-button" onClick={onPublish} disabled={saving || quoteStatus.state === 'loading'}>
-          {saving ? 'Publishing…' : 'Publish Ride'}
+          {saving ? 'Checking content and publishing…' : 'Publish Ride'}
         </button>
       </div>
     </>

@@ -3190,6 +3190,10 @@ button.ride-card {
   background: rgba(3, 18, 13, .72);
 }
 
+@media (max-width: 700px) {
+  .ride-card.has-destination-photo .ride-card-content { padding-bottom: 88px; }
+}
+
 .pickup-photo-field {
   display: grid;
   gap: 12px;

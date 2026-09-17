@@ -1182,6 +1182,7 @@
   .search-recommendation-footer { align-items: flex-start; flex-direction: column; padding: 10px 18px max(14px, env(safe-area-inset-bottom)); }
   .search-recommendation-footer button { align-self: flex-end; }
   .search-itinerary-leg dl { grid-template-columns: 1fr; }
+
 }
 
 @media (max-width: 380px) {
@@ -1243,4 +1244,17 @@
   border-color: #fecdd3;
   color: #e11d48;
   background: #fff1f2;
+}
+
+@media (max-width: 700px) {
+  .search-ride-card.has-destination-photo .search-ride-card-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-bottom: 88px;
+  }
+
+  .search-ride-card.has-destination-photo .search-ride-card-footer button {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }

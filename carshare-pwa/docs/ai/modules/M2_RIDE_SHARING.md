@@ -459,3 +459,22 @@ notifications and evidence holds without rewriting deployed history. The
 original browser-local `/safety` verification demo remains; `/safety/admin` and
 the two production Admin Edge Functions are removed. `m2-live-share` version 4
 is active and returns only the privacy-safe family snapshot.
+
+
+## Content moderation (D040; deployed and enabled 2026-09-17)
+
+Contribution/pickup instructions use server privacy checks and a gated Cloudflare
+Qwen3 classifier; pickup photos reuse the shared Sightengine checker with strict
+M2 failure handling. Existing M3 AI credentials are reused server-side only.
+New publication prepares a private Draft; the selected photo is checked/staged
+before `persist_moderated_ride` commits text and photo atomically. Rejected or
+unavailable checks preserve input and show field errors. Old public content is
+checked on edit/republish, not scanned in bulk. No direct browser upload/binding
+is allowed after SQL 114. SQL 115 schedules abandoned-photo cleanup.
+M1 avatar behavior is unchanged. Cloudflare's 120-case live acceptance passed;
+SQL 114, SQL 115, the matching Edge Functions and Netlify frontend are live.
+The hourly orphan-photo cleanup job is active and its first manual invocation
+returned HTTP 200. User-led publish/edit/photo acceptance remains outstanding;
+details are in `docs/ai/M2_CONTENT_MODERATION_RELEASE.md`.
+SQL 116 raises the service-only per-Host moderation limit from 20 to 40 requests
+per hour so a Host can make about twenty full text-plus-new-photo attempts.

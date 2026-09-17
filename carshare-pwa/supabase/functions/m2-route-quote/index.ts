@@ -22,6 +22,7 @@ type Input = {
   rideId?: string | null;
   ride?: unknown;
   quoteToken?: string;
+  approvalId?: string;
 };
 
 type StartRideRow = {
@@ -155,7 +156,11 @@ async function handle(request: Request): Promise<Response> {
     if (new Date(quote.expiresAt).getTime() <= Date.now()) {
       throw new HttpError(409, "QUOTE_EXPIRED", "The route quote expired. Calculate the route again.");
     }
-    const persistedRideId = await rpc<string>("persist_quoted_ride", quotedRideRpcArgs(userId, mode, rideId, ride, quote));
+    if (!rideId || !input.approvalId) throw new HttpError(409, 'CONTENT_APPROVAL_REQUIRED', 'Check the Ride content before publishing.');
+    const persistedRideId = await rpc<string>("persist_moderated_ride", {
+      p_args: quotedRideRpcArgs(userId, mode, rideId, ride, quote),
+      p_approval_id: input.approvalId,
+    });
     return json(request, { rideId: persistedRideId });
   }
 

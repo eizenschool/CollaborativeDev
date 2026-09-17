@@ -420,7 +420,14 @@ test('Ride cards use lazy destination photos while pickup photos stay on Publish
   await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
     const database = JSON.parse(localStorage.getItem(storageKey));
-    const future = { date: '2026-09-15', time: '07:00', departureAt: '2026-09-14T23:00:00.000Z', status: 'Published', expiredAt: null };
+    const departure = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000));
+    const future = {
+      date: departure.toISOString().slice(0, 10),
+      time: departure.toISOString().slice(11, 16),
+      departureAt: departure.toISOString(),
+      status: 'Published',
+      expiredAt: null,
+    };
     Object.assign(database.rides.r_1, future, {
       pickupInstructions: 'Wait beside the station information counter.',
       pickupPhotoPath: 'mock/r_1/meeting.webp',
@@ -440,6 +447,28 @@ test('Ride cards use lazy destination photos while pickup photos stay on Publish
   await expect(searchPhotoCard.locator('.destination-ride-photo img')).toHaveAttribute('alt', '');
   await expect(searchPhotoCard.locator('.destination-photo-credit')).toContainText('Google Maps');
   await expect(searchPhotoCard.locator('.pickup-photo-preview-image')).toHaveCount(0);
+  if (page.viewportSize().width <= 700) {
+    await searchPhotoCard.locator('.destination-photo-credit > span').evaluate((node) => {
+      node.textContent = 'Photo by Tunku Abdul Rahman University of Management and Technology (TAR UMT)';
+    });
+    const expectMobileCreditLayout = async () => {
+      const layout = await searchPhotoCard.evaluate((card) => {
+        const credit = card.querySelector('.destination-photo-credit')?.getBoundingClientRect();
+        const contribution = card.querySelector('.search-ride-card-footer > span')?.getBoundingClientRect();
+        const action = card.querySelector('.search-ride-card-footer > button')?.getBoundingClientRect();
+        return {
+          separated: Boolean(credit && contribution && action
+            && contribution.bottom <= credit.top
+            && action.bottom <= credit.top),
+          contained: card.scrollWidth <= card.clientWidth + 1,
+        };
+      });
+      expect(layout).toEqual({ separated: true, contained: true });
+    };
+    await expectMobileCreditLayout();
+    await page.setViewportSize({ width: 430, height: 900 });
+    await expectMobileCreditLayout();
+  }
 
   await openPage(page, '/favourite', 'Favourite rides');
   await expect(page.locator('.search-ride-card.has-destination-photo')).toHaveCount(1);

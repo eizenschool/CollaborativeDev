@@ -3,6 +3,8 @@ import { rideSupabaseAdapter } from '../../data-access/m2-rides/rideSupabaseAdap
 import '../shared/fixture/legacyMockDb.js';
 import { rideMockAdapter } from '../../data-access/m2-rides/rideMockAdapter.js';
 import { ReputationService } from '../m1-profile/ReputationService.js';
+import { RideContentService } from './RideContentService.js';
+import { RidePickupPhotoService } from './RidePickupPhotoService.js';
 import {
   departureParts,
   isAtLeastHoursAway,
@@ -73,6 +75,34 @@ function rpcError(error) {
   if (!error) return null;
   const message = error.message?.replace(/^.*?: /, '') || 'The ride could not be updated.';
   return Object.assign(new Error(message), { code: error.code });
+}
+
+function combinedModerationError(...errors) {
+  const fieldErrors = Object.assign({}, ...errors.map((error) => error?.fieldErrors || {}));
+  if (!Object.keys(fieldErrors).length) return errors.find(Boolean) || new Error('Content checking failed.');
+  const error = new Error(errors.map((item) => item?.message).filter(Boolean).join(' '));
+  error.code = 'CONTENT_CHECK_FAILED';
+  error.fieldErrors = fieldErrors;
+  return error;
+}
+
+async function reviewRideContent(rideId, ride, photoChange = {}) {
+  let photoPath;
+  try {
+    photoPath = photoChange.file
+      ? await RidePickupPhotoService.stage(rideId, photoChange.file)
+      : photoChange.remove ? null : undefined;
+  } catch (photoError) {
+    // A rejected photo must not hide independent text violations. Review the
+    // text against the currently attached photo, then return every field error.
+    try {
+      await RideContentService.check(rideId, ride, undefined);
+    } catch (textError) {
+      throw combinedModerationError(textError, photoError);
+    }
+    throw photoError;
+  }
+  return RideContentService.check(rideId, ride, photoPath);
 }
 
 async function functionError(error, data, fallback) {
@@ -529,7 +559,7 @@ export const RideService = {
     return rideMockAdapter.getRide(rideId);
   },
 
-  async updateRide(rideId, patch) {
+  async updateRide(rideId, patch, photoChange = {}) {
     const current = await this.getRide(rideId);
     if (!current) throw new Error('Ride not found.');
     const merged = mergeRideUpdate(current, patch);
@@ -541,8 +571,10 @@ export const RideService = {
     if (rideSupabaseAdapter.isConfigured) {
       if (current.status === 'Published') {
         if (!patch.routeQuote?.token) throw new Error('Calculate a fresh route before saving a Published ride.');
+        const approvalId = await reviewRideContent(rideId, merged, photoChange);
         const result = await invokeRouteFunction({
           action: 'publish',
+          approvalId,
           mode: 'update',
           rideId,
           ride: buildRoutePayload(merged),
@@ -554,7 +586,12 @@ export const RideService = {
       if (error) throw rpcError(error);
       return this.getRide(rideId);
     }
-    return rideMockAdapter.updateRide(rideId, patch);
+    const updated = await rideMockAdapter.updateRide(rideId, patch);
+    if (current.status === 'Published') {
+      if (photoChange.file) await RidePickupPhotoService.replace(rideId, photoChange.file);
+      else if (photoChange.remove) await RidePickupPhotoService.remove(rideId);
+    }
+    return updated;
   },
 
   async publishRide(hostId, rideData, status = 'Published') {
@@ -568,15 +605,11 @@ export const RideService = {
 
     if (rideSupabaseAdapter.isConfigured) {
       if (status === 'Published') {
-        if (!rideData.routeQuote?.token) throw new Error('Calculate a fresh route before publishing.');
-        const result = await invokeRouteFunction({
-          action: 'publish',
-          mode: 'create',
-          rideId: null,
-          ride: buildRoutePayload(rideData),
-          quoteToken: rideData.routeQuote.token
-        });
-        return this.getRide(result.rideId);
+        const draft = await this.publishRide(hostId, rideData, 'Draft');
+        try {
+          const quote = await this.quoteRide(rideData, { rideId: draft.id });
+          return await this.publishDraft(draft.id, rideData, quote);
+        } catch (error) { error.draftRideId = draft.id; throw error; }
       }
       const { data: rideId, error } = await rideSupabaseAdapter.createDraft(buildRideRpcArgs(rideData));
       if (error) throw rpcError(error);
@@ -599,7 +632,7 @@ export const RideService = {
     return rideMockAdapter.quoteRide(rideData, { rideId });
   },
 
-  async publishDraft(rideId, draftChanges, routeQuote = null) {
+  async publishDraft(rideId, draftChanges, routeQuote = null, photoChange = {}) {
     const ride = await this.getRide(rideId);
     if (!ride || ride.status !== 'Draft') throw new Error('Only a Draft ride can be published.');
     await ReputationService.requireEligibility(ride.hostId, 'host');
@@ -611,12 +644,15 @@ export const RideService = {
     });
     if (rideSupabaseAdapter.isConfigured) {
       if (!routeQuote?.token) throw new Error('Calculate a fresh route before publishing.');
+      const approvalId = await reviewRideContent(rideId, merged, photoChange);
       const result = await invokeRouteFunction({
-        action: 'publish', mode: 'publish_draft', rideId,
+        action: 'publish', mode: 'publish_draft', rideId, approvalId,
         ride: buildRoutePayload(merged), quoteToken: routeQuote.token
       });
       return this.getRide(result.rideId);
     }
+    if (photoChange.file) await RidePickupPhotoService.replace(rideId, photoChange.file);
+    else if (photoChange.remove) await RidePickupPhotoService.remove(rideId);
     return rideMockAdapter.publishDraft(rideId, draftChanges || {}, routeQuote);
   },
 
