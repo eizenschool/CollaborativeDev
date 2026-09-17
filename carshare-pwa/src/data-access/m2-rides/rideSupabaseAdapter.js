@@ -56,6 +56,10 @@ export const rideSupabaseAdapter = {
     return supabase.rpc('search_public_rides_near_destination', params);
   },
 
+  searchNearConfirmedDestination(params) {
+    return supabase.rpc('search_public_rides_near_confirmed_destination', params);
+  },
+
   searchPublished({ from, to, range, legacy = false }) {
     let query = supabase.from('rides').select(rideSelect(legacy ? 'legacy-public' : 'public')).eq('status', 'Published');
     if (from) query = query.ilike('pickup', `%${from}%`);
@@ -64,8 +68,10 @@ export const rideSupabaseAdapter = {
     return query.order('departure_at', { ascending: true });
   },
 
-  searchMultiLeg(params, { confirmed = false } = {}) {
-    const rpcName = confirmed
+  searchMultiLeg(params, { confirmed = false, confirmedRadius = false } = {}) {
+    const rpcName = confirmedRadius
+      ? 'search_public_multi_leg_journeys_near_confirmed_destination'
+      : confirmed
       ? 'search_public_multi_leg_journeys_with_confirmed_locations'
       : 'search_public_multi_leg_journeys';
     return supabase.rpc(rpcName, params);

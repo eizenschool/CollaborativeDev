@@ -9,6 +9,7 @@ import {
   getCurrentLocationPreview,
   getCurrentPosition,
   isConfirmedLocation,
+  resolveLocationPlaceId,
   resolveCurrentLocation,
   searchNearbyPickupLocations,
   searchLocations
@@ -144,6 +145,27 @@ describe('Google Places location boundary', () => {
     expect(results[0]).toEqual({ placeId: 'place-0', label: 'Malaysia place 0' });
     expect(fetchAutocompleteSuggestions).toHaveBeenCalledWith(expect.objectContaining({ includedRegionCodes: ['my'] }));
     expect(importLibrary).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves and caches a confirmed Place ID for reload-safe radius searches', async () => {
+    const fetchFields = vi.fn(async () => {});
+    class Place {
+      constructor({ id }) {
+        this.id = id;
+        this.location = { lat: () => 3.1579, lng: () => 101.7123 };
+        this.formattedAddress = 'KLCC, Kuala Lumpur';
+        this.fetchFields = fetchFields;
+      }
+    }
+    const maps = { importLibrary: vi.fn(async () => ({ Place })) };
+
+    await expect(resolveLocationPlaceId('reload-klcc', { maps })).resolves.toMatchObject({
+      placeId: 'reload-klcc', latitude: 3.1579, longitude: 101.7123
+    });
+    await resolveLocationPlaceId('reload-klcc', { maps });
+
+    expect(fetchFields).toHaveBeenCalledWith({ fields: ['location', 'formattedAddress'] });
+    expect(maps.importLibrary).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces offline and quota exhaustion without retrying', async () => {
