@@ -63,4 +63,44 @@ describe('Module 4 confirmed route RPC text', () => {
       p_destination_search_place_id: 'destination-place-id'
     }));
   });
+
+  it('routes confirmed-destination radii through the private-anchor RPCs', async () => {
+    await RideService.searchRides({
+      from: 'TAR UMT',
+      proximity: {
+        destinationSearchPlaceId: 'google-klcc',
+        center: { lat: 3.1579, lng: 101.7123 },
+        radiusKm: 10
+      },
+      confirmedLocations: { pickupPlaceId: 'google-tar-umt', destinationPlaceId: '' },
+      compatibility: { vehicleType: 'suv', language: 'english' }
+    });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'search_public_rides_near_confirmed_destination', {
+      p_pickup: 'TAR UMT',
+      p_departure_start: null,
+      p_departure_end: null,
+      p_destination_search_place_id: 'google-klcc',
+      p_center_latitude: 3.1579,
+      p_center_longitude: 101.7123,
+      p_radius_km: 10,
+      p_vehicle_type: 'suv',
+      p_language: 'english',
+      p_pickup_place_id: 'google-tar-umt'
+    });
+
+    await RideService.searchMultiLegRides({
+      pickup: 'TAR UMT', destination: 'KLCC',
+      pickupPlaceId: 'google-tar-umt', destinationSearchPlaceId: 'google-klcc',
+      destinationLatitude: 3.1579, destinationLongitude: 101.7123, proximityKm: 10,
+      minSeats: 1, tags: []
+    });
+
+    expect(rpc).toHaveBeenNthCalledWith(2, 'search_public_multi_leg_journeys_near_confirmed_destination', expect.objectContaining({
+      p_destination_search_place_id: 'google-klcc',
+      p_center_latitude: 3.1579,
+      p_center_longitude: 101.7123,
+      p_radius_km: 10
+    }));
+  });
 });

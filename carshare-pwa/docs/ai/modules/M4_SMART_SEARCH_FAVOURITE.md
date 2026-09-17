@@ -35,7 +35,9 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
   and an entered value must be chosen from the list before Search runs. The
   selected input IDs round-trip as `pickupPlaceId` and
   `destinationSearchPlaceId`; Module 6's existing `destinationPlaceId` remains
-  a separate catalogue hint that alone enables the 5/10/25 km radius mode.
+  a separate catalogue hint. Either kind of confirmed destination enables the
+  5/10/25 km controls, but exact endpoint matching remains selected until the
+  passenger explicitly chooses a radius.
   Deployed migration `082` compares those inputs privately against confirmed
   Ride endpoints. A Ride with
   a different stored endpoint cannot match by text; only legacy rows with no
@@ -72,13 +74,18 @@ The core vertical slice is implemented in `Development` and the Module 4 branch:
 - Search can lazily open a keyboard-contained Destination Discovery picker,
   filter its ranked results by name or heritage/culinary/nature/event category,
   and match Published rides whose confirmed destination is within 5, 10, or
-  25 km. Manual destination edits leave exact text mode. Safe cards expose only
-  the computed distance, never a Ride Place ID, coordinate, pickup instruction,
-  waypoint, or route geometry.
-- Mock proximity uses Module 6's narrow public place-query contract and fixture
-  destination IDs. Configured Supabase environments call the hardened public
-  invoker RPC from migration `035`, deployed and anonymously live-verified on
-  2026-08-20.
+  25 km. Choosing a recommendation fills the destination without enabling a
+  radius, while editing or replacing any destination returns to exact mode.
+  Safe cards expose only the computed distance, never a Ride Place ID,
+  coordinate, pickup instruction, waypoint, or route geometry.
+- Radius search now accepts both catalogue recommendations and ordinary Google
+  Places selections. Google centres are held only in component/module memory;
+  reloads resolve the URL-persisted Place ID again. Mock matching uses verified
+  fixture destination anchors, and rides without an anchor cannot satisfy a
+  radius search. Deployed migration `035` remains the catalogue search path.
+  Migration `117_m4_confirmed_destination_radius_search.sql` adds the equivalent
+  private-anchor direct and multi-leg RPCs for Google-confirmed destinations and
+  is authored but not deployed.
 - FR-4.5 vehicle and language compatibility is implemented across Search,
   owner vehicle management, Host profile editing, favourites, mock persistence,
   and safe card display. Existing rows remain unclassified: they appear under
@@ -117,6 +124,9 @@ verified), plus deployed `039_m4_vehicle_language_filters.sql`,
 `067_m4_favourite_unavailable_notifications.sql`, and
 `068_m4_multi_leg_journey_search.sql`, and deployed
 `082_m4_confirmed_location_search.sql`, which adds the exact endpoint RPCs.
+Migration `117_m4_confirmed_destination_radius_search.sql` is authored but not
+deployed; it must be reviewed and applied before live Google-destination radius
+search is available.
 Post-deployment advisors for the deployed migrations reported no new
 Module 4 security finding. The new favourite/transfer indexes are initially
 reported as unused, which is expected before normal production traffic.
@@ -125,7 +135,8 @@ reported as unused, which is expected before normal production traffic.
 Remaining acceptance work is operational rather than another feature slice:
 two-account notification/push verification, owner-edit verification, and a
 live dataset containing a valid two-leg chain and confirmed-location exact/
-legacy-fallback cases. Migration `082` is deployed, anonymously smoke-tested,
+legacy-fallback cases. Migration `117` also requires deployment and anonymous
+direct/multi-leg radius verification. Migration `082` is deployed, anonymously smoke-tested,
 and followed by security/performance advisors. Route-corridor matching remains
 outside Module 4, and multi-leg matching deliberately uses stored schedules
 rather than paid Routes/Distance Matrix calls.

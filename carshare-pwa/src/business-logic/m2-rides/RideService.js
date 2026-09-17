@@ -38,6 +38,12 @@ function isUndeployedProximitySearch(error) {
   return error?.code === 'PGRST202' || /search_public_rides_near_destination/i.test(detail);
 }
 
+function isUndeployedConfirmedRadiusSearch(error) {
+  const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return error?.code === 'PGRST202'
+    || /search_public_(?:rides|multi_leg_journeys)_near_confirmed_destination/i.test(detail);
+}
+
 function isUndeployedCompatibilitySearch(error) {
   const detail = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
   return error?.code === 'PGRST202' || /search_public_rides_with_compatibility/i.test(detail);
@@ -407,6 +413,27 @@ export const RideService = {
   async searchRides({ from, to, date, proximity = null, confirmedLocations = null, compatibility = null } = {}) {
     if (rideSupabaseAdapter.isConfigured) {
       const range = date ? klDayRange(date) : null;
+      if (proximity?.destinationSearchPlaceId) {
+        const { data, error } = await rideSupabaseAdapter.searchNearConfirmedDestination({
+          p_pickup: confirmedRouteTextForRpc(from),
+          p_departure_start: range?.start || null,
+          p_departure_end: range?.end || null,
+          p_destination_search_place_id: proximity.destinationSearchPlaceId,
+          p_center_latitude: proximity.center?.lat ?? null,
+          p_center_longitude: proximity.center?.lng ?? null,
+          p_radius_km: proximity.radiusKm,
+          p_vehicle_type: compatibility?.vehicleType || null,
+          p_language: compatibility?.language || null,
+          p_pickup_place_id: confirmedLocations?.pickupPlaceId || null
+        });
+        if (error) {
+          if (isUndeployedConfirmedRadiusSearch(error)) {
+            throw new Error('Radius search for confirmed destinations is not available in this environment yet. Match the exact destination or reselect it.');
+          }
+          throw rpcError(error);
+        }
+        return attachDestinationPhotoPlaceIds((data || []).map(mapProximityRideRow));
+      }
       if (confirmedLocations) {
         const { data, error } = await rideSupabaseAdapter.searchConfirmed({
             p_pickup: confirmedRouteTextForRpc(from),
@@ -478,12 +505,17 @@ export const RideService = {
   async searchMultiLegRides(criteria = {}) {
     if (!rideSupabaseAdapter.isConfigured) return [];
     const range = criteria.date ? klDayRange(criteria.date) : null;
-    const usesConfirmedLocations = Boolean(criteria.pickupPlaceId || criteria.destinationSearchPlaceId);
+    const usesConfirmedRadius = Boolean(criteria.proximityKm && criteria.destinationSearchPlaceId);
+    const usesCatalogueRadius = Boolean(criteria.proximityKm && criteria.destinationPlaceId);
+    const exactDestinationId = usesCatalogueRadius
+      ? ''
+      : (criteria.destinationSearchPlaceId || criteria.destinationPlaceId || '');
+    const usesConfirmedLocations = Boolean(criteria.pickupPlaceId || exactDestinationId);
     const { data, error } = await rideSupabaseAdapter.searchMultiLeg({
       p_pickup: usesConfirmedLocations
         ? confirmedRouteTextForRpc(criteria.pickup)
         : (criteria.pickup || null),
-      p_destination: criteria.destinationPlaceId
+      p_destination: usesCatalogueRadius
         ? null
         : (usesConfirmedLocations
             ? confirmedRouteTextForRpc(criteria.destination)
@@ -491,8 +523,8 @@ export const RideService = {
       p_departure_start: range?.start || null,
       p_departure_end: range?.end || null,
       p_depart_after: criteria.departAfter || null,
-      p_destination_place_id: criteria.destinationPlaceId || null,
-      p_radius_km: criteria.destinationPlaceId ? criteria.proximityKm : null,
+      p_destination_place_id: usesCatalogueRadius ? criteria.destinationPlaceId : null,
+      p_radius_km: criteria.proximityKm || null,
       p_journey_scale: criteria.journeyScale || null,
       p_min_seats: criteria.minSeats,
       p_tags: criteria.tags,
@@ -500,13 +532,21 @@ export const RideService = {
       p_min_rating: criteria.minRating || null,
       p_vehicle_type: criteria.vehicleType || null,
       p_language: criteria.language || null,
-      ...(usesConfirmedLocations ? {
+      ...(usesConfirmedRadius ? {
         p_pickup_place_id: criteria.pickupPlaceId || null,
-        p_destination_search_place_id: criteria.destinationSearchPlaceId || null
+        p_destination_search_place_id: criteria.destinationSearchPlaceId,
+        p_center_latitude: criteria.destinationLatitude,
+        p_center_longitude: criteria.destinationLongitude
+      } : usesConfirmedLocations ? {
+        p_pickup_place_id: criteria.pickupPlaceId || null,
+        p_destination_search_place_id: exactDestinationId || null
       } : {})
-    }, { confirmed: usesConfirmedLocations });
+    }, { confirmed: usesConfirmedLocations, confirmedRadius: usesConfirmedRadius });
     if (error) {
       const detail = `${error.code || ''} ${error.message || ''} ${error.details || ''}`;
+      if (usesConfirmedRadius && isUndeployedConfirmedRadiusSearch(error)) {
+        throw new Error('Multi-leg radius search for confirmed destinations is not available in this environment yet.');
+      }
       if (error.code === 'PGRST202' || /search_public_multi_leg_journeys/i.test(detail)) {
         throw new Error('Multi-leg journey matching is not available in this environment yet.');
       }

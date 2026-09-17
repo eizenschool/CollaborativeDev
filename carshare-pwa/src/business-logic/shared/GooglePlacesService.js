@@ -34,6 +34,7 @@ let googleMapsPromise = null;
 // The prediction object is not serialisable UI state and Place Details should
 // only be requested after the user selects a row, not on every keystroke.
 const locationPredictionCache = new Map();
+const resolvedLocationCache = new Map();
 
 export class LocationServiceError extends Error {
   constructor(code, message) {
@@ -227,13 +228,15 @@ export async function resolveLocationSuggestion(suggestion) {
     label: String(suggestion?.label || '').trim(),
     ...(suggestion?.distanceMeters != null && Number.isFinite(Number(suggestion.distanceMeters))
       ? { distanceMeters: Number(suggestion.distanceMeters) } : {}),
-    ...(Number.isFinite(Number(suggestion?.latitude))
+    ...(suggestion?.latitude !== null && suggestion?.latitude !== undefined && Number.isFinite(Number(suggestion.latitude))
       ? { latitude: Number(suggestion.latitude) } : {}),
-    ...(Number.isFinite(Number(suggestion?.longitude))
+    ...(suggestion?.longitude !== null && suggestion?.longitude !== undefined && Number.isFinite(Number(suggestion.longitude))
       ? { longitude: Number(suggestion.longitude) } : {}),
     ...(suggestion?.formattedAddress ? { formattedAddress: String(suggestion.formattedAddress).trim() } : {})
   };
-  if (!candidate.placeId || (Number.isFinite(candidate.latitude) && Number.isFinite(candidate.longitude))) {
+  if (!candidate.placeId) return candidate;
+  if (Number.isFinite(candidate.latitude) && Number.isFinite(candidate.longitude)) {
+    resolvedLocationCache.set(candidate.placeId, candidate);
     return candidate;
   }
 
@@ -245,15 +248,48 @@ export async function resolveLocationSuggestion(suggestion) {
     await place.fetchFields({ fields: ['location', 'formattedAddress'] });
     const latitude = placeCoordinate(place.location, 'lat');
     const longitude = placeCoordinate(place.location, 'lng');
-    return {
+    const resolved = {
       ...candidate,
       ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
       ...(place.formattedAddress ? { formattedAddress: String(place.formattedAddress).trim() } : {})
     };
+    if (Number.isFinite(resolved.latitude) && Number.isFinite(resolved.longitude)) {
+      resolvedLocationCache.set(candidate.placeId, resolved);
+    }
+    return resolved;
   } catch {
     // A confirmed Place ID is still useful when the optional coordinate fetch
     // is unavailable. The server can apply its normal state-level safeguards.
     return candidate;
+  }
+}
+
+export async function resolveLocationPlaceId(placeId, { maps } = {}) {
+  const id = String(placeId || '').trim();
+  if (!id) throw new LocationServiceError('INVALID_LOCATION', 'Choose a confirmed destination again.');
+  const cached = resolvedLocationCache.get(id);
+  if (cached) return cached;
+
+  try {
+    const mapsApi = await resolveMaps(maps);
+    const { Place } = await mapsApi.importLibrary('places');
+    const place = new Place({ id });
+    await place.fetchFields({ fields: ['location', 'formattedAddress'] });
+    const latitude = placeCoordinate(place.location, 'lat');
+    const longitude = placeCoordinate(place.location, 'lng');
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new LocationServiceError('NO_RESULTS', 'This destination has no usable location. Choose it again.');
+    }
+    const resolved = {
+      placeId: id,
+      latitude,
+      longitude,
+      ...(place.formattedAddress ? { formattedAddress: String(place.formattedAddress).trim() } : {})
+    };
+    resolvedLocationCache.set(id, resolved);
+    return resolved;
+  } catch (error) {
+    throw serviceError(error, 'This destination could not be located for radius search. Choose it again or match the exact destination.');
   }
 }
 
@@ -411,6 +447,7 @@ export const GooglePlacesService = {
   isConfigured: Boolean(configuredApiKey),
   searchLocations,
   resolveLocationSuggestion,
+  resolveLocationPlaceId,
   buildAutocompleteRequest,
   createMapDiagnostic,
   loadGoogleMapsLibraries,

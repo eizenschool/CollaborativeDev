@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { calculateCompositeHostImpact } from '../../m1-profile/HostImpactEngine.js';
 import { RideService } from '../../m2-rides/RideService.js';
+import { resolveLocationPlaceId } from '../../shared/GooglePlacesService.js';
 import {
   SEARCH_PROXIMITY_RADII,
   SMART_SEARCH_SORTS,
@@ -24,6 +25,10 @@ vi.mock('../../m2-rides/RideService.js', () => ({
   }
 }));
 
+vi.mock('../../shared/GooglePlacesService.js', () => ({
+  resolveLocationPlaceId: vi.fn()
+}));
+
 const ride = (overrides = {}) => ({
   id: overrides.id || 'ride',
   pickup: 'KL Sentral',
@@ -42,7 +47,12 @@ const ride = (overrides = {}) => ({
 });
 
 describe('Module 4 smart search contracts', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveLocationPlaceId.mockResolvedValue({
+      placeId: 'google-destination', latitude: 3.139, longitude: 101.6869
+    });
+  });
 
   it('normalizes criteria and preserves each repeated restriction tag in URLs', () => {
     const normalized = normalizeSmartSearchCriteria({
@@ -79,9 +89,9 @@ describe('Module 4 smart search contracts', () => {
       .toMatchObject({ vehicleType: '', language: '' });
   });
 
-  it('defaults recommendation links to 10 km and round-trips supported radii', () => {
+  it('keeps confirmed recommendations exact by default and round-trips supported radii', () => {
     const legacyPlaceHint = smartSearchCriteriaFromParams('destination=Jonker+Street&destinationPlaceId=fixture_jonker');
-    expect(legacyPlaceHint.proximityKm).toBe(10);
+    expect(legacyPlaceHint.proximityKm).toBe(0);
 
     for (const radius of SEARCH_PROXIMITY_RADII) {
       const criteria = normalizeSmartSearchCriteria({
@@ -92,7 +102,7 @@ describe('Module 4 smart search contracts', () => {
   });
 
   it('normalizes invalid radii and removes proximity when the place hint is missing', () => {
-    expect(normalizeSmartSearchCriteria({ destinationPlaceId: 'fixture_jonker', proximityKm: 9 }).proximityKm).toBe(10);
+    expect(normalizeSmartSearchCriteria({ destination: 'Jonker Street', destinationPlaceId: 'fixture_jonker', proximityKm: 9 }).proximityKm).toBe(0);
     expect(normalizeSmartSearchCriteria({ proximityKm: 25 })).toMatchObject({ destinationPlaceId: '', proximityKm: 0 });
   });
 
@@ -115,7 +125,7 @@ describe('Module 4 smart search contracts', () => {
     expect(expandProximityCriteria(selected).proximityKm).toBe(10);
     expect(expandProximityCriteria({ ...selected, proximityKm: 10 }).proximityKm).toBe(25);
     expect(expandProximityCriteria({ ...selected, proximityKm: 25 })).toMatchObject({
-      destination: 'Jonker Street', destinationSearchPlaceId: 'fixture_jonker', destinationPlaceId: '', proximityKm: 0
+      destination: 'Jonker Street', destinationSearchPlaceId: '', destinationPlaceId: 'fixture_jonker', proximityKm: 0
     });
   });
 
@@ -195,13 +205,15 @@ describe('Module 4 smart search contracts', () => {
         id: 'near-jonker',
         destination: 'Melaka Sentral',
         destinationLocation: { placeId: 'fixture_jonker' },
+        destinationAnchor: { latitude: 2.1958, longitude: 102.2486 },
         pickupLocation: { latitude: 3.13, longitude: 101.68 },
         pickupInstructions: 'Private meeting point',
         waypoints: [{ placeId: 'private_stop' }]
       }),
       ride({
         id: 'far-away',
-        destinationLocation: { placeId: 'fixture_georgetown' }
+        destinationLocation: { placeId: 'fixture_georgetown' },
+        destinationAnchor: { latitude: 5.4141, longitude: 100.3288 }
       })
     ]);
 
@@ -219,7 +231,11 @@ describe('Module 4 smart search contracts', () => {
       from: 'KL',
       to: '',
       date: '',
-      proximity: { destinationPlaceId: 'fixture_jonker', radiusKm: 5 },
+      proximity: {
+        destinationPlaceId: 'fixture_jonker',
+        center: { lat: 2.1958, lng: 102.2486 },
+        radiusKm: 5
+      },
       confirmedLocations: { pickupPlaceId: 'google-kl', destinationPlaceId: '' },
       compatibility: null
     });
@@ -229,6 +245,7 @@ describe('Module 4 smart search contracts', () => {
     expect(result[0]).not.toHaveProperty('pickupLocation');
     expect(result[0]).not.toHaveProperty('pickupInstructions');
     expect(result[0]).not.toHaveProperty('waypoints');
+    expect(result[0]).not.toHaveProperty('destinationAnchor');
   });
 
   it('passes selected compatibility filters through the shared Ride service contract', async () => {
@@ -246,11 +263,63 @@ describe('Module 4 smart search contracts', () => {
     });
   });
 
-  it('rejects stale or unknown recommendation place hints', async () => {
-    await expect(SmartSearchService.search({
-      destination: 'Missing place', destinationPlaceId: 'not_in_catalogue'
-    })).rejects.toThrow('no longer available');
-    expect(RideService.searchRides).not.toHaveBeenCalled();
+  it('uses an exact confirmed recommendation without silently enabling radius search', async () => {
+    RideService.searchRides.mockResolvedValue([]);
+    await SmartSearchService.search({
+      destination: 'Jonker Street', destinationPlaceId: 'fixture_jonker'
+    });
+    expect(RideService.searchRides).toHaveBeenCalledWith(expect.objectContaining({
+      proximity: null,
+      confirmedLocations: { pickupPlaceId: '', destinationPlaceId: 'fixture_jonker' }
+    }));
+  });
+
+  it('resolves a reloaded Google destination only when radius matching is requested', async () => {
+    RideService.searchRides.mockResolvedValue([]);
+
+    await SmartSearchService.search({
+      destination: 'KLCC', destinationSearchPlaceId: 'google-klcc', proximityKm: 10
+    });
+
+    expect(resolveLocationPlaceId).toHaveBeenCalledWith('google-klcc');
+    expect(RideService.searchRides).toHaveBeenCalledWith(expect.objectContaining({
+      proximity: {
+        destinationSearchPlaceId: 'google-klcc',
+        center: { lat: 3.139, lng: 101.6869 },
+        radiusKm: 10
+      }
+    }));
+  });
+
+  it('keeps coordinates transient while preserving the confirmed destination and radius in the URL', () => {
+    const criteria = normalizeSmartSearchCriteria({
+      destination: 'KLCC', destinationSearchPlaceId: 'google-klcc',
+      destinationLatitude: 3.1579, destinationLongitude: 101.7123, proximityKm: 25
+    });
+    const params = smartSearchCriteriaToParams(criteria);
+
+    expect(params.get('destinationSearchPlaceId')).toBe('google-klcc');
+    expect(params.get('proximityKm')).toBe('25');
+    expect(params.toString()).not.toMatch(/latitude|longitude|3\.1579|101\.7123/i);
+  });
+
+  it('includes the mock radius boundary and excludes rides without verified destination anchors', async () => {
+    RideService.searchRides.mockResolvedValue([
+      ride({
+        id: 'boundary', destination: 'Nearby',
+        destinationLocation: { placeId: 'nearby' },
+        destinationAnchor: { latitude: 0, longitude: 0.044966 }
+      }),
+      ride({ id: 'unverified', destination: 'Unknown', destinationLocation: { placeId: 'unknown' } })
+    ]);
+
+    const result = await SmartSearchService.search({
+      destination: 'Selected place', destinationSearchPlaceId: 'google-selected',
+      destinationLatitude: 0, destinationLongitude: 0, proximityKm: 5
+    });
+
+    expect(result.map((item) => item.id)).toEqual(['boundary']);
+    expect(result[0].proximityDistanceKm).toBe(5);
   });
 
   it('filters after a local departure time and sorts deterministically by departure', () => {

@@ -426,6 +426,11 @@
   box-shadow: 0 2px 8px rgba(17, 24, 39, .08);
 }
 
+.search-segmented-control button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
 .search-radius-control { grid-template-columns: repeat(3, 1fr); }
 
 .search-active-filters {
@@ -466,6 +471,11 @@
   color: var(--muted);
   font-size: 10px;
   line-height: 1.45;
+}
+
+.search-filter-helper + .search-clear-button {
+  width: 100%;
+  margin-top: 8px;
 }
 
 .search-choose-destination-filter {

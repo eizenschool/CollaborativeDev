@@ -36,7 +36,8 @@ export default function SearchForm({ criteria, onChange, onSubmit, loading }) {
           onChange={(destination, location) => onChange(applyManualDestinationText(
             criteria,
             destination,
-            location?.placeId || ''
+            location?.placeId || '',
+            location
           ))}
         />
       </div>

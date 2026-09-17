@@ -1101,3 +1101,17 @@ Deployed `112_project_safety_report_notifications.sql` as `20260916120535_safety
   Functions and Netlify frontend are live and text/photo moderation is enabled.
   Post-deployment privilege checks confirmed the receipt tables and moderated
   persister remain service-only. See `docs/ai/M2_CONTENT_MODERATION_RELEASE.md`.
+
+## Module 4 confirmed-destination radius search (authored, not deployed)
+
+- `117_m4_confirmed_destination_radius_search.sql` makes the existing 5/10/25 km
+  controls available for an ordinary Google-confirmed destination as well as a
+  catalogue recommendation. It compares the transient passenger-selected centre
+  with `private.m2_ride_verification` destination anchors inside private
+  security-definer helpers and exposes only narrow security-invoker wrappers.
+- The public direct and multi-leg projections return the existing safe fields
+  plus rounded distance. Coordinates, Ride endpoint IDs, pickup instructions,
+  waypoints, and route geometry do not cross the RPC boundary.
+- The migration has not been deployed. Do not document it as live until both
+  anonymous direct search and multi-leg fallback have been verified and the
+  security/performance advisors have been reviewed.
