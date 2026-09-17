@@ -67,7 +67,7 @@ confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that. `082_m4` and `099_m1`
-are deployed; the next unused repository sequence is `117`.)
+are deployed; the next unused repository sequence is `118`.)
 ```
 
 ### Driver document rollout (2026-09-06)
@@ -1102,7 +1102,7 @@ Deployed `112_project_safety_report_notifications.sql` as `20260916120535_safety
   Post-deployment privilege checks confirmed the receipt tables and moderated
   persister remain service-only. See `docs/ai/M2_CONTENT_MODERATION_RELEASE.md`.
 
-## Module 4 confirmed-destination radius search (authored, not deployed)
+## Module 4 confirmed-destination radius search (deployed 2026-09-18)
 
 - `117_m4_confirmed_destination_radius_search.sql` makes the existing 5/10/25 km
   controls available for an ordinary Google-confirmed destination as well as a
@@ -1112,6 +1112,9 @@ Deployed `112_project_safety_report_notifications.sql` as `20260916120535_safety
 - The public direct and multi-leg projections return the existing safe fields
   plus rounded distance. Coordinates, Ride endpoint IDs, pickup instructions,
   waypoints, and route geometry do not cross the RPC boundary.
-- The migration has not been deployed. Do not document it as live until both
-  anonymous direct search and multi-leg fallback have been verified and the
-  security/performance advisors have been reviewed.
+- The migration is deployed as
+  `20260917161659_m4_confirmed_destination_radius_search`. Anonymous REST smoke
+  tests returned HTTP 200 for both direct radius search and multi-leg fallback;
+  the direct check returned matching rides while the deliberately unmatched
+  multi-leg route returned a safe empty result. Security and performance
+  advisors reported no new Module 4 finding.
