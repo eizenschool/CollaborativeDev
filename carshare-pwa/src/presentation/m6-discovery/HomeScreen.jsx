@@ -94,11 +94,11 @@ function Hero({ candidate, onOpen }) {
       ? `${candidate.rides.length} listed ride${candidate.rides.length > 1 ? 's' : ''} · ${seatsLeft > 0 ? `up to ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} in one listed ride` : 'no seats remaining'}`
       : 'No listed ride for this date';
   return (
-    <button type="button" className="dsc-hero" onClick={() => onOpen(place.id)}>
+    <article className="dsc-hero">
       <span className="dsc-hero-media">
         <PlaceImage key={place.id} place={place} widthPx={PHOTO_WIDTH_LARGE} revealable />
         <span className="dsc-hero-scrim" />
-        <span className="dsc-hero-text">
+        <button type="button" className="dsc-hero-text dsc-hero-open" onClick={() => onOpen(place.id)}>
           <span className="dsc-hero-eyebrow"><IconStar size={12} /> Top pick for you</span>
           <span className="dsc-hero-title">{place.name}</span>
           <span className="dsc-hero-sub">
@@ -106,9 +106,9 @@ function Hero({ candidate, onOpen }) {
             {Number.isFinite(candidate.distanceKm) && ` · ${Math.round(candidate.distanceKm)} km straight line`}
             {` · ${trafficLabel}`}
           </span>
-        </span>
+        </button>
       </span>
-    </button>
+    </article>
   );
 }
 

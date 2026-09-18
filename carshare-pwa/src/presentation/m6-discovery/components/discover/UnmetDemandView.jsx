@@ -133,7 +133,7 @@ export default function UnmetDemandView() {
           {rows.map((row) => (
             <article className="dsc-card dsc-card-unserved" key={row.placeId}>
               <span className="dsc-card-media">
-                <PlaceImage place={row.place} widthPx={PHOTO_WIDTH_CARD} />
+                <PlaceImage place={row.place} widthPx={PHOTO_WIDTH_CARD} revealable />
               </span>
 
               <span className="dsc-card-body">

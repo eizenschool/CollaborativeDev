@@ -11,8 +11,8 @@ Module 2 uses two separate website-restricted browser keys:
   geocoding, and the five nearest pickup-friendly Google places disclosed only
   after the Driver selects `Use current location`. Nearby Search requests
   `displayName`, `formattedAddress`, and `location`, so Google bills them under
-  the Nearby Search Pro SKU. Destination Ride cards additionally request the
-  first Place photo on demand when Module 6 has no usable cached reference.
+  the Nearby Search Pro SKU. Destination Ride cards request a fresh Place
+  photo on demand instead of reusing a possibly expired stored photo name.
   The app does not create a Dynamic Maps instance for these cards.
 
 Google currently lists separate monthly 10,000-event free usage caps for
@@ -137,11 +137,11 @@ but does not replace, the required Google Cloud hard quota.
 - Automated tests mock Google and browser geolocation. They must make zero real
   API calls.
 - Search, Favourite, and `/ride` destination photos are requested only after a
-  card enters the viewport margin. Module 6's current photo reference is tried
-  first; a missing or failed reference uses `Place.fetchFields(['photos'])`.
-  Returned photo URIs are not persisted, decorative images use empty alt text,
-  and photographer/Google Maps attribution remains visible on the card. Missing
-  key, offline, quota, and no-photo failures preserve the original card style.
+  card enters the viewport margin. `Place.fetchFields(['photos'])` obtains a
+  current photo, and `getURI()` returns a media URL held only in memory.
+  Decorative images use empty alt text, and photographer/Google Maps
+  attribution is shown only after the image loads. Missing key, offline, quota,
+  and no-photo failures preserve the original card style.
 - If the location key is absent, offline, or over quota, existing Ride text and
   Embed previews remain readable, but a new unconfirmed location cannot be
   saved. If the Embed key is absent, the local route illustration remains.

@@ -759,6 +759,29 @@ test('mobile filters trap focus and return it to the trigger', async ({ page }) 
   await expect(trigger).toBeFocused();
 });
 
+test('Photo off lets a visitor open one destination photo from its Home card', async ({ page }) => {
+  await openPage(page, '/home', 'Where should you go?');
+  await expect(page.locator('.dsc-list-skeleton')).toHaveCount(0);
+  const fartherPlaces = page.getByRole('button', { name: /Explore \d+ farther places/ });
+  if (await fartherPlaces.count()) await fartherPlaces.click();
+  await expect(page.locator('.dsc-card').nth(1)).toBeVisible();
+
+  const card = page.locator('.dsc-card').first();
+  const otherCard = page.locator('.dsc-card').nth(1);
+  const photoAction = card.getByRole('button', { name: /View real photo of/ });
+  await expect(photoAction).toBeVisible();
+  await photoAction.click();
+
+  await expect(page).toHaveURL(/\/home(?:\?|$)/);
+  await expect(card.locator('img.dsc-photo.is-loaded')).toBeVisible();
+  await expect(card.locator('.dsc-photo-credit')).toContainText('Fixture photo');
+  await expect(card.getByRole('button', { name: /View real photo of/ })).toHaveCount(0);
+  await expect(otherCard.locator('img.dsc-photo')).toHaveCount(0);
+  await expect(otherCard.getByRole('button', { name: /View real photo of/ })).toBeVisible();
+  await card.getByRole('link', { name: /View .* details/ }).click();
+  await expect(page).toHaveURL(/\/discover\//);
+});
+
 test('Ride workspace keeps long route names inside compact cards', async ({ page }) => {
   await openPage(page, '/home', 'Where should you go?');
   await page.evaluate((storageKey) => {
