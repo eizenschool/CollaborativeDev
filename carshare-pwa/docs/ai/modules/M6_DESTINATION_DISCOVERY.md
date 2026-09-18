@@ -166,7 +166,8 @@ Business logic: `src/business-logic/m6-discovery/discovery/`
 - `DiscoveryContractAdapter.js` — the only file importing another module
 - `DestinationDiscoveryService.js` — orchestration
 - `localDate.js` — today's date from the local calendar, not `toISOString()`'s UTC one
-- `placePhotos.js` — builds the live Places Photo URL; null for a fixture reference
+- `placePhotos.js` — shared photo image-size tiers
+- `shared/PlacePhotoService.js` — fetches current Place photo metadata and returns a temporary URI; it never uses the catalogue's possibly expired photo names
 - `mediaMode.js` — 2026-08-17, device-level opt-in setting gating photos and Street View; `localStorage`-backed, off by default
 - `StreetView.js` — FR-6.15, `checkStreetViewCoverage` (calls the `m6-streetview` coverage-check function) and `buildStreetViewEmbedUrl` (the Maps Embed API iframe URL); no Google key touches the server-side check
 - `PlaceDescription.js` — FR-6.8/6.9/6.10, the place described from phrases two or more of its own reviewers used independently
@@ -243,9 +244,11 @@ Free monthly caps: Nearby/Text Search 1,000 each, Place Details 1,000, Place
 Photos 1,000, Street View Static 10,000, Street View **metadata unlimited** — which
 is why FR-6.15 queries metadata before ever requesting an image.
 
-Photos are the only continuing cost: because references rather than bytes are
-stored, every view spends a request. Mitigations are lazy-loading only the first
-carousel image in list view and long-lived browser cache headers on the proxy.
+Photos are the continuing media cost. A displayed image requests fresh photo
+metadata and then its media URI. Visible-slot lazy loading, a current-frame
+carousel, and the per-card "View real photo" action while global media is off
+limit requests to images people can actually see. Failed media remains an
+illustration, and its attribution is not displayed until the image loads.
 
 Ingestion is one-time-ish and bounded: FR-6.6 halts a cycle at its request quota
 and resumes at the next scheduled run, so a low daily quota delays catalogue

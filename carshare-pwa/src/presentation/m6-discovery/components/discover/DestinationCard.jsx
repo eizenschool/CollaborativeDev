@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { IconStar, IconUsers, IconCar, IconAlertTriangle, IconMapPin, IconClock } from '../../../shared/components/icons.jsx';
 import { REVIEW_CONFIDENCE_SATURATION } from '../../../../business-logic/m6-discovery/discovery/constants.js';
 import { buildPlaceDescription } from '../../../../business-logic/m6-discovery/discovery/PlaceDescription.js';
+import { photoAttributionName } from '../../../../business-logic/shared/PlacePhotoService.js';
 import { PHOTO_WIDTH_CARD } from '../../../../business-logic/m6-discovery/discovery/placePhotos.js';
 import PlaceImage from './PlaceImage.jsx';
 
@@ -41,32 +42,44 @@ export function freshnessLabel(updatedAt) {
 
 export default function DestinationCard({ candidate, onOpen, index }) {
   const place = candidate.place;
-  const [photoShown, setPhotoShown] = useState(false);
+  const [photo, setPhoto] = useState(null);
   if (!place) return null;
 
   const seatsLeft = candidate.rides.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
-  // Gated on photoShown, not just on an attribution existing: with the media
-  // setting off, PlaceImage renders the illustration, and crediting a
-  // photographer under artwork is not what the attribution requirement means.
-  const credit = photoShown ? place.photoReferences?.[0]?.attribution : null;
+  const credit = photo ? photoAttributionName(photo.attribution) : '';
   // Falls back to the stored description when there are too few reviews to
   // describe the place from them (FR-6.10).
   const described = buildPlaceDescription(place, { distanceKm: candidate.distanceKm });
   const freshness = freshnessLabel(place.updatedAt);
 
   return (
-    <button
-      type="button"
+    <article
       className={'dsc-card' + (candidate.rideStatus === 'available' && !candidate.servedByRide ? ' dsc-card-unserved' : '')}
       onClick={() => onOpen(place.id)}
       style={Number.isInteger(index) ? { '--motion-delay': `${Math.min(index, 5) * 40}ms` } : undefined}
     >
       <span className="dsc-card-media">
-        <PlaceImage place={place} widthPx={PHOTO_WIDTH_CARD} onShownChange={setPhotoShown} />
-        {credit && <span className="dsc-photo-credit">{credit}</span>}
+        <PlaceImage
+          place={place}
+          widthPx={PHOTO_WIDTH_CARD}
+          revealable
+          onShownChange={(shown, currentPhoto) => setPhoto(shown ? currentPhoto : null)}
+        />
+        {credit && <span className="dsc-photo-credit">Photo by {credit}</span>}
       </span>
 
-      <span className="dsc-card-body">
+      <div
+        className="dsc-card-body"
+        role="link"
+        tabIndex={0}
+        aria-label={`View ${place.name} details`}
+        onClick={(event) => { event.stopPropagation(); onOpen(place.id); }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          onOpen(place.id);
+        }}
+      >
         <span className="dsc-card-head">
           <h3 className="dsc-card-title">{place.name}</h3>
           <span className="dsc-chip">{place.category}</span>
@@ -123,7 +136,7 @@ export default function DestinationCard({ candidate, onOpen, index }) {
             <IconUsers size={13} /> {candidate.interestedUsers} {candidate.interestedUsers === 1 ? 'traveller has' : 'travellers have'} viewed this as an option for this date.
           </span>
         )}
-      </span>
-    </button>
+      </div>
+    </article>
   );
 }

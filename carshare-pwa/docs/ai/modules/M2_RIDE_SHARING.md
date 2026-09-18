@@ -332,11 +332,12 @@ locations, departure and ordered waypoint Place IDs/stop minutes, so changing
 contribution, restrictions, pickup instructions or display copy does not spend
 another Routes request.
 
-Waypoint cards prefer the academic Module 6 cached photo reference and lazily
-fall back to a fresh Google Maps JavaScript `Place` photo. Bytes, fresh URIs and
-new resource names are never persisted. This is the documented D018 prototype
-limitation: Google permits indefinite Place ID storage, but photo references
-and URIs can expire and are not a production cache contract.
+Waypoint cards resolve a fresh Google Maps JavaScript `Place` photo when their
+image slot becomes visible. Bytes, fresh URIs and newly returned photo names
+are never persisted or built from the catalogue's possibly expired names. This
+is the documented D018 prototype limitation: Google permits indefinite Place
+ID storage, but photo references and URIs can expire and are not a production
+cache contract.
 
 The live `059_m2_ride_pickup_destination_photos.sql` contract
 adds one private pickup meeting photo per Ride. Create/Edit keeps the selected

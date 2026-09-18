@@ -110,49 +110,44 @@ Maps to the module as follows:
 | `types` | FR-6.7 classification fallback when `primaryType` does not match a known type |
 | `reviews[].text` | Stored with author attribution as `places.reviews` (`027`) and shown on the detail page as attributed reviews. Also the source `PlaceDescription.js` describes a place from - but only through phrases two or more reviewers used independently, never by quoting one; see `027`'s header for what happened when a single review was written into `description` verbatim |
 | `rating`, `userRatingCount` | Desirability quality and headroom signals; FR-6.16 rating suppression |
-| `photos[].name` | FR-6.13 carousel references; FR-6.12 Provisional when absent |
+| `photos[].name` | Stored as legacy carousel metadata; the UI does not use it to build a media URL because photo names may expire. |
 | `location` | Journey-cost signal, FR-6.36/6.37 spatial queries |
 
 ### 3.3 Photographs — FR-6.13, FR-6.14
 
-```http
-GET https://places.googleapis.com/v1/{PHOTO_NAME}/media?maxHeightPx=800&skipHttpRedirect=true
-X-Goog-Api-Key: {GOOGLE_PLACES_SERVER_KEY}
-```
+The browser's Maps JavaScript Places library calls
+`Place.fetchFields({ fields: ['photos'] })` when a visible image is requested,
+then calls the returned photo's `getURI({ maxWidth })` for the image URL. The
+stored `photos[].name` is not used: Google photo names can expire, which caused
+the intermittent `400 Bad Request` responses seen in DevTools. Fresh URIs stay
+in component memory only. The app stores no image bytes or media URI.
 
-`PHOTO_NAME` is the stored `photos[].name` from §3.2.
+Each requested image makes a fresh Places photo-metadata request followed by a
+photo media request. These are recurring Google Maps Platform costs, so media
+loading is explicitly gated:
 
-This is the **only continuing cost in the module**. Image bytes may not be copied
-into project storage, so each viewing spends a request. Four mitigations, all
-already reflected in the UI:
-
-- **Opt-in loading (2026-08-17).** Nothing loads until the reader asks for it.
+- **Opt-in loading.** Nothing loads until the reader asks for it.
   `mediaMode.js` is a device-level setting, off by default and persisted in
   `localStorage` (`useMediaMode.js` binds it into React via
   `useSyncExternalStore`), gating every `PlaceImage` in the app - list cards,
   the home rail, the hero, and the detail carousel all wait for it. The hero
-  and the detail carousel additionally offer a per-slot "Show photo" button
-  (`revealable` on `PlaceImage`), so one photo can be seen without turning
-  everything on. Added specifically because ordinary dev reloads against the
-  live catalogue were exhausting the free 1,000/month cap. Street View is
-  gated by the same setting for a different reason - see §3.4.
-- the list renders one photograph per card, not the whole carousel;
-- the carousel loads a frame only when it is shown (`loading="lazy"`);
-- Google's own response carries `Cache-Control: private, max-age=86400` -
-  verified live 2026-08-17, not just documented. There is no proxy: the
-  browser calls `places.googleapis.com` directly (`placePhotos.js`), and this
-  header is Google's, not ours. A repeat view of the exact same URL within 24
-  hours is served from the browser's own cache rather than spending another
-  request - but the cache key is the full URL including `maxWidthPx`, so the
-  same photo requested at a different width (a card vs. the detail carousel)
-  is a separate cache entry and a separate first-time cost, not shared.
+  and the home cards, hero, Guide and detail carousel provide a per-slot
+  "View real photo" action (`revealable` on the image component). A viewer can
+  request one photo without enabling all automatic media. Street View shares
+  the global setting for a different reason - see §3.4.
+- visible photo slots are resolved lazily with an `IntersectionObserver`; a
+  long off-screen list does not issue metadata requests;
+- the carousel requests only its current frame;
+- the illustration stays visible until the image `load` event. Attribution is
+  shown only after that event, so a failed image does not flash a photographer
+  credit over the illustration. Failed slots can be retried.
 
 **Demo hazard:** the default is off. A screen shared without first turning
 photos on shows illustrations everywhere and looks broken, not merely
 unfinished - see the reminder in `docs/MODULE6-HANDOVER.md` §7's demo table.
 
-`authorAttributions` from §3.2 must be displayed wherever a photograph is shown
-(FR-6.14), along with the "Google Maps" attribution the policy requires.
+`authorAttributions` from the fresh Place result are displayed wherever a
+photograph is successfully shown (FR-6.14), along with Google Maps attribution.
 
 ### 3.4 Street View — FR-6.15
 
