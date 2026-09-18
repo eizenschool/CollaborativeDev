@@ -127,7 +127,11 @@ export const AuthService = {
       throw new Error('Google sign-in needs a live Supabase connection. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local first.');
     }
 
-    const options = {};
+    // Without this, Google skips the account chooser and silently reuses
+    // whatever Google session is already active in the browser (desktop
+    // browsers tend to have one long-lived session, so login "sticks" to
+    // the first account picked instead of letting the user switch).
+    const options = { queryParams: { prompt: 'select_account' } };
     if (typeof window !== 'undefined') options.redirectTo = window.location.origin;
 
     const { error } = await authSupabaseAdapter.signInWithOAuth({ provider: 'google', options });

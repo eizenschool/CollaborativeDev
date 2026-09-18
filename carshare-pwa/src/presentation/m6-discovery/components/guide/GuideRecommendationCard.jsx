@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { DestinationDiscoveryService } from '../../../../business-logic/m6-discovery/discovery/DestinationDiscoveryService.js';
 import { TumpangGuideService } from '../../../../business-logic/m6-discovery/guide/TumpangGuideService.js';
 import { GUIDE_ACTION } from '../../../../business-logic/m6-discovery/guide/constants.js';
+import { photoAttributionName } from '../../../../business-logic/shared/PlacePhotoService.js';
 import {
   guideCategoryLabel, guideCopy, guideReasonText, guideRoleLabel, guideTradeoffLabel
 } from '../../../../business-logic/m6-discovery/guide/GuideLanguage.js';
@@ -13,7 +14,7 @@ import GuidePlaceImage from './GuidePlaceImage.jsx';
 export default function GuideRecommendationCard({ recommendation, featured = false, batchId = null, language, languagePack, planState, actionState, onAction, chatScrollRef }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [photoShown, setPhotoShown] = useState(false);
+  const [loadedPhoto, setLoadedPhoto] = useState(null);
   const { place } = recommendation;
   const whyStorageKey = `m6-guide-why:${batchId || 'unbatched'}:${place?.id || recommendation.placeId}`;
   const [whyOpen, setWhyOpen] = useState(() => {
@@ -61,10 +62,10 @@ export default function GuideRecommendationCard({ recommendation, featured = fal
   return (
     <article className={`guide-rec-card ${featured ? 'is-featured' : 'is-alternative'}`}>
       <div className="guide-rec-card__media">
-        <GuidePlaceImage place={place} revealable copy={copy} onShownChange={setPhotoShown} />
+        <GuidePlaceImage place={place} revealable copy={copy} onShownChange={(shown, photo) => setLoadedPhoto(shown ? photo : null)} />
         <span className="guide-rec-card__role">{guideRoleLabel(recommendation.role, language, languagePack)}</span>
         {recommendation.previouslyShown && <span className="guide-rec-card__repeat">{copy.previouslyShown}</span>}
-        {photoShown && place.photoReferences?.[0]?.attribution && <span className="guide-rec-card__credit">{copy.photoCredit}: {place.photoReferences[0].attribution}</span>}
+        {loadedPhoto && photoAttributionName(loadedPhoto.attribution) && <span className="guide-rec-card__credit">{copy.photoCredit}: {photoAttributionName(loadedPhoto.attribution)}</span>}
       </div>
       <div className="guide-rec-card__body">
         <div><h3>{place.name}</h3><p className="guide-rec-card__location"><IconMapPin size={14} /> {place.state} · {guideCategoryLabel(place.category, language, languagePack)}</p></div>

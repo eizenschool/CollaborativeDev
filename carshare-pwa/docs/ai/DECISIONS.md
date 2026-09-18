@@ -941,8 +941,26 @@ deployed live in the first place. `index.ts` now requires
 deployed; `SIGHTENGINE_API_USER`/`SIGHTENGINE_API_SECRET` still need to be
 set as Supabase Edge Function secrets.
 
+## D040 - Module 2 content moderation before publication
+
+Accepted and deployed 2026-09-17; user-led live acceptance remains. Only Ride
+contribution, pickup instructions and pickup meeting photos are in scope. M2
+fails closed, distinguishes rejected from unavailable, and preserves input.
+Reuse M1 Sightengine provider code without changing its fail-open policy.
+Use backend privacy rules plus Cloudflare Workers AI Qwen3 for text, gated on
+120 synthetic cases (30 each English/Chinese/Malay/mixed) with every high-risk
+case blocked and no more than 5% false positives per language. No paid fallback.
+Existing M3 server-only Cloudflare AI secrets may be reused; this shares the
+account allowance. Free Gemini is not used for real moderation inputs.
+Server-issued, content-bound approvals and SQL guards protect publication and
+photo binding. Public edits commit text and photo together; Draft text may be
+saved privately. Old public content is checked upon editing/republishing, not
+bulk rescanned. Ordinary faces/plates remain a caution, not a blanket block.
+SQL 114/115 and docs/ai/M2_CONTENT_MODERATION_RELEASE.md define the release,
+provider validation, atomic persistence, cleanup and deployment approval gates.
+
 ## Open Decisions
-- whether the avatar content-check pattern (D039) extends to vehicle/ride photos, message attachments, or free-text fields, and on what timeline;
+- whether avatar checking extends beyond the M2 Ride fields accepted in D040 to vehicle photos, messages or other fields;
 - database schemas/RLS for Module 5 (Module 4's `034`/`035`/`039`/`082` are deployed; Module 6's `024` schema is deployed);
 - Routes API, traffic-aware computation, and map pin selection;
 - production trip-verification pipeline integration (now Module 2's, per D018);

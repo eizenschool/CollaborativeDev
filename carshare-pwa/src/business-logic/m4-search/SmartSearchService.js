@@ -1,6 +1,7 @@
 import { RideService } from '../m2-rides/RideService.js';
 import { calculateCompositeHostImpact } from '../m1-profile/HostImpactEngine.js';
 import { PlaceQueryService } from '../m6-discovery/discovery/PlaceQueryService.js';
+import { resolveLocationPlaceId } from '../shared/GooglePlacesService.js';
 import {
   findMultiLegJourneys,
   isMultiLegSearchEligible,
@@ -47,6 +48,35 @@ function numberOr(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function coordinate(value, minimum, maximum) {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum ? parsed : null;
+}
+
+function destinationCentre(criteria) {
+  const latitude = coordinate(criteria.destinationLatitude, -90, 90);
+  const longitude = coordinate(criteria.destinationLongitude, -180, 180);
+  return latitude === null || longitude === null ? null : { lat: latitude, lng: longitude };
+}
+
+function anchorCentre(anchor) {
+  const latitude = coordinate(anchor?.latitude ?? anchor?.lat, -90, 90);
+  const longitude = coordinate(anchor?.longitude ?? anchor?.lng, -180, 180);
+  return latitude === null || longitude === null ? null : { lat: latitude, lng: longitude };
+}
+
+function distanceKm(origin, destination) {
+  if (!origin || !destination) return null;
+  const radians = (degrees) => degrees * Math.PI / 180;
+  const latitudeDelta = radians(destination.lat - origin.lat);
+  const longitudeDelta = radians(destination.lng - origin.lng);
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(radians(origin.lat)) * Math.cos(radians(destination.lat))
+    * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function localDateParts(instant = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Kuala_Lumpur',
@@ -68,6 +98,8 @@ function toPublicSearchRide(ride) {
   const {
     pickupLocation,
     destinationLocation,
+    pickupAnchor,
+    destinationAnchor,
     pickupInstructions,
     waypoints,
     ...safeRide
@@ -88,10 +120,12 @@ export function normalizeSmartSearchCriteria(criteria = {}) {
   const destinationSearchPlaceId = destination && !destinationPlaceId
     ? text(criteria.destinationSearchPlaceId)
     : '';
-  const requestedProximity = numberOr(criteria.proximityKm, 10);
-  const proximityKm = destinationPlaceId
-    ? (SEARCH_PROXIMITY_RADII.includes(requestedProximity) ? requestedProximity : 10)
+  const confirmedDestination = Boolean(destination && (destinationSearchPlaceId || destinationPlaceId));
+  const requestedProximity = numberOr(criteria.proximityKm, 0);
+  const proximityKm = confirmedDestination && SEARCH_PROXIMITY_RADII.includes(requestedProximity)
+    ? requestedProximity
     : 0;
+  const centre = confirmedDestination ? destinationCentre(criteria) : null;
 
   return {
     pickup,
@@ -100,6 +134,8 @@ export function normalizeSmartSearchCriteria(criteria = {}) {
     destinationSearchPlaceId,
     destinationPlaceId,
     proximityKm,
+    destinationLatitude: centre?.lat ?? null,
+    destinationLongitude: centre?.lng ?? null,
     date: text(criteria.date),
     departAfter: text(criteria.departAfter),
     journeyScale: VALID_SCALES.has(journeyScale) ? journeyScale : '',
@@ -113,13 +149,15 @@ export function normalizeSmartSearchCriteria(criteria = {}) {
   };
 }
 
-export function applyManualDestinationText(criteria, destination, destinationSearchPlaceId = '') {
+export function applyManualDestinationText(criteria, destination, destinationSearchPlaceId = '', location = null) {
   return {
     ...criteria,
     destination,
     destinationSearchPlaceId,
     destinationPlaceId: '',
-    proximityKm: 0
+    proximityKm: 0,
+    destinationLatitude: location?.latitude ?? null,
+    destinationLongitude: location?.longitude ?? null
   };
 }
 
@@ -127,14 +165,7 @@ export function expandProximityCriteria(criteria) {
   const normalized = normalizeSmartSearchCriteria(criteria);
   const currentIndex = SEARCH_PROXIMITY_RADII.indexOf(normalized.proximityKm);
   const nextRadius = SEARCH_PROXIMITY_RADII[currentIndex + 1];
-  return normalizeSmartSearchCriteria(nextRadius
-    ? { ...normalized, proximityKm: nextRadius }
-    : {
-        ...normalized,
-        destinationSearchPlaceId: normalized.destinationPlaceId,
-        destinationPlaceId: '',
-        proximityKm: 0
-      });
+  return normalizeSmartSearchCriteria({ ...normalized, proximityKm: nextRadius || 0 });
 }
 
 export function validateSmartSearchCriteria(criteria, { now = new Date() } = {}) {
@@ -268,13 +299,23 @@ export const SmartSearchService = {
     let proximity = null;
     let proximityCentre = null;
 
-    if (normalized.destinationPlaceId) {
+    if (normalized.proximityKm && normalized.destinationPlaceId) {
       proximityCentre = await PlaceQueryService.getPlaceBySourcePlaceId(normalized.destinationPlaceId);
       if (!proximityCentre) {
         throw new Error('This recommended destination is no longer available. Choose another place.');
       }
       proximity = {
         destinationPlaceId: normalized.destinationPlaceId,
+        center: { lat: proximityCentre.lat, lng: proximityCentre.lng },
+        radiusKm: normalized.proximityKm
+      };
+    } else if (normalized.proximityKm && normalized.destinationSearchPlaceId) {
+      const transientCentre = destinationCentre(normalized);
+      const resolved = transientCentre || await resolveLocationPlaceId(normalized.destinationSearchPlaceId);
+      proximityCentre = { lat: resolved.lat ?? resolved.latitude, lng: resolved.lng ?? resolved.longitude };
+      proximity = {
+        destinationSearchPlaceId: normalized.destinationSearchPlaceId,
+        center: proximityCentre,
         radiusKm: normalized.proximityKm
       };
     }
@@ -284,10 +325,10 @@ export const SmartSearchService = {
       to: proximity ? '' : normalized.destination,
       date: normalized.date,
       proximity,
-      confirmedLocations: normalized.pickupPlaceId || normalized.destinationSearchPlaceId
+      confirmedLocations: normalized.pickupPlaceId || normalized.destinationSearchPlaceId || normalized.destinationPlaceId
         ? {
             pickupPlaceId: normalized.pickupPlaceId,
-            destinationPlaceId: normalized.destinationSearchPlaceId
+            destinationPlaceId: proximity ? '' : (normalized.destinationSearchPlaceId || normalized.destinationPlaceId)
           }
         : null,
       compatibility: normalized.vehicleType || normalized.language
@@ -302,9 +343,10 @@ export const SmartSearchService = {
         const pickupMatches = !normalized.pickupPlaceId
           || pickupId === normalized.pickupPlaceId
           || (!pickupId && ride.pickup?.toLowerCase().includes(normalized.pickup.toLowerCase()));
+        const exactDestinationId = normalized.destinationSearchPlaceId || normalized.destinationPlaceId;
         const destinationMatches = proximity
-          || !normalized.destinationSearchPlaceId
-          || destinationId === normalized.destinationSearchPlaceId
+          || !exactDestinationId
+          || destinationId === exactDestinationId
           || (!destinationId && ride.destination?.toLowerCase().includes(normalized.destination.toLowerCase()));
         return pickupMatches && destinationMatches;
       });
@@ -313,18 +355,13 @@ export const SmartSearchService = {
     let distanceByPlaceId = new Map();
     let directCandidates = candidates;
     if (proximity && RideService.backend === 'mock') {
-      const nearbyPlaces = await PlaceQueryService.queryPlacesNearPoint({
-        lat: proximityCentre.lat,
-        lng: proximityCentre.lng,
-        radiusKm: proximity.radiusKm
+      directCandidates = candidates.flatMap((ride) => {
+        const distance = distanceKm(proximityCentre, anchorCentre(ride.destinationAnchor));
+        if (distance === null || distance > proximity.radiusKm) return [];
+        const destinationId = ride.destinationLocation?.placeId || ride.destinationPlaceId || ride.destination_place_id || '';
+        if (destinationId) distanceByPlaceId.set(destinationId, distance);
+        return [{ ...ride, proximityDistanceKm: Math.round(distance * 10) / 10 }];
       });
-      distanceByPlaceId = new Map(nearbyPlaces.map((place) => [place.sourcePlaceId, place.distanceKm]));
-      directCandidates = candidates
-        .filter((ride) => distanceByPlaceId.has(ride.destinationLocation?.placeId))
-        .map((ride) => ({
-          ...ride,
-          proximityDistanceKm: distanceByPlaceId.get(ride.destinationLocation.placeId)
-        }));
     }
 
     const directResults = filterAndSortRides(directCandidates, normalized).map(toPublicSearchRide);
@@ -332,7 +369,13 @@ export const SmartSearchService = {
 
     if (RideService.backend !== 'mock') {
       if (typeof RideService.searchMultiLegRides !== 'function') return [];
-      return sortMultiLegJourneys(await RideService.searchMultiLegRides(normalized), normalized.sort);
+      return sortMultiLegJourneys(await RideService.searchMultiLegRides({
+        ...normalized,
+        ...(proximityCentre ? {
+          destinationLatitude: proximityCentre.lat,
+          destinationLongitude: proximityCentre.lng
+        } : {})
+      }), normalized.sort);
     }
 
     const [allRides, transferPoints] = await Promise.all([

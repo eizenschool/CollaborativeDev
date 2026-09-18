@@ -35,6 +35,17 @@ export function saveExploreReturn(url, scrollY = 0) {
   if (/^\/home(?:\?|$)/.test(url)) write(`${KEY}:return`, { url, scrollY });
 }
 export function readExploreReturn() { const value = read(`${KEY}:return`); return /^\/home(?:\?|$)/.test(value?.url || '') ? value : { url: '/home', scrollY: 0 }; }
+// Destructive: reads the saved return point and immediately clears it, so a
+// value is only ever applied once. HomeScreen's scroll-restore effect uses
+// this (not readExploreReturn) so a fresh, unrelated visit to /home never
+// re-applies a stale scroll position. DestinationDetail.jsx keeps using the
+// non-destructive readExploreReturn() to derive its own return-context
+// filters without consuming the value HomeScreen still needs.
+export function consumeExploreReturn() {
+  const value = readExploreReturn();
+  write(`${KEY}:return`, null);
+  return value;
+}
 export function matchingCandidates(list, category, query) {
   const text = query.trim().toLowerCase();
   return (list || []).filter(({ place }) => (category === 'all' || place?.category === category)

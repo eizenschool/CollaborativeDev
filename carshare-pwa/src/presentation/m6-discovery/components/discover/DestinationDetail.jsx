@@ -19,6 +19,7 @@ import {
   IconAlertTriangle, IconBell, IconRoute, IconClock, IconMessage, IconUsers, IconCheck
 } from '../../../shared/components/icons.jsx';
 import PlaceImage from './PlaceImage.jsx';
+import { photoAttributionName } from '../../../../business-logic/shared/PlacePhotoService.js';
 import { freshnessLabel } from './DestinationCard.jsx';
 import StreetViewFrame from './StreetViewFrame.jsx';
 import { PHOTO_WIDTH_LARGE } from '../../../../business-logic/m6-discovery/discovery/placePhotos.js';
@@ -77,7 +78,7 @@ function Carousel({ place }) {
   // was given, not merely whether a fetchable reference exists - a real photo
   // gated behind the media setting is still, right now, showing the
   // illustration, and must not be captioned with its photographer's credit.
-  const [photoShown, setPhotoShown] = useState(false);
+  const [loadedPhoto, setLoadedPhoto] = useState(null);
   const photoFrames = place.photoReferences?.length ? place.photoReferences : [];
   const hasCoordinate = Number.isFinite(place?.lat) && Number.isFinite(place?.lng);
   const frames = hasCoordinate && hasStreetViewEmbedKey()
@@ -92,7 +93,7 @@ function Carousel({ place }) {
   // The tag would otherwise call a real photograph, or real Street View
   // imagery that turned out uncovered (or not yet revealed), an illustration
   // mislabelled the other way - or vice versa.
-  const isIllustration = streetViewFellBack || (!isStreetViewFrame && !photoShown);
+  const isIllustration = streetViewFellBack || (!isStreetViewFrame && !loadedPhoto);
 
   return (
     <div className="dsc-carousel">
@@ -113,7 +114,7 @@ function Carousel({ place }) {
               variant={index}
               widthPx={PHOTO_WIDTH_LARGE}
               revealable
-              onShownChange={setPhotoShown}
+              onShownChange={(shown, photo) => setLoadedPhoto(shown ? photo : null)}
             />
           )}
         {streetViewCovered && <span className="dsc-illustration-tag">Street View</span>}
@@ -129,8 +130,8 @@ function Carousel({ place }) {
             {streetViewResult.capturedAt ? ` · Captured ${streetViewResult.capturedAt}` : ''}
           </span>
         )}
-        {!isStreetViewFrame && photoShown && current?.attribution && (
-          <span className="dsc-photo-credit">Photo: {current.attribution}</span>
+        {!isStreetViewFrame && loadedPhoto && (
+          <span className="dsc-photo-credit">Photo: {photoAttributionName(loadedPhoto.attribution) || 'Google Maps'}</span>
         )}
 
         {frames.length > 1 && (

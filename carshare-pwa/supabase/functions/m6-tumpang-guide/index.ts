@@ -2367,7 +2367,8 @@ async function handle(request: Request) {
         : (error instanceof Error || error instanceof DOMException) && error.name === "AbortError" ? "timeout"
           : status === 429 ? "provider_429" : status >= 400 ? "transcription_provider_error" : "transcription_failed";
       console.warn(JSON.stringify({ event: "m6_guide_transcription_failure", traceId: voiceTrace,
-        edgeVersion: EDGE_VERSION, reason, status: status || null, userId: user?.id || null }));
+        edgeVersion: EDGE_VERSION, reason, status: status || null, userId: user?.id || null,
+        quality: (error as Error & { quality?: unknown })?.quality || null }));
       return json({ error: reason === "transcription_low_confidence"
         ? "The transcription was too uncertain to use." : "Voice transcription is temporarily unavailable.",
       reason, traceId: voiceTrace }, status === 429 ? 429 : reason === "transcription_low_confidence" ? 422 : 503, origin);

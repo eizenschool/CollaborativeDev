@@ -67,20 +67,24 @@ export function guideTranscriptionQuality(body: Record<string, unknown>, text: s
   const logProbAverage = logProb.length ? logProb.reduce((sum, value) => sum + value, 0) / logProb.length : 0;
   const duration = transcriptDuration(body, segments);
   const spokenUnits = [...text.replace(/[\s\p{P}\p{S}]/gu, "")].length;
-  const likelySilence = noSpeech.length > 0 && noSpeechAverage >= .65;
-  const lowConfidence = logProb.length > 0 && logProbAverage < -1;
+  const likelySilence = noSpeech.length > 0 && noSpeechAverage >= .9;
+  const lowConfidence = logProb.length > 0 && logProbAverage < -1.5;
+  const weakAcousticEvidence = noSpeech.length > 0 && logProb.length > 0
+    && noSpeechAverage >= .75 && logProbAverage < -1.1;
   const overCompressed = compression.some((value) => value > 2.4);
   const repeated = repeatedTranscript(text);
   const hallucinatedOutro = knownWhisperHallucination(text);
   const implausiblyDense = duration > 0 && duration <= 4
     && spokenUnits > Math.max(18, Math.ceil(duration * 14));
-  const uncertainShortUtterance = duration > 0 && duration <= 2.5
-    && ((logProb.length > 0 && logProbAverage < -.55) || (noSpeech.length > 0 && noSpeechAverage > .35));
+  // Successful text is inserted into an editable draft and is never sent
+  // automatically, so only strong evidence of silence or poor recognition
+  // should block a transcript.
   return {
-    valid: Boolean(text) && !likelySilence && !lowConfidence && !overCompressed && !repeated
-      && !hallucinatedOutro && !implausiblyDense && !uncertainShortUtterance,
-    likelySilence, lowConfidence, overCompressed, repeated, hallucinatedOutro,
-    implausiblyDense, uncertainShortUtterance, duration
+    valid: Boolean(text) && !likelySilence && !lowConfidence && !weakAcousticEvidence
+      && !overCompressed && !repeated && !hallucinatedOutro && !implausiblyDense,
+    likelySilence, lowConfidence, weakAcousticEvidence, overCompressed, repeated, hallucinatedOutro,
+    implausiblyDense, noSpeechAverage: noSpeech.length ? noSpeechAverage : null,
+    logProbAverage: logProb.length ? logProbAverage : null, duration
   };
 }
 
@@ -112,8 +116,9 @@ export async function transcribeGuideAudio({
   if (!text) throw new Error("No speech was recognised.");
   const quality = guideTranscriptionQuality(body, text);
   if (!quality.valid) {
-    const error = new Error("The transcription was too uncertain to use.") as Error & { code?: string };
+    const error = new Error("The transcription was too uncertain to use.") as Error & { code?: string; quality?: unknown };
     error.code = "transcription_low_confidence";
+    error.quality = quality;
     throw error;
   }
   return { text, language: detectedLanguage || String(body.language || "").trim() || null,

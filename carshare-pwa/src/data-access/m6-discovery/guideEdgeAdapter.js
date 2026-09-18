@@ -4,8 +4,9 @@
 import { supabase } from '../shared/supabase/supabaseClient.js';
 import { GUIDE_REQUEST_TIMEOUT_MS } from './guidePersistenceConfig.js';
 
-const baseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '') || '';
-const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+const baseUrl = (import.meta.env.VITE_TUMPANG_GUIDE_EDGE_URL || import.meta.env.VITE_SUPABASE_URL)?.replace(/\/$/, '') || '';
+const publishableKey = import.meta.env.VITE_TUMPANG_GUIDE_EDGE_PUBLISHABLE_KEY
+  || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
   || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 async function invoke(payload, { fetchImpl = globalThis.fetch, timeoutMs = GUIDE_REQUEST_TIMEOUT_MS } = {}) {

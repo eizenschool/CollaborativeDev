@@ -10,6 +10,10 @@ const locationInput = readFileSync(resolve(
   import.meta.dirname,
   '../../shared/components/maps/ConfirmedLocationInput.jsx'
 ), 'utf8');
+const moduleSource = readFileSync(resolve(
+  import.meta.dirname,
+  '../components/SearchModule.jsx'
+), 'utf8');
 
 describe('Module 4 confirmed location presentation contract', () => {
   it('reuses the shared Google combobox for both Search route fields', () => {
@@ -26,5 +30,12 @@ describe('Module 4 confirmed location presentation contract', () => {
     expect(locationInput).toContain('LOCATION_SEARCH_DEBOUNCE_MS');
     expect(locationInput).toContain('role="combobox"');
     expect(locationInput).toContain('role="listbox"');
+  });
+
+  it('shows all three radius choices independently of the recommendation picker', () => {
+    expect(moduleSource).toContain('SEARCH_PROXIMITY_RADII.map');
+    expect(moduleSource).toContain('disabled={!criteria.destination');
+    expect(moduleSource).toContain('Match exact destination');
+    expect(moduleSource).toMatch(/function selectRecommendation[\s\S]*?destinationPlaceId: place\.sourcePlaceId,[\s\S]*?proximityKm: 0/);
   });
 });

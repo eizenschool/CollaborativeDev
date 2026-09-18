@@ -38,6 +38,13 @@ export default defineConfig({
   })),
   webServer: {
     command: 'npm.cmd run dev:fixture -- --host 127.0.0.1 --port 4173',
+    // Fixture mode intentionally clears global Supabase settings. Configure
+    // only the Guide Edge adapter so its transcription request reaches the
+    // Playwright route mock without switching other modules out of fixture mode.
+    env: {
+      VITE_TUMPANG_GUIDE_EDGE_URL: 'http://127.0.0.1:54321',
+      VITE_TUMPANG_GUIDE_EDGE_PUBLISHABLE_KEY: 'playwright-test-publishable-key',
+    },
     url: 'http://127.0.0.1:4173/home',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

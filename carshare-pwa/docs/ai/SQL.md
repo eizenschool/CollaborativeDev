@@ -25,16 +25,19 @@ Project URL: https://pnetstmovctfwqcumodx.supabase.co
 Adopted live scope: Module 1 + Module 2 + Module 3 messaging + Module 4 search/favourites and favourite availability alerts
 Deployed SQL history: 001-026, 028, 033-035, 036_m3, 038_m2-040_m4,
   045_m3, 057_m2, 060_m2-062_m2, 064_m2, 065_m3, 066_m2, 067_m4, 068_m4,
-  069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, and 099_m1 as tracked Supabase
+  069_project, 070_project, 072_m1, 073_m1, 074_m1, 082_m4, 099_m1, 113_m1,
+  114_m2, 115_m2, and 116_m2 as tracked Supabase
   migrations, plus tracked 023, 027, 029, 030, 031, 032, and 037_m2
   applied through the Dashboard SQL Editor (see below)
-Repository SQL history: 001-110 (`078_m1`, `087_m1`, `098_m1`, `104_m1`,
+Repository SQL history: 001-116 (`078_m1`, `087_m1`, `098_m1`, `104_m1`,
   `105_m1`, `106_m1`, `107_m1`, `108_m1`, `109_m1`, and `110_m1` are all
   confirmed live via a direct query against the linked database on
-  2026-09-16 - see each entry below for what was checked; `088_m1` remains
-  authored, not deployed (its `profile_private.ic_checked_at` column does
-  not exist live); `093_m1`-`097_m1` are live without tracked migration
-  entries; `099_m1` is deployed as a tracked migration)
+  2026-09-16 - see each entry below for what was checked; `088_m1` was not
+  deployed as one unit (`profile_private.ic_checked_at` is absent), but its
+  retired vehicle-licence trigger was found live on 2026-09-17; `093_m1`-
+  `097_m1` are live without tracked migration entries; `099_m1` is deployed
+  as a tracked migration; `113_m1` repaired that trigger drift as tracked
+  migration `20260917063318_m1_remove_legacy_vehicle_license_gate`)
   (031 and 032 applied through the Dashboard SQL Editor on 2026-08-16;
   033 deployed as project_notifications on 2026-08-20; 034 and 035_m4 are
   deployed; 036_m3 is deployed as m3_message_translation; 037_m2 was applied
@@ -75,7 +78,7 @@ confirmed live via the exact `42501 permission denied for table
 `profile_visibility` PostgREST error, whose own hint asks for a plain
 table-level grant. `071_project_grant_table_level_profile_visibility_update.sql`
 is authored locally, not yet deployed, and grants that. `082_m4` and `099_m1`
-are deployed; the next unused repository sequence is `109`.)
+are deployed; the next unused repository sequence is `118`.)
 ```
 
 ### Driver document rollout (2026-09-06)
@@ -120,13 +123,27 @@ are deployed; the next unused repository sequence is `109`.)
   date validation with inferred-century `make_date`, including leap birthdays,
   and rejects underage driver submissions. Apply 100 then 101.
 - `102_m1_require_driver_documents_to_publish.sql` - deployed, confirmed live
-  2026-09-16: a direct query of `private.enforce_ride_identity_verification`'s
+  2026-09-17: a direct query of `private.enforce_ride_identity_verification`'s
   live function body matches this file exactly (requires
   `license_document_path`, checks its storage object exists, enforces
   `license_expiry`), not the earlier, looser identity-status-only rule this
   file's header says to keep running until activation. It checks both stored
   owner photos, number, expiry and age on transitions into Published only.
   Existing published rides remain untouched.
+- `113_m1_remove_legacy_vehicle_license_gate.sql` - deployed with user approval
+  as tracked migration `20260917063318_m1_remove_legacy_vehicle_license_gate`.
+  A 2026-09-17 live inspection found the retired
+  `enforce_ride_driver_license_before_publish` trigger still attached to
+  `public.rides` alongside the current account-level identity trigger. It is
+  the exact source of the obsolete "Add your driver's license number to this
+  vehicle" publish failure. The repair first proves that
+  `enforce_ride_identity_before_publish` still calls
+  `private.enforce_ride_identity_verification`, then drops only the legacy
+  trigger. It leaves the current identity and Passport guards, both functions,
+  all vehicle columns and all existing data unchanged. Post-deployment
+  inspection confirmed the legacy trigger absent and both the account-level
+  identity trigger and Passport driver-type guard still present. Pre/post
+  advisors reported no finding caused by this trigger-only change.
 - Live checks confirm private bucket, RLS, authenticated column grants,
   no anonymous read/RPC execution and SECURITY INVOKER submission. Transactional
   negative checks cover missing session, other-owner photo paths and underage
@@ -429,10 +446,10 @@ one-hour urgent SOS delivery. The next new
 migration starts at `046`.
 M2 migrations `041`-`043` are now deployed.
 
-`046_m2_adaptive_checkin.sql` is deployed as `m2_adaptive_checkin`. Passenger
-check-in accepts accuracy up to 150 m and distance up to
-`least(200 + accuracy, 350)` m; Driver arrival remains 100 m/200 m. Raw
-submitted coordinates are not stored.
+`046_m2_adaptive_checkin.sql` is deployed as `m2_adaptive_checkin`; its original
+passenger distance rule was later superseded by deployed migration `058` below.
+Passenger Check-in still accepts accuracy up to 150 m, Driver arrival remains
+100 m/200 m, and raw submitted Check-in coordinates are not stored.
 
 `047_m2_live_location_tracking.sql` is deployed as `m2_live_location_tracking`.
 It adds private consent sessions, latest points, sampled history, expiring
@@ -480,15 +497,18 @@ terminal Ride, and removes unavailable live coordinates after two minutes.
 `m2-live-share` active version 4 consumes the UUID-free snapshot RPC; remote
 `project-admin` and `ride-dispute-evidence` Edge Functions were deleted.
 
-`056_m2_lifecycle_expiry_and_validation.sql` is authored locally and is **not
-deployed**. It adds stable nullable `ride_requests.accepted_at`, a partial
+`056_m2_lifecycle_expiry_and_validation.sql` is live on the shared project, but
+has no dedicated entry in `supabase_migrations.schema_migrations`. A read-only
+verification on 2026-09-18 confirmed its `accepted_at` column/comment/backfill,
+participant index/helper, replacement RPC bodies, exact 30-minute lifecycle
+processor, notification triggers, authenticated-only public grants, and active
+minute Cron. It adds stable nullable `ride_requests.accepted_at`, a partial
 participant-history index, the exact 30-minute unstarted-Ride expiry boundary,
 Matched/Accepted invariants, terminal former-participant history access, and
 safe expiry notifications. It replaces existing RPC bodies without changing
 their signatures and leaves active Realtime/family access restricted to
-current Accepted participants. Deployment must be separately approved; after
-deployment, verify the existing overdue Matched Ride and requests, Cron,
-notifications, and security/performance advisors.
+current Accepted participants. The verification found no overdue Ride or
+request waiting for an immediate lifecycle correction.
 
 `057_m2_fix_family_link_crypto_schema.sql` is now recorded as tracked migration
 `m2_fix_family_link_crypto_schema`. It replaced only
@@ -516,12 +536,16 @@ no browser grants and every narrow RPC performs explicit authorization.
 Two-account/two-device acceptance is still required before
 `VITE_M2_SOS_ENABLED` is enabled.
 
-`058_m2_widen_checkin_tolerance.sql` is authored locally and is **not
-deployed**. It widens passenger Check-in distance from
+`058_m2_widen_checkin_tolerance.sql` is deployed as tracked migration
+`m2_widen_checkin_tolerance` (version `20260917160025`). It widens passenger
+Check-in distance from
 `least(200 + accuracy, 350)` m to `least(250 + accuracy, 400)` m while retaining
 the 150 m accuracy ceiling, nullable accuracy for historical Checked In rows,
 coordinate non-persistence, and the Driver arrival policy. It replaces the
-existing RPC body without changing its signature or execute grant.
+existing RPC body without changing its signature or execute grant. Post-deploy
+verification confirmed the 400 m constraint, widened formula, zero incompatible
+existing rows, authenticated-only execution, and the unchanged active lifecycle
+Cron.
 
 `docs/MODULE6-SCHEMA.md` is superseded: it describes the former Trust & Safety
 module, whose scope moved to Modules 1/2/3/5. Module 6 is now Destination
@@ -694,14 +718,16 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   compensating removal
   of the Trust Admin/dispute/evidence rollout while preserving and tightening
   participant/family live tracking and sampled history.
-- `056_m2_lifecycle_expiry_and_validation.sql` - authored, not deployed;
+- `056_m2_lifecycle_expiry_and_validation.sql` - live without a dedicated
+  migration-history entry;
   stable acceptance history, exact departure-grace expiry, Matched/request
   invariants, terminal former-participant access, validation alignment, and
   deduplicated expiry notifications.
 - `057_m2_fix_family_link_crypto_schema.sql` - deployed as tracked migration;
   schema-qualifies the pgcrypto token generator and digest inside the existing
   authenticated Family Link creation RPC.
-- `058_m2_widen_checkin_tolerance.sql` - authored, not deployed; slightly
+- `058_m2_widen_checkin_tolerance.sql` - deployed as tracked migration
+  `m2_widen_checkin_tolerance`; slightly
   widens passenger-only adaptive Check-in distance while retaining the GPS
   accuracy, privacy, historical compatibility, and RPC authorization boundary.
 - `059_m2_ride_pickup_destination_photos.sql` - live without a tracked
@@ -836,15 +862,16 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   signature, same admin gate, same status-filter validation) to fix the bug
   above. `submit_safety_report` and `admin_resolve_safety_report` have no
   equivalent alias mismatch and are untouched.
-- `094_m1_identity_holds_the_licence.sql` - live without a tracked migration
-  entry; adds
+- `094_m1_identity_holds_the_licence.sql` - partially reflected live without a
+  tracked migration entry; adds
   `ic_number` and `license_expiry` to `identity_verifications` so the MyKad is
-  entered once instead of on every vehicle, drops the `088_m1`
-  `enforce_ride_driver_license_before_publish` trigger, and folds the expiry
+  entered once instead of on every vehicle and folds the expiry
   check into `private.enforce_ride_identity_verification`. A submission with no
   expiry recorded is treated as valid, not lapsed.
   `vehicles.driver_license_number`/`driver_license_expiry` are deliberately
-  left in place and unused.
+  left in place and unused. Although this file also drops the `088_m1`
+  `enforce_ride_driver_license_before_publish` trigger, a 2026-09-17 live check
+  found that trigger attached again; `113_m1` records the narrow repair.
 - `095_m1_grant_table_level_identity_verifications_update.sql` - live without a
   tracked migration entry; `094_m1` only granted a column-restricted UPDATE, which Postgres
   refuses for the `INSERT ... ON CONFLICT DO UPDATE` supabase-js's `.upsert()`
@@ -946,7 +973,10 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
   `public.get_reputation_summary` and `public.get_ride_eligibility`. It
   replaces constants only: the `072_m1` ledger, per-event clamp, +3 per-Ride
   positive cap, event deltas and three-Ride provisional window are untouched.
-- `088_m1_identity_gate_hardening.sql` - authored, not deployed; adds
+- `088_m1_identity_gate_hardening.sql` - not deployed as one tracked migration;
+  its `profile_private.ic_checked_at` column is absent live, but a 2026-09-17
+  inspection found its legacy `enforce_ride_driver_license_before_publish`
+  trigger attached to `public.rides`. The file adds
   `profile_private.ic_checked_at` (written only by `handle_new_user()` from
   the sign-up payload, with no insert/update grant to browser roles, and never
   storing the IC number itself) and `vehicles.driver_license_expiry`, plus the
@@ -1067,3 +1097,44 @@ Fresh empty-table indexes may appear as "unused" in the performance advisor unti
 Deployed `111_m3_fix_message_report_admin_queue.sql` (`20260916113610_fix_message_report_admin_queue`) restores the queue's `messageEvidenceId` projection after the live legacy M1 function omitted it, which had made message cases render as profile reports and trigger the evidence-resolution guard. The business layer also accepts the raw `message_evidence_id` name defensively. Post-deployment inspection confirmed both remaining open message reports now project non-null evidence IDs.
 
 Deployed `112_project_safety_report_notifications.sql` as `20260916120535_safety_report_notifications`. It connects profile and message safety decisions to the existing project notification inbox. Reporters receive a privacy-safe action-taken or no-violation result; reported members are notified only for warnings or confirmed conduct, including the applied reputation deduction. Dismissed reports never notify the reported member, and dedupe keys prevent repeat admin requests from creating duplicate notices.
+
+
+## Module 2 moderation (deployed 2026-09-17)
+
+- `114_m2_content_moderation.sql`: deployed as
+  `20260917091148_m2_content_moderation_v4`; service-only content receipts and immutable
+  approved-photo metadata, browser Storage write restrictions, deferred final-row
+  approval guard, atomic `persist_moderated_ride` wrapper, Draft photo binding,
+  per-Host hourly quota and abandoned-photo cleanup claims. Preserves existing
+  route persister and lifecycle-only transitions. No historical bulk scan.
+- `115_m2_content_cleanup_schedule.sql`: deployed as
+  `20260917101615_m2_content_cleanup_schedule`. Its active `m2-content-cleanup`
+  Cron job runs at minute 15 of every hour and reads the function URL and
+  dedicated bearer secret from Vault. A post-deployment invocation returned
+  HTTP 200 with no timeout or error and removed zero stale photos.
+- `116_m2_raise_content_check_hourly_limit.sql`: deployed as
+  `20260917102438_m2_raise_content_check_hourly_limit`. It raises the existing
+  per-Host hourly moderation request limit from 20 to 40 because one complete
+  attempt can consume separate photo and combined-text checks. The service-only
+  execution grants and fail-closed error remain unchanged.
+- The v4 120-case Cloudflare evaluation passed. The matching content/route Edge
+  Functions and Netlify frontend are live and text/photo moderation is enabled.
+  Post-deployment privilege checks confirmed the receipt tables and moderated
+  persister remain service-only. See `docs/ai/M2_CONTENT_MODERATION_RELEASE.md`.
+
+## Module 4 confirmed-destination radius search (deployed 2026-09-18)
+
+- `117_m4_confirmed_destination_radius_search.sql` makes the existing 5/10/25 km
+  controls available for an ordinary Google-confirmed destination as well as a
+  catalogue recommendation. It compares the transient passenger-selected centre
+  with `private.m2_ride_verification` destination anchors inside private
+  security-definer helpers and exposes only narrow security-invoker wrappers.
+- The public direct and multi-leg projections return the existing safe fields
+  plus rounded distance. Coordinates, Ride endpoint IDs, pickup instructions,
+  waypoints, and route geometry do not cross the RPC boundary.
+- The migration is deployed as
+  `20260917161659_m4_confirmed_destination_radius_search`. Anonymous REST smoke
+  tests returned HTTP 200 for both direct radius search and multi-leg fallback;
+  the direct check returned matching rides while the deliberately unmatched
+  multi-leg route returned a safe empty result. Security and performance
+  advisors reported no new Module 4 finding.

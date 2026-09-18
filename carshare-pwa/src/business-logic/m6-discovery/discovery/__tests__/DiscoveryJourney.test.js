@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_ORIGIN,
+  consumeExploreReturn,
   discoveryFilters,
   matchingCandidates,
   normalizeOrigin,
+  readExploreReturn,
+  saveExploreReturn,
   trafficText,
   validTravelDate
 } from '../DiscoveryJourney.js';
@@ -64,5 +67,29 @@ describe('DiscoveryJourney', () => {
       .toBe('1 listed ride · no seats remaining');
     expect(trafficText([{ seatsAvailable: 1 }]))
       .toBe('1 listed ride · up to 1 seat in one ride');
+  });
+
+  it('round-trips a saved explore return point for a /home-prefixed url', () => {
+    saveExploreReturn('/home?date=2026-09-18', 420);
+    expect(readExploreReturn()).toEqual({ url: '/home?date=2026-09-18', scrollY: 420 });
+  });
+
+  it('does not save an explore return point for a non-/home url', () => {
+    saveExploreReturn('/discover/place-1', 300);
+    expect(readExploreReturn()).toEqual({ url: '/home', scrollY: 0 });
+  });
+
+  it('reads the safe default when nothing was saved', () => {
+    expect(readExploreReturn()).toEqual({ url: '/home', scrollY: 0 });
+  });
+
+  it('consumeExploreReturn applies a saved value exactly once', () => {
+    saveExploreReturn('/home?date=2026-09-18', 640);
+    expect(consumeExploreReturn()).toEqual({ url: '/home?date=2026-09-18', scrollY: 640 });
+    expect(consumeExploreReturn()).toEqual({ url: '/home', scrollY: 0 });
+  });
+
+  it('consumeExploreReturn returns the safe default when nothing was saved', () => {
+    expect(consumeExploreReturn()).toEqual({ url: '/home', scrollY: 0 });
   });
 });

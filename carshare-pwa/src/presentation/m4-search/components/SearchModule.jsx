@@ -50,28 +50,37 @@ function FilterPanel({ criteria, onChange, onClear, onChooseRecommendation, mobi
       </fieldset>
 
       <fieldset>
-        <legend>Recommended destination radius</legend>
-        {criteria.destinationPlaceId ? (
+        <legend>Destination radius</legend>
+        <div className="search-segmented-control search-radius-control">
+          {SEARCH_PROXIMITY_RADII.map((radius) => (
+            <button
+              key={radius}
+              type="button"
+              aria-pressed={criteria.proximityKm === radius}
+              disabled={!criteria.destination || (!criteria.destinationSearchPlaceId && !criteria.destinationPlaceId)}
+              onClick={() => patch({ proximityKm: radius })}
+            >
+              {radius} km
+            </button>
+          ))}
+        </div>
+        {criteria.proximityKm ? (
           <>
-            <div className="search-segmented-control search-radius-control">
-              {SEARCH_PROXIMITY_RADII.map((radius) => (
-                <button
-                  key={radius}
-                  type="button"
-                  aria-pressed={criteria.proximityKm === radius}
-                  onClick={() => patch({ proximityKm: radius })}
-                >
-                  {radius} km
-                </button>
-              ))}
-            </div>
-            <p className="search-filter-helper">Matches confirmed ride destinations near {criteria.destination}.</p>
+            <p className="search-filter-helper">Matches verified ride destinations near {criteria.destination}.</p>
+            <button type="button" className="search-clear-button" onClick={() => patch({ proximityKm: 0 })}>
+              Match exact destination
+            </button>
           </>
         ) : (
-          <button type="button" className="search-choose-destination-filter" onClick={onChooseRecommendation}>
-            <IconStar size={15} aria-hidden="true" />Choose a recommended place
-          </button>
+          <p className="search-filter-helper">
+            {criteria.destinationSearchPlaceId || criteria.destinationPlaceId
+              ? 'Exact destination matching is selected.'
+              : 'Choose a confirmed destination to use a radius.'}
+          </p>
         )}
+        <button type="button" className="search-choose-destination-filter" onClick={onChooseRecommendation}>
+          <IconStar size={15} aria-hidden="true" />Choose a recommended place
+        </button>
       </fieldset>
 
       <div className="search-filter-grid">
@@ -204,19 +213,12 @@ export default function SearchModule() {
       destination: place.name,
       destinationSearchPlaceId: '',
       destinationPlaceId: place.sourcePlaceId,
-      proximityKm: 10
+      proximityKm: 0,
+      destinationLatitude: place.lat,
+      destinationLongitude: place.lng
     }));
     DestinationDiscoveryService.recordInterest(user?.id, place.id, criteria.date).catch(() => {});
     closeRecommendations();
-  }
-
-  function clearRecommendedDestination() {
-    setCriteria((current) => normalizeSmartSearchCriteria({
-      ...current,
-      destinationSearchPlaceId: current.destinationPlaceId,
-      destinationPlaceId: '',
-      proximityKm: 0
-    }));
   }
 
   function submitSearch(event) {
@@ -239,6 +241,8 @@ export default function SearchModule() {
       destinationSearchPlaceId: current.destinationSearchPlaceId,
       destinationPlaceId: current.destinationPlaceId,
       proximityKm: current.proximityKm,
+      destinationLatitude: current.destinationLatitude,
+      destinationLongitude: current.destinationLongitude,
       date: current.date,
       departAfter: current.departAfter
     }));
@@ -295,7 +299,7 @@ export default function SearchModule() {
   }
 
   const activeFilterCount = [
-    criteria.destinationPlaceId,
+    criteria.proximityKm,
     criteria.journeyScale,
     criteria.minSeats > 1,
     criteria.minRating > 0,
@@ -306,14 +310,10 @@ export default function SearchModule() {
   ].filter(Boolean).length;
 
   const appliedFilterChips = [
-    appliedCriteria.destinationPlaceId && {
+    appliedCriteria.proximityKm > 0 && {
       key: 'destination-radius',
       label: `Within ${appliedCriteria.proximityKm} km of ${appliedCriteria.destination}`,
-      remove: () => removeAppliedFilter({
-        destinationSearchPlaceId: appliedCriteria.destinationPlaceId,
-        destinationPlaceId: '',
-        proximityKm: 0
-      })
+      remove: () => removeAppliedFilter({ proximityKm: 0 })
     },
     appliedCriteria.journeyScale && {
       key: 'journey-scale',
@@ -366,17 +366,12 @@ export default function SearchModule() {
             {criteria.destinationPlaceId ? <IconMapPin size={17} /> : <IconStar size={17} />}
           </span>
           <span>
-            <strong>{criteria.destinationPlaceId ? `Within ${criteria.proximityKm} km of ${criteria.destination}` : 'Not sure where to go?'}</strong>
-            <small>{criteria.destinationPlaceId ? 'Only confirmed ride destinations are matched.' : 'Use Destination Discovery recommendations in this search.'}</small>
+            <strong>{criteria.destinationPlaceId ? criteria.destination : 'Not sure where to go?'}</strong>
+            <small>{criteria.destinationPlaceId ? 'Recommended destination selected. Choose a radius in Filters if you want nearby drop-offs.' : 'Browse recommended destinations for your search.'}</small>
           </span>
           <button ref={recommendationButtonRef} type="button" onClick={openRecommendations}>
             {criteria.destinationPlaceId ? 'Change place' : 'Browse recommendations'}
           </button>
-          {criteria.destinationPlaceId && (
-            <button type="button" className="search-destination-clear" onClick={clearRecommendedDestination}>
-              Match exact place
-            </button>
-          )}
         </div>
         <button ref={filterTriggerRef} className="search-mobile-filter-button" type="button" onClick={() => setFiltersOpen(true)}>
           <IconFilter size={17} aria-hidden="true" /> Filters {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
@@ -414,12 +409,12 @@ export default function SearchModule() {
           {!loading && !error && rides.length === 0 && (
             <div className="search-empty-state">
               <IconSearch size={28} />
-              <h3>{appliedCriteria.destinationPlaceId ? `No rides within ${appliedCriteria.proximityKm} km` : 'No matching rides yet'}</h3>
-              <p>{appliedCriteria.destinationPlaceId
+              <h3>{appliedCriteria.proximityKm ? `No rides within ${appliedCriteria.proximityKm} km` : 'No matching rides yet'}</h3>
+              <p>{appliedCriteria.proximityKm
                 ? `No available ride currently ends close enough to ${appliedCriteria.destination}.`
                 : 'Try a broader route, another date, or fewer filters.'}</p>
               <div className="search-empty-actions">
-                {appliedCriteria.destinationPlaceId && (
+                {appliedCriteria.proximityKm > 0 && (
                   <button type="button" onClick={applyProximityAlternative}>
                     {appliedCriteria.proximityKm < 25 ? 'Expand the radius' : 'Match the exact destination'}
                   </button>
@@ -434,14 +429,14 @@ export default function SearchModule() {
               <MultiLegJourneyCard
                 key={ride.id}
                 journey={ride}
-                proximityLabel={appliedCriteria.destinationPlaceId ? appliedCriteria.destination : ''}
+                proximityLabel={appliedCriteria.proximityKm ? appliedCriteria.destination : ''}
                 onView={(event) => openItinerary(ride, event.currentTarget)}
               />
             ) : (
               <SearchRideCard
                 key={ride.id}
                 ride={ride}
-                proximityLabel={appliedCriteria.destinationPlaceId ? appliedCriteria.destination : ''}
+                proximityLabel={appliedCriteria.proximityKm ? appliedCriteria.destination : ''}
                 saved={favouriteIds.has(ride.id)}
                 favouritePending={pendingRideId === ride.id}
                 onToggleFavourite={() => toggleFavourite(ride)}

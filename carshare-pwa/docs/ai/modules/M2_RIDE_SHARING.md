@@ -64,7 +64,7 @@ location confirmation, quote invalidation, and Draft contracts while adding
 focused validation recovery and responsive actions. Ride/request confirmations
 use the shared adaptive dialog; no lifecycle or service contract changed.
 
-Accepted decision D025 and authored, undeployed migration
+Accepted decision D025 and live migration
 `056_m2_lifecycle_expiry_and_validation.sql` make the database the only status
 authority. Published rides without an Accepted request expire at departure;
 rides with an Accepted request become Matched and receive a 30-minute Start
@@ -291,17 +291,12 @@ Migration `038` is now deployed as `m2_ride_usability_notifications`; it uses
 the shared Module 3 notification inbox, unread Realtime count, Web Push and
 service-worker path. Module 2 does not create a second notification centre.
 
-Passenger check-in uses adaptive GPS tolerance from deployed migration `041`:
-accuracy must be at most 150 m and measured distance must be at most
-`min(200 m + accuracy, 350 m)`. Driver destination arrival intentionally keeps
-the existing 100 m accuracy and 200 m distance limits. Authored, undeployed
-follow-up `049` preserves nullable accuracy only for historical Checked In rows;
-every new check-in still writes the measured accuracy.
-
-Authored, undeployed migration `058_m2_widen_checkin_tolerance.sql` makes the
-requested small passenger-only adjustment to `min(250 m + accuracy, 400 m)`.
-It retains the 150 m accuracy ceiling, historical nullable-accuracy
-compatibility, coordinate non-persistence, and the Driver arrival limits.
+Passenger check-in uses the adaptive GPS tolerance from deployed migrations
+`046` and `058`: accuracy must be at most 150 m and measured distance must be at
+most `min(250 m + accuracy, 400 m)`. Driver destination arrival intentionally
+keeps the existing 100 m accuracy and 200 m distance limits. Historical Checked
+In rows may retain nullable accuracy, but every new check-in writes the measured
+accuracy. Submitted Check-in coordinates are not persisted.
 
 Publish Ride autocomplete supplies a 5 km location bias and origin only when
 the existing foreground preview is at most 500 m inaccurate. Malaysia remains
@@ -337,11 +332,12 @@ locations, departure and ordered waypoint Place IDs/stop minutes, so changing
 contribution, restrictions, pickup instructions or display copy does not spend
 another Routes request.
 
-Waypoint cards prefer the academic Module 6 cached photo reference and lazily
-fall back to a fresh Google Maps JavaScript `Place` photo. Bytes, fresh URIs and
-new resource names are never persisted. This is the documented D018 prototype
-limitation: Google permits indefinite Place ID storage, but photo references
-and URIs can expire and are not a production cache contract.
+Waypoint cards resolve a fresh Google Maps JavaScript `Place` photo when their
+image slot becomes visible. Bytes, fresh URIs and newly returned photo names
+are never persisted or built from the catalogue's possibly expired names. This
+is the documented D018 prototype limitation: Google permits indefinite Place
+ID storage, but photo references and URIs can expire and are not a production
+cache contract.
 
 The live `059_m2_ride_pickup_destination_photos.sql` contract
 adds one private pickup meeting photo per Ride. Create/Edit keeps the selected
@@ -459,3 +455,22 @@ notifications and evidence holds without rewriting deployed history. The
 original browser-local `/safety` verification demo remains; `/safety/admin` and
 the two production Admin Edge Functions are removed. `m2-live-share` version 4
 is active and returns only the privacy-safe family snapshot.
+
+
+## Content moderation (D040; deployed and enabled 2026-09-17)
+
+Contribution/pickup instructions use server privacy checks and a gated Cloudflare
+Qwen3 classifier; pickup photos reuse the shared Sightengine checker with strict
+M2 failure handling. Existing M3 AI credentials are reused server-side only.
+New publication prepares a private Draft; the selected photo is checked/staged
+before `persist_moderated_ride` commits text and photo atomically. Rejected or
+unavailable checks preserve input and show field errors. Old public content is
+checked on edit/republish, not scanned in bulk. No direct browser upload/binding
+is allowed after SQL 114. SQL 115 schedules abandoned-photo cleanup.
+M1 avatar behavior is unchanged. Cloudflare's 120-case live acceptance passed;
+SQL 114, SQL 115, the matching Edge Functions and Netlify frontend are live.
+The hourly orphan-photo cleanup job is active and its first manual invocation
+returned HTTP 200. User-led publish/edit/photo acceptance remains outstanding;
+details are in `docs/ai/M2_CONTENT_MODERATION_RELEASE.md`.
+SQL 116 raises the service-only per-Host moderation limit from 20 to 40 requests
+per hour so a Host can make about twenty full text-plus-new-photo attempts.

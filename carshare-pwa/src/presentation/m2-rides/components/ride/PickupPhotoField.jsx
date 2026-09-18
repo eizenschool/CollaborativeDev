@@ -31,7 +31,7 @@ export function PickupPhotoPreview({ file, rideId, hasExisting = false, removed 
   return <img className="pickup-photo-preview-image" src={url} alt="Pickup meeting point preview" />;
 }
 
-export default function PickupPhotoField({ rideId, file, hasExisting = false, removed = false, disabled = false, onFileChange, onRemove }) {
+export default function PickupPhotoField({ rideId, file, hasExisting = false, removed = false, disabled = false, moderationError, onFileChange, onRemove }) {
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const [error, setError] = useState('');
@@ -104,6 +104,7 @@ export default function PickupPhotoField({ rideId, file, hasExisting = false, re
         <button type="button" className="btn-secondary" disabled={disabled} onClick={() => fileInputRef.current?.click()}>{visible ? 'Replace from files' : 'Upload photo'}</button>
         {visible && <button type="button" className="pickup-photo-remove" disabled={disabled} onClick={onRemove}><IconTrash size={16} aria-hidden="true" /> Remove</button>}
       </div>
+      {moderationError && <p id="pickup-photo-content-error" tabIndex={-1} className="location-field-message error" role="alert">{moderationError}</p>}
       {error && <p className="location-field-message error" role="alert">{error} You can still upload a photo from your files.</p>}
 
       {cameraOpen && (

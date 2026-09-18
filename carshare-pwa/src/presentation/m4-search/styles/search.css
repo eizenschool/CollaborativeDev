@@ -426,6 +426,11 @@
   box-shadow: 0 2px 8px rgba(17, 24, 39, .08);
 }
 
+.search-segmented-control button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
 .search-radius-control { grid-template-columns: repeat(3, 1fr); }
 
 .search-active-filters {
@@ -466,6 +471,11 @@
   color: var(--muted);
   font-size: 10px;
   line-height: 1.45;
+}
+
+.search-filter-helper + .search-clear-button {
+  width: 100%;
+  margin-top: 8px;
 }
 
 .search-choose-destination-filter {
@@ -999,6 +1009,58 @@
 }
 .search-recommendation-categories button[aria-pressed="true"] { border-color: var(--teal); color: white; background: var(--teal); }
 
+.search-recommendation-nearby {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.search-recommendation-nearby-button,
+.search-recommendation-show-all {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--teal-dark);
+  background: white;
+  font: 750 10.5px var(--font);
+}
+.search-recommendation-nearby-button[aria-pressed="true"] {
+  border-color: var(--teal);
+  color: white;
+  background: var(--teal);
+}
+.search-recommendation-nearby button:disabled { cursor: wait; opacity: .65; }
+.search-recommendation-show-all { border-color: transparent; background: transparent; }
+.search-recommendation-location-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #991b1b;
+  background: #fef2f2;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.search-recommendation-location-error button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border: 0;
+  color: #991b1b;
+  background: transparent;
+  font-weight: 800;
+}
+
 .search-recommendation-content { min-height: 0; overflow-y: auto; padding: 4px 22px 18px; }
 .search-recommendation-group h3 { margin: 16px 0 8px; color: #4b5563; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
 .search-recommendation-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -1177,11 +1239,16 @@
   .search-recommendation-input input { font-size: 16px; }
   .search-recommendation-categories { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
   .search-recommendation-categories button { flex: 0 0 auto; }
+  .search-recommendation-nearby { align-items: flex-start; flex-direction: column; }
+  .search-recommendation-nearby-button,
+  .search-recommendation-show-all { width: 100%; min-height: 44px; }
+  .search-recommendation-location-error { align-items: flex-start; }
   .search-recommendation-content { padding: 4px 18px 16px; }
   .search-recommendation-list { grid-template-columns: 1fr; }
   .search-recommendation-footer { align-items: flex-start; flex-direction: column; padding: 10px 18px max(14px, env(safe-area-inset-bottom)); }
   .search-recommendation-footer button { align-self: flex-end; }
   .search-itinerary-leg dl { grid-template-columns: 1fr; }
+
 }
 
 @media (max-width: 380px) {
@@ -1243,4 +1310,17 @@
   border-color: #fecdd3;
   color: #e11d48;
   background: #fff1f2;
+}
+
+@media (max-width: 700px) {
+  .search-ride-card.has-destination-photo .search-ride-card-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-bottom: 88px;
+  }
+
+  .search-ride-card.has-destination-photo .search-ride-card-footer button {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }

@@ -33,7 +33,7 @@ import DemoControls, { DemoActiveBanner } from './components/discover/DemoContro
 import './styles/discover.css';
 import { Chip, Skeleton } from '../shared/components/ui/Primitives.jsx';
 import {
-  discoveryFilters, readOrigin, saveExploreReturn, saveOrigin
+  consumeExploreReturn, discoveryFilters, readOrigin, saveExploreReturn, saveOrigin
 } from '../../business-logic/m6-discovery/discovery/DiscoveryJourney.js';
 import { resolveKnownGuideOrigin } from '../../business-logic/m6-discovery/guide/GuideOriginResolver.js';
 import { todayIso } from '../../business-logic/m6-discovery/discovery/localDate.js';
@@ -94,11 +94,11 @@ function Hero({ candidate, onOpen }) {
       ? `${candidate.rides.length} listed ride${candidate.rides.length > 1 ? 's' : ''} · ${seatsLeft > 0 ? `up to ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} in one listed ride` : 'no seats remaining'}`
       : 'No listed ride for this date';
   return (
-    <button type="button" className="dsc-hero" onClick={() => onOpen(place.id)}>
+    <article className="dsc-hero">
       <span className="dsc-hero-media">
         <PlaceImage key={place.id} place={place} widthPx={PHOTO_WIDTH_LARGE} revealable />
         <span className="dsc-hero-scrim" />
-        <span className="dsc-hero-text">
+        <button type="button" className="dsc-hero-text dsc-hero-open" onClick={() => onOpen(place.id)}>
           <span className="dsc-hero-eyebrow"><IconStar size={12} /> Top pick for you</span>
           <span className="dsc-hero-title">{place.name}</span>
           <span className="dsc-hero-sub">
@@ -106,9 +106,9 @@ function Hero({ candidate, onOpen }) {
             {Number.isFinite(candidate.distanceKm) && ` · ${Math.round(candidate.distanceKm)} km straight line`}
             {` · ${trafficLabel}`}
           </span>
-        </span>
+        </button>
       </span>
-    </button>
+    </article>
   );
 }
 
@@ -139,10 +139,16 @@ function ResultsSkeleton() {
 // load, and a failure here never blocks or replaces the destinations below.
 function useAccountStatus(userId) {
   const [status, setStatus] = useState(null);
+  // Exposed so HomeScreen's scroll-restore effect can wait for this strip's
+  // own independent fetch to settle before applying a saved scrollY - it
+  // mounts above the destination grid and would otherwise shift the list out
+  // from under an already-applied restore.
+  const [loading, setLoading] = useState(Boolean(userId));
 
   useEffect(() => {
-    if (!userId) { setStatus(null); return; }
+    if (!userId) { setStatus(null); setLoading(false); return; }
     let cancelled = false;
+    setLoading(true);
 
     (async () => {
       try {
@@ -163,13 +169,15 @@ function useAccountStatus(userId) {
         // and simply show nothing rather than risk the destinations below.
         console.error('Account status check failed', cause);
         if (!cancelled) setStatus(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
 
     return () => { cancelled = true; };
   }, [userId]);
 
-  return status;
+  return { status, loading };
 }
 
 function AccountStatusStrip({ status }) {
@@ -321,9 +329,10 @@ export default function HomeScreen() {
   const [unservedLimit, setUnservedLimit] = useState(RESULT_PAGE_SIZE);
   const [categoryLimit, setCategoryLimit] = useState(RESULT_PAGE_SIZE);
   const [withheldLimit, setWithheldLimit] = useState(RESULT_PAGE_SIZE);
-  const restoredExploreKey = useRef('');
+  const [promptChecked, setPromptChecked] = useState(false);
+  const restoreAttempted = useRef(false);
   const mediaEnabled = useMediaEnabled();
-  const accountStatus = useAccountStatus(user?.id);
+  const { status: accountStatus, loading: accountStatusLoading } = useAccountStatus(user?.id);
 
   const updateFilter = useCallback((key, value, defaultValue = '') => {
     const next = new URLSearchParams(searchParams);
@@ -366,7 +375,8 @@ export default function HomeScreen() {
 
     (async () => {
       const data = await load(travelDate);
-      if (cancelled || !data) return;
+      if (cancelled) return;
+      if (!data) { setPromptChecked(true); return; }
 
       // The prompt is an enhancement, not part of the result. If asking whether
       // to show it fails, the destinations are still on screen and stay there.
@@ -376,6 +386,8 @@ export default function HomeScreen() {
         }
       } catch (cause) {
         console.error('Preference prompt check failed', cause);
+      } finally {
+        if (!cancelled) setPromptChecked(true);
       }
     })();
 
@@ -461,12 +473,23 @@ export default function HomeScreen() {
   }, [categoryFilter, searchQuery, result]);
 
   useEffect(() => {
-    const scrollY = Number(location.state?.restoreExploreScrollY);
-    if (!Number.isFinite(scrollY) || loading || restoredExploreKey.current === location.key) return;
-    restoredExploreKey.current = location.key;
-    window.requestAnimationFrame(() => window.scrollTo({ top: Math.max(0, scrollY), behavior: 'auto' }));
-    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
-  }, [loading, location.key, location.pathname, location.search, location.state, navigate]);
+    // Waits on every async piece that can insert content above the destination
+    // grid (the account-status strip, the preference prompt) in addition to
+    // the destinations themselves, so the one-shot scrollTo below is not
+    // undermined by a banner mounting after it already ran.
+    if (restoreAttempted.current || loading || accountStatusLoading || !promptChecked) return;
+    restoreAttempted.current = true;
+    // Reads sessionStorage directly rather than router state, so this applies
+    // equally whether the user returned via the in-app back button (the only
+    // path that used to inject restoreExploreScrollY into navigate's state) or
+    // a native OS/browser back gesture (a plain history POP, which never
+    // carried that state) - saveExploreReturn already runs on every
+    // openDestination regardless of how the user later returns.
+    const saved = consumeExploreReturn();
+    const currentUrl = `${location.pathname}${location.search}`;
+    if (saved.url !== currentUrl || !(saved.scrollY > 0)) return;
+    window.requestAnimationFrame(() => window.scrollTo({ top: saved.scrollY, behavior: 'auto' }));
+  }, [loading, accountStatusLoading, promptChecked, location.pathname, location.search]);
 
   // The hero is the strongest served candidate; the grid below then starts from
   // the second, so the same place is never shown twice on one screen.

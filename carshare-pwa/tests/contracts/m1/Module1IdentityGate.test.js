@@ -130,4 +130,16 @@ describe('Module 1 identity and reputation SQL contracts', () => {
     // them, and dropping columns is not this migration's business.
     expect(sql).not.toMatch(/alter table public\.vehicles\s+drop column/i);
   });
+
+  it('repairs a live legacy vehicle gate only when the account-level gate exists', async () => {
+    const sql = await read('../../../database/sql/113_m1_remove_legacy_vehicle_license_gate.sql');
+    const tracked = await read('../../../supabase/migrations/20260917063318_m1_remove_legacy_vehicle_license_gate.sql');
+    expect(sql).toContain("trigger.tgname = 'enforce_ride_identity_before_publish'");
+    expect(sql).toContain("trigger_function.proname = 'enforce_ride_identity_verification'");
+    expect(sql).toContain('drop trigger if exists enforce_ride_driver_license_before_publish on public.rides;');
+    expect(sql).not.toMatch(/drop trigger if exists enforce_ride_identity_before_publish/i);
+    expect(sql).not.toMatch(/drop function/i);
+    expect(sql).not.toMatch(/alter table public\.vehicles/i);
+    expect(tracked).toBe(sql);
+  });
 });

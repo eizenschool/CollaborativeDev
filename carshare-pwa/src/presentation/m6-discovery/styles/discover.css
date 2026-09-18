@@ -65,6 +65,18 @@
    apply and the SVG expands to its own aspect ratio instead. */
 .dsc-hero-media { display: block; position: relative; height: 240px; }
 
+.dsc-hero-open {
+  z-index: 2;
+  width: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dsc-hero-open:focus-visible { outline: 2px solid #fff; outline-offset: 5px; }
+
 @media (min-width: 701px) { .dsc-hero-media { height: 340px; } }
 @media (min-width: 1101px) { .dsc-hero-media { height: 440px; } }
 
@@ -779,6 +791,31 @@
   border-radius: 999px;
 }
 
+.dsc-photo-slot,
+.dsc-poster-fallback {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dsc-photo-slot { overflow: hidden; }
+.dsc-photo-slot > .dsc-poster-fallback { z-index: 0; }
+.dsc-photo-slot > .dsc-photo { position: absolute; inset: 0; z-index: 1; opacity: 0; transition: opacity .12s ease; }
+.dsc-photo-slot > .dsc-photo.is-loaded { opacity: 1; }
+.dsc-photo-status {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.9);
+  color: var(--ink);
+  font-size: 12px;
+}
+
 .dsc-illustration-tag {
   position: absolute;
   left: 8px;
@@ -811,6 +848,9 @@
   background: rgba(17, 24, 39, 0.72);
   border-radius: 999px;
   cursor: pointer;
+  z-index: 3;
+  border: 0;
+  font-family: inherit;
 }
 
 .dsc-reveal:hover { background: rgba(17, 24, 39, 0.85); }
@@ -865,6 +905,7 @@
 }
 
 .dsc-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.dsc-card-body:focus-visible { outline: 2px solid var(--teal); outline-offset: -3px; }
 
 /* aspect-ratio rather than a flat height - the card is ~343px wide on a
    phone-width grid and ~400px in the 3-column desktop grid, so a fixed
@@ -879,6 +920,11 @@
   flex-direction: column;
   gap: 10px;
   flex: 1;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .dsc-card-head {

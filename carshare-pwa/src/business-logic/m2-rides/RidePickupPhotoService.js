@@ -1,6 +1,7 @@
 import { ridePickupPhotoSupabaseAdapter } from '../../data-access/m2-rides/ridePickupPhotoSupabaseAdapter.js';
 import '../shared/fixture/legacyMockDb.js';
 import { rideMockAdapter } from '../../data-access/m2-rides/rideMockAdapter.js';
+import { RideContentService } from './RideContentService.js';
 
 export const PICKUP_PHOTO_SOURCE_MAX_BYTES = 10 * 1024 * 1024;
 export const PICKUP_PHOTO_STORED_MAX_BYTES = 2 * 1024 * 1024;
@@ -82,16 +83,16 @@ export async function preparePickupPhoto(file) {
   }
 }
 
-async function removeObject(path) {
-  if (!path) return;
-  const { error } = await ridePickupPhotoSupabaseAdapter.removeObject(path);
-  if (error) throw photoError(error, 'Unable to remove the old pickup photo.');
-}
-
 export const RidePickupPhotoService = {
   backend: ridePickupPhotoSupabaseAdapter.isConfigured ? 'supabase' : 'mock',
   validate: validatePickupPhoto,
   prepare: preparePickupPhoto,
+
+  async stage(rideId, file) {
+    const prepared = await preparePickupPhoto(file);
+    if (!ridePickupPhotoSupabaseAdapter.isConfigured) return undefined;
+    return RideContentService.photo(rideId, prepared, false);
+  },
 
   async replace(rideId, file) {
     const prepared = await preparePickupPhoto(file);
@@ -100,26 +101,13 @@ export const RidePickupPhotoService = {
       await rideMockAdapter.setRidePickupPhoto(rideId, path, await dataUrlOf(prepared));
       return { path, file: prepared };
     }
-    const { data: userId, error: userError } = await ridePickupPhotoSupabaseAdapter.currentUserId();
-    if (userError || !userId) throw new Error('Sign in before adding a pickup photo.');
-    const { data: path, error: uploadError } = await ridePickupPhotoSupabaseAdapter.upload(userId, rideId, prepared);
-    if (uploadError) throw photoError(uploadError, 'Unable to upload the pickup photo.');
-    try {
-      const { data: oldPath, error } = await ridePickupPhotoSupabaseAdapter.setRidePhoto(rideId, path);
-      if (error) throw photoError(error, 'Unable to attach the pickup photo to this ride.');
-      if (oldPath && oldPath !== path) removeObject(oldPath).catch(() => {});
-      return { path, file: prepared };
-    } catch (error) {
-      await removeObject(path).catch(() => {});
-      throw error;
-    }
+    const path = await RideContentService.photo(rideId, prepared, true);
+    return { path, file: prepared };
   },
 
   async remove(rideId) {
     if (!ridePickupPhotoSupabaseAdapter.isConfigured) return rideMockAdapter.setRidePickupPhoto(rideId, null, null);
-    const { data: oldPath, error } = await ridePickupPhotoSupabaseAdapter.setRidePhoto(rideId, null);
-    if (error) throw photoError(error, 'Unable to remove the pickup photo.');
-    await removeObject(oldPath).catch(() => {});
+    await RideContentService.removeDraftPhoto(rideId);
     return true;
   },
 
