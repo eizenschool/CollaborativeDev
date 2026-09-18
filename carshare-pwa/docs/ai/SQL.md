@@ -7,6 +7,17 @@ history lives in `database/sql/`; do not duplicate full migrations here.
 
 ## Current Status
 
+### Requested ride status adjustment (2026-09-17)
+
+`113_m2_requested_three_ride_statuses.sql` was applied as the tracked migration
+`m2_requested_three_ride_statuses`. This one-off data adjustment changes the
+specified Nn Ever Fresh ride to Completed, Port Dickson ride to Expired, and
+OPPO LOW YAT ride to Cancelled by Host. Related requests and the completion
+timestamp are updated; existing triggers synchronize all six direct/group
+conversations and their seven-day retention, reputation, notifications, and
+live tracking. Scheduled dates and recorded boarding/GPS facts are preserved.
+The script checks the original Published state and must not be rerun.
+
 ```text
 Supabase connected: Yes
 Project ref: pnetstmovctfwqcumodx
