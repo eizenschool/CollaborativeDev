@@ -1,0 +1,1082 @@
+[
+  {
+    "id": "en-01",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 809,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-02",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 704,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-03",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 1779,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-04",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 866,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-05",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 834,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-06",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 521,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-07",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 741,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-08",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 552,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-09",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 1236,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-10",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 538,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-11",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 657,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-12",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 511,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-13",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 780,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-14",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 497,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-15",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 919,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-16",
+    "language": "en",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 551,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-17",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-18",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-19",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-20",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-21",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 5,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-22",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-23",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-24",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 4,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-25",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 4,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-26",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-27",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-28",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-29",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "en-30",
+    "language": "en",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-01",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 739,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-02",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 785,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-03",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 481,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-04",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 791,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-05",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 694,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-06",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 547,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-07",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 1206,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-08",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 704,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-09",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 1052,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-10",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 719,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-11",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 731,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-12",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 529,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-13",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 544,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-14",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 782,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-15",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 524,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-16",
+    "language": "zh",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 888,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-17",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-18",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-19",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-20",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 1369,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-21",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-22",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-23",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 4,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-24",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 1185,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-25",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 1609,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-26",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 777,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-27",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-28",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 1148,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-29",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "zh-30",
+    "language": "zh",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-01",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 853,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-02",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 921,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-03",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 706,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-04",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 676,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-05",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 695,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-06",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 1058,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-07",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 668,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-08",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 1257,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-09",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 679,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-10",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 1729,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-11",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 546,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-12",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 846,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-13",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 726,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-14",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 791,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-15",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 846,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-16",
+    "language": "ms",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 670,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-17",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-18",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-19",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-20",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 528,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-21",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-22",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-23",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-24",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-25",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 546,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-26",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-27",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-28",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 570,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-29",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "ms-30",
+    "language": "ms",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-01",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 836,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-02",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 730,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-03",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 687,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-04",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 660,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-05",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 717,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-06",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 667,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-07",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 454,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-08",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 753,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-09",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 726,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-10",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 581,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-11",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 781,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-12",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 481,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-13",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 871,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-14",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 520,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-15",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 455,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-16",
+    "language": "mixed",
+    "expected": "approved",
+    "actual": "approved",
+    "durationMs": 543,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-17",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-18",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-19",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-20",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 939,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-21",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-22",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-23",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-24",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 680,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-25",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 644,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-26",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 1521,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-27",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 2,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-28",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-29",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 3,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+    "id": "mixed-30",
+    "language": "mixed",
+    "expected": "rejected",
+    "actual": "rejected",
+    "durationMs": 757,
+    "policyVersion": "m2-content-v4",
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8"
+  }
+]

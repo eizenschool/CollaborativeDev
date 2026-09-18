@@ -1,0 +1,25 @@
+-- Module 6 Destination Discovery: follow-up to 029 - grant anon read on
+-- source_place_id too.
+--
+-- 029's reasoning for excluding it was that it is the one field Google's
+-- terms permit storing indefinitely, "not ours to hand to an unauthenticated
+-- caller." That reasoning did not account for `discoverySupabaseRepository.js`
+-- being the same adapter code for both authenticated and anon sessions,
+-- selecting one fixed column list regardless of who is asking. Postgres
+-- denies a query for the *whole* table, not just the ungranted columns, the
+-- moment any requested column lacks a grant - so leaving source_place_id out
+-- did not quietly omit it from the response, it broke anonymous browsing
+-- entirely (`permission denied for table places`), confirmed live the moment
+-- 029 was applied.
+--
+-- source_place_id is also not merely internal: it is `destinationPlaceId` in
+-- the FR-6.35 prefill payload (DestinationDiscoveryService.js) and the
+-- `sourcePlaceId` PlaceQueryService.js exposes to Modules 2 and 4 - a
+-- signed-out visitor clicking "Publish a ride here" needs it captured at
+-- click time, before the auth redirect, or the prefill silently degrades.
+-- Google's storage restriction is about not warehousing it indefinitely or
+-- beyond the catalogue's own lifecycle, not about which authenticated role
+-- may read a row the catalogue already serves - and 024's authenticated
+-- policy already exposes it to any authenticated request, so refusing it to
+-- anon added no real protection, only broke a shared code path.
+grant select (source_place_id) on table public.places to anon;

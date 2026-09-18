@@ -1,20 +1,75 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import App from './App.jsx';
-import { AuthProvider } from './context/AuthContext.jsx';
-import './presentation/styles/theme.css';
+import App from './presentation/shared/app/App.jsx';
+import { AuthProvider } from './presentation/shared/context/AuthContext.jsx';
+import { MessagingSessionProvider } from './presentation/m3-messaging/context/MessagingSessionContext.jsx';
+import { NotificationProvider } from './presentation/shared/context/NotificationContext.jsx';
+import { CallSessionProvider } from './presentation/m3-messaging/context/CallSessionContext.jsx';
+import CallOverlay from './presentation/m3-messaging/components/CallOverlay.jsx';
+import GlobalSOSLauncher, { SOSLauncherProvider } from './presentation/m2-rides/components/ride/GlobalSOSLauncher.jsx';
+import SOSAlertOverlay from './presentation/m2-rides/components/ride/SOSAlertOverlay.jsx';
+import './presentation/shared/styles/theme.css';
 
 // Registers the offline-resilience Service Worker described in 3.1(a).
 // vite-plugin-pwa injects this virtual module at build time.
 import { registerSW } from 'virtual:pwa-register';
-registerSW({ immediate: true });
+
+const SOS_ENABLED = import.meta.env.VITE_M2_SOS_ENABLED === 'true';
+
+// The browser's own scroll restoration otherwise races HomeScreen's async
+// data refetch on a native back/forward navigation - HomeScreen.jsx's own
+// restore effect (via DiscoveryJourney.js's consumeExploreReturn) handles
+// this deliberately instead.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+async function clearDevelopmentPwaState() {
+  if (!('serviceWorker' in navigator)) return;
+  const resetKey = 'lets-tumpang-dev-pwa-reset-v1';
+  if (sessionStorage.getItem(resetKey)) return;
+
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  const wasControlled = Boolean(navigator.serviceWorker.controller);
+  if (!registrations.length && !wasControlled) return;
+
+  sessionStorage.setItem(resetKey, 'done');
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+  if ('caches' in globalThis) {
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+  }
+  if (wasControlled) globalThis.location.reload();
+}
+
+if (import.meta.env.DEV) {
+  // A production worker previously installed on localhost can otherwise keep
+  // serving an old application bundle to one Chrome profile while Vite serves
+  // current source to another. Development must always be network-fresh.
+  void clearDevelopmentPwaState();
+} else {
+  let updateSW;
+  updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh: () => { void updateSW?.(true); },
+  });
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <NotificationProvider>
+          <MessagingSessionProvider>
+            <CallSessionProvider>
+              <SOSLauncherProvider enabled={SOS_ENABLED}>
+                <App />
+                <CallOverlay />
+                <GlobalSOSLauncher />
+                {SOS_ENABLED && <SOSAlertOverlay />}
+              </SOSLauncherProvider>
+            </CallSessionProvider>
+          </MessagingSessionProvider>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>

@@ -1,0 +1,1702 @@
+/* ===== Module 6 - Destination Discovery =====
+   Follows docs/ai/UI.md: shared 700 / 900 / 1100 breakpoints, the px type scale
+   (24 page / 20 section / 16 card / 14-15 body / 12 caption), an 8px spacing
+   rhythm, and theme.css tokens rather than raw colours.
+
+   Every rule is namespaced .dsc-* so this file cannot reach into another
+   module's screens. Illustration colours live in PlacePoster.jsx, where the
+   reason for a module-local palette is documented. */
+
+.dsc-page {
+  /* theme.css reserves a flat 64px under .app-shell for the fixed phone tab
+     bar, but the bar itself is calc(64px + env(safe-area-inset-bottom)) - the
+     one module page with no bottom safe-area compensation of its own let
+     content sit under the home indicator on a notched phone. Matches
+     search.css's calc(96px + env(safe-area-inset-bottom)) page padding. */
+  padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
+  max-width: 1280px;
+  /* .app-shell is display:flex; flex-direction:column (theme.css), and
+     .dsc-page is a direct flex item with margin-left/right: auto for
+     centring under max-width. A flex item with an auto cross-axis margin
+     does not stretch - it falls back to shrink-to-fit sizing instead, which
+     can grow as large as its content's min-content width. That was latent
+     and harmless while .dsc-filters/.dsc-audience wrapped (min-content was
+     just their widest single chip); switching those to a scrolling nowrap
+     row gave this page a genuinely large min-content contributor and
+     exposed it - .dsc-page grew wider than the viewport, silently clipped
+     rather than shown as a scrollbar by theme.css's
+     html, body { overflow-x: hidden }. An explicit width, the standard fix
+     for a flex item that must never grow past its own container on
+     content's say-so, restores ordinary "100% up to max-width" sizing. */
+  width: 100%;
+  min-width: 0;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+@media (min-width: 701px) {
+  .dsc-page { padding: 24px; }
+}
+
+@media (min-width: 1101px) {
+  .dsc-page { padding: 32px; }
+}
+
+/* --- hero --------------------------------------------------------------- */
+
+.dsc-hero {
+  position: relative;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  margin-bottom: 24px;
+  background: #fff;
+  border: 1px solid var(--border);
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* The card and hero interiors are <span> elements, because a <button> may not
+   contain block-level children. Spans are inline by default, so every one of
+   these containers has to declare its own display or the height simply does not
+   apply and the SVG expands to its own aspect ratio instead. */
+.dsc-hero-media { display: block; position: relative; height: 240px; }
+
+.dsc-hero-open {
+  z-index: 2;
+  width: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dsc-hero-open:focus-visible { outline: 2px solid #fff; outline-offset: 5px; }
+
+@media (min-width: 701px) { .dsc-hero-media { height: 340px; } }
+@media (min-width: 1101px) { .dsc-hero-media { height: 440px; } }
+
+.dsc-hero-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0) 35%, rgba(17, 24, 39, 0.78) 100%);
+}
+
+.dsc-hero-text {
+  display: block;
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  color: #fff;
+}
+
+.dsc-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--teal-dark);
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.dsc-hero-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+
+@media (min-width: 701px) { .dsc-hero-title { font-size: 32px; } }
+
+.dsc-hero-sub { display: block; font-size: 14px; margin: 0; opacity: 0.92; }
+
+/* --- header and controls ------------------------------------------------ */
+
+.dsc-header h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+
+.dsc-header p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* The AI entry point. Home's primary action for a visitor who cannot yet
+   name a destination - direction A (spacious editorial): an inviting,
+   full-width block the reader reads as a headline offer, not a flat search
+   bar - matching the "one primary action" language of the accepted mockup,
+   rather than the dense-utility bar this had drifted into. */
+.dsc-header .dsc-eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dsc-header .dsc-lede { margin: 0 0 24px; color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 56ch; }
+
+.dsc-ask {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 20px 20px 20px 24px;
+  margin-top: 4px;
+  background: linear-gradient(135deg, var(--teal-tint) 0%, #fff 62%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl, var(--radius-card));
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard);
+}
+.dsc-ask:hover { border-color: var(--teal); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.dsc-ask:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.dsc-ask-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--teal-dark);
+}
+.dsc-ask-ph {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+}
+.dsc-ask-go {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  background: var(--teal);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+.dsc-ask:hover .dsc-ask-go { background: var(--teal-dark); }
+
+@media (max-width: 700px) {
+  .dsc-ask { flex-wrap: wrap; padding: 18px; }
+  .dsc-ask-ph { font-size: 16px; }
+  .dsc-ask-go { width: 100%; justify-content: center; }
+  .dsc-origin-summary__button { display: flex; width: 100%; }
+  .dsc-origin-summary__change { margin-left: auto; }
+  .dsc-guide-question { align-items: stretch; flex-direction: column; }
+  .dsc-guide-question .dsc-btn { width: 100%; }
+}
+
+/* The account-status strip: only rendered when there is genuinely something
+   pending, so it never occupies space for a visitor with nothing going on. */
+.dsc-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  margin: 16px 0 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  color: var(--ink);
+}
+.dsc-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  flex: none;
+  box-shadow: 0 0 0 3px var(--teal-tint);
+}
+.dsc-status button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dsc-origin-summary {
+  margin: 18px 0 0;
+}
+.dsc-origin-summary__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 9px 12px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dsc-origin-summary__button:hover { border-color: var(--teal); }
+.dsc-origin-summary__button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.dsc-origin-summary__button > span:nth-child(2) { min-width: 0; }
+.dsc-origin-summary__label { display: block; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.dsc-origin-summary__default { color: var(--muted); font-size: 12px; font-weight: 400; }
+.dsc-origin-summary__change { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; color: var(--teal-dark); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.dsc-origin-summary__hint, .dsc-origin-summary__dialog-note { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.dsc-origin-summary__dialog-note { margin-top: 14px; }
+
+/* The location picker is shared JSX, while its layout is intentionally owned
+   by each consuming screen. Without these Home-scoped rules the browser drew
+   native list bullets and a native button inside an otherwise designed
+   AdaptiveDialog. */
+.dsc-origin-dialog .confirmed-location-field,
+.dsc-origin-dialog .route-field { min-width: 0; }
+.dsc-origin-dialog .route-field > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.dsc-origin-dialog .input-wrap { position: relative; }
+.dsc-origin-dialog .input-wrap input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 44px 10px 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+.dsc-origin-dialog .input-wrap .prefix-icon {
+  position: absolute;
+  z-index: 2;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.dsc-origin-dialog .location-confirmed-icon {
+  position: absolute;
+  z-index: 2;
+  right: 12px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  pointer-events: none;
+}
+.dsc-origin-dialog .current-location-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dsc-origin-dialog .current-location-button:disabled { opacity: .6; cursor: wait; }
+.dsc-origin-dialog .current-location-confirmation {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--teal) 34%, var(--border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--teal-tint) 72%, white);
+}
+.dsc-origin-dialog .current-location-confirmation__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+.dsc-origin-dialog .current-location-confirmation__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: 50%;
+  color: var(--teal-dark);
+  background: #fff;
+}
+.dsc-origin-dialog .current-location-confirmation__details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.dsc-origin-dialog .current-location-confirmation__eyebrow {
+  color: var(--teal-dark);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.dsc-origin-dialog .current-location-confirmation strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.dsc-origin-dialog .current-location-confirmation__accuracy {
+  padding-left: 36px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dsc-origin-dialog .current-location-confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+.dsc-origin-dialog .current-location-confirmation__actions button {
+  min-height: 40px;
+  padding: 8px 13px;
+  font-size: 12px;
+}
+.dsc-origin-dialog .location-suggestions-panel {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+.dsc-origin-dialog .location-suggestions-heading {
+  margin: 0;
+  padding: 11px 14px 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.dsc-origin-dialog .location-suggestions-panel ul {
+  max-height: min(300px, 42vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+.dsc-origin-dialog .location-suggestions-panel li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 48px;
+  padding: 10px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.dsc-origin-dialog .location-suggestions-panel li svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal); }
+.dsc-origin-dialog .location-suggestions-panel li:hover,
+.dsc-origin-dialog .location-suggestions-panel li.active { background: var(--teal-tint); }
+.dsc-origin-dialog .location-distance { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.dsc-origin-dialog .google-attribution {
+  display: flex;
+  justify-content: flex-end;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+}
+.dsc-origin-dialog .google-attribution img { display: block; width: 120px; max-width: 100%; height: auto; }
+.dsc-origin-dialog .location-field-message { margin: 7px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.dsc-origin-dialog .location-field-message.error { color: var(--danger); }
+@media (max-width: 520px) {
+  .dsc-origin-dialog .current-location-confirmation__actions button { width: 100%; }
+}
+.dsc-range-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dsc-range-note button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--teal-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .dsc-range-note { align-items: flex-start; flex-direction: column; }
+}
+
+/* Loading skeleton: replaces the plain "Finding destinations…" text so the
+   page does not visibly jump in height once results arrive. */
+.dsc-list-skeleton { pointer-events: none; }
+.dsc-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+}
+.dsc-card-skeleton .dsc-card-media { aspect-ratio: 16 / 10; border-radius: var(--radius-lg); }
+
+/* Phone-first: a column stacks the date field, the filter chips and the
+   media toggle onto their own rows instead of the two-column squeeze that
+   used to result from flex-wrap alone (the chips wrapped into a cramped
+   column beside the date field, and the toggle was left orphaned on its own
+   line regardless). align-items: flex-start deliberately does not stretch
+   .dsc-field to the container width - UnmetDemandView.jsx reuses
+   .dsc-controls with only the date field inside it, and that lone field
+   should keep its own natural width rather than always filling the row. */
+.dsc-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 32px 0 40px;
+}
+
+@media (min-width: 701px) {
+  .dsc-controls { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+}
+
+.dsc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dsc-field input {
+  /* 16px prevents iOS zooming the viewport on focus. */
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: #fff;
+  min-height: 44px;
+}
+
+/* Full width on phone (its own row above the date field), a bounded flexible
+   width on desktop alongside the other controls - matches .dsc-field's input
+   sizing (16px to avoid iOS zoom, 44px touch target) but needs align-self:
+   stretch since, unlike .dsc-field, it should always fill its row. */
+.dsc-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--muted);
+  min-height: 44px;
+}
+
+.dsc-search-field input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: transparent;
+  min-height: 44px;
+}
+
+@media (min-width: 701px) {
+  .dsc-search-field { flex: 1 1 220px; max-width: 320px; }
+}
+
+/* The sanctioned scrolling-chip idiom (search.css's
+   .search-recommendation-categories): nowrap + overflow-x + flex: 0 0 auto on
+   each chip, rather than wrapping five chips into a column narrower than any
+   one of them. align-self: stretch so the row spans .dsc-controls's full
+   width - the flex column above deliberately does not stretch children by
+   default, since the lone-field case must not be forced full width, but the
+   chip strip needs a bounded width for its own overflow to make sense. */
+.dsc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  gap: 8px;
+  align-self: stretch;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 701px) {
+  .dsc-filters { flex-wrap: wrap; overflow-x: visible; align-self: auto; padding-bottom: 0; }
+}
+
+/* Category filter buttons use the shared ui/Primitives Chip (.ui-chip). The
+   category value itself is lowercase (business-logic/discovery/constants.js);
+   capitalising is this row's presentation choice, not a global Chip rule. */
+.dsc-filters .ui-chip { text-transform: capitalize; }
+
+/* --- sections ----------------------------------------------------------- */
+
+.dsc-section { margin-bottom: 56px; }
+
+.dsc-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dsc-section h2 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.dsc-section-note {
+  margin: 0 0 24px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.dsc-count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dsc-list {
+  display: grid;
+  gap: 28px;
+  /* minmax(0, 1fr), not bare 1fr: cards contain white-space: nowrap
+     descendants (.dsc-chip, .dsc-count), and an unbroken chip can otherwise
+     push a bare 1fr track wider than its even share of the grid. Two columns
+     at most, not three - direction A shows fewer, larger destinations per
+     screen rather than maximising how many fit. */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 701px) { .dsc-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.dsc-empty,
+.dsc-notice,
+.dsc-withheld {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+
+.dsc-empty {
+  background: #fff;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.dsc-empty p { margin: 0 0 6px; }
+.dsc-empty p:last-child { margin-bottom: 0; }
+
+.dsc-empty-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dsc-notice {
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  padding: 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.dsc-traffic-notice, .dsc-date-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  margin: -20px 0 24px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.dsc-date-notice { color: var(--teal-dark); background: var(--teal-tint); border-color: transparent; }
+.dsc-date-notice__options { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.dsc-date-notice__options button { border: 1px solid var(--teal); border-radius: var(--radius-pill); padding: 5px 9px; color: var(--teal-dark); background: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.dsc-date-notice__options button:hover { background: var(--teal); color: #fff; }
+.dsc-detail-date-notice { margin: 16px 0 0; padding: 12px 14px; border: 1px solid var(--teal); }
+.dsc-detail-date-notice > svg { flex: 0 0 auto; margin-top: 2px; }
+.dsc-date-notice__copy { display: grid; gap: 2px; min-width: 0; }
+.dsc-date-notice__copy strong, .dsc-date-notice__copy small { display: block; }
+.dsc-date-notice__copy small { color: var(--muted); font-size: 12px; }
+
+.dsc-withheld {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* A failed read, distinct from an empty one: solid rather than dashed, so it
+   does not read as "nothing here" at a glance. */
+.dsc-failed {
+  border-style: solid;
+  border-color: var(--border);
+}
+
+.dsc-failed-title {
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+.dsc-failed-action {
+  margin-top: 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius);
+  background: var(--teal);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dsc-failed-action:hover { background: var(--teal-dark); border-color: var(--teal-dark); }
+
+/* --- poster ------------------------------------------------------------- */
+
+/* The photograph and the illustration share one slot and must fill it
+   identically, so a place swapping between them never shifts the layout. */
+.dsc-poster,
+.dsc-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Held under the image while it loads, so the slot is never a bare white gap. */
+.dsc-photo { background: var(--teal-tint); }
+
+/* FR-6.15's interactive scene and its "checking coverage" placeholder. Both
+   need their own explicit display and dimensions - an iframe has no natural
+   fallback height the way a poster's own viewBox gives it one, and a bare
+   <div> during the coverage check would otherwise collapse to zero height,
+   the same failure this module already hit once with a plain <span>. */
+.dsc-streetview-embed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.dsc-streetview-checking {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--teal-tint);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.dsc-photo-credit {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(17, 24, 39, 0.6);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.dsc-photo-slot,
+.dsc-poster-fallback {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dsc-photo-slot { overflow: hidden; }
+.dsc-photo-slot > .dsc-poster-fallback { z-index: 0; }
+.dsc-photo-slot > .dsc-photo { position: absolute; inset: 0; z-index: 1; opacity: 0; transition: opacity .12s ease; }
+.dsc-photo-slot > .dsc-photo.is-loaded { opacity: 1; }
+.dsc-photo-status {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.9);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.dsc-illustration-tag {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+/* The per-slot "show photo" / "load Street View" affordance PlaceImage and
+   StreetViewFrame render over their own illustration when the global media
+   setting is off. A span with role="button", not a <button> - see
+   PlaceImage.jsx's header for why nesting a real button here would be
+   invalid inside a card-sized <button>. */
+.dsc-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+  width: fit-content;
+  height: fit-content;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(17, 24, 39, 0.72);
+  border-radius: 999px;
+  cursor: pointer;
+  z-index: 3;
+  border: 0;
+  font-family: inherit;
+}
+
+.dsc-reveal:hover { background: rgba(17, 24, 39, 0.85); }
+.dsc-reveal:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* The always-visible global toggle in .dsc-controls. Built on the shared
+   Chip primitive so it reads as part of the same control row rather than a
+   separate settings widget. */
+/* align-self: stretch, matching .dsc-filters above - on the phone column
+   layout this gives the toggle its own full-width row instead of the
+   orphaned content-width pill it used to be left as beside a wrapped chip
+   column. justify-content centres its icon+label within that width. */
+.dsc-media-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: stretch;
+}
+
+@media (min-width: 701px) {
+  .dsc-media-toggle { align-self: auto; justify-content: flex-start; }
+}
+
+/* --- card --------------------------------------------------------------- */
+
+.dsc-card {
+  /* Weaker card boundary than the dense-utility direction used - whitespace
+     and imagery do the separating, the border is a hairline, not a frame. */
+  border: 1px solid var(--border-subtle, #eef1f0);
+  border-radius: var(--radius-lg, var(--radius-card));
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  /* Staggered entrance: same ui-item-enter + --motion-delay pattern the
+     former home-action-card used, reused here since it is now these cards
+     that lead the first screen a visitor sees. */
+  animation: ui-item-enter var(--motion-slow) var(--ease-enter) both;
+  animation-delay: var(--motion-delay, 0ms);
+  flex-direction: column;
+  text-align: left;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+
+.dsc-card:hover {
+  border-color: #c9d1db;
+  box-shadow: 0 4px 14px rgba(17, 24, 39, .06);
+  transform: translateY(-1px);
+}
+
+.dsc-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.dsc-card-body:focus-visible { outline: 2px solid var(--teal); outline-offset: -3px; }
+
+/* aspect-ratio rather than a flat height - the card is ~343px wide on a
+   phone-width grid and ~400px in the 3-column desktop grid, so a fixed
+   140px let the image ratio drift from 2.45:1 to 2.9:1 across breakpoints,
+   the one image slot in this file that never adapted. display: block is
+   still required for the same <button>-interior reason as .dsc-hero-media. */
+.dsc-card-media { display: block; position: relative; aspect-ratio: 4 / 3; }
+
+.dsc-card-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsc-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dsc-card-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.dsc-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: capitalize;
+  white-space: nowrap;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font-weight: 600;
+}
+
+/* The full description is in the document; the card shows the first three
+   lines of it. Clamping in CSS rather than cutting the string keeps the whole
+   text available to assistive technology and to the detail screen, and stops a
+   long description from setting the height of every card in its grid row. */
+.dsc-card-desc {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dsc-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.dsc-meta-item { display: inline-flex; align-items: center; gap: 4px; }
+
+.dsc-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* FR-6.16: thin data is stated, not dressed up as a rating. */
+.dsc-rating-low { color: var(--muted); font-weight: 400; font-style: italic; }
+
+.dsc-review-count { color: var(--muted); font-weight: 400; }
+
+.dsc-weather {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: #92400e;
+  background: var(--warning-tint);
+  padding: 8px;
+  border-radius: var(--radius);
+}
+
+.dsc-availability {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  margin-top: auto;
+}
+
+.dsc-served { background: var(--teal-tint); color: var(--teal-dark); }
+.dsc-unserved { background: var(--gold-tint); color: #854d0e; }
+.dsc-traffic-unknown { background: #f1f5f9; color: #475569; }
+.dsc-availability-note { display: block; margin-top: 3px; color: inherit; font-size: 11px; font-weight: 400; }
+.dsc-availability-note svg { vertical-align: -2px; margin-right: 2px; }
+.dsc-interest-note { display: flex; align-items: flex-start; gap: 5px; margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.dsc-interest-note svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal); }
+.dsc-saved-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.dsc-saved-state > svg { flex: 0 0 auto; margin-top: 2px; }
+.dsc-saved-state span { min-width: 0; }
+.dsc-saved-state strong, .dsc-saved-state small { display: block; }
+.dsc-saved-state small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.dsc-saved-state--alert { background: #fff; }
+.dsc-inline-action { display: block; margin-top: 6px; padding: 0; border: 0; color: var(--teal-dark); background: transparent; font: inherit; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.dsc-inline-action:disabled { cursor: wait; opacity: .65; }
+.dsc-interest-choice { display: grid; gap: 5px; margin: 12px 0; }
+.dsc-interest-choice small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+/* The unserved section is visually distinct because it asks for a different
+   action - offer to drive, rather than take a seat. */
+.dsc-card-unserved { border-style: dashed; }
+
+/* --- buttons ------------------------------------------------------------ */
+
+.dsc-actions {
+  display: flex;
+  /* Phone-first, matching the house pattern repeated in theme.css, ride.css
+     and search.css for the same shape: a call-to-action row stacks and its
+     buttons go full-width on a narrow screen rather than wrapping into
+     content-width buttons side by side. */
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+@media (min-width: 701px) {
+  .dsc-actions { flex-direction: row; flex-wrap: wrap; align-items: normal; }
+}
+
+/* Scoped to .dsc-actions's own children rather than every .dsc-btn - this
+   class is also used standalone (PreferencePrompt, DemoControls, the "no
+   longer available" fallback), where stretching to full width was never
+   part of the ask. */
+.dsc-actions > .dsc-btn { width: 100%; }
+@media (min-width: 701px) { .dsc-actions > .dsc-btn { width: auto; } }
+
+/* Inside the detail aside, .dsc-actions and .dsc-notice sit in a plain
+   .dsc-panel with no flex gap of their own (unlike .dsc-card-body's cards,
+   where the 8px column gap already separates them) - this replaces what used
+   to be an inline marginTop on both elements. */
+.dsc-panel .dsc-availability + .dsc-actions,
+.dsc-panel .dsc-actions + .dsc-notice {
+  margin-top: 16px;
+}
+
+.dsc-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.dsc-btn:hover { border-color: var(--teal); }
+.dsc-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-btn-primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dsc-btn-primary:hover { background: var(--teal-dark); border-color: var(--teal-dark); }
+
+.dsc-btn-ghost { border-color: transparent; color: var(--muted); background: transparent; }
+
+.dsc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- preference prompt -------------------------------------------------- */
+
+.dsc-prompt {
+  border: 1px solid var(--teal);
+  background: var(--teal-tint);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.dsc-prompt h2 {
+  font-family: var(--font-display);
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.dsc-prompt p { margin: 0 0 16px; font-size: 14px; color: var(--muted); }
+
+.dsc-prompt-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dsc-prompt-choice {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--ink);
+  min-height: 44px;
+}
+
+.dsc-prompt-choice.selected {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* --- detail ------------------------------------------------------------- */
+
+.dsc-back {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.dsc-detail-layout { display: grid; gap: 24px; }
+
+/* .dsc-detail-aside is the only container holding a call to action ("Find a
+   ride" / "I will drive" / "Tell me when there is a ride") and it is second
+   in the JSX, so on a single-column phone layout it used to render below the
+   carousel, the full description, every review and the score breakdown -
+   UI.md L79's "keep the primary action easy to reach" reachable only after a
+   long scroll. `order` is a grid auto-placement property, not a DOM change:
+   assistive tech and keyboard tab order still follow the markup, only the
+   painted position moves, which is what actually fixes the "easy to reach"
+   problem without turning the aside into a new fixed-position bar that would
+   also need to carry its "N rides going" status line, not just the buttons. */
+.dsc-detail-aside { order: -1; }
+
+@media (min-width: 1101px) {
+  .dsc-detail-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
+  .dsc-detail-aside { position: sticky; top: calc(var(--nav-offset) + 16px); order: 0; }
+}
+
+.dsc-carousel { position: relative; border-radius: var(--radius-card); overflow: hidden; }
+.dsc-carousel-frame { position: relative; height: 220px; }
+
+@media (min-width: 701px) { .dsc-carousel-frame { height: 300px; } }
+/* Missing before - the frame stayed 300px inside a ~780px-wide desktop detail
+   column (1.6fr of .dsc-detail-layout's grid), a 2.6:1 letterbox for the
+   primary imagery. Steps once more here, matching the hero's own two-step
+   ladder rather than stopping after one. */
+@media (min-width: 1101px) { .dsc-carousel-frame { height: 380px; } }
+
+.dsc-carousel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dsc-carousel-prev { left: 8px; }
+.dsc-carousel-next { right: 8px; }
+
+.dsc-carousel-dots {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.dsc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 0;
+}
+
+.dsc-dot.active { background: #fff; width: 20px; border-radius: 999px; }
+
+.dsc-detail h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--ink);
+}
+
+.dsc-detail-desc {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 16px 0 8px;
+}
+
+.dsc-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.dsc-panel h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.dsc-panel p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.dsc-panel-note { margin: 12px 0 0 !important; font-size: 12px !important; }
+.dsc-selected-date { display: flex; align-items: center; gap: 6px; }
+
+.dsc-guide-question {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--teal-tint);
+}
+.dsc-guide-question h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.dsc-guide-question p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+/* --- reviews ------------------------------------------------------------ */
+
+.dsc-review { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.dsc-review:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.dsc-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dsc-review-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.dsc-review-author { font-size: 14px; font-weight: 600; color: var(--ink); }
+.dsc-review-stars { display: inline-flex; gap: 2px; color: var(--gold); margin-left: auto; }
+.dsc-review-text { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+
+/* --- audience switch ---------------------------------------------------- */
+
+/* The two tab labels ("Where should I go?" / "Where do people want to go?")
+   are long enough that wrapping into a two-line-tall bar was the default on
+   a phone. The same nowrap + overflow-x idiom as .dsc-filters, rather than
+   letting either label wrap internally. */
+.dsc-audience {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow-x: visible;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 701px) {
+  .dsc-audience { display: flex; overflow-x: visible; }
+}
+
+.dsc-audience-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 0;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+}
+
+.dsc-audience-tab.active {
+  color: var(--teal-dark);
+  border-bottom-color: var(--teal);
+  font-weight: 600;
+}
+
+.dsc-audience-tab:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+
+/* --- demonstration controls (only rendered at ?demo=1) ------------------- */
+
+.dsc-demo {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 24px;
+  background: #fff;
+}
+
+.dsc-demo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dsc-demo-head h2 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.dsc-demo-note { margin: 4px 0 16px; font-size: 12px; color: var(--muted); }
+
+.dsc-demo-group { margin-bottom: 16px; }
+.dsc-demo-group:last-child { margin-bottom: 0; }
+
+.dsc-demo-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+
+.dsc-demo-months { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.dsc-demo-chip {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.dsc-demo-chip.active {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dsc-demo-hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+.dsc-demo-error { color: var(--danger, #c0392b); }
+
+.dsc-demo-place-select {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: #fff;
+  min-height: 44px;
+}
+
+.dsc-demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--warning-tint);
+  color: #854d0e;
+  font-size: 13px;
+}
+
+/* --- why we are suggesting this ----------------------------------------- */
+
+.dsc-reasons,
+.dsc-caveats {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dsc-reasons li,
+.dsc-caveats li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.dsc-reasons li svg { color: var(--teal); flex-shrink: 0; margin-top: 2px; }
+
+.dsc-caveats li {
+  font-size: 14px;
+  color: var(--muted);
+  background: var(--gold-tint);
+  padding: 12px;
+  border-radius: var(--radius);
+}
+
+.dsc-caveats li svg { color: #854d0e; flex-shrink: 0; margin-top: 2px; }
+
+.dsc-working-toggle {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.dsc-working-toggle:hover { color: var(--teal-dark); }
+.dsc-working-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-show-more {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--teal-dark);
+  font: 700 14px var(--font);
+  cursor: pointer;
+}
+.dsc-show-more:hover { border-color: var(--teal); background: var(--teal-tint); }
+.dsc-show-more span { color: var(--muted); font-weight: 500; }
+
+.dsc-caret-open { transform: rotate(90deg); }
+
+/* --- score breakdown ---------------------------------------------------- */
+
+.dsc-breakdown { display: grid; gap: 24px; }
+
+.dsc-breakdown-axis h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-family: var(--font-display);
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.dsc-axis-score { font-size: 20px; color: var(--teal-dark); }
+
+.dsc-axis-note { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+
+.dsc-axis-cap {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #854d0e;
+  background: var(--gold-tint);
+  padding: 12px;
+  border-radius: var(--radius);
+  line-height: 1.6;
+}
+
+.dsc-signal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 64px;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.dsc-signal-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.dsc-signal-fill { display: block; height: 100%; background: var(--teal); }
+.dsc-signal-value { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dsc-signal-weight { color: var(--muted); }
+
+/* Why a signal landed where it did, shown under its label. */
+.dsc-signal-reason {
+  display: block;
+  font-size: 12px;
+  color: var(--teal-dark);
+}
+
+.dsc-season-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+}
+
+.dsc-season-off { background: var(--gold-tint); color: #854d0e; }
+
+/* --- home rail ---------------------------------------------------------- */
+
+.dsc-rail { margin-top: 32px; }
+
+.dsc-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dsc-rail-head h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+
+.dsc-rail-link {
+  border: 0;
+  background: none;
+  color: var(--teal-dark);
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.dsc-rail-sub { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+
+/* Shown in place of the track when nothing ranked. The rail keeps its heading
+   and this control so Discovery never loses its entry point on the home screen. */
+.dsc-rail-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--teal-dark);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dsc-rail-cta:hover { border-color: var(--teal); border-style: solid; }
+
+/* A scrolling rail rather than a wrapping grid, so the row reads as "more to
+   the right" instead of quietly truncating. */
+.dsc-rail-track {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dsc-rail-item {
+  flex: 0 0 220px;
+  scroll-snap-align: start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #fff;
+  padding: 0;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dsc-rail-item:hover { border-color: #c9d1db; }
+.dsc-rail-item:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.dsc-rail-media { display: block; position: relative; height: 108px; }
+.dsc-rail-body { display: block; padding: 12px; }
+
+.dsc-rail-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+  line-height: 1.3;
+}
+
+.dsc-rail-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsc-card, .dsc-card:hover { transition: none; transform: none; }
+}

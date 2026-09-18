@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "carshare-pwa-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "carshare-pwa", "run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "carshare-pwa-fixture",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "carshare-pwa", "run", "dev:fixture"],
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "carshare-pwa-fixture-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "carshare-pwa", "run", "dev:fixture", "--", "--port", "5199", "--strictPort"],
+      "port": 5199
+    },
+    {
+      "name": "carshare-pwa-dev-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "carshare-pwa", "run", "dev", "--", "--port", "5198", "--strictPort"],
+      "port": 5198
+    }
+  ]
+}

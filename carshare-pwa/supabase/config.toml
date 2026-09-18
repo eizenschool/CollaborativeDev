@@ -1,0 +1,42 @@
+[functions.notification-push]
+verify_jwt = false
+
+[functions.m2-live-share]
+verify_jwt = false
+
+[functions.m2-ride-pickup-photo]
+verify_jwt = false
+
+
+[functions.m3-message-translation]
+verify_jwt = true
+
+[functions.m3-turn-credentials]
+verify_jwt = true
+
+[functions.m3-turn-usage-monitor]
+verify_jwt = false
+
+[functions.m6-ingest]
+verify_jwt = false
+
+[functions.m6-tumpang-guide]
+# Public guests are allowed. The function validates an optional user JWT in its
+# own code and never trusts a browser-supplied user identifier.
+verify_jwt = false
+
+[functions.m3-message-reports]
+# Handler verifies user JWTs or a dedicated scheduled-cleanup secret.
+verify_jwt = false
+
+[functions.m2-content-check]
+# Handler verifies the user with Auth before checking ownership or content.
+verify_jwt = false
+
+[functions.m2-content-cleanup]
+# Dedicated scheduled-cleanup secret, never a browser credential.
+verify_jwt = false
+
+[functions.m2-content-evaluate]
+# Temporary synthetic-corpus evaluator; requires a server credential.
+verify_jwt = false

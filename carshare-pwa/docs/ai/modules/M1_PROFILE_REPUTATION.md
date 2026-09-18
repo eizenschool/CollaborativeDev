@@ -1,0 +1,247 @@
+# Module 1 — User Profile & Reputation
+
+## Owner
+Daniel Lim Dong Hen
+
+## Purpose
+User identity/profile, vehicle information, reputation/impact presentation, emergency-contact/account-management responsibilities.
+
+## Requirement Intent
+Registration/profile management, photo, vehicles, evidence-based reputation/standing, privacy-filtered public profile, ride eligibility support, Host Impact Score/badge presentation, emergency contact, deactivation/deletion.
+
+## Existing Repository Areas
+Presentation: `src/presentation/m1-profile/`, with shared auth state in
+`src/presentation/shared/context/AuthContext.jsx`.
+Business logic: `src/business-logic/m1-profile/`.
+Data access: `src/data-access/m1-profile/` contains M1 Supabase and mock
+adapters; the Supabase client and atomic legacy fixture foundation remain in
+`src/data-access/shared/`.
+
+## Owns
+Profile/account-facing behaviour, vehicles, profile-side reputation/impact display, host eligibility inputs exposed to Module 2.
+
+## Depends On
+Module 2 verified ride lifecycle/review outcomes; Module 5 trip and CO2 data for Host Impact; Supabase Auth/profile data.
+
+## Current Status
+`Development` already contains a substantial Module 1 prototype and services. Do not restart from scratch.
+Auth and Profile now consume the shared semantic UI runtime: visible labels,
+inline live feedback, pending submission states, accessible account actions,
+adaptive deactivation confirmation, and the phone Sign out path are preserved
+without adding profile fields or changing authentication/service contracts.
+Module 1 is connected to the shared Supabase project. The deployed history is
+`database/sql/001-012`; security corrections for Module 1 are in `008-009`.
+Supabase session restoration now has one startup authority: AuthContext consumes
+the user supplied by `INITIAL_SESSION`, mounts a safe account shell immediately,
+and fetches the private Profile in the background. Initial `Preparing` is capped
+at eight seconds with a non-blocking retry notice; foreground token/profile
+events stay silent and never replace the mounted route with the startup screen.
+Public-safe profile fields are separate from owner-only phone/emergency data,
+email is sourced from Supabase Auth, avatars use an owner-folder policy, and
+vehicles are owner-only with one active vehicle per user.
+`ProfileService.updateProfilePhoto()` now runs a Sightengine-backed content
+check (`supabase/functions/m1-avatar-content-check`, D039) before a photo
+reaches the public `avatars` bucket, flagging identity documents, visible
+personal information, nudity, violence, hate/extremist symbols, and
+offensive gestures (e.g. a raised middle finger); it fails open on a check
+error. Two earlier providers were tried and dropped: Gemini (three separate
+live issues in one session - timeout, a model that hangs on image input, a
+free-tier quota shared with Module 6's Tumpang Guide), then Google Cloud
+Vision (fully built and tested but never deployable live - blocked by a
+Google Cloud billing-account issue). Email verification
+does not establish an app session until Supabase returns one. Deactivation is
+reversible on the next successful login and hides published rides; hard account
+deletion is hidden until Auth identity deletion can be implemented safely.
+`MyProfile.jsx`'s consolidated layout (`.profile-page`/`.profile-sidebar`/`.rail-card` in `theme.css`) now has a `@media (max-width: 700px)` breakpoint matching Module 2's Ride Hub pattern - previously the sidebar had no mobile treatment.
+Module 2 reviews now recalculate `host_impact_stats.rating` as the account-level
+average star rating. Authored migration `065` additionally gives those reviews
+an asymmetric Reputation effect while preserving rating as a separate signal.
+`AuthPage.jsx` now offers "Continue with Google" next to email/password (D015);
+`AuthService.signInWithGoogle()` calls Supabase's `signInWithOAuth`, and the
+existing `handle_new_user()` trigger already covers Google's profile/avatar
+metadata shape. Still needs Google Cloud + Supabase Dashboard provider setup
+(see `docs/SUPABASE-SETUP.md`) before it works against the live project.
+### Driver onboarding update (2026-09-06; supersedes the older capture flow below)
+
+My Vehicles now collects account-level driver documents before the first
+vehicle form: IC number/photo, licence expiry and one licence photo. Complete
+drivers skip this step for additional vehicles. Existing owners supplement
+missing documents here. Info & Security offers passenger IC/MyKad or Passport;
+it never requires a licence and preserves any existing driver fields.
+The shared identity form uses private previews and specific field errors.
+Admin review labels the selected identity photo; licence photos appear only
+when driver fields are present. Passenger IC has a basic 12-digit check;
+Passport has a 5–20 ASCII letter/digit check. Both require a nonempty
+JPEG/PNG/WebP photo up to 5 MB. Changing type/number requires a matching new photo.
+Submission resets the combined application to pending; approval remains a badge,
+not a prerequisite for hosting. The service calls `submit_identity_documents_v2`
+and reads back ambiguous outcomes before reporting success or allowing retries.
+`panel=vehicles&returnTo=...` deep-links to My Vehicles and preserves only an
+allowlisted publish/new-draft return path. 100/101 are live; 102's stricter publish
+trigger is pending frontend release. 103 adds passenger Passport storage/RPC
+and is deployed as `20260906134759_m1_passenger_identity_documents` with approval.
+It adds a Passport-only publish guard because the live legacy guard only checks
+status. 102 remains undeployed. Real passenger upload acceptance is pending.
+Legacy reads and driver-only RPC fallback keep
+existing drivers compatible; passenger capture needs 103. Passport alone never
+unlocks hosting, even when previous licence files are retained. See SQL.md.
+
+Identity verification happens where it is used, not at sign-up (D035).
+Sign-up collects no IC number at all - the old gate was skippable through
+`signInWithGoogle()` and asked every member for a document only a Host needs.
+A Host uploads a photo of their MyKad before publishing a Ride
+(`IdentityVerificationService`, `IdentityVerificationCard`, authored migration
+`093_m1`): submitting unlocks publishing, approval earns the verified label,
+and review runs through a service-role-only
+`private.review_identity_verification` because the shared Trust & Safety
+reviewer surface is still undecided. The images live in the PRIVATE
+`identity-documents` bucket under owner-folder policies with no anon policy,
+and never reach a public profile or Ride card. `093_m1` also retires
+`profile_private.ic_checked_at` (restoring `handle_new_user()` before dropping
+the column). The MyKad number and the driver's licence expiry are captured in that same
+step and stored on `identity_verifications` (`094_m1`), not per vehicle: a
+Malaysian licence carries the holder's IC, and a Host with three cars used to
+retype it three times. The vehicle form no longer asks for a licence, `094_m1`
+retires the `088_m1` per-vehicle trigger, and the expiry check moves into
+`enforce_ride_identity_verification`. Publishing needs a non-rejected
+submission, an unlapsed licence, a registered vehicle and the D034 reputation
+gate. Status is visible in Profile > Info & Security, rendered from the same
+`IdentityVerificationCard` as the publish gate. Review is still manual - a
+reviewer runs `private.review_identity_verification` from the Supabase SQL
+Editor, since a client-facing reviewer surface depends on the open Trust &
+Safety console decision. `malaysianIdentity.js` holds the shared MyKad
+validator and licence-currency rule.
+
+Submitting writes through a direct `.upsert()`, which PostgREST turns into
+`INSERT ... ON CONFLICT DO UPDATE`; `094_m1` only granted a column-restricted
+UPDATE, which Postgres refuses for that statement shape with a
+`42501 permission denied` error - the same trap `071_project` hit on
+`profile_visibility`. `095_m1` grants the plain table-level UPDATE that shape
+needs; RLS still does the real gatekeeping underneath it.
+
+Live ACL verification on 2026-09-06 then found that INSERT still covered only
+`093_m1`'s original three columns. Deployed tracked migration `099_m1` restores
+column-scoped INSERT for `ic_number` and `license_expiry`; broad table INSERT
+remains disabled and the owner-only RLS policies remain in force.
+
+`096_m1` adds a partial unique index on `ic_number` so the same MyKad cannot
+back two accounts - a rejected or reputation-damaged member could otherwise
+sign up again under a new email and resubmit the same number. A member's own
+resubmission is unaffected: it lands on their existing row through the
+`onConflict: 'user_id'` upsert.
+
+`/home` is now the public website entry rather than a post-login-only route.
+Guests can browse Home, Search, Ride listings, and Published Ride Detail; the
+shared auth gate is applied only when they enter account-specific services.
+`AuthPage.jsx` defaults to Login for a gated action, explains why authentication
+is needed, and returns email/password users to the requested internal route.
+Its journey scene remains a desktop treatment and is hidden on phone, where the
+form is the complete auth experience. The desktop car follows the full KL
+Sentral-Genting-Ipoh route using the route's SVG geometry.
+Profile exposes an explicit Sign out action after the page content on phone
+because the desktop top-navigation actions are hidden below 700px.
+Profile's Overview panel continues to omit the redundant Quick actions card
+because Home owns primary navigation.
+When `VITE_M2_SOS_ENABLED=true`, Info & Security also hosts Module 2's Trusted
+Family card. It lists only the account owner's outgoing one-way relationships,
+shows whether each recipient has at least one Push-ready device, creates a
+hashed one-use 24-hour invitation, and requires confirmation before revocation.
+The card never exposes Push endpoints or grants ordinary location access;
+Module 2 owns the service and database contract.
+Module 4's deployed migration `039` adds optional owner-managed
+classification fields: one `vehicles.vehicle_type` per vehicle and a set of
+`profiles.spoken_languages` for the Host. The profile and vehicle screens and
+mock adapter support these fields now. Existing rows are intentionally not
+backfilled, and the live save actions report the deployment requirement until `039` is reviewed and applied. These classifications are the only new fields
+allowed into Module 4's public card projection; vehicle make/model/plate and
+other private profile data remain owner-only.
+
+The application now implements accepted decisions D030 and D034. Reputation
+begins at 100 and is clamped to that ceiling per event, so positive credit
+earned at 100 is spent rather than banked against a later penalty. It stays
+provisional for three evidence rides, caps positive credit at +3 per Ride, and
+changes only for verified completion, Check-in, participant review,
+cancellation, No-show, or confirmed conduct events. Publishing is restricted
+below 90 after the provisional period; requesting is restricted below 75; a
+safety hold overrides both. Tier boundaries follow those gates: Trusted 95+,
+Standard 90+, Limited 75+, Restricted 50+, safety problem below 50. Ordinary login never changes trust. Client checks
+in `RideService` and `RideRequestService` provide early feedback. Deployed
+migration `072` supplies the authoritative ledger, triggers and server
+enforcement; deployed compensating migration `074` keeps its Ride-status
+trigger within the actual `rides` row contract and restores recruitment close.
+Authored migration `087_m1` moves the server-side origin and thresholds to
+match D034 and rebases existing scores by +30 clamped at 100; until it is
+deployed the live database still starts members at 70 and gates at 65/50 while
+the client shows the new policy.
+
+`/users/:userId` is the safe public profile linked from Ride cards/details,
+request management and direct-message headers. Account Settings has switches
+for photo, spoken languages, completed-trip count and CO2 impact, plus a public
+preview. The projection always excludes email, phone, emergency contact,
+vehicle registration, companion names and precise Ride data. Deployed migration
+`073` stores these choices and exposes `get_public_profile`. Home and desktop
+navigation use the owner's photo as a direct Profile shortcut.
+
+The same safe public profile is now the privacy-preserving friendship discovery
+surface: other members see Add friend, pending-response, or Message actions,
+while guests authenticate and return to the same profile. Owners can invoke the
+system share sheet for `/users/:userId`, with clipboard fallback and visible
+feedback. There is no username/directory search. Authored migration `079_m3`
+extends raw safe-profile relevance only to current or retained friend-chat
+co-members; Auth email and `profile_private` phone/emergency contact remain
+outside that policy.
+
+## Open Questions
+Hard account deletion; phone OTP. Deployed migration `078_m1` adds a
+service-role-only path (`private.apply_conduct_outcome`,
+`private.clear_reputation_hold`) so confirmed conduct events and safety holds
+are reachable without a client-facing admin surface; a shared Trust & Safety
+admin UI is still an open, whole-team decision per
+`docs/ai/modules/TRUST_SAFETY_HANDOVER.md`. Deployed migration `104_m1`
+replaces `078_m1`'s two-value minor/serious penalty with four graduated
+tiers - Minor (-8), Moderate (-14), Major (-20, was "serious"), Severe (-30) -
+and teaches `apply_conduct_outcome` to escalate a repeat offender to the next
+tier itself (3rd confirmed Minor in 90 days -> Moderate; 2nd confirmed
+Moderate in 180 days -> Major; 2nd confirmed Major ever -> Severe), so a
+member cannot absorb the same -8 indefinitely. Major and Severe always set
+`reputation_hold`; Minor/Moderate only do if the reviewer explicitly asks.
+`078_m1` itself is unmodified and both its original event types keep working;
+`ReputationPolicy.js`'s `CONDUCT_SEVERITY_TIERS`/`resolveConductSeverity`
+mirror the SQL escalation exactly, for a future reviewer UI to preview an
+outcome before confirming it. `106_m1` adds that reviewer UI -
+`AdminConductReview.jsx` at `/admin/conduct`, same admin allowlist as
+`097_m1` - to review a member and confirm a graduated Trust Case; there is
+still no appeals path. `107_m1` adds the self-service slice of the case
+queue `106_m1` initially left out: any signed-in member can report another
+from `PublicProfile.jsx`, and `/admin/conduct`'s Case queue lists open
+reports. This is a deliberately narrow, by user decision, self-service
+report - it does not pull M2 ride-dispute, M3 message, or M5 trip evidence
+automatically, which remains a separate, larger, cross-module decision.
+`106_m1` and `107_m1` are deployed (by user action, 2026-09-14); by the same
+user decision the page's manual "paste a user ID" lookup was then removed
+entirely - a raw Supabase UUID has no easy source for a reviewer to copy
+from, so the Case queue's Review button is now the only way into a member's
+standing here. `108_m1` (deployed) fixes a live
+`admin_list_safety_reports` bug caught immediately after `107_m1` went live
+(an ORDER BY referenced a pre-alias column name).
+Deployed `105_m1` adds the one deliberate, manual exception to "identity
+documents do not affect reputation": `/admin/identity`'s new "Not verified"
+tab lists every active member with zero `identity_verifications` row at all
+(never submitted - a pending/rejected row already belongs on the other tabs),
+oldest signup first, and lets the same allowlisted reviewer apply a -5,
+non-holding `identity_verification_overdue` event, day-scoped so a double
+click cannot double it. Deliberately not a cron job - nothing else in
+reputation runs on elapsed time today. See `docs/M1-REPUTATION-SCORE-RULES.md`
+for the full current rule set. Host Impact formula and badge
+tiers are implemented (`HostImpactEngine.js`). Per D034 the composite is
+contribution only (`trips x 2.0 + co2 x 0.5`, tiers 0/50/120/200) and
+reputation acts as a ceiling through `badgeIsWithheld` rather than as a term:
+a safety hold or a score below `hostMinimum` withholds every tier above
+Bronze. Badge perks are display
+labels only and are now non-monetary: the scaffold's "platform fee" ladder
+contradicted the platform's non-monetary definition and was replaced with
+visibility, support and discovery perks, guarded by a test.
+
+## M3 message evidence integration (2026-09-16)
+
+Supersedes the earlier statement that the case queue has no M3 evidence. `AdminConductReview` now renders `MessageReportReview` for reports with `messageEvidenceId`; ordinary profile reports keep their existing workflow. The new M3 server endpoint checks the existing admin allowlist and atomically links the decision, grouped report closure and `private.apply_conduct_outcome`, preventing duplicate penalties. Four-tier severity/escalation was verified live. Evidence playback is restricted to this report; there is no general administrator chat browser. Backend 109/110 and the Edge Function are deployed; frontend release and signed-in media acceptance are pending. See `docs/M3-MESSAGE-REPORTS.md`.

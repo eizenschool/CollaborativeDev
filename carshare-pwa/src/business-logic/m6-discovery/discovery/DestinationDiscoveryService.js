@@ -1,0 +1,443 @@
+// ===== BUSINESS LOGIC LAYER (DestinationDiscoveryService) =====
+// UC6.1 browse recommendations / UC6.3 record interest and continue to a ride /
+// UC6.4 travel preferences / UC6.6 notification registration.
+//
+// The orchestration layer: it gathers the facts each signal needs, then hands
+// them to the pure engines. No scoring arithmetic lives here - that is all in
+// DestinationScoringEngine, so the rules stay testable without a data layer and
+// this file stays readable as a sequence of steps.
+//
+// Order is load-bearing. Weather runs *before* scoring (UC6.11's note: a severe
+// warning is not something a strong affinity should outweigh), and seat headroom
+// is computed per request rather than cached, because a seat taken two minutes
+// ago would otherwise still be advertised as free.
+
+import { discoveryDb } from '../../../data-access/m6-discovery/discoveryStore.js';
+import { rankCandidates } from './DestinationScoringEngine.js';
+import { selectRecommendable } from './PlaceLifecycle.js';
+import { buildNameRecurrenceIndex, localEconomySignal } from './ChainDetection.js';
+import { resolveAffinity } from './AffinityResolver.js';
+import { distanceKm, maxDistanceKm } from './geo.js';
+import { applyWeatherGate, fetchForecasts } from './WeatherGate.js';
+import { resolveSeason } from './SeasonalCalendar.js';
+import { buildReasons } from './RecommendationReasons.js';
+import { DiscoveryContractAdapter } from './DiscoveryContractAdapter.js';
+
+// The Guide already treats 80 km as the default area around a confirmed
+// coordinate. Explore uses the same boundary before applying the unchanged
+// two-axis formula, so a ride hundreds of kilometres away cannot make a
+// destination look locally relevant. Callers can explicitly pass null to
+// widen the catalogue again.
+export const DEFAULT_EXPLORATION_RADIUS_KM = 80;
+
+// FR-6.24 now resolves against the declared calendar in SeasonalCalendar.js
+// rather than treating everything without an event as undeclared.
+
+/** The highest review count among same-category, same-state peers (headroom denominator). */
+function peerMaxReviewCount(place, places) {
+  return places
+    .filter((p) => p.category === place.category && p.state === place.state)
+    .reduce((max, p) => Math.max(max, Number(p.reviewCount) || 0), 0);
+}
+
+async function readTraffic() {
+  try { return { rides: await DiscoveryContractAdapter.getPublishedRides({ throwOnError: true }), status: 'available' }; }
+  catch { return { rides: [], status: 'unavailable' }; }
+}
+
+export const DestinationDiscoveryService = {
+  /**
+   * UC6.1 - assembles, gates, scores and sections the candidate set.
+   *
+   * `origin` is the user's location; where it is missing every candidate scores
+   * full journey cost rather than being dropped, so the view still works before
+   * location permission is granted (UC6.1 A1 asks for a location, it does not
+   * make one mandatory).
+   */
+  async getRecommendations({ userId, origin, travelDate, preferredCategories: sessionCategories, maxDistanceKm: candidateRadiusKm = null } = {}) {
+    const [allPlaces, traffic, demand, preferences] = await Promise.all([
+      discoveryDb.listPlaces(),
+      readTraffic(),
+      discoveryDb.latentDemand(travelDate),
+      userId ? discoveryDb.getPreferences(userId) : null
+    ]);
+
+    const { rides, status: rideStatus } = traffic;
+    // FR-6.4: Retired and unenriched places are withheld before anything else,
+    // so no later step can accidentally surface one.
+    const recommendable = selectRecommendable(allPlaces);
+
+    // UC6.11 runs before scoring, not within it.
+    const forecasts = await fetchForecasts(recommendable, travelDate);
+    const { candidates: allWeatherCandidates, withheld: weatherWithheld } =
+      applyWeatherGate(recommendable, forecasts);
+
+    const allDistanceByPlace = new Map(allWeatherCandidates.map((place) =>
+      [place.id, distanceKm(origin, { lat: place.lat, lng: place.lng })]
+    ));
+    const hasDistanceBoundary = Number.isFinite(Number(candidateRadiusKm))
+      && Number(candidateRadiusKm) > 0
+      && Number.isFinite(Number(origin?.lat)) && Number.isFinite(Number(origin?.lng));
+    const afterWeather = hasDistanceBoundary
+      ? allWeatherCandidates.filter((place) => {
+        const distance = allDistanceByPlace.get(place.id);
+        return Number.isFinite(distance) && distance <= Number(candidateRadiusKm);
+      })
+      : allWeatherCandidates;
+    const outsideRadiusCount = allWeatherCandidates.length - afterWeather.length;
+
+    const completedTrips = await DiscoveryContractAdapter.getCompletedTripCategories(userId, allPlaces);
+    const ridesByPlace = DiscoveryContractAdapter.getRidesByPlace(afterWeather, rides, travelDate);
+
+    // Chain detection is indexed once across the whole catalogue rather than the
+    // gated subset: an outlet withheld for weather still counts as evidence that
+    // its siblings belong to a chain.
+    const chainIndex = buildNameRecurrenceIndex(allPlaces);
+
+    const distanceByPlace = new Map(afterWeather.map((place) =>
+      [place.id, allDistanceByPlace.get(place.id)]
+    ));
+    const furthest = maxDistanceKm([...distanceByPlace.values()]);
+
+    // Resolved once per place and kept, because the detail screen has to explain
+    // the seasonal score in words and recomputing it there could drift.
+    const seasonByPlace = new Map(afterWeather.map((place) =>
+      [place.id, resolveSeason(place, travelDate)]
+    ));
+
+    // Resolved once and kept, because the reasons need to say *where* a match
+    // came from - "similar to trips you have taken" and "you said you enjoy
+    // this" are different claims and only one of them is true at a time.
+    const affinityByPlace = new Map(afterWeather.map((place) =>
+      [place.id, resolveAffinity(place.category, {
+        completedTrips: sessionCategories?.length ? [] : completedTrips,
+        preferredCategories: sessionCategories?.length ? sessionCategories : preferences?.preferredCategories
+      })]
+    ));
+
+    const scored = rankCandidates(afterWeather.map((place) => ({
+      placeId: place.id,
+      affinity: affinityByPlace.get(place.id).value,
+      season: seasonByPlace.get(place.id).value,
+      local: localEconomySignal(place, chainIndex),
+      rating: place.rating,
+      reviewCount: place.reviewCount,
+      peerMaxReviewCount: peerMaxReviewCount(place, allPlaces),
+      rides: ridesByPlace.get(place.id) || [],
+      distanceKm: distanceByPlace.get(place.id),
+      maxCandidateDistanceKm: furthest,
+      interestedUserCount: demand.get(place.id) || 0
+    })));
+
+    // Re-attach the place records the UI needs to render. The engine works on
+    // ids and numbers alone so it never has to know about photos or descriptions.
+    const byId = new Map(afterWeather.map((p) => [p.id, p]));
+    const decorate = (entry) => {
+      const place = byId.get(entry.placeId);
+      const enriched = {
+        ...entry,
+        place,
+        rideStatus,
+        origin,
+        // A failed ride read is not evidence that the destination is
+        // unserved. Keep the scoring result for a degraded view, but remove
+        // the boolean claim that powers the "no ride" explanation.
+        servedByRide: rideStatus === 'available' ? entry.servedByRide : null,
+        weatherAdvisory: place?.weatherAdvisory,
+        rides: ridesByPlace.get(entry.placeId) || [],
+        interestedUsers: demand.get(entry.placeId) || 0,
+        distanceKm: distanceByPlace.get(entry.placeId),
+        season: seasonByPlace.get(entry.placeId)
+      };
+
+      // Built here rather than in the component so the sentences are testable
+      // without rendering anything, and so both the list and the detail screen
+      // are guaranteed to explain a destination the same way.
+      const { reasons, caveats } = buildReasons(enriched, {
+        place,
+        rides: enriched.rides,
+        season: enriched.season,
+        affinitySource: affinityByPlace.get(entry.placeId)?.source,
+        distanceKm: enriched.distanceKm,
+        interestedUsers: enriched.interestedUsers,
+        weatherAdvisory: place?.weatherAdvisory,
+        travelDate
+      });
+
+      return { ...enriched, reasons, caveats };
+    };
+
+    return {
+      rideStatus,
+      searchRadiusKm: hasDistanceBoundary ? Number(candidateRadiusKm) : null,
+      outsideRadiusCount,
+      alternativeDates: Object.fromEntries(afterWeather.map((place) => [
+        place.id,
+        [...new Set(rides
+          .filter((ride) => ride.date > travelDate
+            && ride.date !== travelDate
+            && Number(ride.seatsAvailable) > 0
+            && DiscoveryContractAdapter.rideReferencesPlace(ride, place))
+          .map((ride) => ride.date))]
+          .sort()
+      ])),
+      primary: scored.primary.map(decorate),
+      unserved: scored.unserved.map(decorate),
+      withheld: scored.withheld.map(decorate),
+      weatherWithheld,
+      preferences,
+      // Kept for explicit callers that want to show possible alternative dates;
+      // Home does not silently switch the traveller's selected date.
+      departureDates: DiscoveryContractAdapter.departureDates(rides)
+    };
+  },
+
+  /**
+   * The dates that actually have departures, cheapest possible question.
+   *
+   * Lets a caller land on a useful date without first running a full scoring
+   * pass to discover the one it guessed has no rides on it.
+   */
+  async getDepartureDates() {
+    const rides = await DiscoveryContractAdapter.getPublishedRides();
+    return DiscoveryContractAdapter.departureDates(rides);
+  },
+
+  /**
+   * UC6.2 - one destination, carrying the same scores the list showed.
+   *
+   * Deliberately runs the full ranking rather than scoring this place on its own.
+   * Two of the signals are relative to the candidate set - visitation headroom is
+   * measured against same-category peers, journey cost against the furthest
+   * candidate - so a place scored in isolation would produce different numbers
+   * from the card the user just tapped. Reusing the ranking guarantees the detail
+   * screen and the list can never disagree.
+   */
+  async getDestination(placeId, { userId, origin, travelDate, preferredCategories, maxDistanceKm: candidateRadiusKm = null, rideDate = travelDate } = {}) {
+    const place = await discoveryDb.getPlace(placeId);
+    if (!place) return null;
+
+    const [scopedRanked, traffic, demand] = await Promise.all([
+      this.getRecommendations({ userId, origin, travelDate, preferredCategories, maxDistanceKm: candidateRadiusKm }),
+      readTraffic(),
+      discoveryDb.latentDemand(travelDate)
+    ]);
+    let ranked = scopedRanked;
+    let candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
+      .find((entry) => entry.placeId === placeId);
+
+    // A directly opened or bookmarked detail URL may point outside the Home
+    // screen's current nearby boundary. Keep the place usable and preserve its
+    // established score explanation in that case. Places opened from Home are
+    // already inside the scoped set, so their list/detail scores stay identical.
+    if (!candidate && Number.isFinite(Number(candidateRadiusKm))) {
+      ranked = await this.getRecommendations({
+        userId,
+        origin,
+        travelDate,
+        preferredCategories,
+        maxDistanceKm: null
+      });
+      candidate = [...ranked.primary, ...ranked.unserved, ...ranked.withheld]
+        .find((entry) => entry.placeId === placeId);
+    }
+
+    // Recommendation scores remain specific to the selected travel date. Ride
+    // availability is exact when Detail carries a date, while an undated Detail
+    // deliberately lists every Published ride for this place.
+    const rides = (DiscoveryContractAdapter
+      .getRidesByPlace([place], traffic.rides, rideDate)
+      .get(place.id) || [])
+      .sort((left, right) => String(left.departureAt || '').localeCompare(String(right.departureAt || '')));
+
+    // A place withheld by the weather gate never reaches scoring, so the detail
+    // screen still opens - it simply has no score to explain.
+    const weatherWithheld = ranked.weatherWithheld.find((entry) => entry.id === placeId);
+
+    return {
+      place,
+      rideStatus: traffic.status,
+      alternativeDates: ranked.alternativeDates[place.id] || [],
+      candidate: candidate || null,
+      rides,
+      // Browsing interest belongs to the place/date, not to membership in the
+      // current recommendation slice. A far-away deep link must not erase it.
+      interestedUsers: demand.get(place.id) || 0,
+      distanceKm: candidate?.distanceKm ?? null,
+      weatherWithheld: Boolean(weatherWithheld),
+      weatherReason: weatherWithheld?.weatherReason || null
+    };
+  },
+
+  /**
+   * UC6.7 / FR-6.34 - the demand side of the platform made visible to the supply
+   * side: where people want to go that nobody is driving to.
+   *
+   * A destination already served by a ride with a seat left is suppressed
+   * deliberately. Sending a second Host to a route that still has capacity would
+   * create exactly the duplicate journey this module exists to prevent.
+   *
+   * Ranked by demand first, then by how close the destination sits to where this
+   * Host has published before - a Host is far likelier to drive a route they
+   * already know than an equally popular one across the country.
+   */
+  async getUnmetDemand({ userId, travelDate, origin } = {}) {
+    const [places, rides, demand] = await Promise.all([
+      discoveryDb.listPlaces(),
+      DiscoveryContractAdapter.getPublishedRides({ throwOnError: true }),
+      discoveryDb.latentDemand(travelDate)
+    ]);
+
+    const recommendable = selectRecommendable(places);
+    const ridesByPlace = DiscoveryContractAdapter.getRidesByPlace(recommendable, rides, travelDate);
+
+    const hostAnchor = await DiscoveryContractAdapter.getHostPublishingAnchor(userId, places)
+      || origin
+      || null;
+
+    return recommendable
+      .map((place) => {
+        const serving = ridesByPlace.get(place.id) || [];
+        const seatsLeft = serving.reduce((best, r) => Math.max(best, r.seatsAvailable || 0), 0);
+        return { place, serving, seatsLeft, interestedUsers: demand.get(place.id) || 0 };
+      })
+      // UC6.7 step 3: exclude destinations already served by a ride with a seat.
+      .filter((entry) => entry.interestedUsers > 0 && entry.seatsLeft === 0)
+      .map((entry) => ({
+        placeId: entry.place.id,
+        place: entry.place,
+        interestedUsers: entry.interestedUsers,
+        travelDate,
+        distanceKm: hostAnchor
+          ? distanceKm(hostAnchor, { lat: entry.place.lat, lng: entry.place.lng })
+          : null
+      }))
+      .sort((a, b) =>
+        b.interestedUsers - a.interestedUsers
+        || (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+  },
+
+  /**
+   * FR-6.30 - interest, the weak signal. Recorded on selection, before the user
+   * commits to anything, because a selection expresses that the destination was
+   * considered regardless of whether a ride was ultimately found.
+   */
+  async recordInterest(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return { recorded: false };
+    return discoveryDb.recordInterest(userId, placeId, travelDate);
+  },
+
+  async getInterest(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return null;
+    return discoveryDb.getInterest?.(userId, placeId, travelDate) || null;
+  },
+
+  async removeInterest(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return { removed: false };
+    return discoveryDb.removeInterest?.(userId, placeId, travelDate) || { removed: false };
+  },
+
+  /** FR-6.33 - intent, the strong signal. */
+  async registerForNotification(userId, placeId, travelDate) {
+    if (!userId || !placeId || !travelDate) return { registration: null, alreadyExisted: false };
+    return discoveryDb.registerForNotification(userId, placeId, travelDate);
+  },
+
+  async listRegistrations(userId) {
+    return discoveryDb.listRegistrations(userId);
+  },
+
+  async cancelRegistration(userId, registrationId) {
+    return discoveryDb.cancelRegistration(userId, registrationId);
+  },
+
+  async getActionState(userId, placeId, travelDate) {
+    const [interest, registrations] = await Promise.all([
+      this.getInterest(userId, placeId, travelDate),
+      this.listRegistrations(userId)
+    ]);
+    return {
+      interest,
+      alert: registrations.find((registration) => registration.placeId === placeId
+        && registration.travelDate === travelDate && registration.status === 'active') || null
+    };
+  },
+
+  async getPlace(placeId) {
+    return discoveryDb.getPlace(placeId);
+  },
+
+  /** Demo aid for the notification a place's lifecycle_state degrading triggers. */
+  async setPlaceLifecycleState(placeId, state) {
+    return discoveryDb.setPlaceLifecycleState(placeId, state);
+  },
+
+  /** FR-6.21 / UC6.4 - stated preferences, superseded by history as it accumulates. */
+  async getPreferences(userId) {
+    return userId ? discoveryDb.getPreferences(userId) : null;
+  },
+
+  async savePreferences(userId, preferences) {
+    return discoveryDb.savePreferences(userId, preferences);
+  },
+
+  /**
+   * UC6.4 A1 - the prompt is shown only to a user with neither history nor
+   * stated preferences, and never again once dismissed.
+   */
+  async shouldPromptForPreferences(userId) {
+    if (!userId) return false;
+    const stored = await discoveryDb.getPreferences(userId);
+    if (stored?.promptDismissed || stored?.preferredCategories?.length) return false;
+
+    const places = await discoveryDb.listPlaces();
+    const trips = await DiscoveryContractAdapter.getCompletedTripCategories(userId, places);
+    return trips.length === 0;
+  },
+
+  /**
+   * UC6.3 / FR-6.35 - the payload Module 2's publish form and Module 4's search
+   * form are pre-filled from, so the user does not retype what they just chose.
+   */
+  buildPrefillPayload(place, origin) {
+    return {
+      destination: place?.name || '',
+      pickup: origin?.label || '',
+      destinationPlaceId: place?.sourcePlaceId || null
+    };
+  },
+
+  /**
+   * The same payload as a URL, which is how it actually reaches Modules 2 and 4.
+   *
+   * A query string rather than router state on purpose: it survives a reload,
+   * can be shared or bookmarked, and needs no shared in-memory contract between
+   * modules. `destinationPlaceId` is an opaque discovery hint for Search only;
+   * it is never treated as a confirmed Ride Place ID. Search activates its
+   * agreed 10 km destination-proximity default for this handoff. Both forms treat every
+   * parameter as optional, so a bare link behaves like a direct visit.
+   *
+   * @param target 'search' for Module 4's ride search, 'publish' for Module 2's form
+   */
+  buildPrefillUrl(target, place, { origin, travelDate } = {}) {
+    const payload = this.buildPrefillPayload(place, origin);
+    const params = new URLSearchParams();
+
+    if (target === 'publish') {
+      if (payload.destination) params.set('destination', payload.destination);
+      if (travelDate) params.set('date', travelDate);
+      return `/ride/publish${params.toString() ? `?${params}` : ''}`;
+    }
+
+    // The travel origin is deliberately not carried into Module 4's pickup
+    // field. It is a ranking origin, not a confirmed meeting point; Module 4's
+    // own location flow must establish the pickup with the traveller.
+    if (payload.destination) params.set('destination', payload.destination);
+    if (travelDate) params.set('date', travelDate);
+    if (payload.destinationPlaceId) {
+      params.set('destinationPlaceId', payload.destinationPlaceId);
+      params.set('proximityKm', '10');
+    }
+    return `/search${params.toString() ? `?${params}` : ''}`;
+  }
+};
